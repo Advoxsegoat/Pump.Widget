@@ -23,7 +23,8 @@ One consistent voice across every episode: **calm, deadpan, nature-documentary n
 ## Recurring Universe (build the lore, then monetize it)
 
 - **BreezeCorp™ / OmniCorp™**: the megacorp behind every disaster. Its logo should show up in every episode (AC units, park signs, push notifications).
-- **SKRONGLE 🥐**: the in-universe brainrot meme. A crude croissant with googly eyes and human teeth that screams "SKRONGLE!!" Reuse it across episodes until viewers start commenting it and using the sound themselves. That's the merch and IP play: plushies, stickers, a "Skrongle" sound for duets.
+- **SKRONGLE 🥐**: the in-universe brainrot meme. A crude croissant with googly eyes and human teeth that screams "SKRONGLE!!" Reuse it across episodes until viewers start commenting it and using the sound themselves. That's the merch and IP play: plushies, stickers, a "Skrongle" sound for duets. *Canon (Ep 05):* Skrongle was engineered in OmniCorp's Meme Lab to bury its scandals, and now he watches us.
+- **CEO-Bot™ & the Chief Distraction Officer**: OmniCorp's leadership from Ep 04 onward.
 - **The Push Notification Punchline**: every episode ends with a corporate notification or a stat ticking up while the human is down.
 
 ## Production Notes
@@ -39,3 +40,8 @@ One consistent voice across every episode: **calm, deadpan, nature-documentary n
 |---|---|---|
 | 01 | The AC Filter | [01-the-ac-filter.md](01-the-ac-filter.md) |
 | 02 | The Distracted Park | [02-the-distracted-park.md](02-the-distracted-park.md) |
+| 03 | High Tide | [03-high-tide.md](03-high-tide.md) |
+| 04 | Restructuring | [04-restructuring.md](04-restructuring.md) |
+| 05 | Release the Croissant (Season 1 Finale) | [05-release-the-croissant.md](05-release-the-croissant.md) |
+
+**How to make and post these:** see [PRODUCTION-AND-PUBLISHING.md](PRODUCTION-AND-PUBLISHING.md).
