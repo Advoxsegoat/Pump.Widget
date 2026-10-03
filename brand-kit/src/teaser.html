@@ -1,0 +1,210 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: 'Anton'; src: url('../fonts/Anton.woff2') format('woff2'); }
+  @font-face { font-family: 'Space Mono'; font-weight: 700; src: url('../fonts/SpaceMono.woff2') format('woff2'); }
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script src="skrongle.js"></script>
+<script>
+// END OF FEED teaser: 20s, 1080x1920. renderFrame(t) is pure in t so frames are reproducible.
+const { PALETTE, drawSkrongle, drawVoid, drawSkyline, drawScanlines, glitchText, drawPhone } = window.EOF;
+const W = 1080, H = 1920;
+const NAME = new URLSearchParams(location.search).get('name') || 'END OF FEED';
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+window.DURATION = 20;
+
+const rand = (s) => { const x = Math.sin(s * 12.9898 + 78.233) * 43758.5453; return x - Math.floor(x); };
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const ease = (v) => 1 - Math.pow(1 - clamp(v), 3);
+
+function monoText(text, x, y, size, color, align = 'center') {
+  ctx.font = `700 ${size}px "Space Mono"`;
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
+}
+
+function glitchBars(t, amount) {
+  const f = Math.floor(t * 30);
+  for (let i = 0; i < 14 * amount; i++) {
+    const y = rand(f * 31 + i) * H;
+    const h = 8 + rand(f * 17 + i) * 70;
+    const colors = ['rgba(57,255,20,0.55)', 'rgba(255,0,80,0.45)', 'rgba(0,220,255,0.45)', 'rgba(255,255,255,0.35)'];
+    ctx.fillStyle = colors[Math.floor(rand(f * 7 + i) * colors.length)];
+    ctx.fillRect(rand(f * 13 + i) * W * 0.4 - W * 0.2, y, W * (0.6 + rand(i + f) * 0.8), h);
+  }
+}
+
+// Scene A, 0-3s: OmniCorp PSA boot screen
+function sceneA(t) {
+  ctx.fillStyle = '#020402';
+  ctx.fillRect(0, 0, W, H);
+  const lines = ['OMNICORP™ PUBLIC', 'SERVICE ANNOUNCEMENT'];
+  let budget = Math.floor(Math.max(0, t - 0.25) * 22);
+  lines.forEach((line, i) => {
+    const shown = line.slice(0, Math.max(0, budget));
+    budget -= line.length;
+    monoText(shown, W / 2, 880 + i * 90, 58, PALETTE.toxic);
+  });
+  if (Math.floor(t * 3) % 2 === 0) monoText('▮', W / 2, 1080, 58, PALETTE.toxic);
+  monoText('[ PLEASE REMAIN CALM AND KEEP SCROLLING ]', W / 2, 1240, 26, 'rgba(57,255,20,0.45)');
+  // CRT flicker
+  ctx.fillStyle = `rgba(57,255,20,${0.03 + rand(Math.floor(t * 30)) * 0.03})`;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// Scene B, 3-6.5s: the world is ending
+function sceneB(t) {
+  const lt = t - 3;
+  drawVoid(ctx, W, H, t);
+  ctx.save();
+  const z = 1 + lt * 0.02;
+  ctx.translate(W / 2, H);
+  ctx.scale(z, z);
+  ctx.translate(-W / 2, -H);
+  drawSkyline(ctx, W, H, H, 1.1);
+  ctx.restore();
+  const shake = Math.max(0, 1 - lt * 1.5);
+  const jx = (rand(Math.floor(t * 30)) - 0.5) * 40 * shake;
+  glitchText(ctx, 'THE WORLD', W / 2, 800, { font: '220px Anton', split: 8, jx });
+  if (lt > 0.5) glitchText(ctx, 'IS ENDING.', W / 2, 1030, { font: '220px Anton', split: 8, jx: -jx, color: lt > 0.5 && lt < 0.65 ? PALETTE.toxic : '#fff' });
+}
+
+// fake feed cards scrolling inside the phone screen
+function drawFeed(s, scroll) {
+  const cardH = 300, gap = 26;
+  const total = (cardH + gap) * 8;
+  for (let k = 0; k < 8; k++) {
+    let y = s.y + ((k * (cardH + gap) - scroll) % total + total) % total - cardH;
+    const x = s.x + 28;
+    const w = s.w - 56;
+    ctx.fillStyle = '#0f2229';
+    ctx.beginPath(); ctx.roundRect(x, y, w, cardH, 24); ctx.fill();
+    const hue = Math.floor(rand(k + 3) * 360);
+    ctx.fillStyle = `hsl(${hue},70%,45%)`;
+    ctx.beginPath(); ctx.roundRect(x + 22, y + 22, cardH - 44, cardH - 44, 18); ctx.fill();
+    ctx.fillStyle = 'rgba(191,246,255,0.35)';
+    ctx.fillRect(x + cardH, y + 60, w - cardH - 30, 22);
+    ctx.fillRect(x + cardH, y + 110, (w - cardH - 30) * 0.7, 22);
+    ctx.fillStyle = 'rgba(255,60,90,0.8)';
+    ctx.font = '700 30px "Space Mono"'; ctx.textAlign = 'left';
+    ctx.fillText('♥ ' + (1 + Math.floor(rand(k) * 99)) + '.' + Math.floor(rand(k + 9) * 9) + 'M', x + cardH, y + 200);
+  }
+}
+
+function phoneRect() { return { cx: W / 2, cy: 1140, w: 640, h: 1040 }; }
+
+// Scene C, 6.5-10s: the feed keeps going
+function sceneC(t) {
+  const lt = t - 6.5;
+  drawVoid(ctx, W, H, t);
+  drawSkyline(ctx, W, H, H, 1.1);
+  const p = phoneRect();
+  const rise = ease(lt / 0.6);
+  const s = drawPhone(ctx, p.cx, p.cy + (1 - rise) * 900, p.w, p.h, 1);
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(s.x, s.y, s.w, s.h, s.r); ctx.clip();
+  const scroll = 600 * lt + 260 * lt * lt; // accelerating doomscroll
+  drawFeed(s, scroll);
+  ctx.restore();
+  glitchText(ctx, 'THE FEED', W / 2, 270, { font: '170px Anton', split: 6 });
+  if (lt > 0.7) glitchText(ctx, 'KEEPS GOING.', W / 2, 450, { font: '170px Anton', split: 6, color: PALETTE.screen });
+}
+
+// Scene D, 10-14s: SKRONGLE breaks out of the phone
+function sceneD(t) {
+  const lt = t - 10;
+  const f = Math.floor(t * 30);
+  const flash = lt < 2 ? (f % 4 < 2) : (f % 6 < 3);
+  drawVoid(ctx, W, H, t);
+  const shakeAmt = 18 + Math.min(1, lt) * 20;
+  const sx = (rand(f) - 0.5) * shakeAmt, sy = (rand(f + 99) - 0.5) * shakeAmt;
+  ctx.save();
+  ctx.translate(sx, sy);
+  const mouth = 0.45 + 0.55 * Math.abs(Math.sin(lt * 17));
+  const pupils = { pupilL: [Math.cos(lt * 13), Math.sin(lt * 11)], pupilR: [Math.sin(lt * 9), Math.cos(lt * 15)] };
+  if (lt < 2) {
+    const p = phoneRect();
+    const s = drawPhone(ctx, p.cx, p.cy, p.w, p.h, 1.4);
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(s.x, s.y, s.w, s.h, s.r); ctx.clip();
+    ctx.fillStyle = flash ? PALETTE.toxic : '#061006';
+    ctx.fillRect(s.x, s.y, s.w, s.h);
+    const pop = ease(lt / 0.25);
+    drawSkrongle(ctx, p.cx, p.cy, 380 * pop, { mouth, ...pupils, glow: 0.6, tilt: Math.sin(lt * 8) * 0.12 });
+    ctx.restore();
+  } else {
+    // out of the phone and filling the frame
+    const grow = ease((lt - 2) / 0.35);
+    if (flash) { ctx.fillStyle = 'rgba(57,255,20,0.35)'; ctx.fillRect(-50, -50, W + 100, H + 100); }
+    drawSkrongle(ctx, W / 2, 1150, 420 + 520 * grow, { mouth, ...pupils, glow: 1.6, tilt: Math.sin(lt * 10) * 0.15 });
+  }
+  const pulse = 1 + 0.08 * Math.abs(Math.sin(lt * 17));
+  ctx.save();
+  ctx.translate(W / 2, 330);
+  ctx.scale(pulse, pulse);
+  glitchText(ctx, 'SKRONGLE!!', 0, 0, { font: '170px Anton', split: 12, jx: (rand(f + 5) - 0.5) * 30, color: flash ? '#fff' : PALETTE.toxic });
+  ctx.restore();
+  ctx.restore();
+}
+
+// Scene E, 14-18.5s: title card
+function sceneE(t) {
+  const lt = t - 14;
+  drawVoid(ctx, W, H, t);
+  drawSkyline(ctx, W, H, H, 1.1);
+  const g = ctx.createRadialGradient(W / 2, 640, 40, W / 2, 640, 520);
+  g.addColorStop(0, 'rgba(57,255,20,0.4)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const bob = Math.sin(lt * 3) * 14;
+  drawSkrongle(ctx, W / 2, 640 + bob, 360, { mouth: 0.15 + 0.1 * Math.sin(lt * 2), pupilL: [0.5, 0.5], pupilR: [-0.5, 0.5], glow: 1.1 });
+  const words = NAME.split(' ');
+  const mid = Math.ceil(words.length / 2);
+  const l1 = words.slice(0, mid).join(' '), l2 = words.slice(mid).join(' ');
+  const jx = lt < 0.4 ? (rand(Math.floor(t * 30)) - 0.5) * 40 : 0;
+  glitchText(ctx, l1, W / 2, 1010, { font: '230px Anton', split: 8, jx });
+  if (l2) glitchText(ctx, l2, W / 2, 1230, { font: '230px Anton', split: 8, jx: -jx });
+  if (lt > 0.8) monoText('SEASON 1 · 5 EPISODES', W / 2, 1400, 46, PALETTE.toxic);
+  if (lt > 1.4) monoText('mon / wed / fri', W / 2, 1462, 36, 'rgba(191,246,255,0.8)');
+  if (lt > 2.2 && Math.floor(lt * 2.5) % 2 === 0) monoText('▶ follow before it’s too late', W / 2, 1550, 38, '#ffffff');
+}
+
+// Scene F, 18.5-20s: end of feed
+function sceneF(t) {
+  const lt = t - 18.5;
+  ctx.fillStyle = '#020402';
+  ctx.fillRect(0, 0, W, H);
+  monoText('end of feed.' + (Math.floor(t * 3) % 2 === 0 ? '▮' : ' '), W / 2, 940, 60, PALETTE.toxic);
+  const peek = ease((lt - 0.3) / 0.5);
+  drawSkrongle(ctx, 880, 1980 - 230 * peek, 300, { mouth: 0.05, pupilL: [-0.8, -0.6], pupilR: [-0.8, -0.6], glow: 0.8, tilt: -0.3 });
+}
+
+const SCENES = [[0, sceneA], [3, sceneB], [6.5, sceneC], [10, sceneD], [14, sceneE], [18.5, sceneF]];
+
+window.renderFrame = (t) => {
+  ctx.save();
+  let fn = SCENES[0][1];
+  for (const [start, s] of SCENES) if (t >= start) fn = s;
+  fn(t);
+  // glitch transitions around each cut
+  for (const [start] of SCENES.slice(1)) {
+    const d = Math.abs(t - start);
+    if (d < 0.12) glitchBars(t, 1 - d / 0.12);
+  }
+  drawScanlines(ctx, W, H, 0.1);
+  ctx.restore();
+};
+
+document.fonts.load('230px Anton').then(() => document.fonts.load('700 40px "Space Mono"')).then(() => { window.ready = true; });
+</script>
+</body>
+</html>

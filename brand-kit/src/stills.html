@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: 'Anton'; src: url('../fonts/Anton.woff2') format('woff2'); }
+  @font-face { font-family: 'Space Mono'; font-weight: 700; src: url('../fonts/SpaceMono.woff2') format('woff2'); }
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="skrongle.js"></script>
+<script>
+const { PALETTE, drawSkrongle, drawVoid, drawSkyline, drawScanlines, glitchText } = window.EOF;
+const params = new URLSearchParams(location.search);
+const which = params.get('which') || 'avatar';
+const NAME = params.get('name') || 'END OF FEED';
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+
+function avatar() {
+  c.width = 1080; c.height = 1080;
+  drawVoid(ctx, 1080, 1080, 0);
+  const g = ctx.createRadialGradient(540, 560, 60, 540, 560, 560);
+  g.addColorStop(0, 'rgba(57,255,20,0.55)');
+  g.addColorStop(0.45, 'rgba(57,255,20,0.14)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 1080, 1080);
+  drawSkrongle(ctx, 540, 590, 700, { mouth: 0.9, pupilL: [0.6, -0.4], pupilR: [-0.7, 0.5], glow: 1.2, tilt: -0.06 });
+  drawScanlines(ctx, 1080, 1080, 0.08);
+}
+
+function banner() {
+  c.width = 2560; c.height = 1440;
+  drawVoid(ctx, 2560, 1440, 0);
+  drawSkyline(ctx, 2560, 1440, 1440, 0.95);
+  // glow behind the safe area
+  const g = ctx.createRadialGradient(1280, 720, 50, 1280, 720, 900);
+  g.addColorStop(0, 'rgba(57,255,20,0.22)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 2560, 1440);
+  // safe area: 1546x423 centered (x 507-2053, y 508-931)
+  drawSkrongle(ctx, 720, 735, 290, { mouth: 0.75, pupilL: [0.5, 0.3], pupilR: [-0.6, -0.2], glow: 1, tilt: -0.1 });
+  glitchText(ctx, NAME, 1480, 690, { font: '230px Anton', split: 7 });
+  ctx.font = '700 40px "Space Mono"';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = PALETTE.toxic;
+  ctx.fillText('the world is ending. the feed keeps going.', 1480, 860);
+  ctx.font = '700 28px "Space Mono"';
+  ctx.fillStyle = 'rgba(191,246,255,0.75)';
+  ctx.fillText('NEW EPISODES · MON / WED / FRI', 1480, 530);
+  drawScanlines(ctx, 2560, 1440, 0.1);
+}
+
+document.fonts.load('230px Anton').then(() => document.fonts.load('700 40px "Space Mono"')).then(() => {
+  ({ avatar, banner })[which]();
+  window.ready = true;
+});
+</script>
+</body>
+</html>
