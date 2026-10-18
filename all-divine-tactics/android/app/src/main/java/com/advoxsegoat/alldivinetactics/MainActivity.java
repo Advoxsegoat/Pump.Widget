@@ -18,6 +18,7 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.ValueCallback;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -65,13 +66,6 @@ public class MainActivity extends Activity {
 
         root = new FrameLayout(this);
         root.setBackgroundColor(INK);
-        web = new WebView(this);
-        web.setBackgroundColor(INK);
-        web.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        web.setVerticalScrollBarEnabled(false);
-        web.setHorizontalScrollBarEnabled(false);
-        root.addView(web, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(root);
 
         // Keep the game clear of camera cutouts, any bars that cannot hide, and the keyboard.
@@ -98,31 +92,8 @@ public class MainActivity extends Activity {
             }
         });
 
-        WebSettings s = web.getSettings();
-        s.setJavaScriptEnabled(true);
-        s.setDomStorageEnabled(true); // save slots live in localStorage
-        s.setMediaPlaybackRequiresUserGesture(false);
-        s.setSupportZoom(false);
-        s.setBuiltInZoomControls(false);
-        s.setDisplayZoomControls(false);
-        s.setTextZoom(100);
-        s.setAllowContentAccess(false);
-        s.setAllowFileAccess(false); // file:///android_asset stays readable regardless
-
         shellJs = readAsset("android-shell.js");
-        web.addJavascriptInterface(new Host(), "AndroidHost");
-        web.setWebViewClient(new WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                Uri u = request.getUrl();
-                return !("file".equals(u.getScheme()) && String.valueOf(u.getPath()).startsWith("/android_asset/"));
-            }
-
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                view.evaluateJavascript(shellJs, null);
-            }
-        });
+        buildWebView();
 
         if (Build.VERSION.SDK_INT >= 33) {
             OnBackInvokedCallback cb = new OnBackInvokedCallback() {
@@ -135,10 +106,59 @@ public class MainActivity extends Activity {
                     OnBackInvokedDispatcher.PRIORITY_DEFAULT, cb);
             backCallback = cb;
         }
+        hideSystemBars();
+    }
+
+    // The WebView is built here rather than in onCreate so that a fresh one can replace it if its
+    // renderer dies. Saves live in localStorage and survive the swap.
+    @SuppressLint("SetJavaScriptEnabled")
+    private void buildWebView() {
+        web = new WebView(this);
+        web.setBackgroundColor(INK);
+        web.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        web.setVerticalScrollBarEnabled(false);
+        web.setHorizontalScrollBarEnabled(false);
+        root.addView(web, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        WebSettings s = web.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true); // save slots live in localStorage
+        s.setMediaPlaybackRequiresUserGesture(false);
+        s.setSupportZoom(false);
+        s.setBuiltInZoomControls(false);
+        s.setDisplayZoomControls(false);
+        s.setTextZoom(100);
+        s.setAllowContentAccess(false);
+        s.setAllowFileAccess(false); // file:///android_asset stays readable regardless
+
+        web.addJavascriptInterface(new Host(), "AndroidHost");
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                Uri u = request.getUrl();
+                return !("file".equals(u.getScheme()) && String.valueOf(u.getPath()).startsWith("/android_asset/"));
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                view.evaluateJavascript(shellJs, null);
+            }
+
+            // The page's renderer died, usually for memory. Without this the app is killed with
+            // it; with it, the game reloads to the title screen.
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                if (view != web) return true;
+                root.removeView(web);
+                web.destroy();
+                buildWebView();
+                return true;
+            }
+        });
 
         web.loadUrl(GAME_URL);
         web.requestFocus();
-        hideSystemBars();
     }
 
     private String readAsset(String name) {

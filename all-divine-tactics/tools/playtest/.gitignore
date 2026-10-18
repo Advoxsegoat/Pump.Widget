@@ -1,0 +1,3 @@
+# results written by the scripts here
+*.json
+smoke-out/

@@ -109,6 +109,7 @@ window.AD = window.AD || {};
   'use strict';
   const W = 400, H = 225;
   AD.W = W; AD.H = H; AD.TILE = 24;
+  AD.VERSION = '1.3.0';
   AD.frame = 0;
 
   // ---------------------------------------------------------------- utils
@@ -153,6 +154,32 @@ window.AD = window.AD || {};
       try { return JSON.parse(decodeURIComponent(escape(atob(str.trim())))); } catch (e) { return null; }
     },
   };
+
+  // ---------------------------------------------------------------- errors
+  // Every error the game survives is kept (the last 30, in storage too), so a freeze on a phone
+  // can be reported: Options > Report a problem copies the log.
+  AD.errlog = AD.store.get('errlog') || [];
+  const sceneName = (s) => (s ? Object.keys(AD).find((k) => AD[k] === s.constructor) || s.constructor.name || '?' : '-');
+  AD.sceneName = sceneName;
+  AD.report = function (e, where) {
+    try {
+      const msg = String((e && e.message) || e);
+      const stack = String((e && e.stack) || '').split('\n').slice(1, 4).map((l) => l.trim()).join(' | ');
+      const bt = AD.curBattle;
+      AD.errlog.push({
+        at: new Date().toISOString(), where: where || '', msg, stack,
+        scenes: AD.stack.map(sceneName).join('>'),
+        ch: bt ? bt.ch.id + ' t' + bt.turn + ' ' + bt.phase : '',
+      });
+      if (AD.errlog.length > 30) AD.errlog.splice(0, AD.errlog.length - 30);
+      AD.store.set('errlog', AD.errlog);
+    } catch (e2) { /* the log must never throw */ }
+    console.error(e);
+  };
+  // run fn once p settles, whether it worked or threw: a failed menu flow must still hand control back
+  AD.settle = (p, fn) => Promise.resolve(p).catch((e) => AD.report(e, 'flow')).then(fn);
+  window.addEventListener('error', (ev) => AD.report(ev.error || ev.message, 'window'));
+  window.addEventListener('unhandledrejection', (ev) => AD.report(ev.reason, 'promise'));
 
   // ---------------------------------------------------------------- input
   const KEYMAP = {
@@ -333,6 +360,28 @@ window.AD = window.AD || {};
     },
   };
 
+  // A scene that throws every frame would hold the screen still forever. After a few failures in
+  // a row it is closed instead: a pushed scene resolves as cancelled, a battle restarts from its
+  // prep screen, anything else falls back to the world map or the title.
+  AD.rescue = function (scene, why) {
+    AD.report(new Error((why || 'scene failed') + ': closed ' + sceneName(scene)), 'rescue');
+    const i = AD.stack.indexOf(scene);
+    if (i > 0) {
+      if (scene.done) { try { scene.done(null); } catch (e) { AD.pop(scene); } } else AD.pop(scene);
+      if (AD.stack.indexOf(scene) >= 0) AD.pop(scene);
+      return;
+    }
+    const GM = AD.game;
+    if (scene instanceof AD.Battle && GM && GM.preBattle && GM.current) GM.retry();
+    else if (GM && GM.state && AD.World) AD.goto(new AD.World());
+    else if (AD.Title) AD.goto(new AD.Title());
+  };
+  function failed(scene, e, what) {
+    AD.report(e, what + ' ' + sceneName(scene));
+    scene.__fails = (scene.__fails || 0) + 1;
+    if (scene.__fails >= 8) { scene.__fails = 0; AD.rescue(scene, what + ' kept throwing'); }
+  }
+
   // ---------------------------------------------------------------- loop
   let acc = 0, last = 0;
   function step() {
@@ -343,7 +392,9 @@ window.AD = window.AD || {};
     }
     AD.fade.update();
     const top = AD.top();
-    if (top && top.update) top.update();
+    if (top && top.update) {
+      try { top.update(); top.__fails = 0; } catch (e) { failed(top, e, 'update'); }
+    }
     if (inp.rclick) inp.rclick = false;
     inp.click = null;
     inp.mouse.moved = false;
@@ -362,8 +413,9 @@ window.AD = window.AD || {};
     let from = 0;
     for (let i = AD.stack.length - 1; i >= 0; i--) { if (AD.stack[i].opaque) { from = i; break; } }
     for (let i = from; i < AD.stack.length; i++) {
+      const s = AD.stack[i];
       ctx.save();
-      AD.stack[i].draw && AD.stack[i].draw(ctx);
+      try { s.draw && s.draw(ctx); } catch (e) { failed(s, e, 'draw'); }
       ctx.restore();
     }
     if (AD.fade.a > 0) {
@@ -390,7 +442,7 @@ window.AD = window.AD || {};
       render();
     } catch (e) {
       acc = 0;
-      if (loopErrors++ < 5) console.error(e);
+      if (loopErrors++ < 5) AD.report(e, 'loop');
     }
   }
 
@@ -468,10 +520,11 @@ window.AD = window.AD || {};
     const A = G.rgb(a), B = G.rgb(b);
     return G.hex(A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t);
   };
-  G.canvas = function (w, h) {
+  G.canvas = function (w, h, readBack) {
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
-    const x = c.getContext('2d');
+    // a canvas whose pixels are read every frame lives in memory, not on the GPU
+    const x = c.getContext('2d', readBack ? { willReadFrequently: true } : undefined);
     x.imageSmoothingEnabled = false;
     c.x = x;
     return c;
@@ -929,7 +982,7 @@ window.AD = window.AD || {};
 
   // ------------------------------------------------ post: bloom, tilt-shift, vignette
   const SW = W >> 2, SH = H >> 2, HW = W >> 1, HH = H >> 1;
-  const small = G.canvas(SW, SH);
+  const small = G.canvas(SW, SH, true);
   const half = G.canvas(HW, HH);
   const band = G.canvas(W, H);
   const vign = G.canvas(W, H);
@@ -3196,7 +3249,9 @@ window.AD = window.AD || {};
   }
 
   // ---------------------------------------------------------------- rendering into a duel
-  const cvCache = new Map();
+  // keyed weakly: battle units are new objects every battle, so a strong map kept every fighter
+  // of every duel alive for the whole session
+  const cvCache = new WeakMap();
   // opt.look draws someone in another body (a giant takes a big build); opt.scale draws the raster
   // larger, whole pixels at a time
   F.draw = function (ctx, u, pose, x, y, faceRight, opt) {
@@ -5044,6 +5099,84 @@ window.AD = window.AD || {};
   });
   AD.item = (id, uses) => ({ id, uses: uses === undefined ? (ITEMS[id] ? ITEMS[id].uses : 1) : uses });
 
+  // ---------------------------------------------------------------- what a weapon does besides hurt
+  // Statuses last through the victim's next phase of its own (burn: n of them).
+  AD.STATUS = {
+    burn: { n: 'Burn', past: 'BURNED', c: '#ff8a3a', desc: 'Loses a tenth of its HP as its phase begins. Never kills.' },
+    root: { n: 'Root', past: 'ROOTED', c: '#8ae06a', desc: 'Cannot move on its next phase. Can still strike from where it stands.' },
+    chill: { n: 'Chill', past: 'CHILLED', c: '#8ad8ff', desc: 'Spd -4.' },
+    blind: { n: 'Blind', past: 'BLINDED', c: '#c0a4ff', desc: 'Hit -25.' },
+  };
+  // on-hit effects: st (status, n phases) at ch% per hit; push/pull move the foe a tile after the
+  // exchange; chain arcs to one foe beside the target for that share of the damage
+  const FX = {
+    ember: { st: 'burn', n: 2, ch: 50 }, glassray: { st: 'blind', ch: 50 }, spark: { chain: 0.5 }, heatwave: { st: 'burn', n: 2 },
+    lightning: { chain: 0.5, ch: 100 }, sunspear: { st: 'burn', n: 3 }, phoenix: { st: 'burn', n: 2 }, goldflame: { st: 'burn', n: 2 }, dawn: { st: 'blind' },
+    thorn: { st: 'root', ch: 40 }, briar: { st: 'root', ch: 70 }, stoneshape: { push: 1 }, shadowthorn: { st: 'blind', ch: 60 }, rosestorm: { st: 'root' }, inkwell: { st: 'blind' },
+    gust: { push: 1 }, frost: { st: 'chill' }, cyclone: { push: 1 }, icelance: { st: 'chill', n: 2 }, tidebreak: { push: 1 }, gale: { chain: 0.5 },
+    hookknife: { st: 'root', ch: 50 }, handaxe: { push: 1, ch: 50 }, harpoon: { pull: 1 }, musket: { st: 'blind', ch: 30 }, poker: { st: 'burn', n: 1 },
+    skillet: { st: 'blind', ch: 30 }, nightblade: { st: 'blind', ch: 50 }, ivoryblade: { st: 'chill', ch: 50 }, prism: { st: 'blind', ch: 50 },
+    bwstaff: { push: 1 }, stonehands: { push: 1 },
+  };
+  Object.keys(FX).forEach((id) => { ITEMS[id].fx = Object.assign({ ch: 100 }, FX[id]); });
+
+  // Arts: a technique chosen in the forecast. It costs more uses than a plain strike and replaces Boost.
+  AD.ARTS = {
+    windsweep: { n: 'Windsweep', cost: 3, hit: -5, noCounter: 1, desc: 'A cut too quick to answer: no counter.' },
+    haymaker: { n: 'Haymaker', cost: 3, mt: 5, hit: -10, push: 1, desc: 'Mt +5, and the blow knocks them back a tile.' },
+    skewer: { n: 'Skewer', cost: 3, hit: 5, sever: 1, desc: 'Goes clean through: ignores half of Def.' },
+    deadeye: { n: 'Deadeye', cost: 3, hit: 30, crit: 15, desc: 'Breath held. Hit +30, Crit +15.' },
+    wildfire: { n: 'Wildfire', cost: 4, mt: 2, st: 'burn', stN: 2, spread: 1, desc: 'Mt +2. Burns the target and every foe beside it.' },
+    overgrowth: { n: 'Overgrowth', cost: 4, st: 'root', stN: 1, spread: 1, desc: 'Roots the target and every foe beside it.' },
+    riptide: { n: 'Riptide', cost: 3, mt: 3, st: 'chill', stN: 1, push: 1, desc: 'Mt +3. Chills them and washes them back a tile.' },
+    sunburst: { n: 'Sunburst', cost: 5, splash: 0.5, desc: 'Every foe beside the target takes half the blow.' },
+    // signatures
+    openpalm: { n: 'Open Palm', cost: 3, mt: 2, drain: 1, desc: 'Mt +2. Abarax heals by all the damage dealt.' },
+    riverturn: { n: 'River Turn', cost: 3, hit: 10, noCounter: 1, push: 1, desc: 'Turns the blow aside: no counter, and a push.' },
+    finalcut: { n: 'Final Cut', cost: 4, crit: 40, sever: 1, desc: 'Crit +40.' },
+    threebreaths: { n: 'Three Breaths', cost: 3, strikes: 3, mt: -4, desc: 'One breath. Two. Three strikes at Mt -4.' },
+    combo: { n: 'Danny\'s Combo', cost: 3, strikes: 3, mt: -3, desc: 'Three strikes at Mt -3. He practised on the bag.' },
+    truelevel: { n: 'True Level', cost: 3, sure: 1, desc: 'He checked. It cannot miss.' },
+    murder: { n: 'Murder of Crows', cost: 4, strikes: 2, mt: -2, st: 'blind', stN: 1, desc: 'Two knives that blind, Mt -2.' },
+    rebirth: { n: 'Rebirth', cost: 4, drain: 1, desc: 'Reigna heals by all the damage dealt.' },
+    sonic: { n: 'Sonic', cost: 3, strikes: 2, noCounter: 1, desc: 'Two strikes and gone before they turn.' },
+    petalstorm: { n: 'Petal Storm', cost: 4, splash: 0.5, st: 'root', stN: 1, desc: 'Roots the target. Foes beside it take half.' },
+    eye: { n: 'Eye of the Storm', cost: 4, splash: 0.5, st: 'chill', stN: 1, spread: 1, desc: 'Foes beside take half; all of them are chilled.' },
+    nightfall: { n: 'Nightfall', cost: 3, st: 'blind', stN: 2, noCounter: 1, desc: 'Blinds for two turns. No counter.' },
+    firstsnow: { n: 'First Snow', cost: 3, st: 'chill', stN: 2, spread: 1, desc: 'Chills the target and every foe beside it.' },
+    refraction: { n: 'Refraction', cost: 4, splash: 0.5, st: 'blind', stN: 1, desc: 'All colours at once: blinds; foes beside take half.' },
+    unseen: { n: 'Unseen', cost: 3, crit: 20, noCounter: 1, desc: 'Crit +20. They never see it, so never answer it.' },
+    stoke: { n: 'Stoke', cost: 3, mt: 2, st: 'burn', stN: 3, desc: 'Mt +2. Burns for three turns.' },
+    breakwater: { n: 'Breakwater', cost: 3, mt: 4, st: 'chill', stN: 1, push: 1, desc: 'Mt +4. Chills and pushes.' },
+    landslide: { n: 'Landslide', cost: 3, mt: 6, hit: -10, push: 1, desc: 'Mt +6, and a push.' },
+    lastlight: { n: 'Last Light', cost: 4, mt: 2, st: 'blind', stN: 1, spread: 1, desc: 'Mt +2. Blinds the target and every foe beside it.' },
+  };
+  AD.TYPE_ART = { blade: 'windsweep', fist: 'haymaker', pole: 'skewer', shot: 'deadeye', flame: 'wildfire', bloom: 'overgrowth', tide: 'riptide', all: 'sunburst' };
+  const SIG = {
+    openhand: 'openpalm', bwstaff: 'riverturn', severance: 'finalcut', twofinger: 'threebreaths', dannys: 'combo', plumb: 'truelevel',
+    crowthorn: 'murder', phoenix: 'rebirth', swallow: 'sonic', rosestorm: 'petalstorm', gale: 'eye', nightblade: 'nightfall',
+    ivoryblade: 'firstsnow', prism: 'refraction', nobody: 'unseen', poker: 'stoke', tidebreak: 'breakwater', stonehands: 'landslide', dawn: 'lastlight',
+  };
+  Object.keys(SIG).forEach((id) => { ITEMS[id].art = SIG[id]; });
+  AD.artId = (d) => (d && d.weapon ? d.art || AD.TYPE_ART[d.t] || null : null);
+  // a short line on what a weapon does beyond its numbers
+  AD.fxText = function (d) {
+    const f = d && d.fx;
+    if (!f) return '';
+    const bits = [];
+    if (f.st) bits.push(AD.STATUS[f.st].n + (f.n > 1 ? ' ' + f.n : ''));
+    if (f.push) bits.push('Push');
+    if (f.pull) bits.push('Pull');
+    if (f.chain) bits.push('Chain');
+    return bits.join(', ') + (f.ch < 100 ? ' ' + f.ch + '%' : '');
+  };
+  AD.weaponHelp = function (d) {
+    const art = AD.ARTS[AD.artId(d)];
+    const line = `Mt ${d.mt}  Hit ${d.hit}  Crit ${d.crt}  Wt ${d.wt}  Rng ${d.rng[0]}-${d.rng[1]}  Rank ${d.rank}`;
+    const fx = AD.fxText(d);
+    return [d.desc, line, (fx ? 'On hit: ' + fx + '.  ' : '') + (art ? 'Art: ' + art.n + ' (' + art.cost + ' uses). ' + art.desc : '')].filter(Boolean).join('\n');
+  };
+
   // ---------------------------------------------------------------- skills
   AD.SKILLS = {
     getup: ['Get Up', 'Survives the first fatal blow each battle with 1 HP.'],
@@ -5083,6 +5216,24 @@ window.AD = window.AD || {};
     regen: ['Mending', 'Recovers 20% HP each turn.'],
     lastworld: ['The Last', 'Fights at full strength for a world nobody remembers. +2 to all.'],
     gentle: ['Gentle', 'Never kills; leaves foes at 1 HP.'],
+    // learned along the way (see AD.LEARN in data_units.js)
+    secondhelping: ['Second Helping', 'Recovers a quarter of max HP after defeating a foe.'],
+    vantage: ['First Word', 'Below half HP, strikes first even when attacked.'],
+    wrath: ['Hot Blood', '+20 Crit while below half HP.'],
+    sol: ['Rose Sol', 'Skl% chance a hit heals half the damage dealt.'],
+    luna: ['Moon Bite', 'Skl% chance a hit ignores half of Def or Res.'],
+    pavise: ['Bulwark', 'Skl% chance to halve damage from an adjacent foe.'],
+    thrift: ['Thrift', 'Lck% chance a strike costs no use.'],
+    galeforce: ['Galeforce', 'Once a turn, defeating a foe on your own turn lets you act again.'],
+    focus: ['Lone Wolf', '+10 Hit and +15 Crit with no ally adjacent.'],
+    charm: ['Charm', 'Allies within 2 tiles deal +2 damage.'],
+    quickriposte: ['Quick Riposte', 'Above half HP, always strikes twice when countering.'],
+    warmhands: ['Warm Hands', 'Songs and Mend restore 10 more HP.'],
+    shelter: ['Shelter', 'Carries a rescued ally with no loss of Spd or Skl.'],
+    kindle: ['Kindle', 'Every hit with a gift sets the foe burning.'],
+    ward: ['Clear Mind', '+4 Res against gifts. Burn, Root, Chill and Blind never take hold.'],
+    trample: ['Trample', '+4 damage against foes on foot.'],
+    slip: ['Slip', 'Moves through tiles held by foes.'],
   };
 
   // ---------------------------------------------------------------- classes
@@ -5140,24 +5291,24 @@ window.AD = window.AD || {};
   cls('crownsoldier', 'Crown Soldier', 1, 'foot', 5, ['pole'], st(21, 6, 0, 4, 4, 3, 5, 1), st(75, 45, 0, 40, 35, 25, 35, 15), { weak: ['blade', 'flame'] });
   cls('crownlancer', 'Crown Lancer', 1, 'horse', 7, ['pole', 'blade'], st(22, 6, 0, 5, 6, 3, 6, 2), st(75, 45, 0, 40, 45, 25, 35, 15), { tags: ['horse'], shield: 3, weak: ['blade', 'bloom'] });
   cls('officer', 'Crown Officer', 2, 'foot', 6, ['blade', 'shot'], st(28, 9, 2, 10, 9, 6, 8, 4), st(70, 45, 10, 50, 45, 30, 35, 20), { shield: 4, weak: ['fist', 'tide'] });
-  cls('knuckle', 'Knuckle of the Hand', 1, 'foot', 6, ['fist', 'blade'], st(22, 7, 2, 8, 8, 4, 5, 4), st(70, 45, 15, 55, 50, 30, 30, 25), { shield: 3, weak: ['pole', 'bloom'] });
+  cls('knuckle', 'Knuckle of the Hand', 1, 'foot', 6, ['fist', 'blade'], st(22, 7, 2, 8, 8, 4, 5, 4), st(70, 45, 15, 55, 50, 30, 30, 25), { shield: 3, weak: ['pole', 'bloom'], skills: ['quickriposte'] });
   cls('compactinf', 'Compact Rifleman', 1, 'foot', 5, ['shot', 'pole'], st(19, 6, 0, 5, 4, 2, 4, 1), st(70, 45, 0, 45, 35, 20, 30, 15), { weak: ['fist', 'flame'] });
   cls('ironclad', 'Ironclad', 1, 'armor', 4, ['pole', 'fist'], st(26, 8, 0, 4, 2, 1, 10, 0), st(85, 50, 0, 35, 20, 20, 55, 5), { tags: ['armor'], shield: 5, weak: ['fist', 'flame'] });
   cls('wardivine', 'War Divine', 1, 'foot', 5, ['flame', 'bloom', 'tide'], st(18, 1, 6, 5, 5, 3, 2, 6), st(60, 10, 55, 45, 45, 25, 15, 45), { shield: 3, weak: ['blade', 'shot'] });
-  cls('warcommander', 'War Commander', 2, 'foot', 6, ['flame', 'bloom', 'tide', 'blade'], st(30, 8, 10, 10, 9, 6, 7, 9), st(70, 40, 50, 50, 45, 30, 30, 40), { shield: 5, weak: ['shot', 'pole'] });
+  cls('warcommander', 'War Commander', 2, 'foot', 6, ['flame', 'bloom', 'tide', 'blade'], st(30, 8, 10, 10, 9, 6, 7, 9), st(70, 40, 50, 50, 45, 30, 30, 40), { shield: 5, weak: ['shot', 'pole'], skills: ['wrath'] });
   cls('ashveil', 'Ash Veil Sister', 1, 'phase', 6, ['blade'], st(18, 5, 2, 10, 11, 4, 2, 5), st(55, 40, 15, 65, 70, 30, 15, 30), { shield: 2, weak: ['flame', 'pole'] });
   cls('lantern', 'Lantern Knight', 1, 'horse', 7, ['pole'], st(25, 8, 1, 7, 6, 3, 8, 6), st(75, 50, 5, 50, 40, 25, 45, 35), { tags: ['horse'], shield: 4, weak: ['bloom', 'shot'], skills: ['lanternaura'] });
   cls('bandit', 'Gorse Bandit', 1, 'foot', 5, ['fist'], st(22, 6, 0, 2, 4, 1, 3, 0), st(80, 50, 0, 25, 35, 15, 25, 5), { weak: ['blade', 'tide'] });
   cls('deserter', 'Deserter', 1, 'foot', 5, ['pole', 'shot'], st(20, 6, 0, 5, 5, 2, 4, 1), st(70, 45, 0, 40, 40, 20, 30, 15), { weak: ['blade', 'bloom'] });
   cls('unbound', 'Unbound', 1, 'foot', 5, ['bloom', 'tide'], st(19, 2, 6, 5, 5, 2, 3, 5), st(65, 15, 55, 45, 45, 20, 20, 40), { shield: 3, weak: ['flame', 'fist'] });
   cls('hollow', 'Hollow', 1, 'foot', 5, ['fist'], st(22, 7, 0, 3, 5, 0, 3, 3), st(80, 50, 0, 30, 40, 0, 25, 25), { tags: ['hollow', 'beast'], shield: 3, weak: ['flame', 'blade'] });
-  cls('hound', 'Gray Hound', 1, 'foot', 6, ['fist'], st(18, 6, 0, 6, 9, 0, 2, 2), st(65, 45, 0, 45, 60, 0, 20, 20), { tags: ['beast'], shield: 2, weak: ['pole', 'flame'] });
+  cls('hound', 'Gray Hound', 1, 'foot', 6, ['fist'], st(18, 6, 0, 6, 9, 0, 2, 2), st(65, 45, 0, 45, 60, 0, 20, 20), { tags: ['beast'], shield: 2, weak: ['pole', 'flame'], skills: ['focus'] });
   cls('moth', 'Glass Moth', 1, 'fly', 7, ['tide'], st(16, 1, 6, 6, 9, 0, 1, 6), st(55, 10, 50, 45, 60, 0, 10, 45), { tags: ['beast', 'fly'], shield: 2, weak: ['shot', 'flame'] });
   cls('wraith', 'Calder Wraith', 1, 'phase', 5, ['bloom'], st(20, 1, 7, 6, 6, 0, 2, 8), st(60, 10, 55, 45, 45, 0, 15, 55), { tags: ['hollow'], shield: 3, weak: ['flame', 'song'] });
-  cls('brassmask', 'Brass Mask', 2, 'foot', 6, ['blade'], st(28, 10, 3, 12, 12, 5, 7, 6), st(65, 45, 15, 55, 55, 30, 30, 30), { shield: 4, weak: ['fist', 'tide'] });
+  cls('brassmask', 'Brass Mask', 2, 'foot', 6, ['blade'], st(28, 10, 3, 12, 12, 5, 7, 6), st(65, 45, 15, 55, 55, 30, 30, 30), { shield: 4, weak: ['fist', 'tide'], skills: ['luna'] });
   cls('sister4', 'Sister Who Was Four', 2, 'fly', 7, ['tide', 'flame'], st(25, 3, 11, 10, 12, 6, 4, 10), st(55, 15, 55, 50, 55, 30, 20, 45), { tags: ['fly'], shield: 3, weak: ['shot', 'bloom'] });
   cls('choir', 'Choir of the Order', 2, 'foot', 5, ['bloom', 'song'], st(26, 2, 11, 10, 8, 4, 6, 12), st(60, 10, 55, 50, 40, 20, 25, 55), { shield: 4, weak: ['flame', 'fist'] });
-  cls('finger', 'Finger of the Hand', 2, 'phase', 6, ['blade', 'bloom', 'tide'], st(34, 12, 12, 14, 13, 6, 9, 11), st(65, 45, 45, 50, 50, 30, 35, 40), { shield: 6, weak: ['all', 'song'] });
+  cls('finger', 'Finger of the Hand', 2, 'phase', 6, ['blade', 'bloom', 'tide'], st(34, 12, 12, 14, 13, 6, 9, 11), st(65, 45, 45, 50, 50, 30, 35, 40), { shield: 6, weak: ['all', 'song'], skills: ['pavise'] });
   cls('seamwalker', 'Seamwalker', 2, 'phase', 6, ['blade', 'fist'], st(30, 11, 4, 12, 12, 5, 8, 6), st(65, 45, 15, 50, 50, 25, 35, 25), { shield: 4, weak: ['flame', 'pole'] });
   cls('horror', 'Horror', 3, 'foot', 6, ['fist', 'flame', 'bloom', 'tide'], st(60, 18, 16, 14, 12, 0, 14, 12), st(60, 45, 45, 40, 40, 0, 35, 35), { shield: 8, weak: [] });
 
@@ -5488,6 +5639,37 @@ window.AD = window.AD || {};
   pp('narrator', null);
   // playable portraits by id
   Object.keys(U).forEach((id) => { P[id] = Object.assign({ name: U[id].name }, U[id].port); });
+
+  // ---------------------------------------------------------------- skills learned on the way
+  // [class tier, level, skill]; tier 0 is any tier (Abarax keeps his level through the story)
+  AD.LEARN = {
+    abarax: [[0, 4, 'secondhelping'], [0, 9, 'sol'], [0, 14, 'charm'], [0, 19, 'vantage']],
+    vanity: [[1, 6, 'focus'], [1, 12, 'luna'], [2, 5, 'galeforce']],
+    benny: [[1, 7, 'quickriposte'], [1, 13, 'pavise'], [2, 6, 'wrath']],
+    xav: [[1, 6, 'thrift'], [1, 12, 'slip'], [2, 5, 'focus']],
+    echoe: [[1, 7, 'warmhands'], [1, 13, 'ward'], [2, 6, 'kindle']],
+    reigna: [[1, 6, 'kindle'], [1, 12, 'wrath'], [2, 5, 'charm']],
+    gerace: [[1, 8, 'slip'], [1, 14, 'vantage'], [2, 6, 'luna']],
+    yulie: [[1, 6, 'charm'], [1, 12, 'thrift'], [2, 5, 'galeforce']],
+    noella: [[1, 6, 'warmhands'], [1, 12, 'shelter'], [2, 5, 'vantage']],
+    sierra: [[1, 6, 'shelter'], [1, 12, 'warmhands'], [2, 5, 'wrath']],
+    aurelian: [[1, 10, 'trample'], [1, 14, 'pavise'], [2, 5, 'shelter']],
+    vehday: [[1, 10, 'thrift'], [1, 14, 'focus'], [2, 5, 'pavise']],
+    corvin: [[1, 11, 'galeforce'], [1, 15, 'vantage'], [2, 5, 'slip']],
+    kael: [[2, 8, 'luna'], [2, 12, 'galeforce']],
+    liora: [[2, 7, 'warmhands'], [2, 11, 'ward']],
+    oren: [[3, 12, 'sol'], [3, 15, 'ward']],
+    selenne: [[2, 10, 'shelter'], [2, 14, 'luna']],
+    ithar: [[2, 12, 'slip'], [2, 15, 'shelter']],
+    kesra: [[2, 12, 'vantage'], [2, 15, 'quickriposte']],
+    aurora: [[2, 10, 'kindle'], [2, 14, 'ward']],
+    galt: [[2, 10, 'pavise'], [2, 14, 'quickriposte']],
+    hesper: [[2, 10, 'galeforce'], [2, 14, 'focus']],
+    wren: [[2, 8, 'warmhands'], [2, 12, 'ward']],
+    henri: [[2, 12, 'thrift'], [2, 15, 'vantage']],
+    dray: [[2, 10, 'quickriposte'], [2, 14, 'wrath']],
+    ivo: [[2, 10, 'slip'], [2, 14, 'focus']],
+  };
 
   // ---------------------------------------------------------------- unit factory
   AD.portFor = function (id, unit) {
@@ -5917,7 +6099,7 @@ window.AD = window.AD || {};
   AD.Status.prototype.update = function () {
     const d = I.dir();
     if (d && d[1] && this.units.length > 1) { this.i = (this.i + d[1] + this.units.length) % this.units.length; AD.audio.sfx('cursor'); }
-    if (d && d[0]) { this.page = (this.page + 1) % 2; AD.audio.sfx('cursor'); }
+    if (d && d[0]) { this.page = (this.page + d[0] + 3) % 3; AD.audio.sfx('cursor'); }
     if (I.pressed('b') || I.pressed('x') || I.rclick || I.pressed('a') || I.consumeClick()) { AD.audio.sfx('cancel'); this.done(); }
   };
   AD.Status.prototype.draw = function (ctx) {
@@ -5940,7 +6122,36 @@ window.AD = window.AD || {};
     G.bar(ctx, 80, 110, 44, 3, u.hp / u.mhp, u.hp / u.mhp > 0.33 ? C.hp : C.hpLow);
     G.panel(ctx, 8, 130, 124, 70);
     G.text(ctx, 'Skills', 15, 135, C.gold);
-    (u.skills || []).slice(0, 5).forEach((s, k) => G.text(ctx, (AD.SKILLS[s] || [s])[0], 15, 148 + k * 10, C.cream));
+    const sks = u.skills || [];
+    sks.slice(0, sks.length > 5 ? 4 : 5).forEach((s, k) => G.text(ctx, (AD.SKILLS[s] || [s])[0], 15, 148 + k * 10, C.cream));
+    if (sks.length > 5) G.text(ctx, '+' + (sks.length - 4) + ' more \u25ba', 15, 188, C.gold);
+    if (this.page === 2) {
+      // every skill in full, then the weapon's art and whatever is ailing them
+      G.panel(ctx, 138, 8, 254, 192);
+      G.text(ctx, 'Skills and Arts', 145, 13, C.gold);
+      let yy = 27;
+      const put = (name, desc, nc) => {
+        const lines = G.wrap(desc, 238 - G.measure(name) - 8);
+        if (yy > 186) return;
+        G.text(ctx, name, 145, yy, nc || C.cream);
+        const rest = G.wrap(lines.slice(1).join(' '), 238);
+        G.text(ctx, lines[0], 145 + G.measure(name) + 8, yy, C.gray);
+        yy += 10;
+        rest.filter(Boolean).forEach((l) => { if (yy <= 186) { G.text(ctx, l, 151, yy, C.gray); yy += 10; } });
+        yy += 2;
+      };
+      sks.forEach((sk) => { const d = AD.SKILLS[sk] || [sk, '']; put(d[0], d[1]); });
+      const eq = AD.equipped(u);
+      if (eq) {
+        const aid = AD.artId(eq.d), ad = aid && AD.ARTS[aid];
+        if (ad) put('Art: ' + ad.n, ad.cost + ' uses. ' + ad.desc, C.gold);
+        const fx = AD.fxText(eq.d);
+        if (fx) put('On hit', fx + ' (' + eq.d.n + ')', C.teal);
+      }
+      Object.keys(u.st || {}).forEach((k) => put(AD.STATUS[k].n, AD.STATUS[k].desc, AD.STATUS[k].c));
+      G.text(ctx, '\u25c4\u25ba page   \u25b2\u25bc unit', W - 8, H - 15, C.dim, { align: 'right' });
+      return;
+    }
     if (this.page === 0) {
       G.panel(ctx, 138, 8, 124, 128);
       G.text(ctx, 'Stats', 145, 13, C.gold);
@@ -6056,7 +6267,24 @@ window.AD = window.AD || {};
     return e || ws[0];
   }
   AD.equipped = equipped;
-  function stat(u, k) { return (u.stats[k] || 0) + ((u.mod && u.mod[k]) || 0); }
+  function stat(u, k) {
+    let v = (u.stats[k] || 0) + ((u.mod && u.mod[k]) || 0);
+    if (k === 'spd' && u.st && u.st.chill) v -= 4;
+    // a friend on your back slows you down
+    if (u.carry && (k === 'spd' || k === 'skl') && !has(u, 'shelter')) v = Math.floor(v / 2);
+    return v;
+  }
+  // casters and singers can tend the friend they carry
+  const tender = (u) => cls(u).w.some((t) => t === 'song' || AD.GIFT.indexOf(t) >= 0);
+  // the art a weapon offers this unit right now, or null when it is too worn to pay for one
+  function artFor(u, wo) {
+    const id = wo && AD.artId(wo.d);
+    const a = id && AD.ARTS[id];
+    if (!a) return null;
+    if (u.team === 'p' && (!u.items[wo.i] || u.items[wo.i].uses < a.cost)) return null;
+    return Object.assign({ id }, a);
+  }
+  AD.artFor = artFor;
 
   function initUnit(u) {
     u.uid = ++UID;
@@ -6179,8 +6407,13 @@ window.AD = window.AD || {};
   const B = AD.Battle.prototype;
 
   // ---------------------------------------------------------------- queries
-  B.unitAt = function (x, y) { return this.units.find((u) => !u.dead && !u.gone && u.x === x && u.y === y); };
-  B.alive = function (team) { return this.units.filter((u) => !u.dead && !u.gone && (!team || u.team === team)); };
+  B.unitAt = function (x, y) { return this.units.find((u) => !u.dead && !u.gone && !u.carriedBy && u.x === x && u.y === y); };
+  // a friend being carried is off the map: nobody can see, strike or heal them until they are set down
+  B.alive = function (team) { return this.units.filter((u) => !u.dead && !u.gone && !u.carriedBy && (!team || u.team === team)); };
+  B.carried = function (u) { return u && u.carry ? this.units.find((o) => o.id === u.carry && o.carriedBy === u.id && !o.dead) || null : null; };
+  B.carrierOf = function (o) { return this.units.find((u) => u.id === o.carriedBy && u.carry === o.id && !u.dead && !u.gone) || null; };
+  // rooted units stay put
+  B.movOf = function (u) { return u.st && u.st.root ? 0 : u.mov; };
   B.lord = function () { return this.units.find((u) => u.lord && !u.dead && !u.gone && u.team === 'p') || this.units.find((u) => u.lord && !u.dead && !u.gone); };
   B.terrain = function (x, y) { return TL.info(this.map.at(x, y)); };
   B.visible = function (x, y) {
@@ -6218,7 +6451,7 @@ window.AD = window.AD || {};
         if (nc > maxCost) continue;
         if (!ignoreUnits) {
           const o = this.unitAt(nx, ny);
-          if (o && !friends(o, u)) continue;
+          if (o && !friends(o, u) && !has(u, 'slip')) continue;
         }
         const k = key(nx, ny);
         if (!out.has(k) || out.get(k).c > nc) { out.set(k, { c: nc, x: nx, y: ny, p: key(x, y) }); open.push([nc, nx, ny]); }
@@ -6228,12 +6461,12 @@ window.AD = window.AD || {};
   };
   // tiles a unit can end on
   B.moveTiles = function (u) {
-    const r = this.reach(u, u.mov);
+    const r = this.reach(u, this.movOf(u));
     const ok = new Map();
     r.forEach((v, k) => { const o = this.unitAt(v.x, v.y); if (!o || o === u) ok.set(k, v); });
     // Shadow Step / Blink: the tile beside Abarax (or the twin) is always open
     const anchor = has(u, 'shadowstep') ? this.lord() : has(u, 'blink') ? this.alive('p').find((o) => o !== u && (o.id === 'noella' || o.id === 'sierra')) : null;
-    if (anchor && anchor !== u) {
+    if (anchor && anchor !== u && this.movOf(u)) {
       DIRS.forEach(([dx, dy]) => {
         const x = anchor.x + dx, y = anchor.y + dy;
         const ch = this.map.at(x, y);
@@ -6264,8 +6497,8 @@ window.AD = window.AD || {};
     return dd >= a && dd <= b;
   };
 
-  // full forecast of a would-be combat
-  B.calc = function (a, d, aw, dist, boost, ax, ay) {
+  // full forecast of a would-be combat; art is the attacker's chosen technique, if any
+  B.calc = function (a, d, aw, dist, boost, ax, ay, art) {
     ax = ax === undefined ? a.x : ax; ay = ay === undefined ? a.y : ay;
     const ad = aw ? aw.d : null;
     const dwo = equipped(d);
@@ -6277,7 +6510,8 @@ window.AD = window.AD || {};
       const t = tri(w.t, fw ? fw.t : null) * (has(u, 'abraxas') && tri(w.t, fw ? fw.t : null) < 0 ? 0 : 1);
       const mag = !!w.mag;
       const eff = (w.eff || []).some((tg) => (cls(foe).tags || []).indexOf(tg) >= 0);
-      const sever = (w.sever || has(u, 'sever'));
+      const useArt = initiating && art ? art : null;
+      const sever = (w.sever || has(u, 'sever') || (useArt && useArt.sever));
       const ter = this.terrain(foe === d ? d.x : ax, foe === d ? d.y : ay);
       const fx = foe === d ? d.x : ax, fy = foe === d ? d.y : ay;
       const near = (team, sk, r) => this.alive().some((o) => o !== u && friends(o, u) === (team === 'f') && has(o, sk) && man(o.x, o.y, ux, uy) <= r);
@@ -6291,11 +6525,16 @@ window.AD = window.AD || {};
       const twin = this.alive().find((o) => o !== u && friends(o, u) && has(o, 'duet') && man(o.x, o.y, ux, uy) === 1);
       if (has(u, 'duet') && twin) atk += 2;
       if (has(u, 'lastworld')) atk += 2;
-      let df = mag ? stat(foe, 'res') : stat(foe, 'def') + (ter.def || 0);
+      if (this.alive().some((o) => o !== u && o.team === u.team && has(o, 'charm') && man(o.x, o.y, ux, uy) <= 2)) atk += 2;
+      if (has(u, 'trample') && cls(foe).mt === 'foot') atk += 4;
+      if (useArt && useArt.mt) atk += useArt.mt;
+      let df = mag ? stat(foe, 'res') + (has(foe, 'ward') ? 4 : 0) : stat(foe, 'def') + (ter.def || 0);
       if (has(foe, 'lastworld')) df += 2;
       if (sever) df = Math.floor(df / 2);
-      let dmg = Math.max(0, atk - df);
-      if (foe.broken) dmg = Math.floor(dmg * 1.5);
+      const hurt = (v) => Math.floor(Math.max(0, v) * (foe.broken ? 1.5 : 1));
+      const dmg = hurt(atk - df);
+      // Moon Bite halves what is left of the guard
+      const dmgL = hurt(atk - Math.floor(df / 2));
       let as = stat(u, 'spd') + (w.spd || 0) + (has(u, 'fastest') && initiating ? 3 : 0) - Math.max(0, (w.wt || 0) - stat(u, 'str'));
       let hit = w.hit + stat(u, 'skl') * 2 + Math.floor(stat(u, 'lck') / 2) + t * 15;
       if (near('f', 'conviction', 2) || has(u, 'conviction')) hit += 10;
@@ -6304,6 +6543,10 @@ window.AD = window.AD || {};
       if (has(u, 'duet') && twin) hit += 10;
       if (has(u, 'abraxas') && mag) hit += 10;
       if (u.buff) hit += 20;
+      if (u.st && u.st.blind) hit -= 25;
+      const lone = !this.alive().some((o) => o !== u && o.team === u.team && man(o.x, o.y, ux, uy) === 1);
+      if (has(u, 'focus') && lone) hit += 10;
+      if (useArt && useArt.hit) hit += useArt.hit;
       if (u.team === 'e' && nearFoe('threads', 2, ux, uy)) hit -= 15;
       if (u.team === 'p') hit += AD.game.supportBonus(u, ux, uy, this.alive('p')).hit;
       // foe avoid
@@ -6322,38 +6565,51 @@ window.AD = window.AD || {};
       if (has(foe, 'regular') && this.lord() && man(this.lord().x, this.lord().y, fx, fy) === 1) avo += 20;
       if (foe.team === 'p') avo += AD.game.supportBonus(foe, fx, fy, this.alive('p')).avo;
       if (foe.broken) avo = 0;
-      const shown = AD.clamp(hit - avo, 0, 100);
+      const shown = useArt && useArt.sure ? 100 : AD.clamp(hit - avo, 0, 100);
       let crit = w.crt + Math.floor(stat(u, 'skl') / 2) + (u.items.some((i) => i.id === 'ring') ? 10 : 0);
+      if (has(u, 'wrath') && u.hp * 2 < u.mhp) crit += 20;
+      if (has(u, 'focus') && lone) crit += 15;
+      if (useArt && useArt.crit) crit += useArt.crit;
       let cavo = stat(foe, 'lck') + (fNear('mindvoice', 3) ? 10 : 0);
       if (sever) cavo = 0;
       const critP = AD.clamp(crit - cavo, 0, 100);
-      return { w, wo, dmg, hit: shown, crit: critP, as, tri: t, eff, mag, brave: !!w.brave };
+      return { w, wo, dmg, dmgL, atk, sever: !!sever, hit: shown, crit: critP, as, tri: t, eff, mag, brave: !!w.brave, strikes: useArt && useArt.strikes };
     };
-    const A = side(a, aw, d, ax, ay, true, boost);
+    const A = side(a, aw, d, ax, ay, true, art ? 0 : boost);
     const Dd = side(d, dwo, a, d.x, d.y, false, 0);
     let dCan = !!Dd && !d.broken && (dd && !dd.song) && (this.inRange(d, dwo, d.x, d.y, ax, ay) || has(d, 'theway'));
     if (dCan && d.silenced && dd.mag) dCan = false;
-    if (A && has(a, 'sever')) { /* sever cancels foe skills in combat; counters still happen */ }
-    const aDouble = A && Dd ? A.as >= (dCan ? Dd.as : stat(d, 'spd')) + 4 && !has(d, 'heavyweight') : A && A.as >= stat(d, 'spd') + 4 && !has(d, 'heavyweight');
-    const dDouble = dCan && Dd.as >= A.as + 4 && !has(a, 'heavyweight');
-    return { a, d, A, D: dCan ? Dd : null, aDouble, dDouble, boost: boost || 0, dist };
+    if (art && art.noCounter) dCan = false;
+    let aDouble = A && Dd ? A.as >= (dCan ? Dd.as : stat(d, 'spd')) + 4 && !has(d, 'heavyweight') : A && A.as >= stat(d, 'spd') + 4 && !has(d, 'heavyweight');
+    if (art && art.strikes) aDouble = false;
+    let dDouble = dCan && Dd.as >= A.as + 4 && !has(a, 'heavyweight');
+    if (dCan && has(d, 'quickriposte') && d.hp * 2 >= d.mhp && !has(a, 'heavyweight')) dDouble = true;
+    // First Word: a wounded defender answers before the blow lands
+    const vantage = dCan && has(d, 'vantage') && d.hp * 2 < d.mhp;
+    return { a, d, A, D: dCan ? Dd : null, aDouble, dDouble, vantage, boost: art ? 0 : boost || 0, dist, art: art || null };
   };
 
   // ---------------------------------------------------------------- resolve combat
-  // Mutates the units and returns a timeline the animation plays back.
+  // Mutates the units and returns a timeline the animation plays back, plus what happens after
+  // the exchange (a push or pull, damage that splashes or chains to foes beside the target).
   B.resolve = function (fc) {
     const { a, d } = fc;
+    const art = fc.art;
     const tl = [];
     const order = [];
     const physBoost = fc.A && !fc.A.mag ? fc.boost : 0;
     const strikes = (who, n) => { for (let i = 0; i < n; i++) order.push(who); };
-    const ab = fc.A.brave ? 2 : 1;
+    const ab = fc.A.strikes || (fc.A.brave ? 2 : 1);
+    const db = fc.D && fc.D.brave ? 2 : 1;
+    if (fc.vantage) strikes('d', db);
     strikes('a', (1 + physBoost) * ab);
-    if (fc.D) strikes('d', fc.D.brave ? 2 : 1);
+    if (fc.D && !fc.vantage) strikes('d', db);
     if (fc.aDouble) strikes('a', ab);
-    if (fc.D && fc.dDouble) strikes('d', fc.D.brave ? 2 : 1);
+    if (fc.D && fc.dDouble) strikes('d', db);
     const used = { a: 0, d: 0 };
     let dealt = { a: 0, d: 0 };
+    let fxProc = false; // the attacker's weapon effect landed at least once (push, pull, chain)
+    let aHit = false;
     for (const who of order) {
       const att = who === 'a' ? a : d, def = who === 'a' ? d : a;
       const S = who === 'a' ? fc.A : fc.D;
@@ -6363,7 +6619,12 @@ window.AD = window.AD || {};
       const r1 = AD.rn100(), r2 = AD.rn100();
       const hit = (r1 + r2) / 2 < S.hit;
       const crit = hit && AD.rn100() < S.crit;
-      let dmg = hit ? S.dmg * (crit ? 3 : 1) : 0;
+      const ev = { who, hit, crit, dmg: 0, before: def.hp, mag: S.mag, type: S.w.t };
+      if (who === 'a' && art && !used.a) ev.art = art.n;
+      let base = S.dmg;
+      if (hit && has(att, 'luna') && AD.rn100() < stat(att, 'skl')) { base = S.dmgL; ev.luna = true; }
+      let dmg = hit ? base * (crit ? 3 : 1) : 0;
+      if (hit && dmg && has(def, 'pavise') && man(a.x, a.y, d.x, d.y) === 1 && AD.rn100() < stat(def, 'skl')) { dmg = Math.floor(dmg / 2); ev.pavise = true; }
       // iron skin: first hit each enemy phase
       if (hit && has(def, 'ironskin') && this.phase === 'e' && !def.skinUsed) { dmg = Math.floor(dmg / 2); def.skinUsed = true; }
       if (def.gentle !== undefined || att.gentle) { if (dmg >= def.hp) dmg = def.hp - 1; }
@@ -6372,9 +6633,15 @@ window.AD = window.AD || {};
       if (hit && dmg >= def.hp && has(def, 'getup') && !def.gotUp) { dmg = def.hp - 1; def.gotUp = true; getup = true; }
       def.hp = Math.max(0, def.hp - dmg);
       used[who]++;
-      if (att.team === 'p') att.items[wo.i].uses--;
+      if (att.team === 'p') {
+        // an art is paid for on its first strike; the rest of a many-strike art comes with it
+        const cost = ev.art ? art.cost : who === 'a' && art && art.strikes ? 0 : 1;
+        if (has(att, 'thrift') && AD.rn100() < stat(att, 'lck')) ev.thrift = true;
+        else att.items[wo.i].uses = Math.max(0, att.items[wo.i].uses - cost);
+      }
       dealt[who] += dmg;
-      const ev = { who, hit, crit, dmg, before, after: def.hp, getup, mag: S.mag, type: S.w.t, aHp: a.hp, dHp: d.hp };
+      Object.assign(ev, { dmg, before, after: def.hp, getup, aHp: a.hp, dHp: d.hp });
+      if (who === 'a' && hit) aHit = true;
       // shield and break (only enemies carry shields)
       if (hit && def.mshield && !def.broken) {
         const matches = def.weak.indexOf(S.w.t) >= 0 || (S.w.t === 'all' && def.weak.some((w) => AD.GIFT.indexOf(w) >= 0)) || def.weak.indexOf('all') >= 0 && S.w.t === 'all';
@@ -6390,7 +6657,22 @@ window.AD = window.AD || {};
       if (hit && has(att, 'drain') && def.hp > 0) { const k = AD.pick(['str', 'mag', 'def']); def.mod[k] = (def.mod[k] || 0) - 1; att.mod[k] = (att.mod[k] || 0) + 1; ev.drain = k; }
       if (hit && has(att, 'subtract') && def.hp > 0) { def.mhp = Math.max(1, def.mhp - 2); if (def.hp > def.mhp) def.hp = def.mhp; ev.subtract = true; }
       if (hit && (S.w.silence || has(att, 'silence'))) def.silenced = 1;
-      if (hit && S.w.drain) { const heal = Math.floor(dmg / 2); att.hp = Math.min(att.mhp, att.hp + heal); ev.healed = heal; }
+      let heal = 0;
+      if (hit && S.w.drain) heal += Math.floor(dmg / 2);
+      if (hit && who === 'a' && art && art.drain) heal += dmg;
+      if (hit && dmg && has(att, 'sol') && AD.rn100() < stat(att, 'skl')) { heal += Math.floor(dmg / 2); ev.sol = true; }
+      if (heal) { const h = Math.min(att.mhp - att.hp, heal); att.hp += h; ev.healed = h; }
+      // what the weapon does besides hurt
+      if (hit && def.hp > 0) {
+        const fx = S.w.fx;
+        const roll = fx && AD.rn100() < fx.ch;
+        if (roll && who === 'a' && (fx.push || fx.pull || fx.chain)) fxProc = true;
+        let st = null;
+        if (who === 'a' && art && art.st) st = [art.st, art.stN || 1];
+        else if (roll && fx.st) st = [fx.st, fx.n || 1];
+        else if (S.mag && has(att, 'kindle')) st = ['burn', 1];
+        if (st && this.inflict(def, st[0], st[1])) ev.status = st[0];
+      }
       ev.aHp = a.hp; ev.dHp = d.hp;
       tl.push(ev);
       if (def.hp <= 0) break;
@@ -6402,7 +6684,56 @@ window.AD = window.AD || {};
       if (it && it.uses <= 0 && AD.ITEMS[it.id].uses < 99) { tl.push({ broke_weapon: AD.ITEMS[it.id].n, who: w }); u.items.splice(S.wo.i, 1); const e = equipped(u); u.eq = e ? e.i : 0; }
       if (used[w] && u.wexp) u.wexp[S.w.t] = (u.wexp[S.w.t] || 0) + (S.w.t === 'all' ? 0 : 1 + (u === a ? 1 : 0));
     });
-    return { tl, dealt };
+    return { tl, dealt, after: aHit ? this.aftermath(fc, fxProc) : null };
+  };
+  // the target's neighbours on the attacker's opposing side
+  B.besideFoe = function (a, d) { return this.alive().filter((o) => o !== d && o !== a && !friends(o, a) && man(o.x, o.y, d.x, d.y) === 1); };
+  B.aftermath = function (fc, fxProc) {
+    const { a, d, A } = fc, art = fc.art, fx = A.w.fx || {};
+    const out = { hits: [], spread: [] };
+    // damage that spills onto the foes beside the target
+    let share = art && art.splash ? art.splash : 0, chain = false;
+    if (!share && fxProc && fx.chain) { share = fx.chain; chain = true; }
+    if (share) {
+      let near = this.besideFoe(a, d);
+      if (chain && near.length) near = [near[Math.floor(AD.rng() * near.length)]];
+      near.forEach((o) => {
+        const df = A.mag ? stat(o, 'res') + (has(o, 'ward') ? 4 : 0) : stat(o, 'def') + (this.terrain(o.x, o.y).def || 0);
+        let dmg = Math.floor(Math.max(0, A.atk - (A.sever ? Math.floor(df / 2) : df)) * share);
+        // allies the story needs are never finished off by a stray blow
+        if ((o.gentle !== undefined || a.gentle || o.team === 'a') && dmg >= o.hp) dmg = o.hp - 1;
+        let getup = false;
+        if (dmg >= o.hp && has(o, 'getup') && !o.gotUp) { dmg = o.hp - 1; o.gotUp = true; getup = true; }
+        o.hp = Math.max(0, o.hp - dmg);
+        out.hits.push({ u: o, dmg, getup, chain });
+      });
+    }
+    if (art && art.spread && art.st) this.besideFoe(a, d).forEach((o) => { if (o.hp > 0 && this.inflict(o, art.st, art.stN || 1)) out.spread.push({ u: o, st: art.st }); });
+    // a push or a pull moves the target one tile, if there is room
+    if (d.hp > 0 && ((art && art.push) || (fxProc && (fx.push || fx.pull)))) {
+      const pull = !(art && art.push) && fx.pull;
+      const ddx = d.x - a.x, ddy = d.y - a.y;
+      const [sx, sy] = Math.abs(ddx) >= Math.abs(ddy) ? [Math.sign(ddx), 0] : [0, Math.sign(ddy)];
+      const tx = d.x + (pull ? -sx : sx), ty = d.y + (pull ? -sy : sy);
+      const ch = this.map.at(tx, ty);
+      const ok = ch !== null && TL.cost(ch === 'D' && this.tstate.opened[key(tx, ty)] ? ',' : ch, cls(d).mt) != null && !this.unitAt(tx, ty) && !(tx === a.x && ty === a.y);
+      if (ok) out.move = { u: d, x: tx, y: ty, pull };
+    }
+    return out;
+  };
+  // a status takes hold unless the mind is clear; it lasts through the victim's next own phase
+  B.inflict = function (u, k, n) {
+    if (!u || u.hp <= 0 || has(u, 'ward') || !AD.STATUS[k]) return false;
+    u.st = u.st || {};
+    const dur = (n || 1) + (this.phase === u.team ? 1 : 0);
+    u.st[k] = Math.max(u.st[k] || 0, dur);
+    return true;
+  };
+  B.tickStatus = function (ph) {
+    this.units.forEach((u) => {
+      if (u.team !== ph || !u.st) return;
+      Object.keys(u.st).forEach((k) => { if (--u.st[k] <= 0) delete u.st[k]; });
+    });
   };
 
   // ---------------------------------------------------------------- camera and helpers
@@ -6490,10 +6821,17 @@ window.AD = window.AD || {};
 
   B.update = function () {
     this.updateWalks();
+    // a carried friend goes wherever the carrier goes
+    this.units.forEach((o) => {
+      if (!o.carriedBy) return;
+      const c = this.carrierOf(o);
+      if (c) { o.x = c.x; o.y = c.y; } else delete o.carriedBy;
+    });
     this.cam.x += (this.cam.tx - this.cam.x) * 0.25;
     this.cam.y += (this.cam.ty - this.cam.y) * 0.25;
     if (this.banner) { this.banner.t++; if (this.banner.t > this.banner.life) { const r = this.banner.res; this.banner = null; r && r(); } }
     this.anim = this.anim.filter((a) => { a.t++; return a.t < a.life; });
+    this.watchdog();
     if (this.busy || this.over) return;
     if (this.phase !== 'p') return;
     // nothing is running but the state says something should be: recover rather than freeze
@@ -6502,6 +6840,21 @@ window.AD = window.AD || {};
       this.state = 'map'; this.sel = null; this.moves = null;
     }
     this.playerInput();
+  };
+
+  // A job that dies or hangs mid-turn must not stop the battle. Every legitimate wait has
+  // something visibly running: a scene on top, a timer, a walk, a banner or a fade. Waiting with
+  // none of those for a few seconds means the job is gone, so the battle moves itself along.
+  B.watchdog = function () {
+    const idle = AD.top() === this && !AD.timers.length && !this.banner && AD.fade.a === AD.fade.target && !this.units.some((u) => u.walk);
+    const stalled = idle && !this.over && ((this.busy) || (this.phase !== 'p'));
+    this.stallT = stalled ? (this.stallT || 0) + 1 : 0;
+    if (this.stallT < (this.busy ? 600 : 120)) return;
+    this.stallT = 0;
+    AD.report(new Error('battle stalled (' + (this.busy ? 'job hung' : 'phase ' + this.phase + ' with no job') + '); moving on'), 'watchdog');
+    this.jobs = 0; this.busy = false;
+    if (this.phase !== 'p') this.async(() => this.nextPhase());
+    else { this.state = 'map'; this.sel = null; this.moves = null; }
   };
 
   // ---------------------------------------------------------------- player input
@@ -6692,6 +7045,10 @@ window.AD = window.AD || {};
       if (this.goal.type === 'seize' && u.lord && u.x === this.goal.x && u.y === this.goal.y) items.push({ label: 'Seize', value: 'seize', icon: 'star', color: C.gold });
       if (this.goal.type === 'escape' && this.isExit(u.x, u.y)) items.push({ label: 'Escape', value: 'escape', icon: 'star', color: C.gold });
       if (has(u, 'build') && this.buildSpots(u).length) items.push({ label: 'Build', value: 'build', icon: 'item' });
+      const cargo = this.carried(u);
+      if (!cargo && this.rescuable(u).length) items.push({ label: 'Rescue', value: 'rescue', icon: 'rose', help: 'Take a friend beside you onto your back, out of harm. Spd and Skl are halved while you carry them.' });
+      if (cargo && this.canMend(u)) items.push({ label: 'Mend', value: 'mend', icon: 'song', color: C.hp, help: 'Tend ' + cargo.name + ': restores ' + this.mendAmt(u) + ' HP.' });
+      if (cargo && this.dropSpots(u).length) items.push({ label: 'Drop', value: 'drop', icon: 'rose', help: 'Set ' + cargo.name + ' down beside you. If they have not acted, they still can.' });
       if (this.adjacent(u, (o) => o.team === 'p').length) items.push({ label: 'Trade', value: 'trade', icon: 'item' });
       const lord = this.lord();
       if (lord && (lord === u || man(lord.x, lord.y, u.x, u.y) === 1)) items.push({ label: 'Supply', value: 'supply', icon: 'item' });
@@ -6713,6 +7070,9 @@ window.AD = window.AD || {};
         case 'seize': await this.finish(u); await this.win(); return;
         case 'escape': await this.escape(u); return;
         case 'build': done = await this.buildFlow(u); break;
+        case 'rescue': done = await this.rescueFlow(u); break;
+        case 'mend': done = await this.mendFlow(u); break;
+        case 'drop': done = await this.dropFlow(u); break;
         case 'trade': await this.tradeFlow(u); u.acted = true; continue;
         case 'supply': await AD.game.supply(u); continue;
         case 'items': { const r = await this.itemsFlow(u); if (r !== 'used') continue; done = true; break; }
@@ -6724,6 +7084,11 @@ window.AD = window.AD || {};
 
   B.finish = async function (u) {
     u.done = true; u.acted = false;
+    if (u.galeReady) {
+      u.galeReady = false; u.galeUsed = true; u.done = false;
+      AD.audio.sfx('bloom');
+      AD.fx.float('GALEFORCE', u.x * TS + HT, u.y * TS - 12, C.teal, { life: 80 });
+    }
     this.sel = null; this.state = 'map'; this.moves = null;
     this.vis = null; this.dz = null;
     await this.trigger({ area: true, unit: u });
@@ -6741,17 +7106,18 @@ window.AD = window.AD || {};
       scene.done = async (choice) => {
         AD.pop(scene);
         if (!choice || !choice.w) { res(false); return; }
-        try { await this.fight(u, choice.t, choice.w, choice.boost); } catch (e) { console.error(e); }
+        try { await this.fight(u, choice.t, choice.w, choice.boost, choice.art); } catch (e) { AD.report(e, 'fight'); }
         res(true);
       };
       AD.push(scene);
     });
   };
 
-  B.fight = async function (a, d, wo, boost) {
+  B.fight = async function (a, d, wo, boost, art) {
     a.eq = wo.i;
+    if (art) boost = 0;
     if (boost && a.team === 'p') { a.bp -= boost; a.boosted = true; AD.audio.sfx('boost'); }
-    const fc = this.calc(a, d, wo, man(a.x, a.y, d.x, d.y), boost);
+    const fc = this.calc(a, d, wo, man(a.x, a.y, d.x, d.y), boost, undefined, undefined, art || null);
     const res = this.resolve(fc);
     await this.playCombat(fc, res);
     await this.afterCombat(fc, res);
@@ -6778,6 +7144,7 @@ window.AD = window.AD || {};
       const style = styleOf(att, ev);
       const ranged = man(att.x, att.y, def.x, def.y) > 1 || style === 'shoot' || style === 'cast';
       att.act = { style, phase: 'ready', el: ev.type, ox: 0, oy: 0 };
+      if (ev.art) { AD.audio.sfx('boost'); AD.fx.float(ev.art, att.x * TS + HT, att.y * TS - 16, C.gold, { life: 70 }); await AD.wait(14); }
       await AD.wait(8);
       att.act.phase = 'windup';
       if (ev.crit) { AD.audio.sfx('boost'); att.act.glint = 1; }
@@ -6802,6 +7169,9 @@ window.AD = window.AD || {};
         else AD.fx.shake(2, 6);
         if (ev.broke) { AD.audio.sfx('break'); AD.fx.float('BREAK!', fx, fy - 12, C.gold, { life: 80 }); }
         if (ev.getup) AD.fx.float('GET UP', fx, fy - 12, C.rose, { life: 80 });
+        const tag = ev.status ? AD.STATUS[ev.status].past : ev.luna ? 'MOON BITE' : ev.pavise ? 'BULWARK' : null;
+        if (tag) AD.fx.float(tag, fx, fy - 24, ev.status ? AD.STATUS[ev.status].c : C.violet, { life: 70 });
+        if (ev.sol) AD.fx.float('ROSE SOL', att.x * TS + HT, att.y * TS - 14, C.rose, { life: 70 });
         const from = def.dispHp, to = ev.after;
         for (let i = 1; i <= 12; i++) { def.dispHp = Math.round(from + (to - from) * (i / 12)); if (i === 6 && def.act) { def.act.ox = ux; def.act.oy = uy; } await AD.wait(1); }
         if (ev.healed) att.dispHp = Math.min(att.mhp, att.dispHp + ev.healed);
@@ -6824,8 +7194,38 @@ window.AD = window.AD || {};
 
   B.afterCombat = async function (fc, res) {
     const { a, d } = fc;
+    const af = res.after;
+    // what spilled over: a push, splashes, statuses spread to the foes beside
+    if (af) {
+      for (const h of af.hits) {
+        const o = h.u, px = o.x * TS + HT, py = o.y * TS - 10;
+        o.flash = 8;
+        this.anim.push({ kind: 'impact', x: o.x, y: o.y, el: fc.A.w.t, t: 0, life: 14 });
+        AD.fx.float(String(h.dmg), px, py, '#ffffff', { life: 60 });
+        if (h.chain) AD.fx.float('CHAIN', px, py - 12, C.teal, { life: 60 });
+        if (h.getup) AD.fx.float('GET UP', px, py - 12, C.rose, { life: 70 });
+      }
+      for (const sp of af.spread) AD.fx.float(AD.STATUS[sp.st].past, sp.u.x * TS + HT, sp.u.y * TS - 10, AD.STATUS[sp.st].c, { life: 60 });
+      if (af.hits.length || af.spread.length) { AD.audio.sfx('hit'); await AD.wait(24); }
+    }
     const dead = [a, d].filter((u) => u.hp <= 0);
     for (const u of dead) await this.kill(u, u === a ? d : a);
+    if (af && af.move && af.move.u.hp > 0 && !af.move.u.dead && !this.unitAt(af.move.x, af.move.y)) {
+      const m = af.move;
+      AD.audio.sfx('hit');
+      AD.fx.float(m.pull ? 'PULLED' : 'KNOCKED BACK', m.u.x * TS + HT, m.u.y * TS - 10, C.cream, { life: 50 });
+      await this.walk(m.u, [{ x: m.u.x, y: m.u.y }, { x: m.x, y: m.y }]);
+    }
+    const fallen = af ? af.hits.filter((h) => h.u.hp <= 0 && !h.u.dead).map((h) => h.u) : [];
+    for (const u of fallen) await this.kill(u, a);
+    if (this.over) return;
+    // a kill on your own turn: seconds, or another go
+    const killed = (d.hp <= 0 && d.team !== a.team) || fallen.length;
+    if (killed && a.hp > 0 && a.team === 'p') {
+      if (has(a, 'secondhelping') && a.hp < a.mhp) { const h = Math.min(a.mhp - a.hp, Math.ceil(a.mhp / 4)); a.hp += h; AD.fx.float('+' + h, a.x * TS + HT, a.y * TS, C.hp); AD.audio.sfx('heal'); }
+      if (has(a, 'galeforce') && this.phase === 'p' && !a.galeUsed) a.galeReady = true;
+    }
+    for (const u of fallen) if (a.team === 'p' && a.hp > 0) await this.giveExp(a, Math.ceil(this.expFor(a, u, true, true) / 2));
     // experience
     for (const [u, foe] of [[a, d], [d, a]]) {
       if (u.team !== 'p' || u.hp <= 0) continue;
@@ -6860,6 +7260,12 @@ window.AD = window.AD || {};
       const gains = AD.game.levelUp(u);
       if (!AD.TEST) await AD.run(new LevelUp(this, u, gains));
       if (u.lv >= cap) u.exp = 0;
+      const got = AD.game.learn(u);
+      if (got.length) {
+        AD.audio.sfx('levelup');
+        const sk = u.skills.slice(-got.length).map((k) => AD.SKILLS[k][0] + ': ' + AD.SKILLS[k][1]).join('\n');
+        await AD.notice(u.name + ' learned ' + got.join(' and ') + '!\n' + sk, { icon: 'star' });
+      }
     }
   };
 
@@ -6877,6 +7283,9 @@ window.AD = window.AD || {};
     u.fade = 0;
     for (let i = 0; i < 20; i++) { u.fade = i / 20; await AD.wait(1); }
     u.dead = true;
+    // whoever they carried is set down where they fell
+    const cargo = this.carried(u);
+    if (cargo) { delete cargo.carriedBy; delete u.carry; cargo.x = u.x; cargo.y = u.y; AD.fx.float(cargo.name + ' falls free', u.x * TS + HT, u.y * TS - 12, C.cream, { life: 70 }); }
     if (u.team === 'p') {
       const d = AD.UNITS[u.id];
       if (u.lord) { await this.say([[u.id, 'sad', d.death || '...']]); await this.lose(); return; }
@@ -6915,7 +7324,7 @@ window.AD = window.AD || {};
     u.items[so.i].uses--;
     AD.audio.sfx(so.d.range === 'fold' ? 'warp' : 'heal');
     const healAmt = (o) => {
-      let h = stat(u, 'mag') + so.d.heal;
+      let h = stat(u, 'mag') + so.d.heal + (has(u, 'warmhands') ? 10 : 0);
       if (so.d.id === 'duet' && this.alive('p').some((x) => x !== u && (x.id === 'noella' || x.id === 'sierra' || x.id === 'selenne') && man(x.x, x.y, o.x, o.y) <= 1)) h += 10;
       return h;
     };
@@ -7042,11 +7451,75 @@ window.AD = window.AD || {};
     return true;
   };
 
+  // ---------------------------------------------------------------- rescue, mend, drop
+  B.rescuable = function (u) { return this.adjacent(u, (o) => o.team === 'p' && o !== u && !o.carry && !o.carriedBy); };
+  B.dropSpots = function (u) {
+    const o = this.carried(u);
+    if (!o) return [];
+    return DIRS.map(([dx, dy]) => [u.x + dx, u.y + dy]).filter(([x, y]) => {
+      let ch = this.map.at(x, y);
+      if (ch === null || this.unitAt(x, y)) return false;
+      if (ch === 'D' && this.tstate.opened[key(x, y)]) ch = ',';
+      return TL.cost(ch, cls(o).mt) != null;
+    });
+  };
+  // casters and singers tend the friend they carry, once a turn
+  B.canMend = function (u) { const o = this.carried(u); return !!o && tender(u) && o.hp < o.mhp && !sealed(u); };
+  B.mendAmt = function (u) { return 10 + Math.floor(stat(u, 'mag') / 2) + (has(u, 'warmhands') ? 10 : 0); };
+  B.rescueFlow = async function (u) {
+    const t = await this.pickTarget(u, this.rescuable(u), (o) => 'Rescue ' + o.name + '  HP ' + o.hp + '/' + o.mhp);
+    if (!t) return false;
+    AD.audio.sfx('select');
+    this.anim.push({ kind: 'lift', x: t.x, y: t.y, x1: u.x, y1: u.y, t: 0, life: 16 });
+    for (let i = 0; i < 12; i++) { t.fade = i / 12; await AD.wait(1); }
+    t.fade = 0;
+    t.carriedBy = u.id; u.carry = t.id; t.x = u.x; t.y = u.y;
+    this.vis = null; this.dz = null;
+    AD.fx.float('Rescued ' + t.name, u.x * TS + HT, u.y * TS - 18, C.rose, { life: 60 });
+    await AD.wait(16);
+    // a caster or singer can tend them straight away
+    if (this.canMend(u)) {
+      const px = u.x * TS - this.cam.x;
+      const v = await AD.menu({ items: [{ label: 'Mend', value: 'mend', icon: 'song', color: C.hp, help: 'Tend ' + t.name + ': restores ' + this.mendAmt(u) + ' HP.' }, { label: 'Wait', value: 'wait' }], x: px > W / 2 ? 8 : W - 74, y: 8, w: 66 });
+      if (v === 'mend') await this.mendFlow(u);
+    }
+    return true;
+  };
+  B.mendFlow = async function (u) {
+    const o = this.carried(u);
+    if (!o) return false;
+    const h = Math.min(o.mhp - o.hp, this.mendAmt(u));
+    o.hp += h;
+    AD.audio.sfx('heal');
+    this.anim.push({ kind: 'mend', x: u.x, y: u.y, t: 0, life: 36 });
+    AD.fx.float(o.name + ' +' + h, u.x * TS + HT, u.y * TS + 2, C.hp, { life: 70 });
+    await AD.wait(30);
+    if (u.wexp) { const t = cls(u).w.indexOf('song') >= 0 ? 'song' : null; if (t) u.wexp[t] = (u.wexp[t] || 0) + 1; }
+    await this.giveExp(u, 10);
+    AD.game.bumpSupportNear(u, [o]);
+    return true;
+  };
+  B.dropFlow = async function (u) {
+    const o = this.carried(u);
+    const t = await this.pickTile(u, this.dropSpots(u), 'Set ' + (o ? o.name : '') + ' down here');
+    if (!t || !o) return false;
+    delete o.carriedBy; delete u.carry;
+    o.x = t[0]; o.y = t[1]; o.appear = 0;
+    AD.audio.sfx('select');
+    for (let i = 0; i <= 8; i++) { o.appear = i / 8; await AD.wait(1); }
+    o.appear = undefined;
+    this.vis = null; this.dz = null;
+    await this.trigger({ area: true, unit: o });
+    return true;
+  };
+
   B.isExit = function (x, y) { return this.map.at(x, y) === '<' || (this.goal.exits || []).some(([ex, ey]) => ex === x && ey === y); };
   B.escape = async function (u) {
     u.gone = true; this.escaped.push(u);
+    const cargo = this.carried(u);
+    if (cargo) { cargo.gone = true; this.escaped.push(cargo); }
     AD.audio.sfx('warp');
-    if (u.lord) { this.sel = null; this.state = 'map'; await this.win(); return; }
+    if (u.lord || (cargo && cargo.lord)) { this.sel = null; this.state = 'map'; await this.win(); return; }
     await this.finish(u);
   };
 
@@ -7064,7 +7537,7 @@ window.AD = window.AD || {};
       const v = await AD.menu({
         title: u.name, items: u.items.map((it, i) => {
           const d = AD.ITEMS[it.id];
-          return { label: d.n, value: i, icon: d.weapon ? d.t : d.song ? 'song' : 'item', right: it.uses, help: d.desc || (d.weapon ? `Mt ${d.mt}  Hit ${d.hit}  Crit ${d.crt}  Wt ${d.wt}  Rng ${d.rng[0]}-${d.rng[1]}  Rank ${d.rank}` : ''), color: i === u.eq && d.weapon ? C.gold : undefined };
+          return { label: d.n, value: i, icon: d.weapon ? d.t : d.song ? 'song' : 'item', right: it.uses, help: d.weapon ? AD.weaponHelp(d) : d.desc || '', color: i === u.eq && d.weapon ? C.gold : undefined };
         }),
       });
       if (v === null) return;
@@ -7148,7 +7621,8 @@ window.AD = window.AD || {};
     this.phase = ph;
     this.vis = null; this.dz = null;
     const team = this.alive(ph);
-    team.forEach((u) => { u.done = false; u.skinUsed = false; });
+    // everyone on the side gets their turn back, the carried too: set down, they can still act
+    this.units.forEach((u) => { if (u.team === ph && !u.dead && !u.gone) { u.done = false; u.skinUsed = false; u.galeUsed = false; u.galeReady = false; } });
     if (ph === 'p') {
       if (this.goal.type === 'survive' || this.goal.type === 'defend') {
         if (this.turn > this.goal.turns) { await this.win(); return; }
@@ -7175,6 +7649,7 @@ window.AD = window.AD || {};
   };
   B.nextPhase = async function () {
     if (this.over) return;
+    this.tickStatus(this.phase);
     const order = ['p', 'a', 'e'];
     let i = order.indexOf(this.phase);
     for (let k = 0; k < 3; k++) {
@@ -7201,6 +7676,13 @@ window.AD = window.AD || {};
       if (this.alive().some((o) => o !== u && friends(o, u) && has(o, 'bloomground') && man(o.x, o.y, u.x, u.y) <= 2)) heal += 5;
       heal = Math.min(heal, u.mhp - u.hp);
       if (heal > 0 && u.hp > 0) { u.hp += heal; AD.fx.float('+' + heal, u.x * TS + HT, u.y * TS, C.hp); }
+      // burning eats a tenth of the body, never the last of it
+      if (u.st && u.st.burn && u.hp > 1) {
+        const b = Math.min(u.hp - 1, Math.max(1, Math.floor(u.mhp / 10)));
+        u.hp -= b; u.flash = 6;
+        AD.fx.float('-' + b, u.x * TS + HT, u.y * TS, AD.STATUS.burn.c);
+        this.anim.push({ kind: 'impact', x: u.x, y: u.y, el: 'flame', t: 0, life: 14 });
+      }
       if (u.silenced) u.silenced = Math.max(0, u.silenced - 1);
       u.buff = 0;
       if (ph === 'p' && u.team === 'p') { if (!u.boosted) u.bp = Math.min(5, u.bp + 1); u.boosted = false; }
@@ -7254,7 +7736,7 @@ window.AD = window.AD || {};
     }
     if (mode === 'stay' || mode === 'npc') return;
     if (mode === 'flee') return this.aiFlee(u);
-    const reach = mode === 'hold' ? new Map([[key(u.x, u.y), { c: 0, x: u.x, y: u.y, p: null }]]) : this.reach(u, u.mov);
+    const reach = mode === 'hold' ? new Map([[key(u.x, u.y), { c: 0, x: u.x, y: u.y, p: null }]]) : this.reach(u, this.movOf(u));
     const spots = [];
     reach.forEach((v) => { const o = this.unitAt(v.x, v.y); if (!o || o === u) spots.push(v); });
     // healers first look after their own
@@ -7270,24 +7752,26 @@ window.AD = window.AD || {};
       if (best) {
         await this.centerOn(u.x, u.y);
         await this.walk(u, this.pathTo(reach, best.v.x, best.v.y));
-        const h = Math.min(best.o.mhp - best.o.hp, stat(u, 'mag') + best.so.d.heal);
+        const h = Math.min(best.o.mhp - best.o.hp, stat(u, 'mag') + best.so.d.heal + (has(u, 'warmhands') ? 10 : 0));
         best.o.hp += h; AD.audio.sfx('heal'); AD.fx.float('+' + h, best.o.x * TS + HT, best.o.y * TS, C.hp);
         await AD.wait(20);
         return;
       }
     }
     const ws = weapons(u);
+    // bosses (from Normal up) weigh their weapon's art as well as a plain strike
+    const artsOf = (w) => { const at = u.boss && this.diff >= 1 ? artFor(u, w) : null; return at ? [null, at] : [null]; };
     let best = null;
     const foes = this.alive().filter((o) => !friends(o, u));
     for (const v of spots) {
       for (const f of foes) {
         const dd = man(v.x, v.y, f.x, f.y);
-        for (const w of ws) {
+        for (const w of ws) for (const art of artsOf(w)) {
           const [a, b] = this.weaponRange(u, w);
           if (dd < a || dd > b) continue;
-          const fc = this.calc(u, f, w, dd, 0, v.x, v.y);
+          const fc = this.calc(u, f, w, dd, 0, v.x, v.y, art);
           const A = fc.A;
-          const strikes = (A.brave ? 2 : 1) * (fc.aDouble ? 2 : 1);
+          const strikes = (A.strikes || (A.brave ? 2 : 1)) * (fc.aDouble ? 2 : 1);
           const exp = (A.dmg * A.hit) / 100 * strikes;
           const kill = A.dmg * strikes >= f.hp && A.hit > 0;
           let sc = exp * 2 + (kill ? 60 + A.hit / 2 : 0) + (A.hit / 10);
@@ -7297,7 +7781,8 @@ window.AD = window.AD || {};
           if (songs(f).length) sc += 8;
           sc += (this.terrain(v.x, v.y).avo || 0) * 0.05 - v.c * 0.05;
           if (A.hit <= 0 && A.dmg <= 0) sc -= 50;
-          if (!best || sc > best.sc) best = { v, f, w, sc };
+          if (art) sc += (art.st ? 4 : 0) + (art.push ? 1 : 0) - 2;
+          if (!best || sc > best.sc) best = { v, f, w, sc, art };
         }
       }
     }
@@ -7306,7 +7791,7 @@ window.AD = window.AD || {};
       await this.walk(u, this.pathTo(reach, best.v.x, best.v.y));
       await this.centerOn(u.x, u.y);
       await AD.wait(6);
-      await this.fight(u, best.f, best.w, 0);
+      await this.fight(u, best.f, best.w, 0, best.art);
       return;
     }
     if (mode === 'hold' || mode === 'guard') return;
@@ -7352,7 +7837,7 @@ window.AD = window.AD || {};
     for (let y = 0; y < this.map.h; y++) for (let x = 0; x < this.map.w; x++) if (this.map.at(x, y) === '<') exits.push({ x, y });
     if (u.fleeTo) exits.push({ x: u.fleeTo[0], y: u.fleeTo[1] });
     if (!exits.length) return;
-    const reach = this.reach(u, u.mov);
+    const reach = this.reach(u, this.movOf(u));
     const field = this.distField(u, exits);
     let best = null;
     reach.forEach((v) => { const o = this.unitAt(v.x, v.y); if (o && o !== u) return; const d = field.get(key(v.x, v.y)); if (d !== undefined && (!best || d < best.d)) best = { v, d }; });
@@ -7543,7 +8028,7 @@ window.AD = window.AD || {};
     const set = new Set();
     this.alive('e').forEach((u) => {
       if (!this.visible(u.x, u.y)) return;
-      const r = u.ai === 'hold' ? new Map([[key(u.x, u.y), { x: u.x, y: u.y }]]) : this.reach(u, u.mov);
+      const r = u.ai === 'hold' ? new Map([[key(u.x, u.y), { x: u.x, y: u.y }]]) : this.reach(u, this.movOf(u));
       const ws = weapons(u);
       const maxR = Math.max(0, ...ws.map((w) => this.weaponRange(u, w)[1]));
       r.forEach((v) => { for (let dy = -maxR; dy <= maxR; dy++) for (let dx = -maxR; dx <= maxR; dx++) if (Math.abs(dx) + Math.abs(dy) <= maxR) set.add(key(v.x + dx, v.y + dy)); });
@@ -7553,7 +8038,7 @@ window.AD = window.AD || {};
   };
   B.enemyRange = function (u) {
     if (u._rangeTurn === this.turn + ':' + this.phase && u._range) return u._range;
-    const r = u.ai === 'hold' ? new Map([[key(u.x, u.y), { x: u.x, y: u.y }]]) : this.reach(u, u.mov);
+    const r = u.ai === 'hold' ? new Map([[key(u.x, u.y), { x: u.x, y: u.y }]]) : this.reach(u, this.movOf(u));
     const mv = new Set(), at = new Set();
     r.forEach((v) => { if (!this.unitAt(v.x, v.y) || this.unitAt(v.x, v.y) === u) mv.add(key(v.x, v.y)); });
     const ws = weapons(u);
@@ -7600,7 +8085,7 @@ window.AD = window.AD || {};
     // rows of props and units
     const byRow = {};
     this.units.forEach((u) => {
-      if (u.dead || u.gone) return;
+      if (u.dead || u.gone || u.carriedBy) return;
       const ry = u.walk ? Math.ceil(u.wy / TS - 0.01) : u.y;
       (byRow[ry] = byRow[ry] || []).push(u);
     });
@@ -7701,6 +8186,24 @@ window.AD = window.AD || {};
           for (let i = 1; i < 4; i++) { const kk = Math.max(0, k - i * 0.06); ctx.globalAlpha = 0.5 - i * 0.12; ctx.fillStyle = col; ctx.fillRect(Math.round((a.x0 + (a.x1 - a.x0) * kk) * TS + HT - cx) - 1, Math.round((a.y0 + (a.y1 - a.y0) * kk) * TS + 4 - cy - Math.sin(kk * Math.PI) * 10) - 1, 2, 2); }
           ctx.globalAlpha = 1;
         }
+      } else if (a.kind === 'lift') {
+        // a ribbon of rose light from the rescued to the rescuer
+        const k = a.t / a.life;
+        for (let i = 0; i < 5; i++) {
+          const kk = Math.max(0, Math.min(1, k * 1.4 - i * 0.1));
+          ctx.globalAlpha = (1 - k) * (1 - i * 0.15); ctx.fillStyle = i % 2 ? '#ffffff' : C.rose;
+          ctx.fillRect(Math.round((a.x + (a.x1 - a.x) * kk) * TS + HT - cx) - 1, Math.round((a.y + (a.y1 - a.y) * kk) * TS + 2 - cy - Math.sin(kk * Math.PI) * 12) - 1, 3, 3);
+        }
+        ctx.globalAlpha = 1;
+      } else if (a.kind === 'mend') {
+        // motes of green rising round the carrier
+        const k = a.t / a.life;
+        for (let i = 0; i < 8; i++) {
+          const ang = i * 0.785 + a.t * 0.12, r = 7 + Math.sin(i * 1.7) * 2;
+          ctx.globalAlpha = Math.min(1, (1 - k) * 1.6); ctx.fillStyle = i % 3 ? C.hp : '#ffffff';
+          ctx.fillRect(Math.round(a.x * TS + HT - cx + Math.cos(ang) * r), Math.round(a.y * TS + 8 - cy - k * 20 - (i % 3) * 3), 2, 2);
+        }
+        ctx.globalAlpha = 1;
       } else if (a.kind === 'impact') {
         const x = a.x * TS + HT - cx, y = a.y * TS + 4 - cy, k = a.t / a.life;
         const col = ELC[a.el] || '#ffffff';
@@ -7757,6 +8260,20 @@ window.AD = window.AD || {};
     if (u.team === 'e' && u.mshield && u.broken) G.icon(ctx, 'broken', px + TS - 4, py - 10);
     if (u.boss) G.icon(ctx, 'star', px - 4, py - 10, 0.85);
     if (u.silenced) { ctx.fillStyle = '#c8b8ff'; ctx.fillRect(px + 2, py - 6, 2, 2); }
+    // statuses as small pips over the head, and the vines or frost they leave
+    if (u.st && !u.fade) {
+      let i = 0;
+      for (const k in u.st) {
+        const c = AD.STATUS[k] ? AD.STATUS[k].c : '#fff';
+        ctx.fillStyle = '#06081a'; ctx.fillRect(px + 5 + i * 5, py - 7, 5, 4);
+        ctx.fillStyle = c; ctx.fillRect(px + 6 + i * 5, py - 6, 3, 2);
+        i++;
+      }
+      if (u.st.root) { ctx.fillStyle = '#4a9a3a'; for (let j = 0; j < 3; j++) ctx.fillRect(px + 6 + j * 5, py + TS - 5 - (j % 2), 1, 3); }
+      if (u.st.burn && AD.frame % 12 < 6) { ctx.fillStyle = '#ffb347'; ctx.fillRect(px + HT - 3 + (AD.frame % 24 < 12 ? 0 : 4), py - 2, 2, 2); }
+    }
+    // carrying a friend: a rose at the shoulder
+    if (u.carry && !u.fade) G.icon(ctx, 'rose', px + TS - 7, py - 4, 0.95);
   };
 
   // The HUD keeps out of the way: a one-line terrain tab and, while the cursor rests on a unit, a
@@ -7779,7 +8296,11 @@ window.AD = window.AD || {};
     if (tail) G.text(ctx, tail, tx + tw - 6, ty + 2, C.gray, { align: 'right', mono: true });
     const u = this.unitAt(this.cursor.x, this.cursor.y);
     if (!u || !this.visible(u.x, u.y)) return;
-    const cw = 150, chh = 34;
+    const extra = [];
+    const cargo = this.carried(u);
+    if (cargo) extra.push(['Carrying ' + cargo.name, C.rose]);
+    Object.keys(u.st || {}).forEach((k) => extra.push([AD.STATUS[k].n + (u.st[k] > 1 ? ' ' + u.st[k] : ''), AD.STATUS[k].c]));
+    const cw = 150, chh = extra.length ? 44 : 34;
     const ux = left ? W - cw - 6 : 6, uy = top ? ty - chh - 6 : ty + 19;
     G.panel(ctx, ux, uy, cw, chh, u.team === 'p' ? 'blue' : u.team === 'e' ? 'red' : 'green', 0.9);
     ctx.save(); ctx.beginPath(); ctx.rect(ux + 3, uy + 3, 28, 28); ctx.clip();
@@ -7803,6 +8324,8 @@ window.AD = window.AD || {};
         if (AD.game.knowsWeak(u, wk)) G.icon(ctx, wk, wx, uy + 23); else G.text(ctx, '?', wx + 2, uy + 23, C.dim);
       });
     }
+    let ex = ux + 36;
+    extra.forEach(([s, c]) => { if (ex + G.measure(s) > ux + cw - 4) return; G.text(ctx, s, ex, uy + 33, c); ex += G.measure(s) + 8; });
   };
 
   B.drawBanner = function (ctx) {
@@ -7828,8 +8351,10 @@ window.AD = window.AD || {};
   };
 
   // ---------------------------------------------------------------- forecast scene
+  // L/R picks the weapon, up/down spends Boost, F (or the DANGER button, or a tap on the ART row)
+  // readies the weapon's art instead.
   function Forecast(bt, u, targets) {
-    this.bt = bt; this.u = u; this.targets = targets; this.ti = 0; this.boost = 0;
+    this.bt = bt; this.u = u; this.targets = targets; this.ti = 0; this.boost = 0; this.art = false;
     this.pickWeapons();
   }
   Forecast.prototype.pickWeapons = function () {
@@ -7838,28 +8363,44 @@ window.AD = window.AD || {};
     const cur = this.ws.findIndex((w) => w.i === this.u.eq);
     this.wi = cur >= 0 ? cur : 0;
     this.boost = Math.min(this.boost, this.u.bp, 3);
+    this.fixArt();
+  };
+  Forecast.prototype.artNow = function () { return this.art ? artFor(this.u, this.ws[this.wi]) : null; };
+  Forecast.prototype.fixArt = function () { if (this.art && !artFor(this.u, this.ws[this.wi])) this.art = false; if (this.art) this.boost = 0; };
+  Forecast.prototype.toggleArt = function () {
+    if (!artFor(this.u, this.ws[this.wi])) { AD.audio.sfx('cancel'); return; }
+    this.art = !this.art; this.fixArt();
+    AD.audio.sfx(this.art ? 'boost' : 'cursor');
+  };
+  Forecast.prototype.choice = function () { return { t: this.targets[this.ti], w: this.ws[this.wi], boost: this.art ? 0 : this.boost, art: this.artNow() }; };
+  Forecast.prototype.setBoost = function (b) {
+    this.boost = AD.clamp(b, 0, Math.min(3, this.u.bp));
+    if (this.boost) this.art = false;
   };
   Forecast.prototype.update = function () {
     const t = this.targets[this.ti];
     this.bt.cursor.x = t.x; this.bt.cursor.y = t.y; this.bt.follow(t.x, t.y, 50);
     const d = I.dir();
-    if (d && d[1]) { this.boost = AD.clamp(this.boost - d[1], 0, Math.min(3, this.u.bp)); AD.audio.sfx(d[1] < 0 ? 'boost' : 'cursor'); }
+    if (d && d[1]) { this.setBoost(this.boost - d[1]); AD.audio.sfx(d[1] < 0 ? 'boost' : 'cursor'); }
     if (d && d[0] && this.targets.length > 1) { this.ti = (this.ti + d[0] + this.targets.length) % this.targets.length; this.pickWeapons(); AD.audio.sfx('cursor'); }
-    if ((I.pressed('l') || I.pressed('r')) && this.ws.length > 1) { this.wi = (this.wi + 1) % this.ws.length; AD.audio.sfx('cursor'); }
-    if (I.wheel) { this.boost = AD.clamp(this.boost - I.wheel, 0, Math.min(3, this.u.bp)); }
+    if ((I.pressed('l') || I.pressed('r')) && this.ws.length > 1) { this.wi = (this.wi + 1) % this.ws.length; this.fixArt(); AD.audio.sfx('cursor'); }
+    if (I.pressed('y')) this.toggleArt();
+    if (I.wheel) this.setBoost(this.boost - I.wheel);
     const c = I.consumeClick();
     if (c) {
-      // clicks on the boost pips, the weapon row, or a target
+      // clicks on the boost pips, the weapon row, the art row, or a target
       const R = this.rect || { x: 0, y: 0, w: 0, h: 0 };
-      if (c.y >= R.y + 69 && c.y < R.y + 80 && c.x >= R.x && c.x < R.x + 90) { this.boost = this.boost >= Math.min(3, this.u.bp) ? 0 : this.boost + 1; AD.audio.sfx('boost'); return; }
-      if (c.y >= R.y + 58 && c.y < R.y + 68 && c.x < R.x + 110 && this.ws.length > 1) { this.wi = (this.wi + 1) % this.ws.length; AD.audio.sfx('cursor'); return; }
+      const inX = c.x >= R.x && c.x < R.x + R.w;
+      if (inX && c.y >= R.y + 74 && c.y < R.y + 85 && c.x < R.x + 100) { this.setBoost(this.boost >= Math.min(3, this.u.bp) ? 0 : this.boost + 1); AD.audio.sfx('boost'); return; }
+      if (inX && c.y >= R.y + 62 && c.y < R.y + 73 && c.x < R.x + 130 && this.ws.length > 1) { this.wi = (this.wi + 1) % this.ws.length; this.fixArt(); AD.audio.sfx('cursor'); return; }
+      if (inX && c.y >= R.y + 85 && c.y < R.y + R.h) { this.toggleArt(); return; }
       const tx = Math.floor((c.x + this.bt.cam.x) / TS), ty = Math.floor((c.y + this.bt.cam.y) / TS);
       const j = this.targets.findIndex((o) => o.x === tx && o.y === ty);
       if (j >= 0 && j !== this.ti) { this.ti = j; this.pickWeapons(); AD.audio.sfx('cursor'); return; }
-      const inPanel = c.x >= R.x && c.x < R.x + R.w && c.y >= R.y && c.y < R.y + R.h;
-      if (j === this.ti || inPanel) { AD.audio.sfx('select'); this.done({ t, w: this.ws[this.wi], boost: this.boost }); return; }
+      const inPanel = inX && c.y >= R.y && c.y < R.y + R.h;
+      if (j === this.ti || inPanel) { AD.audio.sfx('select'); this.done(this.choice()); return; }
     }
-    if (I.pressed('a')) { AD.audio.sfx('select'); this.done({ t, w: this.ws[this.wi], boost: this.boost }); return; }
+    if (I.pressed('a')) { AD.audio.sfx('select'); this.done(this.choice()); return; }
     if (I.pressed('b') || I.rclick) { AD.audio.sfx('cancel'); this.done(null); }
     if (I.pressed('x')) { this.bt.async(() => AD.status([t], 0)); }
   };
@@ -7867,25 +8408,26 @@ window.AD = window.AD || {};
     const u = this.u, t = this.targets[this.ti], w = this.ws[this.wi];
     if (!w) return;
     this.bt.drawCursor(ctx, t.x * TS - Math.round(this.bt.cam.x), t.y * TS - Math.round(this.bt.cam.y));
-    const fc = this.bt.calc(u, t, w, man(u.x, u.y, t.x, t.y), this.boost);
-    const ww = 224, hh = 84;
+    const art = this.artNow(), canArt = artFor(u, w);
+    const fc = this.bt.calc(u, t, w, man(u.x, u.y, t.x, t.y), art ? 0 : this.boost, undefined, undefined, art);
+    const ww = 260, hh = 106, mid = ww / 2;
     const below = (t.y * TS + HT - this.bt.cam.y) < H / 2;
-    const x = Math.round((W - ww) / 2), y = below ? H - hh - 8 : 8;
+    const x = Math.round((W - ww) / 2), y = below ? H - hh - 6 : 6;
     this.rect = { x, y, w: ww, h: hh };
     G.panel(ctx, x, y, ww, hh);
     // headers
-    G.panel(ctx, x + 3, y + 3, 106, 13, 'blue', 1);
-    G.panel(ctx, x + 115, y + 3, 106, 13, 'red', 1);
-    G.text(ctx, u.name, x + 56, y + 5, C.cream, { align: 'center' });
-    G.text(ctx, t.name, x + 168, y + 5, C.cream, { align: 'center' });
+    G.panel(ctx, x + 3, y + 3, mid - 6, 13, 'blue', 1);
+    G.panel(ctx, x + mid + 3, y + 3, mid - 6, 13, 'red', 1);
+    G.text(ctx, u.name, x + mid / 2, y + 5, C.cream, { align: 'center' });
+    G.text(ctx, t.name, x + mid + mid / 2, y + 5, C.cream, { align: 'center' });
     const A = fc.A, D = fc.D;
     const row = (label, l, r, yy) => {
-      G.text(ctx, l, x + 92, y + yy, C.cream, { align: 'right', mono: true });
-      G.text(ctx, label, x + 112, y + yy, C.gold, { align: 'center' });
-      G.text(ctx, r, x + 132, y + yy, C.cream, { mono: true });
+      G.text(ctx, l, x + mid - 22, y + yy, C.cream, { align: 'right', mono: true });
+      G.text(ctx, label, x + mid, y + yy, C.gold, { align: 'center' });
+      G.text(ctx, r, x + mid + 22, y + yy, C.cream, { mono: true });
     };
-    const strikes = (S, dbl, boost) => S ? (S.brave ? 2 : 1) * ((dbl ? 2 : 1) + (boost || 0)) : 0;
-    const physB = A && !A.mag ? this.boost : 0;
+    const strikes = (S, dbl, boost) => S ? (S.strikes || (S.brave ? 2 : 1)) * ((dbl ? 2 : 1) + (boost || 0)) : 0;
+    const physB = A && !A.mag ? fc.boost : 0;
     const left = (n) => (n > 1 ? ' x' + n : '');
     row('HP', String(u.hp), String(t.hp), 20);
     row('Mt', A.dmg + left(strikes(A, fc.aDouble, physB)), D ? D.dmg + left(strikes(D, fc.dDouble)) : '--', 30);
@@ -7893,30 +8435,51 @@ window.AD = window.AD || {};
     row('Crit', String(A.crit), D ? String(D.crit) : '--', 50);
     // weapons and the triangle
     G.icon(ctx, w.d.t, x + 8, y + 22);
-    if (A.tri > 0) G.text(ctx, '\u25b2', x + 19, y + 21, C.green); else if (A.tri < 0) G.text(ctx, '\u25bc', x + 19, y + 21, C.red);
+    if (A.tri > 0) G.text(ctx, '▲', x + 19, y + 21, C.green); else if (A.tri < 0) G.text(ctx, '▼', x + 19, y + 21, C.red);
     if (A.eff) G.text(ctx, '!', x + 28, y + 21, C.gold);
     const dw = equipped(t);
-    if (dw) { G.icon(ctx, dw.d.t, x + ww - 17, y + 22); if (D && D.tri > 0) G.text(ctx, '\u25b2', x + ww - 27, y + 21, C.green); else if (D && D.tri < 0) G.text(ctx, '\u25bc', x + ww - 27, y + 21, C.red); }
+    if (dw) { G.icon(ctx, dw.d.t, x + ww - 17, y + 22); if (D && D.tri > 0) G.text(ctx, '▲', x + ww - 27, y + 21, C.green); else if (D && D.tri < 0) G.text(ctx, '▼', x + ww - 27, y + 21, C.red); }
+    if (fc.vantage) G.text(ctx, 'FIRST', x + ww - 8, y + 32, C.rose, { align: 'right' });
+    // what each side is suffering from, under their weapon
+    const tags = (o, tx, align) => Object.keys(o.st || {}).slice(0, 3).forEach((k, i) => G.text(ctx, AD.STATUS[k].n, tx, y + (fc.vantage && align ? 42 : 33) + i * 9, AD.STATUS[k].c, align ? { align: 'right' } : undefined));
+    tags(u, x + 8, false); tags(t, x + ww - 8, true);
+    if (u.carry) G.text(ctx, 'carrying', x + 8, y + 51, C.rose);
     ctx.fillStyle = 'rgba(201,163,93,0.35)'; ctx.fillRect(x + 6, y + 61, ww - 12, 1);
-    G.text(ctx, w.d.n + (this.ws.length > 1 ? '  (L/R)' : ''), x + 8, y + 64 - 1, C.gray);
+    G.text(ctx, w.d.n + (this.ws.length > 1 ? '  (L/R)' : ''), x + 8, y + 64, C.gray);
     // shield and weaknesses
     if (t.mshield) {
-      G.icon(ctx, t.broken ? 'broken' : 'shield', x + 120, y + 64);
-      G.text(ctx, t.broken ? 'BROKEN' : String(t.shield), x + 131, y + 64, t.broken ? C.gold : C.cream, { mono: true });
+      G.icon(ctx, t.broken ? 'broken' : 'shield', x + mid + 22, y + 64);
+      G.text(ctx, t.broken ? 'BROKEN' : String(t.shield), x + mid + 33, y + 64, t.broken ? C.gold : C.cream, { mono: true });
       t.weak.forEach((wk, k) => {
         const known = AD.game.knowsWeak(t, wk);
-        if (known) G.icon(ctx, wk, x + 160 + k * 11, y + 64); else G.text(ctx, '?', x + 162 + k * 11, y + 64, C.dim);
+        if (known) G.icon(ctx, wk, x + mid + 64 + k * 11, y + 64); else G.text(ctx, '?', x + mid + 66 + k * 11, y + 64, C.dim);
       });
     }
     // boost pips
-    G.text(ctx, 'BOOST', x + 8, y + 73, C.gold);
+    G.text(ctx, 'BOOST', x + 8, y + 75, art ? C.dim : C.gold);
     for (let i = 0; i < 5; i++) {
-      const on = i < u.bp, used = i < this.boost;
-      ctx.fillStyle = '#06081a'; ctx.fillRect(x + 42 + i * 9, y + 73, 7, 7);
-      ctx.fillStyle = used ? '#fff2a8' : on ? '#c8962a' : '#2a2f52'; ctx.fillRect(x + 43 + i * 9, y + 74, 5, 5);
-      if (used && Math.floor(AD.frame / 8) % 2) { ctx.fillStyle = '#ffffff'; ctx.fillRect(x + 44 + i * 9, y + 75, 2, 2); }
+      const on = i < u.bp, used = !art && i < this.boost;
+      ctx.fillStyle = '#06081a'; ctx.fillRect(x + 42 + i * 9, y + 75, 7, 7);
+      ctx.fillStyle = used ? '#fff2a8' : on ? (art ? '#6a5a2a' : '#c8962a') : '#2a2f52'; ctx.fillRect(x + 43 + i * 9, y + 76, 5, 5);
+      if (used && Math.floor(AD.frame / 8) % 2) { ctx.fillStyle = '#ffffff'; ctx.fillRect(x + 44 + i * 9, y + 77, 2, 2); }
     }
-    G.text(ctx, A.mag ? '+50% power per BP' : '+1 strike per BP', x + 92, y + 73, C.gray);
+    G.text(ctx, A.mag ? '+50% power per BP' : '+1 strike per BP', x + 92, y + 75, art ? C.dim : C.gray);
+    // the art, and what the weapon does on a hit
+    ctx.fillStyle = 'rgba(201,163,93,0.2)'; ctx.fillRect(x + 6, y + 86, ww - 12, 1);
+    const fxs = AD.fxText(w.d);
+    const aid = AD.artId(w.d), ad = aid && AD.ARTS[aid];
+    if (art) {
+      ctx.fillStyle = 'rgba(232,193,112,0.16)'; ctx.fillRect(x + 4, y + 87, ww - 8, 17);
+      G.text(ctx, 'ART', x + 8, y + 89, Math.floor(AD.frame / 10) % 2 ? '#fff2a8' : C.gold);
+      G.text(ctx, art.n + '  -' + art.cost + ' uses', x + 30, y + 89, C.cream);
+      G.text(ctx, art.desc, x + 8, y + 97, C.gray);
+    } else {
+      G.text(ctx, 'ART', x + 8, y + 89, canArt ? C.goldD : C.dim);
+      const how = I.lastDevice === 'touch' || I.lastDevice === 'mouse' ? 'tap' : I.lastDevice === 'pad' ? 'Y' : 'F';
+      if (ad) G.text(ctx, ad.n + (canArt ? '  (' + how + ')' : '  needs ' + ad.cost + ' uses'), x + 30, y + 89, canArt ? C.gray : C.dim);
+      if (fxs) G.text(ctx, 'On hit: ' + fxs, x + 8, y + 97, C.teal);
+    }
+    if (fxs && art) G.text(ctx, fxs, x + ww - 8, y + 89, C.teal, { align: 'right' });
   };
 
   // ---------------------------------------------------------------- picker
@@ -7991,7 +8554,11 @@ window.AD = window.AD || {};
   // fighters are drawn larger than their raster, whole canvas at a time, to stand as tall as the scene
   const FIGHTER_SCALE = 1.5, BIG_SCALE = 2.5, GIANT_SCALE = 2;
   function Duel(bt, fc, res) {
-    this.bt = bt; this.fc = fc; this.res = res; this.t = 0; this.k = 0; this.phase = 'in'; this.pt = 0;
+    this.bt = bt; this.fc = fc; this.res = res; this.t = 0; this.k = 0; this.pt = 0;
+    // the face-off card first, unless it is turned off
+    this.phase = !AD.TEST && AD.game.opt('intro') !== false ? 'vs' : 'in';
+    // the enemy's many exchanges get a quicker card; the player's, and any boss's, the full one
+    this.vsStep = bt.phase === 'p' || fc.a.boss || fc.d.boss ? 1 : 2;
     const L = fc.a.team === 'p' ? fc.d : fc.a, R = fc.a.team === 'p' ? fc.a : fc.d;
     this.L = L; this.R = R;
     this.hp = {};
@@ -8059,6 +8626,7 @@ window.AD = window.AD || {};
 
   Duel.prototype.update = function () {
     this.t++;
+    if (this.phase === 'vs' && this.pt > 4 && (I.pressed('a') || I.pressed('b') || I.rclick || I.consumeClick())) { this.phase = 'strike'; this.pt = 0; return; }
     if (this.phase === 'strike' && (I.pressed('b') || I.rclick)) { this.skipAll(); return; }
     if (this.phase === 'out' && (I.pressed('a') || I.consumeClick()) && this.pt > 6) { this.phase = 'gone'; this.done(); return; }
     const sp = I.held.fast ? 3 : 1;
@@ -8078,6 +8646,14 @@ window.AD = window.AD || {};
     this.ghosts = this.ghosts.filter((g) => g.life > 0);
     if (this.dim > 0) this.dim--;
     this.sides.forEach((S) => { if (S.react) S.rt++; if (S.flash > 0) S.flash--; });
+    if (this.phase === 'vs') {
+      const was = this.pt;
+      this.pt += this.vsStep;
+      if (was === 0) AD.audio.sfx('dash');
+      if (was < VS.stamp && this.pt >= VS.stamp) { AD.audio.sfx('critcharge'); AD.fx.shake(3, 8); }
+      if (this.pt >= VS.len) { this.phase = 'strike'; this.pt = 0; }
+      return;
+    }
     if (this.phase === 'in') { this.pt++; if (this.pt > 24) { this.phase = 'strike'; this.pt = 0; } return; }
     if (this.phase === 'strike') {
       if (this.wait > 0) { this.wait--; return; }
@@ -8122,6 +8698,13 @@ window.AD = window.AD || {};
     A.react = null;
     const imp = A.seq.ev.find((e) => e.name === 'impact');
     this.cur = { ev, att, def, A, D: Dd, fired: new Set(), impT: imp ? imp.t : A.seq.len };
+    if (ev.art) {
+      // an art is announced: the scene darkens, the name rings out over the attacker
+      this.texts.push({ s: ev.art, x: A.home, y: 26, c: C.gold, t: 0, big: 1 });
+      this.dim = 30; AD.audio.sfx('critcharge');
+      for (let i = 0; i < 16; i++) AD.moves.part(this, { x: A.home + (this.rng() - 0.5) * 50, y: DGY - this.rng() * 60, vy: -0.8 - this.rng(), c: i % 2 ? C.gold : '#ffffff', life: 30 });
+      this.wait = 16;
+    }
   };
   Duel.prototype.event = function (e, cur) {
     if (e.name === 'sfx') AD.audio.sfx(e.data);
@@ -8153,6 +8736,17 @@ window.AD = window.AD || {};
       if (ev.getup) this.texts.push({ s: 'GET UP', x: dx, y: top - 26, c: C.rose, t: 0 });
       if (ev.drain) this.texts.push({ s: ev.drain.toUpperCase() + ' stolen', x: dx, y: top - 38, c: C.violet, t: 0 });
       if (ev.stop) this.texts.push({ s: 'STOPPED', x: dx, y: top - 38, c: C.gold, t: 0 });
+      // what else landed with the blow
+      const pops = [];
+      if (ev.luna) pops.push(['MOON BITE', C.violet]);
+      if (ev.pavise) pops.push(['BULWARK', '#c8d0e8']);
+      if (ev.status) pops.push([AD.STATUS[ev.status].past, AD.STATUS[ev.status].c]);
+      pops.forEach(([s, c], i) => this.texts.push({ s, x: dx + Dd.dir * 30, y: top + 10 + i * 11, c, t: -i * 4 }));
+      if (ev.sol) this.texts.push({ s: 'ROSE SOL', x: this.sides.get(att).cx, y: top, c: C.rose, t: 0 });
+      if (ev.status) {
+        const sc = AD.STATUS[ev.status].c;
+        for (let i = 0; i < 12; i++) M.part(this, { x: dx + (this.rng() - 0.5) * 22, y: this.tgt()[1] + (this.rng() - 0.5) * 30, vy: ev.status === 'root' ? 0.4 : -0.7, vx: (this.rng() - 0.5) * 0.6, c: i % 3 ? sc : '#ffffff', life: 30 });
+      }
       const mid = this.tgt();
       if (ev.healed) { const A = this.sides.get(att); for (let i = 0; i < 10; i++) M.part(this, { x: dx + (this.rng() - 0.5) * 12, y: mid[1] + (this.rng() - 0.5) * 12, vx: (A.cx - dx) / 24, vy: -0.2, c: i % 2 ? '#ffe28a' : '#ffffff', life: 24 }); }
       Dd.flash = 8;
@@ -8301,10 +8895,99 @@ window.AD = window.AD || {};
     info(this.L, 4, this.L.team === 'e' ? 'red' : 'blue');
     info(this.R, W - pw - 4, this.R.team === 'e' ? 'red' : 'blue');
     if (this.phase === 'in') { ctx.fillStyle = '#05060c'; ctx.globalAlpha = Math.max(0, 1 - this.pt / 22); ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+    if (this.phase === 'vs') this.drawVs(ctx);
     const outLen = this.anyDead() ? 50 : 36;
     if ((this.phase === 'out' || this.phase === 'gone') && this.pt > outLen - 16) { ctx.fillStyle = '#05060c'; ctx.globalAlpha = Math.min(1, (this.pt - (outLen - 16)) / 16); ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
     // every gift lands with a flash; at full strength a long exchange would strobe
     AD.fx.drawFlash(ctx, 0.3);
+  };
+  // ---------------------------------------------------------------- face-off card
+  // Two slanted panels slam together over the duel: the foe on the left, the Garden on the right,
+  // each fighter large in their ready stance. VS stamps the seam; then the panels part and the
+  // duel is already standing there.
+  const VS = { stamp: 11, out: 50, len: 64, seamTop: 216, seamBot: 184 };
+  Duel.prototype.drawVs = function (ctx) {
+    const t = this.pt, fc = this.fc;
+    const inK = AD.ease(Math.min(1, t / 10));
+    const outK = t > VS.out ? AD.ease(Math.min(1, (t - VS.out) / (VS.len - VS.out))) : 0;
+    const shift = (1 - inK) * W * 0.7 + outK * W * 0.75;
+    const tint = (u) => u.team === 'e' ? ['#5a1630', '#14060e', '#ff6a7a'] : u.team === 'p' ? ['#1c2e78', '#070a1e', '#7aa8ff'] : ['#16583a', '#06140c', '#7ae8a0'];
+    const panel = (u, sideSign) => {
+      const S = this.sides.get(u);
+      const [c0, c1, rim] = tint(u);
+      const dx = -sideSign * shift;
+      ctx.save();
+      ctx.translate(Math.round(dx), 0);
+      ctx.beginPath();
+      if (sideSign < 0) { ctx.moveTo(-40, 0); ctx.lineTo(VS.seamTop, 0); ctx.lineTo(VS.seamBot, H); ctx.lineTo(-40, H); }
+      else { ctx.moveTo(VS.seamTop, 0); ctx.lineTo(W + 40, 0); ctx.lineTo(W + 40, H); ctx.lineTo(VS.seamBot, H); }
+      ctx.closePath();
+      ctx.clip();
+      const g = ctx.createLinearGradient(sideSign < 0 ? 0 : W, 0, W / 2, H);
+      g.addColorStop(0, c0); g.addColorStop(1, c1);
+      ctx.fillStyle = g; ctx.fillRect(-40, 0, W + 80, H);
+      // diagonal grain and speed lines streaming away from the seam
+      ctx.fillStyle = 'rgba(255,255,255,0.035)';
+      for (let i = -12; i < 30; i++) { ctx.save(); ctx.translate(i * 18, 0); ctx.transform(1, 0, -0.14, 1, 0, 0); ctx.fillRect(0, 0, 7, H); ctx.restore(); }
+      for (let i = 0; i < 16; i++) {
+        const ly = 8 + ((i * 53) % (H - 16)), len = 20 + ((i * 37) % 50);
+        const run = ((t * (5 + (i % 4)) + i * 41) % (W * 0.7));
+        const lx = sideSign < 0 ? VS.seamBot - run : VS.seamTop + run;
+        ctx.globalAlpha = 0.12 + (i % 3) * 0.08; ctx.fillStyle = i % 4 ? rim : '#ffffff';
+        ctx.fillRect(Math.round(sideSign < 0 ? lx - len : lx), ly, len, 1);
+      }
+      ctx.globalAlpha = 1;
+      // the fighter, large, stepping a little toward the seam as the card holds
+      const fx = sideSign < 0 ? 104 + Math.min(t, 40) * 0.25 : W - 104 - Math.min(t, 40) * 0.25, fy = H - 14;
+      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(Math.round(fx) - 34, fy, 68, 3);
+      if (S.big) {
+        const uu = AD.spr.unit(u.look), fr = uu.idle[0];
+        ctx.save(); ctx.imageSmoothingEnabled = false; ctx.translate(Math.round(fx), 0); if (sideSign > 0) ctx.scale(-1, 1);
+        ctx.drawImage(fr, -Math.round((12 - uu.ox) * 4), Math.round(fy - (23 - uu.oy) * 4), fr.width * 4, fr.height * 4);
+        ctx.restore();
+      } else AD.fight.draw(ctx, u, S.rest, fx, fy, sideSign < 0, { weapon: S.W, look: S.body, scale: S.scale * 1.55, fem: S.fem, t: this.t });
+      // name, class and weapon, from the outer edge
+      const al = sideSign < 0 ? 'left' : 'right', ex = sideSign < 0 ? 14 : W - 14;
+      G.text(ctx, u.name, ex, 12, C.cream, { align: al, scale: 2 });
+      G.text(ctx, 'Lv ' + u.lv + '  ' + AD.CLASSES[u.cls].n + (u.boss ? '  BOSS' : ''), ex, 32, u.boss ? C.gold : C.gray, { align: al });
+      const Sx = u === fc.a ? fc.A : fc.D, eq = Sx ? Sx.wo : equipped(u);
+      if (eq) {
+        const wn = eq.d.n, ww2 = G.measure(wn) + 12;
+        const ix = sideSign < 0 ? ex : ex - ww2;
+        G.icon(ctx, eq.d.t, ix, 44); G.text(ctx, wn, ix + 12, 44, C.cream);
+      } else G.text(ctx, 'No counter', ex, 44, C.dim, { align: al });
+      if (u === fc.a && fc.art) G.text(ctx, 'ART \u00b7 ' + fc.art.n, ex, 56, Math.floor(this.t / 6) % 2 ? '#fff2a8' : C.gold, { align: al });
+      const hb = 70, hx = sideSign < 0 ? ex : ex - hb;
+      ctx.fillStyle = '#06081a'; ctx.fillRect(hx - 1, 68, hb + 2, 5);
+      // the hp they walk in with: the exchange is already decided, and must not show
+      const hp0 = this.hp[u.uid] !== undefined ? this.shown[u.uid] : u.hp;
+      ctx.fillStyle = hp0 / u.mhp > 0.33 ? C.hp : C.hpLow; ctx.fillRect(hx, 69, Math.max(1, Math.round(hb * hp0 / u.mhp)), 3);
+      ctx.restore();
+    };
+    panel(this.L, -1);
+    panel(this.R, 1);
+    // the seam, white-hot as they meet
+    if (outK < 1) {
+      const flare = t >= VS.stamp && t < VS.stamp + 6 ? 1 - (t - VS.stamp) / 6 : 0;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 1 - outK * 2.5) * Math.min(1, t / 8);
+      ctx.strokeStyle = C.gold; ctx.lineWidth = 3 + flare * 6;
+      ctx.beginPath(); ctx.moveTo(VS.seamTop, -2); ctx.lineTo(VS.seamBot, H + 2); ctx.stroke();
+      ctx.strokeStyle = '#fff6d8'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(VS.seamTop, -2); ctx.lineTo(VS.seamBot, H + 2); ctx.stroke();
+      ctx.restore();
+      if (flare) { ctx.fillStyle = `rgba(255,248,220,${0.55 * flare})`; ctx.fillRect(0, 0, W, H); }
+    }
+    // VS stamps down at the middle of the seam
+    if (t >= VS.stamp && outK < 1) {
+      const k = t - VS.stamp, sc = k < 5 ? 2.4 - k * 0.28 : 1;
+      ctx.save();
+      ctx.globalAlpha = 1 - outK;
+      ctx.translate(W / 2, H / 2 + 6); ctx.scale(sc, sc);
+      G.text(ctx, 'VS', 0, -13, k % 8 < 4 && k < 16 ? '#ffffff' : C.gold, { align: 'center', scale: 3 });
+      ctx.restore();
+    }
+    if (t > 8 && t < VS.out) G.text(ctx, 'A: skip', W - 10, H - 12, 'rgba(246,236,212,0.45)', { align: 'right' });
   };
   Duel.prototype.opaque = true;
   AD.Duel = Duel;
@@ -8436,7 +9119,7 @@ window.AD = window.AD || {};
   const C = AD.gfx.C;
   const GM = (AD.game = {
     state: null,
-    options: Object.assign({ anims: true, hpbars: true, fx: true, music: 0.5, sfx: 0.6 }, AD.store.get('options') || {}),
+    options: Object.assign({ anims: true, intro: true, hpbars: true, fx: true, music: 0.5, sfx: 0.6 }, AD.store.get('options') || {}),
   });
 
   GM.newGame = function (diff, classic) {
@@ -8495,6 +9178,19 @@ window.AD = window.AD || {};
     if (!Object.keys(gains).length) { const k = AD.pick(AD.STAT_KEYS); u.stats[k]++; gains[k] = 1; }
     return gains;
   };
+  // Skills a unit has reached: at its level in its current tier, or anything from a tier it has
+  // passed. Works on a battle unit (and its record) or a record; returns the names newly learned.
+  GM.learn = function (u) {
+    const tier = AD.CLASSES[u.cls].tier, got = [];
+    (AD.LEARN[u.id] || []).forEach(([t, lv, sk]) => {
+      if (!(t === 0 ? u.lv >= lv : t < tier || (t === tier && u.lv >= lv))) return;
+      if (u.skills.indexOf(sk) >= 0) return;
+      u.skills.push(sk);
+      if (u.rec && u.rec.skills.indexOf(sk) < 0) u.rec.skills.push(sk);
+      got.push(AD.SKILLS[sk][0]);
+    });
+    return got;
+  };
   // works on a battle unit or a record
   GM.promote = function (u, to) {
     const nc = AD.CLASSES[to];
@@ -8508,6 +9204,7 @@ window.AD = window.AD || {};
     nc.w.forEach((t) => { if (u.wexp && u.wexp[t] === undefined) u.wexp[t] = 31; });
     const extra = { thornshade: 'shadowstep', ironchamp: 'ironskin', loomseer: 'mindvoice', unseen: 'walls', prismblade: 'thirdblade', blade2: 'blink', rosedivine: 'openhand', alldivine: 'abraxas' }[to];
     if (extra && u.skills.indexOf(extra) < 0) u.skills.push(extra);
+    GM.lastLearned = GM.learn(u);
     if (u.rec) { u.rec.cls = to; u.rec.lv = u.lv; u.rec.exp = u.exp; u.rec.stats = Object.assign({}, u.stats); u.rec.skills = u.skills.slice(); u.rec.wexp = Object.assign({}, u.wexp); }
   };
 
@@ -8544,7 +9241,7 @@ window.AD = window.AD || {};
       GM.promote(u, c.promo);
       if (battle) { u.look = AD.UNITS[u.id].looks[u.cls] || u.look; u.port = AD.portFor(u.id, u); u.mov = AD.CLASSES[u.cls].mov + (u.movBonus || 0); }
       AD.audio.sfx('levelup'); AD.fx.flash('#ffe8a0', 30);
-      await AD.notice(u.name + ' became a ' + AD.CLASSES[u.cls].n + '!', { icon: 'star' });
+      await AD.notice(u.name + ' became a ' + AD.CLASSES[u.cls].n + '!' + (GM.lastLearned && GM.lastLearned.length ? '\nLearned ' + GM.lastLearned.join(' and ') + '.' : ''), { icon: 'star' });
       used = true;
     } else {
       await AD.notice(d.desc || 'Nothing happens.');
@@ -8612,11 +9309,13 @@ window.AD = window.AD || {};
       const v = await AD.menu({
         title: 'Options', w: 170, items: [
           { label: 'Battle scenes', right: o.anims ? 'On' : 'Off', value: 'anims', help: 'Side-view animation for every exchange, or quick strikes on the map. Hold fast-forward to speed one up; B skips it.' },
+          { label: 'Battle intro', right: o.intro ? 'On' : 'Off', value: 'intro', help: 'The face-off card before each battle scene. A or B skips it.' },
           { label: 'HP bars on map', right: o.hpbars ? 'On' : 'Off', value: 'hpbars' },
           { label: 'Diorama effects', right: o.fx ? 'On' : 'Off', value: 'fx', help: 'Bloom, tilt-shift blur and light pools. Turn off on slow machines.' },
           { label: 'Music', right: Math.round(o.music * 10), value: 'music', help: 'Left/right or A to change.' },
           { label: 'Sound', right: Math.round(o.sfx * 10), value: 'sfx' },
           { label: 'Controls', value: 'keys' },
+          { label: 'Report a problem', value: 'report', right: AD.errlog.length || '', help: 'Copies the error log to the clipboard. Send it with a note on what you were doing.' },
         ],
         onSide: (dx, it, m) => {
           if (it.value === 'music' || it.value === 'sfx') {
@@ -8628,9 +9327,24 @@ window.AD = window.AD || {};
       });
       if (v === null) return;
       if (v === 'music' || v === 'sfx') GM.setOpt(v, o[v] >= 1 ? 0 : Math.round((o[v] + 0.1) * 10) / 10);
+      else if (v === 'report') await GM.reportProblem();
       else if (v === 'keys') await AD.notice('Move: arrows / WASD / mouse\nConfirm: Z, Enter, Space, click\nBack: X, Esc, right-click\nInfo: C   Danger zone: F\nCycle units: Q / E   Menu: P\nHold Shift to fast-forward');
       else GM.setOpt(v, !o[v]);
     }
+  };
+
+  // the error log as plain text: the game version, the device, and every error the game survived
+  GM.reportProblem = async function () {
+    const log = AD.errlog;
+    const text = ['All-Divine Tactics ' + AD.VERSION + ' — error log', navigator.userAgent, 'scenes now: ' + AD.stack.map(AD.sceneName).join('>'), '']
+      .concat(log.map((e) => [e.at + '  ' + e.where + '  ' + (e.ch || ''), '  ' + e.msg, '  in ' + e.scenes, '  ' + e.stack].join('\n'))).join('\n');
+    let copied = false;
+    try { await navigator.clipboard.writeText(text); copied = true; } catch (e) { copied = false; }
+    const box = document.getElementById('codebox');
+    if (!copied && box) { box.value = text; box.hidden = false; box.select(); }
+    await AD.notice((log.length ? log.length + ' error' + (log.length > 1 ? 's' : '') + ' recorded, last: ' + log[log.length - 1].msg.slice(0, 80) + '\n\n' : 'No errors recorded.\n\n') +
+      (copied ? 'The log is on the clipboard.' : 'The log is in the box under the game. Select it and copy it.'));
+    if (box) box.hidden = true;
   };
 
   // ---------------------------------------------------------------- saves
@@ -8694,7 +9408,7 @@ window.AD = window.AD || {};
       map: battle.map.rows.map((r) => r.join('')),
       units: battle.units.filter((u) => !u.gone || u.lord).map((u) => {
         const o = {};
-        ['id', 'name', 'team', 'cls', 'lv', 'exp', 'stats', 'items', 'wexp', 'skills', 'ai', 'boss', 'drop', 'x', 'y', 'hp', 'mhp', 'mod', 'bp', 'eq', 'shield', 'mshield', 'weak', 'broken', 'brokeSkip', 'done', 'dead', 'gone', 'gotUp', 'group', 'wake', 'portId', 'talk', 'glow', 'npc', 'movBonus', 'lord'].forEach((k) => { o[k] = u[k]; });
+        ['id', 'name', 'team', 'cls', 'lv', 'exp', 'stats', 'items', 'wexp', 'skills', 'ai', 'boss', 'drop', 'x', 'y', 'hp', 'mhp', 'mod', 'bp', 'eq', 'shield', 'mshield', 'weak', 'broken', 'brokeSkip', 'done', 'dead', 'gone', 'gotUp', 'group', 'wake', 'portId', 'talk', 'glow', 'npc', 'movBonus', 'lord', 'st', 'carry', 'carriedBy', 'silenced', 'galeUsed', 'gentle', 'spare', 'deathLine', 'recruit', 'fleeTo'].forEach((k) => { o[k] = u[k]; });
         o.lookCls = u.team === 'p' ? null : u.look;
         return o;
       }),
@@ -8731,7 +9445,10 @@ window.AD = window.AD || {};
   GM.toTitle = function () { AD.goto(new AD.Title()); };
 
   // ---------------------------------------------------------------- chapter flow
-  GM.startChapter = async function (id) {
+  // story flows between scenes: if one throws, fall back to the world map instead of a black screen
+  const orWorld = (where) => (e) => { AD.report(e, where); AD.goto(new AD.World()); };
+  GM.startChapter = function (id) { return GM.openChapter(id).catch(orWorld('startChapter ' + id)); };
+  GM.openChapter = async function (id) {
     const ch = AD.chapter(id);
     if (!ch) return;
     GM.preBattle = AD.deep(GM.state);
@@ -8763,6 +9480,7 @@ window.AD = window.AD || {};
       if (u.dead && GM.classic() && !u.lord) { s.dead[u.id] = true; s.party = s.party.filter((id) => id !== u.id); }
     });
     s.done[ch.id] = true;
+    const secured = GM.secureStory(ch, true);
     if (ch.reward) GM.addGold(ch.reward);
     (ch.flags || []).forEach((f) => GM.setFlag(f));
     if (ch.side) s.sides[ch.id] = true;
@@ -8770,6 +9488,7 @@ window.AD = window.AD || {};
     if (ch.dungeonDone) ch.dungeonDone(battle);
     (async () => {
       if (ch.reward) { AD.audio.sfx('coin'); }
+      if (secured.length) await AD.notice(secured.join('\n'), { icon: 'rose' });
       if (ch.after && ch.after.length) {
         await AD.goto(new AD.Blank());
         await AD.dialogue(ch.after, { bg: ch.afterBg || ch.bg || 'black' });
@@ -8782,7 +9501,39 @@ window.AD = window.AD || {};
         const slot = GM.lastSlot || 1;
         if (await AD.confirm('Save your progress to slot ' + slot + '?')) { GM.save(slot); await AD.notice('Saved.'); }
       }
-    })();
+    })().catch(orWorld('endBattle ' + ch.id));
+  };
+  // Story joins and gifts that happen mid-battle (on a set turn) would be skipped by a quick win.
+  // A chapter lists them, and they are made good when it ends. Saves from before this get their
+  // missing friends back on the world map (gifts are left alone: they may have been traded on).
+  GM.secureStory = function (ch, withGifts) {
+    const s = GM.state, notes = [];
+    (ch.joins || []).forEach((id) => {
+      if (s.roster[id]) return;
+      GM.addUnit(id, true);
+      notes.push(AD.UNITS[id].name + ' joined the Garden.');
+    });
+    if (withGifts) (ch.ensure || []).forEach((e) => {
+      if (GM.flag(e.flag)) return;
+      GM.setFlag(e.flag);
+      const r = GM.record(e.unit);
+      if (!r || r.items.some((i) => i.id === e.item)) return;
+      if (r.items.length < 5) r.items.push(AD.item(e.item)); else GM.toConvoy(AD.item(e.item));
+      notes.push(e.text);
+    });
+    return notes;
+  };
+  GM.repair = function () {
+    if (!GM.state) return [];
+    const notes = [];
+    Object.values(AD.CHAPTERS).forEach((ch) => { if (GM.state.done[ch.id]) notes.push(...GM.secureStory(ch, false)); });
+    // friends who already passed a level where a new skill comes
+    Object.values(GM.state.roster).forEach((r) => {
+      if (GM.state.dead[r.id] || !r.skills) return;
+      const got = GM.learn(r);
+      if (got.length) notes.push(AD.UNITS[r.id].name + ' learned ' + got.join(' and ') + '.');
+    });
+    return notes;
   };
   GM.retry = function () {
     GM.state = AD.deep(GM.preBattle);
@@ -8818,6 +9569,14 @@ window.AD = window.AD || {};
   }
   AD.bigText = bigText;
 
+  // Backstop for the menu flows below. Each flow settles even when it throws, so this should never
+  // fire; if a flow hangs instead, the scene gets its controls back after 15 seconds.
+  function unstick(scene, flag, what) {
+    if (scene[flag] && AD.top() === scene && AD.fade.a === AD.fade.target) {
+      if ((scene.stallT = (scene.stallT || 0) + 1) > 900) { scene.stallT = 0; scene[flag] = false; AD.report(new Error(what + ' flow hung; controls handed back'), 'watchdog'); }
+    } else scene.stallT = 0;
+  }
+
   AD.Blank = function () { this.opaque = true; };
   AD.Blank.prototype.draw = function (ctx) { ctx.fillStyle = '#05060c'; ctx.fillRect(0, 0, W, H); };
 
@@ -8830,10 +9589,11 @@ window.AD = window.AD || {};
   };
   AD.Title.prototype.update = function () {
     this.t++;
+    unstick(this, 'menuOpen', 'title');
     if (this.menuOpen) return;
     if (this.t > 30 && (I.pressed('a') || I.pressed('start') || I.consumeClick())) {
       this.menuOpen = true;
-      this.mainMenu().then(() => { this.menuOpen = false; });
+      AD.settle(this.mainMenu(), () => { this.menuOpen = false; });
     }
   };
   AD.Title.prototype.mainMenu = async function () {
@@ -8993,6 +9753,8 @@ window.AD = window.AD || {};
     this.cam = { x: n.x - W / 2, y: n.y - H / 2 };
     this.walking = null;
     this.busy = false;
+    const fixed = GM.repair();
+    if (fixed.length) { this.busy = true; AD.settle(AD.notice(fixed.join('\n'), { icon: 'rose' }), () => { this.busy = false; }); }
   };
   AD.World.prototype.open = function (id) { return AD.worldOpen(id); };
   AD.World.prototype.links = function (id) { return AD.WORLD.nodes[id].links.filter((l) => this.open(l)); };
@@ -9014,11 +9776,12 @@ window.AD = window.AD || {};
         this.node = w.path[w.i]; GM.state.node = this.node;
         // a skirmish may find you on the road
         const road = AD.roadSkirmish && AD.roadSkirmish(a.id, b.id);
-        if (road && w.i < w.path.length - 1 && AD.rng() < 0.18) { this.walking = null; this.busy = true; this.skirmish(road).then(() => { this.busy = false; }); return; }
+        if (road && w.i < w.path.length - 1 && AD.rng() < 0.18) { this.walking = null; this.busy = true; AD.settle(this.skirmish(road), () => { this.busy = false; }); return; }
         if (w.i >= w.path.length - 1) { this.walking = null; this.arrive(); }
       }
       return;
     }
+    unstick(this, 'busy', 'world map');
     if (this.busy) return;
     const d = I.dir();
     if (d) {
@@ -9038,12 +9801,12 @@ window.AD = window.AD || {};
       const wx = c.x + this.cam.x, wy = c.y + this.cam.y;
       const hit = Object.values(AD.WORLD.nodes).find((n) => this.open(n.id) && Math.hypot(n.x - wx, n.y - wy) < 10);
       if (hit) {
-        if (hit.id === this.node) { this.busy = true; this.nodeMenu().then(() => { this.busy = false; }); }
+        if (hit.id === this.node) { this.busy = true; AD.settle(this.nodeMenu(), () => { this.busy = false; }); }
         else { const path = this.route(this.node, hit.id); if (path) { AD.audio.sfx('select'); this.walking = { path, i: 0, t: 0 }; } }
       }
     }
-    if (I.pressed('a')) { this.busy = true; this.nodeMenu().then(() => { this.busy = false; }); }
-    if (I.pressed('start') || I.pressed('b') || I.rclick) { this.busy = true; AD.campMenu().then(() => { this.busy = false; }); }
+    if (I.pressed('a')) { this.busy = true; AD.settle(this.nodeMenu(), () => { this.busy = false; }); }
+    if (I.pressed('start') || I.pressed('b') || I.rclick) { this.busy = true; AD.settle(AD.campMenu(), () => { this.busy = false; }); }
   };
   AD.World.prototype.route = function (a, b) {
     const prev = { [a]: null }, q = [a];
@@ -9184,7 +9947,7 @@ window.AD = window.AD || {};
           if (j) { const other = AD.unitFromRecord(GM.record(j)); await AD.run(new AD.TradeScene(u, other)); GM.record(j).items = other.items.map((i) => ({ id: i.id, uses: i.uses })); }
         }
         if (v === 'use') {
-          const i = await AD.menu({ title: u.name, items: u.items.map((it, i) => { const d = AD.ITEMS[it.id]; return { label: d.n, value: i, icon: d.weapon ? d.t : d.song ? 'song' : 'item', right: it.uses, help: d.desc || (d.weapon ? `Mt ${d.mt} Hit ${d.hit} Crit ${d.crt} Wt ${d.wt} Rng ${d.rng[0]}-${d.rng[1]} Rank ${d.rank}` : '') }; }) });
+          const i = await AD.menu({ title: u.name, items: u.items.map((it, i) => { const d = AD.ITEMS[it.id]; return { label: d.n, value: i, icon: d.weapon ? d.t : d.song ? 'song' : 'item', right: it.uses, help: d.weapon ? AD.weaponHelp(d) : d.desc || '' }; }) });
           if (i !== null) {
             const d = AD.ITEMS[u.items[i].id];
             if (d.weapon) { const [it] = u.items.splice(i, 1); u.items.unshift(it); AD.audio.sfx('select'); }
@@ -9276,7 +10039,7 @@ window.AD = window.AD || {};
     if (!this.entered) {
       this.entered = true;
       const k = 'town:' + this.def.id;
-      if (this.def.first && !GM.state.visited[k]) { GM.state.visited[k] = true; this.busy = true; AD.dialogue(this.def.first).then(() => { this.busy = false; }); }
+      if (this.def.first && !GM.state.visited[k]) { GM.state.visited[k] = true; this.busy = true; AD.settle(AD.dialogue(this.def.first), () => { this.busy = false; }); }
     }
   };
   AD.Town.prototype.blocked = function (x, y) {
@@ -9310,6 +10073,7 @@ window.AD = window.AD || {};
     this.cam.y = AD.clamp(p.py + HT - H / 2, 0, Math.max(0, this.map.h * TS - H));
     if (this.map.w * TS < W) this.cam.x = (this.map.w * TS - W) / 2;
     if (this.map.h * TS < H) this.cam.y = (this.map.h * TS - H) / 2;
+    if (!p.moving) unstick(this, 'busy', 'town');
     if (this.busy || p.moving) return;
     const dirs = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
     let mv = null;
@@ -9323,13 +10087,13 @@ window.AD = window.AD || {};
       p.dir = mv;
       const [dx, dy] = dirs[mv];
       if (!this.blocked(p.x + dx, p.y + dy)) { p.x += dx; p.y += dy; p.moving = true; }
-      else if (this.target) { const n = this.npcs.find((q) => q.x === p.x + dx && q.y === p.y + dy); this.target = null; if (n) { this.busy = true; this.talk(n).then(() => { this.busy = false; }); } }
+      else if (this.target) { const n = this.npcs.find((q) => q.x === p.x + dx && q.y === p.y + dy); this.target = null; if (n) { this.busy = true; AD.settle(this.talk(n), () => { this.busy = false; }); } }
     }
     const c = I.consumeClick();
     if (c) {
       const tx = Math.floor((c.x + this.cam.x) / TS), ty = Math.floor((c.y + this.cam.y) / TS);
       const n = this.npcs.find((q) => q.x === tx && q.y === ty);
-      if (n && Math.abs(n.x - p.x) + Math.abs(n.y - p.y) === 1) { p.dir = n.x > p.x ? 'right' : n.x < p.x ? 'left' : n.y > p.y ? 'down' : 'up'; this.busy = true; this.talk(n).then(() => { this.busy = false; }); return; }
+      if (n && Math.abs(n.x - p.x) + Math.abs(n.y - p.y) === 1) { p.dir = n.x > p.x ? 'right' : n.x < p.x ? 'left' : n.y > p.y ? 'down' : 'up'; this.busy = true; AD.settle(this.talk(n), () => { this.busy = false; }); return; }
       this.target = [tx, ty];
     }
     if (I.pressed('a')) {
@@ -9338,15 +10102,14 @@ window.AD = window.AD || {};
       const n = this.npcs.find((q) => q.x === fx && q.y === fy);
       this.busy = true;
       const done = () => { this.busy = false; };
-      if (n) this.talk(n).then(done);
-      else this.inspect(fx, fy).then(done);
+      AD.settle(n ? this.talk(n) : this.inspect(fx, fy), done);
     }
-    if (I.pressed('start') || I.pressed('b') || I.rclick) { this.busy = true; this.townMenu().then(() => { this.busy = false; }); }
+    if (I.pressed('start') || I.pressed('b') || I.rclick) { this.busy = true; AD.settle(this.townMenu(), () => { this.busy = false; }); }
   };
   AD.Town.prototype.onStep = function () {
     const p = this.p;
     const ex = (this.def.exits || []).find((e) => e.x === p.x && e.y === p.y);
-    if (ex) { this.busy = true; this.leave(ex).then(() => { this.busy = false; }); }
+    if (ex) { this.busy = true; AD.settle(this.leave(ex), () => { this.busy = false; }); }
   };
   AD.Town.prototype.leave = async function (ex) {
     if (ex.to === 'world') { AD.goto(new AD.World()); return; }
@@ -9495,7 +10258,7 @@ window.AD = window.AD || {};
 
   // ---------------------------------------------------------------- shop
   AD.Shop = function (def) { this.def = def; this.opaque = false; };
-  AD.Shop.prototype.enter = function () { this.run(); };
+  AD.Shop.prototype.enter = function () { AD.settle(this.run(), () => { this.done && this.done(); }); };
   AD.Shop.prototype.run = async function () {
     const def = this.def;
     if (def.hello) await AD.dialogue(def.hello);
@@ -9504,7 +10267,7 @@ window.AD = window.AD || {};
       if (v === null) break;
       if (v === 'buy') {
         for (;;) {
-          const items = def.items.filter((id) => !def.cond || !def.cond[id] || GM.flag(def.cond[id])).map((id) => { const d = AD.ITEMS[id]; const p = GM.price(d.price); return { label: d.n, value: id, icon: d.weapon ? d.t : d.song ? 'song' : 'item', right: AD.fmt(p), enabled: GM.state.gold >= p, help: d.desc || (d.weapon ? `${AD.TYPE_NAME[d.t]}  Mt ${d.mt}  Hit ${d.hit}  Crit ${d.crt}  Wt ${d.wt}  Rng ${d.rng[0]}-${d.rng[1]}  Rank ${d.rank}  Uses ${d.uses}` : '') }; });
+          const items = def.items.filter((id) => !def.cond || !def.cond[id] || GM.flag(def.cond[id])).map((id) => { const d = AD.ITEMS[id]; const p = GM.price(d.price); return { label: d.n, value: id, icon: d.weapon ? d.t : d.song ? 'song' : 'item', right: AD.fmt(p), enabled: GM.state.gold >= p, help: d.weapon ? AD.TYPE_NAME[d.t] + ', ' + d.uses + ' uses. ' + AD.weaponHelp(d) : d.desc || '' }; });
           const id = await AD.menu({ title: 'Buy   ' + AD.fmt(GM.state.gold) + ' cr', items, w: 200, max: 9, allowDisabled: false });
           if (id === null) break;
           const p = GM.price(AD.ITEMS[id].price);
@@ -9523,7 +10286,6 @@ window.AD = window.AD || {};
         }
       }
     }
-    this.done && this.done();
   };
   AD.Shop.prototype.update = function () {};
   AD.Shop.prototype.draw = function () {};
@@ -9551,7 +10313,17 @@ window.AD = window.AD || {};
   AD.Prep.prototype.enter = function () {
     AD.audio.play(this.ch.music && this.ch.music.prep || 'world');
     if (this.ch.skipPrep) { this.go(); return; }
-    if (!this.started) { this.started = true; this.loop(); }
+    if (!this.started) { this.started = true; this.keepLooping(); }
+  };
+  // the prep menu must always come back: if one of its sub-flows throws, reopen it (and give up
+  // to the world map if it keeps failing)
+  AD.Prep.prototype.keepLooping = function () {
+    AD.settle(this.loop(), () => {
+      if (this.going || AD.stack.indexOf(this) < 0) return;
+      this.fails = (this.fails || 0) + 1;
+      if (this.fails > 5) { AD.goto(new AD.World()); return; }
+      AD.wait(2).then(() => this.keepLooping());
+    });
   };
   AD.Prep.prototype.loop = async function () {
     for (;;) {
@@ -9600,6 +10372,7 @@ window.AD = window.AD || {};
     this.rebuild();
   };
   AD.Prep.prototype.go = function () {
+    this.going = true;
     AD.goto(this.battle);
   };
   AD.Prep.prototype.update = function () { this.battle.cam.x += (this.battle.cam.tx - this.battle.cam.x) * 0.2; this.battle.cam.y += (this.battle.cam.ty - this.battle.cam.y) * 0.2; };
@@ -9669,7 +10442,7 @@ window.AD = window.AD || {};
     this.t++;
     if (this.t > 60 && !this.asked && (I.pressed('a') || I.consumeClick() || this.t > 200)) {
       this.asked = true;
-      AD.menu({ items: [{ label: 'Try the chapter again', value: 'retry' }, { label: 'Title screen', value: 'title' }] }).then((v) => {
+      AD.settle(AD.menu({ items: [{ label: 'Try the chapter again', value: 'retry' }, { label: 'Title screen', value: 'title' }] }), (v) => {
         if (v === 'title') GM.toTitle(); else if (this.ch.returnTown) AD.goto(new AD.Town(this.ch.returnTown)); else GM.retry();
       });
     }
@@ -10379,7 +11152,7 @@ window.AD = window.AD || {};
   // ================================================================ Chapter 2
   def({
     id: 'c2', n: 2, book: 1, bookName: 'Bilibara', title: 'Road Dogs', sub: 'The harbor, behind the sardine cannery',
-    loc: 'bilibara', bg: 'harbor', next: 'c3', reward: 600,
+    loc: 'bilibara', bg: 'harbor', next: 'c3', reward: 600, joins: ['xav'],
     before: [
       ['@bg', 'lazymans'],
       ['@music', 'town'],
@@ -10462,7 +11235,7 @@ window.AD = window.AD || {};
   // ================================================================ Chapter 3
   def({
     id: 'c3', n: 3, book: 1, bookName: 'Bilibara', title: 'Blue Coats', sub: 'The Tanneries, Tuesday, 11:40 in the morning',
-    loc: 'bilibara', bg: 'lazymans', next: 'c4', reward: 800,
+    loc: 'bilibara', bg: 'lazymans', next: 'c4', reward: 800, joins: ['reigna'],
     before: [
       ['@bg', 'lazymans'],
       ['@music', 'town'],
@@ -10540,7 +11313,7 @@ window.AD = window.AD || {};
   // ================================================================ Chapter 4
   def({
     id: 'c4', n: 4, book: 1, bookName: 'Bilibara', title: 'The Tidebreaker', sub: 'The breakwater, before dawn',
-    loc: 'bilibara', bg: 'harbor', next: 'c5', reward: 900,
+    loc: 'bilibara', bg: 'harbor', next: 'c5', reward: 900, ensure: [{ flag: 'learned_thorn', unit: 'abarax', item: 'thorn', text: 'Abarax learned Thorn.' }],
     before: [
       ['@bg', 'tanneries'],
       ['@music', 'enemy'],
@@ -10589,6 +11362,7 @@ window.AD = window.AD || {};
       ]], ['flash', '#ffcf5a', 30], ['call', (bt) => {
         const a = bt.lord();
         if (a && a.items.length < 5 && !a.items.some((i) => i.id === 'thorn')) a.items.push(AD.item('thorn'));
+        AD.game.setFlag('learned_thorn');
         if (a) { a.hp = Math.max(1, a.hp - 5); a.bp = Math.min(5, a.bp + 2); }
         const d = bt.units.find((u) => u.id === 'dray');
         if (d) { d.ai = 'charge'; d.shield = Math.max(1, d.shield - 2); }
@@ -10775,7 +11549,8 @@ window.AD = window.AD || {};
   // ================================================================ Chapter 7
   def({
     id: 'c7', n: 7, book: 1, bookName: 'Bilibara', title: 'Tooth and Nail', sub: 'The roof of Saint-Clair\'s orphanage',
-    loc: 'bilibara', bg: 'tanneries', next: 'c8', reward: 1600, music: { p: 'boss', e: 'enemy' },
+    loc: 'bilibara', bg: 'tanneries', next: 'c8', reward: 1600, music: { p: 'boss', e: 'enemy' }, joins: ['noella', 'sierra'],
+    ensure: [{ flag: 'learned_spark', unit: 'abarax', item: 'spark', text: 'Abarax learned Spark.' }],
     before: [
       ['@bg', 'tanneries', 'snow'],
       ['@music', 'enemy'],
@@ -10820,7 +11595,7 @@ window.AD = window.AD || {};
       { when: { turn: 2, phase: 'p' }, do: [['say', [
         ['@narrate', 'He reaches for the sky, and the sky answers. Lightning comes down into his hands and stays there, crawling up his arms like roots of white fire.'],
         ['@narrate', 'The iron fence spears tear free and hang in the air around him. The bell lifts out of the tower.'],
-      ]], ['flash', '#ffffff', 30], ['call', (bt) => { const a = bt.lord(); if (a && !a.items.some((i) => i.id === 'spark')) { if (a.items.length >= 5) AD.game.toConvoy(AD.item(a.items.pop().id)); a.items.unshift(AD.item('spark')); a.eq = 0; } }],
+      ]], ['flash', '#ffffff', 30], ['call', (bt) => { const a = bt.lord(); if (a && !a.items.some((i) => i.id === 'spark')) { if (a.items.length >= 5) AD.game.toConvoy(AD.item(a.items.pop().id)); a.items.unshift(AD.item('spark')); a.eq = 0; } AD.game.setFlag('learned_spark'); }],
       ['say', [['@narrate', 'Abarax learned SPARK: lightning, two tiles, and doubly effective against armour.']]]] },
       { when: { turn: 3, phase: 'p' }, do: [['say', [
         ['@narrate', 'Two voices, one low, one high, singing an old harbor song about a sailor who fell in love with a lighthouse. The one he always sings badly.'],

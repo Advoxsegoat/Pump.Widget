@@ -14,6 +14,59 @@ It runs fully offline and asks for no permissions.
 
 ## What is in this build
 
+### New in 1.3
+
+**Freezes.** The remaining freezes came from flows that could die quietly and leave the game
+waiting. Each one now recovers:
+
+- An error in a story, menu or shop flow left the world map, a town or the prep screen marked
+  busy. Every one of those flows now clears the flag however it ends.
+- An error in the enemy's turn stopped the battle with no one able to act. A watchdog now notices
+  a battle that is waiting on nothing and moves it on.
+- A scene that threw on every frame froze the screen. After a few failures in a row it is closed,
+  and the game goes back to the map, the world, or the title.
+- Every battle kept its fighters' drawings in memory, so a long session on a phone ran out. They
+  are released now, and the heap stays flat across battles. The bloom pass's canvas also lives in
+  memory now, so reading it each frame no longer stalls the GPU.
+- If Android kills the page's renderer, the app rebuilds it instead of showing a blank screen.
+- Options → *Report a problem* copies the error log (game version, device, what was on screen) to
+  the clipboard, for anything still left.
+
+**Arts.** Every weapon has a technique, readied in the forecast with **F** (Y on a controller, or
+tap the ART row). An art costs extra uses and takes the place of Boost. Each weapon type has one:
+blades *Windsweep* (no counter), fists *Haymaker* (knockback), poles *Skewer* (half Def), shot
+*Deadeye*, flame *Wildfire*, bloom *Overgrowth*, tide *Riptide*, and Gold Flame *Sunburst*
+(splash). Nineteen personal weapons have their own, from Kesra's *Three Breaths* to Vehday's
+*True Level*. Bosses use arts too, from Normal up.
+
+**Gifts and weapons do more than hurt.** Hits can Burn (a tenth of HP each turn, never lethal),
+Root (cannot move), Chill (Spd −4) or Blind (Hit −25). Lightning, Spark and Gale-Widow chain to a
+second foe. Gust, Cyclone and Tidebreak push, and the Harpoon pulls. Henri's poker burns, Sierra's
+ivory blade chills, and Noella's night blade blinds. The forecast, the unit card and the status
+screen all show what is in effect.
+
+**Seventeen new skills**, learned at set levels: Second Helping, First Word (vantage), Hot Blood,
+Rose Sol, Moon Bite, Bulwark, Thrift, Galeforce, Lone Wolf, Charm, Quick Riposte, Warm Hands,
+Shelter, Kindle, Clear Mind, Trample and Slip. Every friend learns two to four. Saves past those
+levels get the skills on the world map. A third page of the status screen lists every skill in
+full.
+
+**Rescue, Drop and Mend.** Any unit can lift a friend beside them out of harm and set them down
+later; carrying halves Spd and Skl. Casters and singers can Mend the friend they carry, right after
+the rescue or on a later turn.
+
+**A face-off card before each battle scene**: the two fighters slam in from either side, with names,
+levels, weapons and any art. It plays at double speed in the enemy's turn (bosses aside). A or B
+skips it, and Options → *Battle intro* turns it off.
+
+![New in 1.3: the face-off card; an art called out in a duel; the forecast with an art readied; a burning foe on the unit card; Noella carrying Benny and mending him; the Skills and Arts page](docs/new-in-1.3.png)
+
+**Noella and Sierra always join.** They come in during Chapter 7 on turn 3, so a quicker win
+skipped them. Winning the chapter now brings them, and saves that missed them get them back on
+the world map.
+
+### Earlier
+
 **Two versions, merged.** The artifact's second version brought a bigger view (400×225, 24 px
 tiles), paper-doll map figures with walk cycles, and diorama effects (bloom, tilt-shift, light
 pools). This build keeps all of that and adds everything below. Battle fighters are drawn at
@@ -91,7 +144,14 @@ node all-divine-tactics/tools/playtest/sweep.mjs all-divine-tactics/web/index.ht
 
 It plays each chapter with fuzzed keyboard and touch input and reports any run that stops making
 progress (`STUCK`) or throws (`ERROR`). `repro-info.mjs` replays the old freeze and should report
-no phantom menu.
+no phantom menu. The other scripts in `tools/playtest/` take the game's path too:
+
+| Script | What it checks |
+|---|---|
+| `explore.mjs <game> [seeds] [frames] [parallel]` | Fuzzes everything outside a battle: world map, towns, shops, camp menus, saves. |
+| `faults.mjs <game>` | Throws errors into the flows that used to freeze and checks that each one recovers. |
+| `memprobe.mjs <game>` | Plays battle after battle and prints the heap and live canvases, to catch leaks. |
+| `smoke.mjs <game> <outdir>` | Checks arts, statuses, skills, rescue and suspend, and saves screenshots of the new screens. |
 
 ## Build it yourself
 

@@ -132,6 +132,8 @@
         if (n === 'LevelUp' && top.t < 112) return 4;
         if (n === 'Status') { press('b'); return 6; }
         if (n === 'TradeScene') { if (BOT.fuzz && chance(0.5)) { press(rnd() < 0.5 ? 'down' : 'right'); return 4; } if (BOT.fuzz && chance(0.3)) { press('a'); return 4; } press('b'); return 6; }
+        // try the weapon's art about a third of the time
+        if (n === 'Forecast' && !top.__artTried) { top.__artTried = true; if (chance(0.35)) { BOT.arts = (BOT.arts || 0) + 1; if (touch() && top.rect) tap(top.rect.x + 60, top.rect.y + 92); else press('y'); return 4; } }
         if (BOT.fuzz && chance(0.12)) { press('b'); return 6; }
         if (BOT.fuzz && chance(0.25)) { press(['left', 'right', 'up', 'down', 'l', 'r', 'x', 'y'][Math.floor(rnd() * 8)]); return 4; }
         if (touch() && n === 'Forecast') { const R = top.rect; if (R) tap(R.x + R.w / 2, R.y + 20); else tap(AD.W / 2, AD.H - 12); return 6; }
@@ -164,6 +166,9 @@
       const sig = signature();
       if (sig !== lastSig) { lastSig = sig; lastChange = BOT.frames; }
       if (BOT.frames - lastChange > stuckFrames) { BOT.stuck = 'no progress for ' + stuckFrames + ' frames'; return BOT.report(); }
+      // an extra watchdog for scenes whose own clock keeps the signature changing
+      const w = BOT.watch && BOT.watch();
+      if (w) { BOT.stuck = w; return BOT.report(); }
       if (BOT.frames % 30 === 0) await new Promise((r) => setTimeout(r, 0));
     }
     return BOT.report();
