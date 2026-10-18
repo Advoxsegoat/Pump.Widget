@@ -5,10 +5,47 @@ It runs fully offline and asks for no permissions.
 
 | Path | What it is |
 |---|---|
-| [`web/index.html`](web/index.html) | The game, exactly as exported from its artifact. Replace this file to update the app. |
+| [`web/index.html`](web/index.html) | The game. It began as the artifact export and now carries the fixes and new art below, so it is ahead of the artifact. |
 | [`android/`](android/) | The Android app: a full-screen WebView around the game, plus [`android-shell.js`](android/app/src/main/assets/android-shell.js) for the touch layout, clipboard and haptics. |
 | [`tools/render-icons.mjs`](tools/render-icons.mjs) | Redraws the launcher icon from the game's own pixel art (Abarax, Rose Divine). |
 | [`tools/build-apk-offline.sh`](tools/build-apk-offline.sh) | Builds the APK on a machine without the Android SDK. |
+| [`tools/playtest/`](tools/playtest/) | A bot that plays every chapter through the real input path, and the sweep that found the freeze. |
+| [`tools/preview/duel-sheet.mjs`](tools/preview/duel-sheet.mjs) | Renders any duel frame by frame onto one sheet, for judging battle animation. |
+
+## What this build adds to the artifact
+
+**The freeze after a command is fixed.** Four separate causes, all found by the playtest bot:
+
+- Opening INFO from the attack forecast cleared the battle's busy flag while the attack was still
+  running. When the target died, the map opened a phantom action menu over the kill animation and
+  the enemy phase never started. Busy work is now counted, not flagged.
+- Tapping an enemy to attack with a unit that had no usable weapon in reach (sealed gifts, or only
+  ranged weapons) threw inside the forecast and left the map waiting forever.
+- A screen fade that was already at its target never finished.
+- Any error in a frame stopped the game loop for good; now it is logged and the next frame runs.
+
+Also: *Items* returns to the action menu instead of ending the turn when nothing was used, and a
+resumed suspend restores the lord check.
+
+**New art.** Portraits, map sprites and battle sprites are redrawn as adults with more structure.
+Abarax's sides are shaved.
+
+**Battle scenes for every kind of attack.** Fighters are now skeletons posed frame by frame, about
+60 px tall:
+
+- **Blades** are drawn from the scabbard, the fighter dashes in and cuts, dashes back, and sheathes.
+  Criticals add a glint, a leap and a heavier cut.
+- **Gifts** (magic): the caster raises both hands to call the gift, then sends it. All 21 gifts have
+  their own effect, from Ember's fireball, Phoenix and Lightning to Tidebreak's wave, Rose Storm,
+  Stoneshape and Gold Flame.
+- **Everything else** has its own move too: knives (thrown at range), Vanity's crossed blades, the
+  skillet's *clang*, fists (jab and straight, uppercut on a crit), the Open Hand's palm, lances and
+  pokers (with mounted charges), the staff's twirl and leap, harpoons, axes, rifles, crossbows and
+  the Plumb Bow.
+- **Defenders** recoil, stagger on a crit, hop clear of a miss, and fall when they lose.
+- **Controls:** hold fast-forward to speed a duel up, and press **B** to skip it.
+
+![Six duels, three moments each: a blade drawn, cut and sheathed; the skillet's clang; Phoenix called down with raised hands; Tidebreak; a critical cross-cut; Gold Flame on a giant](docs/battle-scenes.png)
 
 ## Install it on a phone
 
@@ -35,9 +72,20 @@ Needs Android 7.0 or newer.
 
 ## Update the game
 
-Export the newest version of the game artifact, replace `web/index.html` with it, and push.
-CI builds a new APK. Each build has a higher version code and the same signing key, so it
-installs over the old one and keeps the saves.
+Edit `web/index.html` and push; CI builds a new APK. Each build has a higher version code and the
+same signing key, so it installs over the old one and keeps the saves.
+
+Replacing `web/index.html` with a fresh artifact export would drop everything in
+*What this build adds* unless the artifact gets the same changes. Before shipping a change, run the
+playtest sweep (needs Playwright, `npm i -g playwright`):
+
+```sh
+node all-divine-tactics/tools/playtest/sweep.mjs all-divine-tactics/web/index.html 1 30000 4
+```
+
+It plays each chapter with fuzzed keyboard and touch input and reports any run that stops making
+progress (`STUCK`) or throws (`ERROR`). `repro-info.mjs` replays the old freeze and should report
+no phantom menu.
 
 ## Build it yourself
 
