@@ -1,6 +1,6 @@
 // Contact sheet of a live duel; see duel-sheet.mjs. window.DUEL = { a, d, wa, wd, dist, ev: [{who,hit,crit}], every, cols, crop, biome }
 window.SCENE = function () {
-  const o = Object.assign({ a: 'abarax', d: 'thug', wa: 'skillet', wd: 'ironsword', dist: 1, ev: [{ who: 'a', hit: 1 }], every: 3, cols: 5, crop: [30, 132], biome: 'city', scale: 2 }, window.DUEL || {});
+  const o = Object.assign({ a: 'abarax', d: 'thug', wa: 'skillet', wd: 'ironsword', dist: 1, ev: [{ who: 'a', hit: 1 }], every: 3, cols: 5, crop: [Math.round(AD.H * 0.15), Math.round(AD.H * 0.74)], biome: 'city', scale: 2 }, window.DUEL || {});
   const mk = (spec, team, uid) => {
     const [id, lk] = spec.split(':');
     const U = AD.UNITS[id];
@@ -23,14 +23,14 @@ window.SCENE = function () {
   const bt = { map: { biome: o.biome, night: !!o.night } };
   const duel = new AD.Duel(bt, fc, { tl });
   let finished = false; duel.done = () => { finished = true; };
-  const cv = document.createElement('canvas'); cv.width = 320; cv.height = 180;
+  const cv = document.createElement('canvas'); cv.width = AD.W; cv.height = AD.H;
   const ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = false;
   const frames = [];
   for (let f = 0; f < 1600 && !finished; f++) {
     duel.update(); AD.fx.update && AD.fx.update();
-    if (f >= (o.from || 16) && f % o.every === 0) { ctx.clearRect(0, 0, 320, 180); duel.draw(ctx); const g = document.createElement('canvas'); g.width = 320; g.height = o.crop[1] - o.crop[0]; g.getContext('2d').drawImage(cv, 0, -o.crop[0]); frames.push([f, g]); }
+    if (f >= (o.from || 16) && f % o.every === 0) { ctx.clearRect(0, 0, AD.W, AD.H); duel.draw(ctx); const g = document.createElement('canvas'); g.width = AD.W; g.height = o.crop[1] - o.crop[0]; g.getContext('2d').drawImage(cv, 0, -o.crop[0]); frames.push([f, g]); }
   }
-  const fw = 320, fh = o.crop[1] - o.crop[0], cols = o.cols, rows = Math.ceil(frames.length / cols), k = o.scale;
+  const fw = AD.W, fh = o.crop[1] - o.crop[0], cols = o.cols, rows = Math.ceil(frames.length / cols), k = o.scale;
   const out = document.createElement('canvas'); out.width = cols * fw * k; out.height = rows * fh * k;
   const x = out.getContext('2d'); x.imageSmoothingEnabled = false;
   frames.forEach(([f, g], i) => { x.drawImage(g, (i % cols) * fw * k, Math.floor(i / cols) * fh * k, fw * k, fh * k); x.fillStyle = '#000'; x.fillRect((i % cols) * fw * k, Math.floor(i / cols) * fh * k, 22 * k, 9 * k); AD.gfx.text(x, String(f), (i % cols) * fw * k + 2, Math.floor(i / cols) * fh * k + 1, '#ffffff'); });

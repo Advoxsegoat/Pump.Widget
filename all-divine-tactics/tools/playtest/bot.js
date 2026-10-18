@@ -18,7 +18,7 @@
   const touch = () => BOT.input === 'touch';
   const tap = (x, y) => { AD.debugClick(Math.round(x), Math.round(y)); AD.input.lastDevice = 'touch'; };
   const tapTile = (bt, x, y) => {
-    const sx = x * 16 + 8 - bt.cam.x, sy = y * 16 + 8 - bt.cam.y;
+    const T = AD.TILE || 16, sx = x * T + T / 2 - bt.cam.x, sy = y * T + T / 2 - bt.cam.y;
     if (sx < 2 || sy < 2 || sx > AD.W - 2 || sy > AD.H - 2) return false;
     tap(sx, sy); return true;
   };
@@ -112,9 +112,9 @@
     switch (n) {
       case 'Title': if (BOT.ch) return 20; press('a'); return 20;
       case 'Menu': chooseMenu(top); return 6;
-      case 'Notice': if (top.t > 12) { if (touch()) tap(160, 90); else press('a'); } return 4;
-      case 'Dialogue': if (touch() && BOT.readDialogue) tap(160, 90); else press(BOT.readDialogue ? 'a' : 'start'); return 4;
-      case 'TitleCard': if (top.t > 32) { if (touch()) tap(160, 90); else press('a'); } return 4;
+      case 'Notice': if (top.t > 12) { if (touch()) tap(AD.W / 2, AD.H / 2); else press('a'); } return 4;
+      case 'Dialogue': if (touch() && BOT.readDialogue) tap(AD.W / 2, AD.H / 2); else press(BOT.readDialogue ? 'a' : 'start'); return 4;
+      case 'TitleCard': if (top.t > 32) { if (touch()) tap(AD.W / 2, AD.H / 2); else press('a'); } return 4;
       case 'Blank': return 4;
       case 'Prep': return 4;
       case 'Battle':
@@ -134,9 +134,9 @@
         if (n === 'TradeScene') { if (BOT.fuzz && chance(0.5)) { press(rnd() < 0.5 ? 'down' : 'right'); return 4; } if (BOT.fuzz && chance(0.3)) { press('a'); return 4; } press('b'); return 6; }
         if (BOT.fuzz && chance(0.12)) { press('b'); return 6; }
         if (BOT.fuzz && chance(0.25)) { press(['left', 'right', 'up', 'down', 'l', 'r', 'x', 'y'][Math.floor(rnd() * 8)]); return 4; }
-        if (touch() && n === 'Forecast') { tap(160, 170); return 6; }
+        if (touch() && n === 'Forecast') { const R = top.rect; if (R) tap(R.x + R.w / 2, R.y + 20); else tap(AD.W / 2, AD.H - 12); return 6; }
         if (touch() && n === 'Picker') { const p = top.list[top.i]; if (!tapTile(top.bt, p.x, p.y)) press('a'); else if (!BOT.tapTwice) { BOT.tapTwice = true; return 2; } BOT.tapTwice = false; return 6; }
-        if (touch() && n === 'LevelUp') { tap(160, 90); return 6; }
+        if (touch() && n === 'LevelUp') { tap(AD.W / 2, AD.H / 2); return 6; }
         press('a'); return 6;
     }
   }

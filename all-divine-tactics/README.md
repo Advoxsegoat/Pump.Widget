@@ -5,14 +5,19 @@ It runs fully offline and asks for no permissions.
 
 | Path | What it is |
 |---|---|
-| [`web/index.html`](web/index.html) | The game. It began as the artifact export and now carries the fixes and new art below, so it is ahead of the artifact. |
+| [`web/index.html`](web/index.html) | The game: the artifact's second version merged with the fixes and battle scenes below. The artifact has been updated to the same build. |
 | [`android/`](android/) | The Android app: a full-screen WebView around the game, plus [`android-shell.js`](android/app/src/main/assets/android-shell.js) for the touch layout, clipboard and haptics. |
 | [`tools/render-icons.mjs`](tools/render-icons.mjs) | Redraws the launcher icon from the game's own pixel art (Abarax, Rose Divine). |
 | [`tools/build-apk-offline.sh`](tools/build-apk-offline.sh) | Builds the APK on a machine without the Android SDK. |
 | [`tools/playtest/`](tools/playtest/) | A bot that plays every chapter through the real input path, and the sweep that found the freeze. |
 | [`tools/preview/duel-sheet.mjs`](tools/preview/duel-sheet.mjs) | Renders any duel frame by frame onto one sheet, for judging battle animation. |
 
-## What this build adds to the artifact
+## What is in this build
+
+**Two versions, merged.** The artifact's second version brought a bigger view (400×225, 24 px
+tiles), paper-doll map figures with walk cycles, and diorama effects (bloom, tilt-shift, light
+pools). This build keeps all of that and adds everything below. Battle fighters are drawn at
+1.5×, the height the second version gave its battle sprites.
 
 **The freeze after a command is fixed.** Four separate causes, all found by the playtest bot:
 
@@ -25,13 +30,15 @@ It runs fully offline and asks for no permissions.
 - Any error in a frame stopped the game loop for good; now it is logged and the next frame runs.
 
 Also: *Items* returns to the action menu instead of ending the turn when nothing was used, and a
-resumed suspend restores the lord check.
+resumed suspend restores the lord check. A tap made during an animation or the enemy phase used to
+wait and fire later, opening a stray map menu or ending the turn; now a tap counts only on the frame
+it lands. A portrait phone no longer gets a squashed canvas.
 
 **New art.** Portraits, map sprites and battle sprites are redrawn as adults with more structure.
 Abarax's sides are shaved.
 
 **Battle scenes for every kind of attack.** Fighters are now skeletons posed frame by frame, about
-60 px tall:
+90 px tall:
 
 - **Blades** are drawn from the scabbard, the fighter dashes in and cuts, dashes back, and sheathes.
   Criticals add a glint, a leap and a heavier cut.
@@ -75,9 +82,8 @@ Needs Android 7.0 or newer.
 Edit `web/index.html` and push; CI builds a new APK. Each build has a higher version code and the
 same signing key, so it installs over the old one and keeps the saves.
 
-Replacing `web/index.html` with a fresh artifact export would drop everything in
-*What this build adds* unless the artifact gets the same changes. Before shipping a change, run the
-playtest sweep (needs Playwright, `npm i -g playwright`):
+`web/index.html` and the artifact are the same build, so a later artifact export can replace it.
+Before shipping a change, run the playtest sweep (needs Playwright, `npm i -g playwright`):
 
 ```sh
 node all-divine-tactics/tools/playtest/sweep.mjs all-divine-tactics/web/index.html 1 30000 4
