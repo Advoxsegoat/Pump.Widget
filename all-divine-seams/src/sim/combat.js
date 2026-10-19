@@ -139,7 +139,7 @@ window.AD = window.AD || {};
       if (o.dead || o.gone) { if (t.frame < d.wind || d.persist !== true) { list.splice(i, 1); if (o.attacking === t) o.attacking = null; continue; } }
       if (o.hitstop > 0 && !d.persist) continue;
       t.frame++;
-      if (t.frame === d.wind + 1 && d.onStrike) d.onStrike(room, t);
+      if (t.frame === d.wind + 1) { if (d.onStrike) d.onStrike(room, t); if (room.bus) room.bus.emit('strike', { attack: t }); }
       if (t.frame > d.wind && t.frame <= d.wind + d.act) strike(room, t);
       if (t.frame >= d.wind + d.act + d.rec) { list.splice(i, 1); if (o.attacking === t) o.attacking = null; }
     }

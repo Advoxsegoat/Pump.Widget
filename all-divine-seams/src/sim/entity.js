@@ -50,7 +50,7 @@ window.AD = window.AD || {};
 
   E.stepFrames = function (room, e, dx, dy) {
     const t = AD.tileInfo(room.grid.at(e.x + dx, e.y + dy));
-    const slow = e.mode === 'walk' && t.slow ? 1 - t.slow : 1;
+    const slow = e.mode !== 'fly' && t.slow ? 1 - t.slow : 1;
     return E.framesPerTile(e.speed * e.moveMul * slow);
   };
 

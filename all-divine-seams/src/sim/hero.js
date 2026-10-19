@@ -9,7 +9,7 @@ window.AD = window.AD || {};
   H.make = function (room, id, run, x, y) {
     const D = AD.HEROES[id];
     const h = AD.ent.make(room, {
-      kind: 'hero', team: 'p', x, y, mode: 'walk', heroId: id, look: D.look,
+      kind: 'hero', team: 'p', x, y, mode: 'hero', heroId: id, look: D.look,
       speed: D.base.move, hp: D.base.hp, dmg: D.base.dmg, armour: D.base.armour, crit: D.base.crit,
       facing: [0, 1], items: {}, itemOrder: [], equipment: null, eqCd: 0,
       level: 1, xp: 0, rolls: D.base.rolls, rollMax: D.base.rolls, rollTimer: 0,

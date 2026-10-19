@@ -46,6 +46,8 @@ window.AD = window.AD || {};
   Grid.prototype.passable = function (x, y, mode) {
     if (!this.inside(x, y)) return false;
     const d = T[this.t[y * W + x]] || T['#'];
+    // the hero may walk (or be knocked) into a pit; monsters' paths never cross one
+    if (mode === 'hero') return !!(d.walk || d.pit);
     return !!(mode === 'fly' ? d.fly : d.walk);
   };
   Grid.prototype.opaque = function (x, y) {
