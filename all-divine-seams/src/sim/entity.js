@@ -67,7 +67,7 @@ window.AD = window.AD || {};
   E.buffer = function (e, dx, dy) { e.buf = dx || dy ? [dx, dy] : null; };
 
   // knock-back: a fast glide, tile by tile, stopping at the first tile it cannot enter
-  E.push = function (room, e, dx, dy, tiles) {
+  E.push = function (room, e, dx, dy, tiles, frames) {
     if (e.gone || e.immovable) return;
     if (e.move) {
       // settle on the nearer of the two tiles it holds
@@ -79,11 +79,12 @@ window.AD = window.AD || {};
     e.buf = null;
     e.pushDir = [dx, dy];
     e.pushLeft = tiles;
+    e.pushFrames = frames || PUSH_FRAMES;
     nextPush(room, e);
   };
   function nextPush(room, e) {
     const [dx, dy] = e.pushDir;
-    if (e.pushLeft > 0 && E.canStep(room, e, dx, dy)) { e.pushLeft--; begin(room, e, dx, dy, PUSH_FRAMES); return true; }
+    if (e.pushLeft > 0 && E.canStep(room, e, dx, dy)) { e.pushLeft--; begin(room, e, dx, dy, e.pushFrames || PUSH_FRAMES); return true; }
     e.pushLeft = 0;
     return false;
   }
