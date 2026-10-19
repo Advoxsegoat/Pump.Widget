@@ -198,7 +198,7 @@ window.AD = window.AD || {};
       case 'anchor': {
         for (const e of IT.foesNear(room, h, h.x, h.y, 1)) procHit(room, h, e, 4, id, rec0, 1);
         for (const e of IT.foesNear(room, h, h.x, h.y, 2)) {
-          if (e.dead || e.immovable) continue;
+          if (e.dead || e.immovable || e.heavy) continue;
           const dx = Math.sign(h.x - e.x), dy = Math.sign(h.y - e.y);
           if (Math.max(Math.abs(e.x - h.x), Math.abs(e.y - h.y)) > 1) AD.ent.push(room, e, dx, dy, 1);
         }

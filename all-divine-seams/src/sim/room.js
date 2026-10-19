@@ -20,6 +20,7 @@ window.AD = window.AD || {};
     AD.ai.install(room);
     AD.director.install(room);
     AD.world.install(room);
+    if (AD.boss) AD.boss.install(room);
     room.onArrive = (e) => run.arrive(room, e);
     room.dropPickup = (x, y, p) => RM.drop(room, x, y, p);
     run.install(room);

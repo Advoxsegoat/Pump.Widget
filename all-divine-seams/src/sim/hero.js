@@ -49,7 +49,8 @@ window.AD = window.AD || {};
     const D = AD.HEROES[h.heroId], B = D.base, T = AD.items.totals(h);
     const lv = h.level - 1;
     const oldMax = h.mhp;
-    h.mhp = Math.round(B.hp * (1 + 0.3 * lv) + T.maxHp);
+    // bosses beaten add 10% each
+    h.mhp = Math.round((B.hp * (1 + 0.3 * lv) + T.maxHp) * (1 + (h.bossHp || 0)));
     if (oldMax) h.hp = Math.max(1, Math.min(h.mhp, h.hp + Math.max(0, h.mhp - oldMax)));
     h.dmg = B.dmg * (1 + 0.2 * lv) * h.dmgMul;
     h.crit = B.crit + T.crit;

@@ -110,7 +110,7 @@ window.AD = window.AD || {};
       }
     }
     if (rec.status) AD.status.apply(tgt, rec.status.kind, Object.assign({ src }, rec.status));
-    if (rec.push && !tgt.dead) {
+    if (rec.push && !tgt.dead && !tgt.heavy) {
       const dx = Math.sign(tgt.x - (src ? src.x : tgt.x)) || (src ? src.facing[0] : 0);
       const dy = Math.sign(tgt.y - (src ? src.y : tgt.y)) || (src ? src.facing[1] : 0);
       if (dx || dy) AD.ent.push(room, tgt, dx, dy, rec.push);

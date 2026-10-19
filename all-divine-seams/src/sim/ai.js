@@ -237,12 +237,12 @@ window.AD = window.AD || {};
     const bus = room.bus;
     // a surprise blow always crits
     bus.on('dealMods', (p) => { if (p.tgt && p.tgt.state === 'asleep') p.crit = true; }, 30);
-    // a shield takes most of a blow from the front
+    // a guard (the Brass Mask's) takes most of a blow from the front
     bus.on('takeMods', (p) => {
       const tg = p.tgt, s = p.src;
-      if (!tg.def || !tg.def.shield || !s || p.rec.fixed) return;
+      if (!tg.def || !tg.def.guard || !s || p.rec.fixed) return;
       const dx = s.x - tg.x, dy = s.y - tg.y;
-      if (dx * tg.facing[0] + dy * tg.facing[1] > 0) { p.mul *= 1 - tg.def.shield; p.shielded = true; }
+      if (dx * tg.facing[0] + dy * tg.facing[1] > 0) { p.mul *= 1 - tg.def.guard; p.guarded = true; }
     });
     bus.on('hit', (p) => {
       const tg = p.tgt;

@@ -379,7 +379,8 @@ window.AD = window.AD || {};
     room.bus.emit('bossIn', { boss: this.bossBody });
   };
   P.bossDown = function (room, b) {
-    this.petals += 10;
+    if (AD.boss && AD.boss.reward) AD.boss.reward(this, b);
+    else this.petals += 10;
     this.end(true, null);
   };
 
