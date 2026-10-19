@@ -90,11 +90,11 @@ window.AD = window.AD || {};
       const armour = (tgt.armour || 0) + (tgt.armourBonus || 0) + AD.status.mods(tgt).armour;
       amount = AD.stat.mitigate(amount, armour);
       if (tgt.flat) amount = Math.max(1, amount - tgt.flat);
-      amount = Math.max(1, Math.round(amount));
-      const stop = p.crit ? 5 : 3;
-      if (src && !rec.noStop) src.hitstop = Math.max(src.hitstop || 0, stop);
-      tgt.hitstop = Math.max(tgt.hitstop || 0, stop);
-      tgt.flash = 6;
+      // a touch that does no harm (a pickpocket's hand) stays harmless
+      amount = base * rec.pct === 0 ? 0 : Math.max(1, Math.round(amount));
+      const stop = amount ? (p.crit ? 5 : 3) : 0;
+      if (src && !rec.noStop && stop) src.hitstop = Math.max(src.hitstop || 0, stop);
+      if (stop) { tgt.hitstop = Math.max(tgt.hitstop || 0, stop); tgt.flash = 6; }
     }
     tgt.hp -= amount;
     res.amount = amount;
@@ -125,8 +125,7 @@ window.AD = window.AD || {};
     const tiles = def.tiles || C.aim(room, def.shape, owner.x, owner.y, facing);
     const t = { owner, def, tiles, facing, frame: 0, hit: new Set(), id: ++room.nextId };
     (room.attacks || (room.attacks = [])).push(t);
-    owner.busy = def.wind + def.act + def.rec;
-    owner.attacking = t;
+    if (!def.noBusy) { owner.busy = def.wind + def.act + def.rec; owner.attacking = t; }
     if (room.bus) room.bus.emit('attackStart', { attack: t });
     return t;
   };
@@ -157,7 +156,7 @@ window.AD = window.AD || {};
       if (!on.has(ex + ',' + ey)) continue;
       if (e.iframes > 0) { t.hit.add(e.id); if (room.bus) room.bus.emit('dodge', { attack: t, tgt: e }); continue; }
       t.hit.add(e.id);
-      const res = C.deal(room, { src: o, tgt: e, pct: d.pct, type: d.type || 'normal', proc: d.proc === undefined ? 1 : d.proc, mask: [], status: d.status, push: d.push, shield: d.shield, attack: t, canCrit: d.canCrit, base: d.base });
+      const res = C.deal(room, { src: o, tgt: e, pct: d.pct, type: d.type || 'normal', proc: d.proc === undefined ? 1 : d.proc, mask: [], status: d.status, push: d.push, shield: d.shield, attack: t, canCrit: d.canCrit, base: d.base, steal: d.steal });
       if (d.onHit && res) d.onHit(room, t, e, res);
     }
   }
