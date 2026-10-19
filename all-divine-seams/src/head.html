@@ -1,0 +1,60 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;padding:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Between the Rooms</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* One visual world by choice: the Seams at night, rose-gold trim. */
+:root {
+  --ink: #07080f;
+  --night: #121633;
+  --gilt: #c9a35d;
+  --rose: #e8607e;
+  --cream: #f6ecd4;
+  --dim: #6c739c;
+  --font: ui-monospace, "Cascadia Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: radial-gradient(ellipse at 50% 30%, #1a1f45 0%, var(--ink) 70%);
+  color: var(--cream);
+  font: 12px/1.4 var(--font);
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+#app {
+  position: relative;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-block: 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+#stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#screen {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background: #05060c;
+  box-shadow: 0 0 0 1px #2a2f5a, 0 0 0 3px #0a0c1c, 0 0 0 4px var(--gilt), 0 18px 60px rgba(0, 0, 0, 0.6);
+  outline: none;
+  touch-action: none;
+  max-width: 100%;
+}
+</style>
+<div id="app">
+  <div id="stage"><canvas id="screen" tabindex="0" aria-label="Between the Rooms"></canvas></div>
+  <div id="controls" aria-hidden="true"></div>
+</div>
+<script>
