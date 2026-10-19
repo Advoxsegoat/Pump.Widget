@@ -14,12 +14,16 @@ window.AD = window.AD || {};
   };
   Bus.prototype.emit = function (name, payload) {
     const list = this.h[name];
-    if (!list) return payload;
-    for (const rec of list.slice()) {
-      try { rec.fn(payload); } catch (e) { if (AD.report) AD.report(e, 'bus ' + name); }
+    if (list) {
+      for (const rec of list.slice()) {
+        try { rec.fn(payload); } catch (e) { if (AD.report) AD.report(e, 'bus ' + name); }
+      }
     }
+    // a room's bus passes everything on to the run's, where sound, the HUD and the Book listen
+    if (this.fwd) this.fwd.emit(name, payload);
     return payload;
   };
+  Bus.prototype.forward = function (to) { this.fwd = to; return this; };
   Bus.prototype.clear = function () { this.h = {}; };
   AD.Bus = Bus;
 })(window.AD);

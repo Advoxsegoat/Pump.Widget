@@ -22,7 +22,7 @@ window.AD = window.AD || {};
       kind: 'monster', team: 'e', x, y, mode: D.mode, speed: D.speed, hp, mhp: hp,
       dmg: AD.stat.scaleDmg(D.dmg, level) * k.dmg, crit: 0, defId: id, def: D, family: D.family, look: D.look,
       level, elite: o.elite || null, eliteTier: tier, state: o.asleep ? 'asleep' : 'hunt', atkCd: 30 + ((x * 7 + y * 13) % 20),
-      cost: D.cost, shimmer: o.shimmer || 0, healT: D.heal ? D.heal.every : 0, turnT: 0,
+      cost: D.cost, shimmer: o.shimmer || 0, untargetable: !!o.shimmer, healT: D.heal ? D.heal.every : 0, turnT: 0,
     });
     if (room.hero) m.facing = [sgn(room.hero.x - x) || 0, sgn(room.hero.y - y) || 1];
     if (room.bus) room.bus.emit('spawn', { m });
@@ -127,7 +127,7 @@ window.AD = window.AD || {};
       if (p.left <= 0 || !room.grid.passable(tx, ty, 'fly') && !AD.tileInfo(room.grid.at(tx, ty)).solid || AD.tileInfo(room.grid.at(tx, ty)).wall) { P.splice(i, 1); continue; }
       let gone = false;
       for (const e of room.bodies.values()) {
-        if (e.team === p.team || e.dead || e.gone || e === p.owner) continue;
+        if (e.team === p.team || e.dead || e.gone || e === p.owner || e.untargetable) continue;
         const [ex, ey] = AD.combat.tileOf(e);
         if (ex !== tx || ey !== ty) continue;
         if (e.iframes > 0) continue;
@@ -158,7 +158,7 @@ window.AD = window.AD || {};
   // ---------------------------------------------------------------- brains
   AI.think = function (room, m) {
     if (m.dead || m.gone) return;
-    if (m.shimmer > 0) { m.shimmer--; return; }
+    if (m.shimmer > 0) { m.shimmer--; m.untargetable = m.shimmer > 0; return; }
     if (m.hitstop > 0) return;
     const st = AD.status.mods(m);
     m.moveMul = st.move;
