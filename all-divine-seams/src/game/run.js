@@ -22,11 +22,13 @@ window.AD = window.AD || {};
     this.metMinis = new Set();
     this.banner = null; this.transition = null; this.gate = null;
     this.quick = [null, null];
+    if (AD.cons) { AD.cons.init(this); AD.cons.install(this); }
     this.startDepth(1, true);
   }
   AD.Run = Run;
   const P = Run.prototype;
 
+  P.useQuick = function (pad) { if (AD.cons) AD.cons.tick(this, pad); };
   P.coef = function () { return AD.stat.coefficient(this.difficulty, this.minutes, this.cleared); };
   P.region = function () { return AD.regionAt(this.depth); };
 
@@ -127,9 +129,13 @@ window.AD = window.AD || {};
       }
       if (run.gate && m === run.gate.guardian) run.guardianDown(room, m);
       if (m === run.bossBody) run.bossDown(room, m);
+      // now and then a monster leaves something behind
+      if (AD.cons && run.streams.loot() < 0.03) AD.room.drop(room, m.x, m.y, AD.cons.randomDrop(run, run.streams.loot));
       room.corpses.push({ look: m.look, defId: m.defId, x: m.fx, y: m.fy, facing: m.facing, t: 0, elite: m.elite });
       AD.ent.remove(room, m);
     }, 90);
+    // brittle armour lets more through
+    room.bus.on('takeMods', (p) => { if (p.tgt === run.hero && run.hero.curse === 'brittle') p.mul *= 1.1; });
     // a test and debug hook: nothing kills the hero
     room.bus.on('lethal', (p) => { if (run.god && p.tgt === run.hero) { p.cancel = true; p.tgt.hp = p.tgt.mhp; } }, 1);
   };

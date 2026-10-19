@@ -16,6 +16,8 @@ window.AD = window.AD || {};
     weaken: { stack: 'refresh', dur: 240 },
     noheal: { stack: 'refresh', dur: 240 },
     haste: { stack: 'refresh', dur: 180 },
+    swift: { stack: 'refresh', dur: 480 },
+    tough: { stack: 'refresh', dur: 480 },
   };
   S.DEF = DEF;
 
@@ -69,6 +71,8 @@ window.AD = window.AD || {};
     const m = { move: 1, atk: 1, dmg: 1, armour: 0, miss: 0, rooted: false, stunned: false, noHeal: false };
     if (s.chill) { m.move *= 0.6; m.atk *= 0.6; }
     if (s.haste) { m.move *= 1.3; m.atk *= 1.3; }
+    if (s.swift) { m.move *= 1.5; m.atk *= 1.5; }
+    if (s.tough) m.armour += 60;
     if (s.root) m.rooted = true;
     if (s.stun) m.stunned = true;
     if (s.blind) m.miss = 0.5;

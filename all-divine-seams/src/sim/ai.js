@@ -165,8 +165,16 @@ window.AD = window.AD || {};
     if (st.stunned) return;
     if (m.atkCd > 0) m.atkCd--;
     if (m.busy) return;
-    const t = room.hero;
     if (m.state === 'asleep') return;
+    let t = room.hero;
+    if (m.rage > 0) {
+      if (--m.rage === 0) m.team = 'e';
+      else {
+        let best = null, bd = 99;
+        for (const o of room.bodies.values()) { if (o === m || o.dead || o.gone || o.kind === 'hero' || o.team === m.team) continue; const d = cheb(m, o); if (d < bd) { bd = d; best = o; } }
+        if (best) t = best;
+      }
+    }
     if (!t || t.dead || t.gone) return;
     const D = m.def;
     // a chained blow (the Tough's second swing, the Knuckle's combo) follows at once
@@ -266,7 +274,7 @@ window.AD = window.AD || {};
       if (p.tgt.stolen && room.dropPickup) room.dropPickup(p.tgt.x, p.tgt.y, { kind: 'coins', amount: Math.round(p.tgt.stolen * 1.5) });
     });
     // what wakes sleepers
-    bus.on('attackStart', (p) => { const o = p.attack.owner; if (o.kind === 'hero') AI.noise(room, o.x, o.y, 4); });
+    bus.on('attackStart', (p) => { const o = p.attack.owner; if (o.kind === 'hero') AI.noise(room, o.x, o.y, o.curse === 'loud' ? 8 : 4); });
     bus.on('roll', (p) => AI.noise(room, p.h.x, p.h.y, 2));
   };
 })(window.AD);

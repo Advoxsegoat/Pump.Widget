@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { load } from './load.mjs';
 
-export const SIM = ['engine/core.js', 'sim/rng.js', 'sim/events.js', 'sim/stats.js', 'sim/grid.js', 'sim/entity.js', 'sim/status.js', 'sim/combat.js', 'data/items.js', 'sim/items.js', 'data/heroes.js', 'sim/hero.js', 'data/monsters.js', 'sim/ai.js', 'sim/boss.js', 'data/regions.js', 'sim/director.js', 'sim/world.js', 'data/templates.js', 'gen/floor.js', 'gen/room.js', 'sim/room.js', 'game/run.js'];
+export const SIM = ['engine/core.js', 'sim/rng.js', 'sim/events.js', 'sim/stats.js', 'sim/grid.js', 'sim/entity.js', 'sim/status.js', 'sim/combat.js', 'data/items.js', 'sim/items.js', 'data/heroes.js', 'sim/hero.js', 'data/monsters.js', 'sim/ai.js', 'sim/boss.js', 'data/regions.js', 'sim/director.js', 'sim/world.js', 'data/templates.js', 'gen/floor.js', 'gen/room.js', 'sim/room.js', 'data/consumables.js', 'game/run.js'];
 const AD = load(SIM);
 const PAD = () => ({ sx: 0, sy: 0, a: false, aHeld: false, aReleased: false, b: false, r: false, l: false, q: [false, false, false] });
 const tickN = (run, n, pad) => { for (let i = 0; i < n; i++) run.tick(pad || PAD()); };
@@ -177,7 +177,7 @@ test('soak: random play through floors throws nothing', () => {
     for (let i = 0; i < 20000; i++) {
       if (i % 20 === 0) { pad = PAD(); pad.sx = AD.rng.int(r, -1, 1); pad.sy = AD.rng.int(r, -1, 1); }
       pad.a = r() < 0.08; pad.b = r() < 0.01; pad.r = r() < 0.01; pad.l = r() < 0.005;
-      pad.aHeld = pad.a; pad.aReleased = r() < 0.02;
+      pad.aHeld = pad.a; pad.aReleased = r() < 0.02; pad.q = [r() < 0.004, r() < 0.004, false];
       run.tick(pad);
       if (run.room.type === 'exit' && !run.gate) run.touchGate();
       if (run.gate && run.gate.open) run.enterGate();

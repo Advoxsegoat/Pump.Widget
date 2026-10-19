@@ -119,6 +119,7 @@ window.AD = window.AD || {};
     }
     h.busy = 0;
     h.rolls--;
+    if (h.curse === 'fickle' && h.hp > 1) h.hp -= 1;
     if (!h.rollTimer) h.rollTimer = R.recharge;
     h.iframes = Math.max(h.iframes, R.iframes);
     h.facing = [dx, dy];
@@ -145,6 +146,11 @@ window.AD = window.AD || {};
       g.acc += g.per; const k = Math.floor(g.acc + 1e-9); g.acc -= k;
       if (k) h.hp = Math.min(h.mhp, h.hp + k);
       if (--g.left <= 0) h.getupHeal = null;
+    }
+    // healing over time (a draught of Healing)
+    if (h.hots && h.hots.length) {
+      for (const g of h.hots) { g.acc += g.per; const k = Math.floor(g.acc + 1e-9); g.acc -= k; if (k) AD.items.heal(room, h, k); g.left--; }
+      h.hots = h.hots.filter((g) => g.left > 0);
     }
     // regen, carried a fraction at a time
     if (h.hp < h.mhp && !AD.status.mods(h).noHeal) {
