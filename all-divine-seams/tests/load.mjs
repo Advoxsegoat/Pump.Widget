@@ -16,3 +16,9 @@ export function load(files) {
   }
   return ctx.AD;
 }
+
+// An open 15x10 room with walls round it, for simulation tests.
+export function testRoom(AD, rows) {
+  rows = rows || ['###############'].concat(Array.from({ length: 8 }, () => '#.............#'), ['###############']);
+  return { grid: new AD.Grid(rows), bodies: new Map(), bus: new AD.Bus(), frame: 0, nextId: 0, run: { coins: 0, coef: () => 1 } };
+}
