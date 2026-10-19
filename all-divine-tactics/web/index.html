@@ -109,7 +109,7 @@ window.AD = window.AD || {};
   'use strict';
   const W = 400, H = 225;
   AD.W = W; AD.H = H; AD.TILE = 24;
-  AD.VERSION = '1.3.0';
+  AD.VERSION = '1.4.0';
   AD.frame = 0;
 
   // ---------------------------------------------------------------- utils
@@ -810,6 +810,9 @@ window.AD = window.AD || {};
     broken: ['.c.cccc.', 'cw.wwwwc', 'cwc.ccwc', 'cwcw.cwc', 'cwcwwc.c', '.cwccw..', '..cw.c..', '...c....'],
     star: ['...g....', '...g....', '..ggg...', 'gggwggg.', '.ggggg..', '.gg.gg..', '.g...g..', '........'],
     rose: ['..rr....', '.rrrr...', 'rrwrrr..', '.rrrr...', '..g.....', '.gg.g...', '..ggg...', '..g.....'],
+    armor: ['.c....c.', 'cwc..cwc', 'cwwwwwwc', '.cwccwc.', '.cwwwwc.', '.cwccwc.', '..cwwc..', '...cc...'],
+    outfit: ['..g..g..', '.cccccc.', 'ccwccwcc', 'c.cwwc.c', '..cwwc..', '..cwwc..', '..c..c..', '........'],
+    acc: ['...rr...', '..rwwr..', '...gg...', '..g..g..', '.g....g.', '.g....g.', '..g..g..', '...gg...'],
   };
   const ICOL = { '#': '#e6ecff', c: '#b8c0e0', g: '#e8c170', r: '#ef5f6a', w: '#ffffff', b: '#5fb6f5' };
   const iconCache = {};
@@ -2071,7 +2074,7 @@ window.AD = window.AD || {};
     }
     if (has(L, 'spectacles') && !back) { if (side) t.row(e0, hx1 - 3, hx1, '#8a5a1a'); else { t.row(e0, hx0 + 1, hx1 - 1, '#6a4a1a'); t.set(cx - 2, e0, '#d89a3a'); t.set(cx + 1, e0, '#d89a3a'); } }
     if (has(L, 'rose') && !back) { const rx = side ? hx0 + 2 : hx1; t.rect(rx, hT + 2, 2, 2, '#e8344e'); t.set(rx, hT + 2, '#ff8a9e'); t.set(rx, hT + 4, '#3a8a4a'); }
-    if (has(L, 'earring') && !back) t.set(side ? hx0 + 3 : hx0, e1 + 1, G.C.gold);
+    if (has(L, 'earring') && !back) t.set(side ? hx0 + 3 : hx0, e1 + 1, L.earC || G.C.gold);
     if (has(L, 'scar') && viewName === 'front') { t.set(cx + 2, e1 + 1, '#d8b8a8'); t.set(cx + 3, e1 + 2, '#d8b8a8'); }
     if (has(L, 'patch') && viewName === 'front') { t.rect(cx + 1, e0 - 1, 3, 3, '#1a1420'); t.row(e0 - 2, hx0, hx1, '#1a1420'); }
     if (has(L, 'beret')) {
@@ -2106,6 +2109,11 @@ window.AD = window.AD || {};
     }
     if (has(L, 'mask') && !back) { const c = L.maskC || '#c9a35d'; const x0 = side ? hx1 - 4 : hx0 + 1; t.rect(x0, e0 - 1, side ? 5 : hx1 - hx0 - 1, 4, c); t.set(side ? hx1 - 2 : cx - 2, e0, '#120c1a'); if (!side) t.set(cx + 1, e0, '#120c1a'); }
     if (has(L, 'bonemask') && !back) { const c = '#ece6d4'; const x0 = side ? hx1 - 5 : hx0 + 1; t.rect(x0, hT + 2, side ? 6 : hx1 - hx0 - 1, hB - hT - 2, c); t.rect(side ? hx1 - 2 : cx - 2, e0, 1, 2, '#120c1a'); if (!side) t.rect(cx + 1, e0, 1, 2, '#120c1a'); }
+    if (L.trinket && L.trinket.kind === 'circlet') {
+      const T = L.trinket;
+      if (side) { t.row(hT + 2, hx0 + 2, hx1, T.c); if (T.gem) t.set(hx1 - 1, hT + 2, T.gem); }
+      else { t.row(hT + 2, hx0, hx1, T.c); if (T.gem && !back) t.set(cx - 1, hT + 2, T.gem); }
+    }
     if (has(L, 'crown')) { t.row(hT - 1, hx0 + 1, hx1 - 1, G.C.gold); [hx0 + 1, cx - 1, cx + 1, hx1 - 1].forEach((x) => t.set(x, hT - 2, G.C.gold)); if (!back) t.set(cx, hT - 1, '#e8344e'); }
   }
 
@@ -2114,6 +2122,34 @@ window.AD = window.AD || {};
     if (has(L, 'scarf')) { const s = L.scarf || L.acc || G.C.gold; t.rect(tx0 - 1, sh, tx1 - tx0 + 3, 2, s); if (viewName === 'front') t.col(tx1, sh + 2, sh + 5, s); if (viewName === 'side') { t.col(tx0 - 1, sh + 2, sh + 5, s); t.col(tx0 - 2, sh + 3, sh + 6, G.shade(s, -0.2)); } if (viewName === 'back') t.col(cx, sh + 2, sh + 6, s); }
     if (has(L, 'lantern') && viewName !== 'back') { const lx = viewName === 'side' ? tx1 - 1 : cx - 1; t.rect(lx, sh + 2, 2, 3, '#fff2a8'); t.set(lx, sh + 2, '#ffffff'); }
     if (has(L, 'gear') && viewName !== 'back') { t.set(cx - 1, sh, '#c98a2a'); t.set(cx, sh, '#e8b84a'); }
+  }
+
+  // ---------------------------------------------------------------- worn gear
+  // armour over the clothes: a breastplate, pauldrons, bracers and greaves; chain is checkered
+  function armorCols(L) {
+    const a = L.armor; if (!a) return null;
+    const has = (k) => a.pieces.indexOf(k) >= 0;
+    return { has, c: a.plate, d: G.shade(a.plate, -0.32), l: G.shade(a.plate, 0.3), trim: a.trim || G.shade(a.plate, -0.2), chain: a.chain, glow: a.glow, stars: a.stars };
+  }
+  function wearTorso(t, L, x0, x1, sh, back, side) {
+    const A = armorCols(L);
+    if (A && A.has('breast')) {
+      t.rect(x0 + 1, sh + 1, x1 - x0 - 1, 5, back ? A.d : A.c);
+      if (!back) { t.row(sh + 1, x0 + 2, x1 - 2, A.l); if (!side) t.col(x1 - 1, sh + 2, sh + 5, A.d); }
+      t.row(sh + 6, x0, x1, A.trim);
+      if (A.chain) for (let y = sh + 2; y <= sh + 5; y++) for (let x = x0 + 1; x < x1; x++) if ((x + y) % 2) t.set(x, y, A.d);
+      if (A.glow && !back) t.set(Math.round((x0 + x1) / 2), sh + 3, A.glow);
+    }
+    if (A && A.has('mantle')) { t.row(sh, x0 - 1, x1 + 1, A.trim); if (!back) t.set(x1, sh + 1, A.trim); }
+    if (A && A.stars && back) { t.set(x0 + 1, sh + 6, '#ffffff'); t.set(x1 - 1, sh + 10, '#bfe8ff'); t.set(x0 + 3, sh + 13, '#ffffff'); }
+    const T = L.trinket;
+    if (T && T.kind === 'amulet' && !back) { const cx = side ? x1 : Math.round((x0 + x1) / 2); t.set(cx - 1, sh + 1, T.c); t.set(cx + (side ? -1 : 1), sh + 1, T.c); t.set(cx, sh + 2, T.gem || T.c); }
+    if (T && T.kind === 'charm') { t.set(side ? x0 : x1 - 1, sh + 9, T.c); t.set(side ? x0 : x1 - 1, sh + 10, G.shade(T.c, 0.3)); }
+  }
+  function wearShoulders(t, L, xs, sh) {
+    const A = armorCols(L);
+    if (!A || !A.has('pauldrons')) return;
+    xs.forEach((x) => { t.rect(x - 1, sh - 1, 4, 3, A.c); t.row(sh - 1, x, x + 1, A.l); t.row(sh + 1, x - 1, x + 2, A.trim); });
   }
 
   // ---------------------------------------------------------------- weapons
@@ -2183,6 +2219,8 @@ window.AD = window.AD || {};
       const lift = (P.lift || [0, 0])[i];
       if (!skirt) for (let x = legX[i]; x < legX[i] + lw; x++) t.col(x, M.hip, M.ankle - lift, pants);
       t.rect(legX[i] - (i === 0 ? 1 : 0), M.ankle + 1 - lift, lw + 1, 2, boots);
+      const A = armorCols(L);
+      if (A && A.has('greaves') && !skirt) { t.rect(legX[i], M.ankle - 3 - lift, lw, 3, back ? A.d : A.c); t.row(M.ankle - 3 - lift, legX[i], legX[i] + lw - 1, A.l); }
     }
     if (skirt) {
       const sk = main;
@@ -2207,9 +2245,14 @@ window.AD = window.AD || {};
       const x0 = side < 0 && o === 'robe' ? ax - 1 : ax;
       t.rect(x0, f.sh + 1, w, alen - 1 + sw, side > 0 ? G.shade(sleeve, -0.12) : sleeve);
       t.rect(ax, f.sh + alen + sw, aw, 2, hand);
+      const A = armorCols(L);
+      if (A && A.has('bracers')) t.rect(ax, f.sh + alen - 3 + sw, aw, 2, side > 0 ? A.d : A.c);
       hands.push([ax + (side > 0 ? aw - 1 : 0), f.sh + alen + sw + 1]);
     });
     outfitFront(t, L, f, back);
+    wearTorso(t, L, f.tx0, f.tx1, f.sh, back, false);
+    wearShoulders(t, L, [f.tx0 - 2, f.tx1], f.sh + 1);
+    if (L.trinket && L.trinket.kind === 'ring' && !back) t.set(hands[1][0], hands[1][1], L.trinket.gem || L.trinket.c);
     // head
     const hw = B.head;
     t.row(f.hT, f.hx0 + 2, f.hx1 - 2, skin);
@@ -2285,6 +2328,8 @@ window.AD = window.AD || {};
     boot(lf, G.shade(boots, -0.25));
     const ln = limb(t, hipX, f.hip, legN[0], B.leg[0], legN[1], B.leg[1] + 1, B.lw, pants);
     boot(ln, boots);
+    const SA = armorCols(L);
+    if (SA && SA.has('greaves') && !skirt) [[lf, SA.d], [ln, SA.c]].forEach(([l, c]) => t.thick(l[2] + (l[0] - l[2]) * 0.25, l[3] + (l[1] - l[3]) * 0.25, l[2] + (l[0] - l[2]) * 0.8, l[3] + (l[1] - l[3]) * 0.8, B.lw, c));
     if (skirt) {
       t.poly([[f.tx0 - 1, f.hip - 1], [f.tx1 + 1, f.hip - 1], [f.tx1 + 4, M.ankle], [f.tx0 - 4, M.ankle]], main);
       t.row(M.ankle, f.tx0 - 4, f.tx1 + 3, o === 'gown' ? (L.acc || G.C.gold) : G.shade(main, -0.25));
@@ -2301,6 +2346,7 @@ window.AD = window.AD || {};
     if (o === 'vest') t.rect(f.tx1 - 1, f.sh + 1, 2, f.hip - f.sh - 1, L.sec || '#e8e0d0');
     if (o === 'gown') t.row(f.sh + 2, f.tx0, f.tx1, L.acc || G.C.gold);
     if (!skirt && o !== 'apron') t.row(f.hip - 1, f.tx0, f.tx1, o === 'shirt' ? (L.acc || G.C.gold) : G.shade(main, -0.25));
+    wearTorso(t, L, f.tx0, f.tx1, f.sh, false, true);
     extrasBody(t, L, f, 'side');
     // head
     t.row(f.hT, f.hx0 + 2, f.hx1 - 1, skin);
@@ -2323,9 +2369,12 @@ window.AD = window.AD || {};
     // near arm, then the weapon, then the hand on top of the grip
     const aN = P.armN || [8, -8];
     const nh = limb(t, shX, shY, aN[0], B.arm[0], aN[1], B.arm[1], B.aw, sleeve, sleeve);
+    if (SA && SA.has('bracers')) t.thick(nh[2] + (nh[0] - nh[2]) * 0.35, nh[3] + (nh[1] - nh[3]) * 0.35, nh[2] + (nh[0] - nh[2]) * 0.8, nh[3] + (nh[1] - nh[3]) * 0.8, B.aw, SA.c);
+    wearShoulders(t, L, [shX - 1], f.sh + 1);
     const kind = P.weapon === undefined ? visualWeapon(L, P.style) : P.weapon;
     if (kind) weapon(t, kind, nh[0], nh[1], P.wa === undefined ? 30 : P.wa, P.wx || 0, L);
     t.rect(nh[0] - 1, nh[1] - 1, P.style === 'punch' ? 3 : 2, P.style === 'punch' ? 3 : 2, fist);
+    if (L.trinket && L.trinket.kind === 'ring') t.set(nh[0], nh[1] - 1, L.trinket.gem || L.trinket.c);
     // magic in the hands
     if (P.glow) {
       const [gx, gy] = P.glowAt === 'far' ? farH : nh;
@@ -2847,13 +2896,17 @@ window.AD = window.AD || {};
       const m = k === 'mask' ? { m: wmap.m, M: wmap.M } : wmap;
       stamp(r, HEADWEAR[k], x0, y0, m);
     });
+    if (L.trinket && L.trinket.kind === 'circlet' && !has('helmet') && !has('hood')) {
+      for (let x = 5; x <= 14; x++) if (r.get(x0 + x, y0 + 6)) r.set(x0 + x, y0 + 6, x % 2 ? L.trinket.c : tone(L.trinket.c, 0.25));
+      if (L.trinket.gem) { r.set(x0 + 12, y0 + 6, L.trinket.gem); r.set(x0 + 12, y0 + 5, tone(L.trinket.gem, 0.4)); }
+    }
     if (has('hood') || has('veil')) { [[11, 8], [12, 8], [13, 8], [11, 7], [12, 7]].forEach(([x, y]) => { if (r.get(x0 + x, y0 + y) === p.skin) r.set(x0 + x, y0 + y, p.skinD); }); }
     if (has('bonemask') || has('mask')) { r.set(x0 + 12, y0 + 9, L.eyeGlow || '#120c1a'); }
     if (has('helmet') && L.plume) { r.cap(x0 + 9, y0 + 2, x0 + 3, y0 + 4, 1.2, L.plume); r.cap(x0 + 4, y0 + 4, x0 + 2, y0 + 8, 1, tone(L.plume, -0.2)); }
     // things worn on the face or in the hair
     if (has('glasses') || has('spectacles')) { const g = L.glassC || '#3a3044'; r.set(x0 + 10, y0 + 9, g); r.set(x0 + 13, y0 + 9, g); r.set(x0 + 11, y0 + 8, g); r.set(x0 + 12, y0 + 8, g); r.set(x0 + 11, y0 + 10, g); r.set(x0 + 12, y0 + 10, g); r.set(x0 + 9, y0 + 9, g); r.set(x0 + 11, y0 + 9, '#cfe8ff'); }
     if (has('patch')) { r.set(x0 + 11, y0 + 9, '#1a1420'); r.set(x0 + 12, y0 + 9, '#1a1420'); r.set(x0 + 12, y0 + 10, '#1a1420'); r.seg([x0 + 5, y0 + 7], [x0 + 11, y0 + 8], '#1a1420'); }
-    if (has('earring')) r.set(x0 + 8, y0 + 11, G.C.gold);
+    if (has('earring')) r.set(x0 + 8, y0 + 11, L.earC || G.C.gold);
     if (has('rose')) { r.ell(x0 + 6, y0 + 6, 1.5, 1.5, '#d8304a'); r.set(x0 + 6, y0 + 6, '#ff6a7e'); r.set(x0 + 5, y0 + 7, '#2a6a3a'); }
     if (has('bells')) { r.set(x0 + 4, y0 + 10, G.C.gold); r.set(x0 + 4, y0 + 12, G.C.gold); }
     return { x0, y0, eye: [x0 + 12, y0 + 9], mouth: [x0 + 12, y0 + 12], top: [x0 + 9, y0 + 2] };
@@ -2873,6 +2926,14 @@ window.AD = window.AD || {};
     ironlance: { kind: 'lance', len: 30 }, steellance: { kind: 'lance', len: 32 }, silverlance: { kind: 'lance', len: 32, tip: '#ffffff', glow: '#e8f0ff' }, harpoon: { kind: 'lance', len: 28, barb: 1, thrown: 1 },
     bayonet: { kind: 'bayonet' }, lanternlance: { kind: 'lance', len: 32, lantern: 1, glow: '#fff2a8' }, poker: { kind: 'poker', glow: '#ff8a3a' }, bwstaff: { kind: 'staff', len: 30 },
     crossbow: { kind: 'crossbow' }, silverbow: { kind: 'crossbow', col: '#d8dce8' }, rifle: { kind: 'rifle', len: 17 }, longrifle: { kind: 'rifle', len: 22 }, musket: { kind: 'rifle', len: 20, brass: 1 }, plumb: { kind: 'bow' },
+    irongreat: { kind: 'great', len: 22 }, steelgreat: { kind: 'great', len: 23, col: '#e8eef8' }, silvergreat: { kind: 'great', len: 23, col: '#ffffff', glow: '#cfe8ff', edge: '#ffffff' },
+    rapier: { kind: 'rapier', len: 19 }, duelrapier: { kind: 'rapier', len: 20, col: '#f4f4ff', guard: '#d8304a', glow: '#ffb0b8' },
+    chakram: { kind: 'chakram', thrown: 1 }, moonring: { kind: 'chakram', thrown: 1, col: '#e8f0ff', glow: '#bfe8ff' },
+    warhammer: { kind: 'maul', len: 18 }, maul: { kind: 'maul', len: 20, big: 1 }, warfan: { kind: 'fan', col: '#c8283a' }, cranefan: { kind: 'fan', col: '#f4f4f8', glow: '#bfe8ff' },
+    scythe: { kind: 'scythe', len: 28 }, reaper: { kind: 'scythe', len: 31, col: '#c8c8d8', glow: '#a88aff' },
+    chainwhip: { kind: 'whip', len: 30 }, thornlash: { kind: 'whip', len: 30, col: '#3a8a4a', thorn: 1 },
+    longbow: { kind: 'bow', long: 1 }, yewbow: { kind: 'bow', long: 1, col: '#5a3a24' },
+    pistol: { kind: 'pistol' }, twinpistols: { kind: 'pistol', dual: 1 },
   };
   F.weaponOf = function (d) {
     if (!d) return { kind: 'none', t: null };
@@ -2881,7 +2942,7 @@ window.AD = window.AD || {};
     w.id = d.id; w.t = d.t; w.mag = !!d.mag;
     return w;
   };
-  F.TWO = { lance: 1, staff: 1, poker: 1, bayonet: 1, rifle: 1, crossbow: 1 };
+  F.TWO = { lance: 1, staff: 1, poker: 1, bayonet: 1, rifle: 1, crossbow: 1, great: 1, maul: 1, scythe: 1 };
 
   function drawBlade(r, hx, hy, ang, W) {
     const len = W.len || 15, ca = Math.cos(ang), sa = Math.sin(ang);
@@ -2906,10 +2967,86 @@ window.AD = window.AD || {};
     const g = W.guard || '#c9a35d';
     r.seg([hx + ca * 1.4 - sa * 2.2, hy + sa * 1.4 + ca * 2.2], [hx + ca * 1.4 + sa * 2.2, hy + sa * 1.4 - ca * 2.2], g);
   }
-  function drawHeld(r, W, hand, back, ang) {
+  function drawHeld(r, W, hand, back, ang, open) {
     const [hx, hy] = hand;
     const ca = Math.cos(ang), sa = Math.sin(ang);
     switch (W.kind) {
+      case 'great': {
+        // a long grip for two hands, a broad blade, a heavy crossguard
+        const len = W.len || 22, steel = W.col || '#d8dee8', tx = hx + ca * len, ty = hy + sa * len;
+        r.cap(hx - ca * 6, hy - sa * 6, hx, hy, 0.95, '#3a2a22'); r.set(hx - ca * 6.5, hy - sa * 6.5, '#c9a35d');
+        r.cap(hx + ca * 2, hy + sa * 2, tx, ty, 1.8, tone(steel, -0.4));
+        r.cap(hx + ca * 2 - sa * 0.5, hy + sa * 2 + ca * 0.5, tx - sa * 0.5, ty + ca * 0.5, 1.0, steel);
+        r.seg([hx + ca * 4, hy + sa * 4], [tx - ca * 2, ty - sa * 2], tone(steel, -0.25)); // the fuller
+        r.set(tx + ca, ty + sa, W.edge || '#ffffff');
+        r.cap(hx + ca * 1.4 - sa * 3.4, hy + sa * 1.4 + ca * 3.4, hx + ca * 1.4 + sa * 3.4, hy + sa * 1.4 - ca * 3.4, 0.8, '#a2783a');
+        break;
+      }
+      case 'rapier': {
+        const len = W.len || 19, steel = W.col || '#e6ecff', tx = hx + ca * len, ty = hy + sa * len;
+        r.cap(hx - ca * 2.2, hy - sa * 2.2, hx, hy, 0.7, '#4a3428');
+        r.seg([hx + ca, hy + sa], [tx, ty], steel); r.set(tx, ty, '#ffffff');
+        // the swept hilt: a cup and a curl round the hand
+        r.ell(hx + ca * 1.2, hy + sa * 1.2, 1.8, 1.8, W.guard || '#c9a35d'); r.ell(hx + ca * 1.2, hy + sa * 1.2, 0.8, 0.8, tone(W.guard || '#c9a35d', -0.3));
+        r.seg([hx + ca * 1.5 - sa * 2.6, hy + sa * 1.5 + ca * 2.6], [hx - ca * 1.6 - sa * 1.4, hy - sa * 1.6 + ca * 1.4], W.guard || '#c9a35d');
+        break;
+      }
+      case 'chakram': {
+        const cx = hx + ca * 3, cy = hy + sa * 3, c = W.col || '#d8dee8';
+        r.ell(cx, cy, 4.2, 4.2, tone(c, -0.35)); r.ell(cx, cy, 3.4, 3.4, c);
+        for (let y = -3; y <= 3; y++) for (let x = -3; x <= 3; x++) if (x * x + y * y <= 4.5) { const X = Math.floor(cx + x), Y = Math.floor(cy + y); if (X >= 0 && Y >= 0 && X < r.w && Y < r.h) r.d[Y * r.w + X] = null; } // the hole
+        for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; r.set(cx + Math.cos(a) * 4.6, cy + Math.sin(a) * 4.6, '#ffffff'); }
+        break;
+      }
+      case 'maul': {
+        const len = W.len || 18, tx = hx + ca * (len - 6), ty = hy + sa * (len - 6);
+        r.cap(hx - ca * 6, hy - sa * 6, tx, ty, 0.85, '#5a4030');
+        const hw = W.big ? 4.2 : 3.4, hl = W.big ? 3.2 : 2.6, c = W.big ? '#6a6e7a' : '#8a8e9a';
+        const p = (u, v) => [tx + ca * u - sa * v, ty + sa * u + ca * v];
+        r.poly([p(-hl, -hw), p(hl, -hw), p(hl, hw), p(-hl, hw)], c);
+        r.poly([p(-hl, -hw), p(hl, -hw), p(hl, -hw + 1.2), p(-hl, -hw + 1.2)], tone(c, 0.3));
+        r.seg(p(-hl, hw), p(hl, hw), tone(c, -0.4));
+        break;
+      }
+      case 'fan': {
+        // ribs spread through a quarter circle, silk between them, open or closed
+        const c = W.col || '#c8283a', n = 6, span = open ? 1.4 : 0.35, R = 9;
+        for (let i = 0; i <= n; i++) { const a = ang - span / 2 + (span * i) / n; r.seg([hx, hy], [hx + Math.cos(a) * R, hy + Math.sin(a) * R], '#3a2a22'); }
+        for (let rr = 4; rr <= R; rr++) for (let i = 0; i < n * 3; i++) { const a = ang - span / 2 + (span * (i + 0.5)) / (n * 3); r.set(hx + Math.cos(a) * rr, hy + Math.sin(a) * rr, rr > R - 1 ? '#ffffff' : (i % 6 < 3 ? c : tone(c, 0.2))); }
+        break;
+      }
+      case 'scythe': {
+        const len = W.len || 28, behind = 10, bx = hx - ca * behind, by = hy - sa * behind, tx = hx + ca * (len - behind), ty = hy + sa * (len - behind);
+        r.cap(bx, by, tx, ty, 0.8, '#5a4030');
+        const c = W.col || '#c8ccd8';
+        // the blade hooks back from the head, across the shaft
+        for (let i = 0; i <= 12; i++) { const k = i / 12, a = ang + Math.PI / 2 + k * 1.1, rr = 2 + k * 9; r.cap(tx + Math.cos(a) * rr * 0.15 - ca * k * 3, ty + Math.sin(a) * rr * 0.15 - sa * k * 3, tx + Math.cos(ang + Math.PI / 2) * (1 + k * 10) - ca * k * k * 6, ty + Math.sin(ang + Math.PI / 2) * (1 + k * 10) - sa * k * k * 6, 0.6, i > 9 ? '#ffffff' : c); }
+        break;
+      }
+      case 'whip': {
+        // a short handle, then the chain: coiled at rest, laid out toward the foe when open
+        const c = W.col || '#8a8e9a', len = 6 + (open || 0) * (W.len || 30);
+        r.cap(hx - ca * 2, hy - sa * 2, hx + ca * 3, hy + sa * 3, 0.8, '#4a3428');
+        let px = hx + ca * 3, py = hy + sa * 3;
+        const sag = (1 - (open || 0)) * 4 + 1.5;
+        for (let i = 1; i <= len; i += 1.5) {
+          const k = i / len, x = hx + ca * (3 + i), y = hy + sa * (3 + i) + Math.sin(k * Math.PI) * sag;
+          r.seg([px, py], [x, y], (i | 0) % 3 ? c : tone(c, 0.3)); px = x; py = y;
+          if (W.thorn && (i | 0) % 4 === 0) r.set(x, y - 1, '#ffb0c0');
+        }
+        r.set(px, py, '#ffffff');
+        break;
+      }
+      case 'pistol': {
+        const draw1 = (x, y) => {
+          r.cap(x - ca * 1.2 + sa * 1.4, y - sa * 1.2 - ca * 1.4, x, y, 0.9, '#5a3a24'); // the grip, down and back
+          r.cap(x, y - ca * 0.4, x + ca * 7, y + sa * 7 - ca * 0.4, 0.75, '#3a3a44');
+          r.set(x + ca * 7, y + sa * 7 - ca * 0.4, '#9aa1c4'); r.set(x + ca * 1.5 - sa, y + sa * 1.5 + ca, '#c9a35d');
+        };
+        draw1(hx, hy);
+        if (W.dual && back) draw1(back[0], back[1]);
+        break;
+      }
       case 'sword': case 'knife': drawBlade(r, hx, hy, ang, W); if (W.dual && back) drawBlade(r, back[0], back[1], ang + 0.4, W); break;
       case 'skillet': {
         // Abarax's iron skillet from the Lazyman's kitchen
@@ -2966,10 +3103,11 @@ window.AD = window.AD || {};
         break;
       }
       case 'bow': {
-        for (let i = -8; i <= 8; i++) { const k = Math.abs(i) / 8; r.set(hx + ca * (2.5 - k * k * 4) - sa * i, hy + sa * (2.5 - k * k * 4) + ca * i, '#8a6a3a'); }
+        const L = W.long ? 12 : 8, bc = W.col || '#8a6a3a';
+        for (let i = -L; i <= L; i++) { const k = Math.abs(i) / L; r.set(hx + ca * (2.5 - k * k * 4) - sa * i, hy + sa * (2.5 - k * k * 4) + ca * i, bc); }
         const pull = back ? back : [hx - ca * 1.5, hy - sa * 1.5];
-        r.seg([hx - ca * 1.5 - sa * 8, hy - sa * 1.5 + ca * 8], pull, '#e8e8e8');
-        r.seg([hx - ca * 1.5 + sa * 8, hy - sa * 1.5 - ca * 8], pull, '#e8e8e8');
+        r.seg([hx - ca * 1.5 - sa * L, hy - sa * 1.5 + ca * L], pull, '#e8e8e8');
+        r.seg([hx - ca * 1.5 + sa * L, hy - sa * 1.5 - ca * L], pull, '#e8e8e8');
         break;
       }
     }
@@ -3033,6 +3171,8 @@ window.AD = window.AD || {};
     const armF = ik(sF[0], sF[1], hfT[0], hfT[1], B.upper, B.fore, 1);
     const legN = seat ? seat.legN : ik(hN[0], hN[1], ...tgt(pose.fn), B.thigh, B.shin, -1);
     const legF = seat ? seat.legF : ik(hF[0], hF[1], ...tgt(pose.ff), B.thigh, B.shin, -1);
+    // worn armour: plate colours, and which pieces
+    const AR = L.armor ? { has: (k) => L.armor.pieces.indexOf(k) >= 0, c: L.armor.plate, d: tone(L.armor.plate, -0.32), l: tone(L.armor.plate, 0.28), trim: L.armor.trim || tone(L.armor.plate, -0.2), chain: L.armor.chain, glow: L.armor.glow } : null;
     const bare = BARE_ARMS[outfit];
     const sleeve = bare ? p.skin : outfit === 'armor' ? p.mainL : outfit === 'apron' ? p.main : p.main;
     const sleeveD = bare ? p.skinD : outfit === 'armor' ? p.main : p.mainD;
@@ -3047,15 +3187,18 @@ window.AD = window.AD || {};
       r.ell(s[0] + 0.2, s[1] + 0.4, B.armR + 0.5, B.armR + 0.3, tone(sleeveD, k)); // the shoulder
       r.ell(s[0] + 0.6, s[1], B.armR - 0.1, B.armR - 0.4, tone(sleeve, k));
       limb(r, s[0], s[1], a[0], a[1], B.armR, tone(sleeve, k), tone(sleeveD, k));
+      if (AR && AR.has('pauldrons')) { r.ell(s[0] + 0.2, s[1] - 0.2, B.armR + 1.4, B.armR + 0.9, tone(AR.d, k)); r.ell(s[0] + 0.7, s[1] - 0.7, B.armR + 0.5, B.armR, tone(AR.c, k)); r.set(s[0] + 1.4, s[1] - 1.6, tone(AR.l, k)); r.seg([s[0] - 1.8, s[1] + 1.4], [s[0] + 2.4, s[1] + 1.2], tone(AR.trim, k)); }
       const fc = rolled || bare ? p.skin : sleeve, fd = rolled || bare ? p.skinD : sleeveD;
       limb(r, a[0], a[1], a[2], a[3], B.foreR, tone(fc, k), tone(fd, k));
       if (rolled) { const m = [lerp(a[0], a[2], 0.18), lerp(a[1], a[3], 0.18)]; r.cap(a[0], a[1], m[0], m[1], B.foreR + 0.3, tone(p.main, k - 0.08)); }
       if (outfit === 'armor' || W.gauntlet) { const m = [lerp(a[0], a[2], 0.45), lerp(a[1], a[3], 0.45)]; r.cap(m[0], m[1], a[2], a[3], B.foreR + 0.25, tone(W.gauntlet || p.mainL, k - 0.1)); }
+      if (AR && AR.has('bracers') && !W.gauntlet) { const m = [lerp(a[0], a[2], 0.38), lerp(a[1], a[3], 0.38)], m2 = [lerp(a[0], a[2], 0.86), lerp(a[1], a[3], 0.86)]; r.cap(m[0], m[1], m2[0], m2[1], B.foreR + 0.35, tone(AR.d, k)); r.cap(m[0] + 0.4, m[1] - 0.4, m2[0] + 0.4, m2[1] - 0.4, B.foreR - 0.2, tone(AR.c, k)); }
       // the hand, a little larger than the wrist
       const hr = (W.kind === 'fist' && !W.open ? 1.75 : 1.5) * Math.min(B.w, 1.2);
       r.ell(a[2], a[3], hr, hr, tone(handC, k - 0.16));
       r.ell(a[2] + 0.35, a[3] - 0.35, hr - 0.5, hr - 0.5, tone(handC, k));
       if (W.kind === 'fist' && W.glint && !far) { r.set(a[2] + 1, a[3] - 1, W.glint); r.set(a[2], a[3] - 1, W.glint); }
+      if (!far && L.trinket && L.trinket.kind === 'ring') r.set(a[2] + 0.6, a[3] - 0.8, L.trinket.gem || L.trinket.c);
     };
     const drawLeg = (hp, l, far) => {
       const k = far ? -0.22 : 0;
@@ -3064,6 +3207,7 @@ window.AD = window.AD || {};
       const bt = [lerp(l[0], l[2], 0.42), lerp(l[1], l[3], 0.42)];
       limb(r, l[0], l[1], bt[0], bt[1], B.shinR, tone(p.pants, k), tone(p.pantsD, k));
       limb(r, bt[0], bt[1], l[2], l[3] - 0.6, B.shinR + 0.1, tone(p.boots, k), tone(p.bootsD, k), tone(p.bootsL, k));
+      if (AR && AR.has('greaves')) { limb(r, lerp(l[0], bt[0], 0.15), lerp(l[1], bt[1], 0.15), lerp(bt[0], l[2], 0.3), lerp(bt[1], l[3], 0.3), B.shinR + 0.45, tone(AR.c, k), tone(AR.d, k), tone(AR.l, k)); r.ell(l[0] + 0.3, l[1], B.shinR, B.shinR - 0.2, tone(AR.l, k)); }
       r.cap(bt[0] - 1.6, bt[1], bt[0] + 1.8, bt[1] - 0.4, 0.7, tone(p.bootsL, k)); // boot cuff
       // the foot, pointing forward along the ground
       const fl = 3.6 * B.k;
@@ -3094,7 +3238,7 @@ window.AD = window.AD || {};
     if (has('hood') || has('veil')) { const hc = has('veil') ? L.hood || '#8a8a96' : L.hood || p.main; r.poly([[hx0 + 2, hy0 + 8], [hx0 + 6, hy0 + 12], at(S, 2, 1.5), at(S, -4.6, 2.5)], tone(hc, -0.25)); }
     // two-handed weapons pass in front of the far hand: draw that hand first
     drawArm(sF, armF, true);
-    if (W.dual && pose.wstate === 'hand') drawHeld(r, { kind: 'knife', len: W.len, col: W.col, hook: W.hook }, [armF[2], armF[3]], null, pose.w + 0.5);
+    if (W.dual && pose.wstate === 'hand' && W.kind !== 'pistol') drawHeld(r, { kind: 'knife', len: W.len, col: W.col, hook: W.hook }, [armF[2], armF[3]], null, pose.w + 0.5);
     if (!skirt) drawLeg(hF, legF, true);
     if (outfit === 'longcoat' || outfit === 'coat' || outfit === 'uniform') {
       const len = outfit === 'longcoat' ? 15 : outfit === 'coat' ? 8 : 4;
@@ -3154,6 +3298,16 @@ window.AD = window.AD || {};
       case 'robe': case 'gown': case 'dress': r.poly([at(S, 1.0 * ws, -1), at(S, 3.4 * ws, -0.8), at(S, 2.4 * ws, 3.6)], outfit === 'gown' ? p.acc : p.sec); belt(outfit === 'gown' ? p.acc : p.sec); break;
       case 'shirt': default: r.seg(at(S, 3.0 * ws, -0.8), at(S, 2.6 * ws, 3), p.mainD); belt(p.mainDD);
     }
+    // the breastplate over whatever is worn under it
+    if (AR && AR.has('breast')) {
+      r.poly([at(S, -3.2 * ws, 0.2), at(S, 2.6 * ws, -1.1), at(S, 5.0 * ws, 0.6), at(S, 5.4 * ws, 3.8), at(S, 4.2 * ws, 7.6), at(hip, B.ww, -4.2), at(hip, -B.ww + 0.8, -4.2), at(S, -3.6 * ws, 5.4)], AR.d);
+      r.poly([at(S, -1.8 * ws, 0.4), at(S, 2.6 * ws, -0.7), at(S, 4.7 * ws, 0.8), at(S, 5.0 * ws, 3.8), at(S, 3.9 * ws, 7.0), at(hip, B.ww - 0.6, -4.6), at(hip, -B.ww + 1.8, -4.6), at(S, -2.4 * ws, 5)], AR.c);
+      r.poly([at(S, 1.6 * ws, -0.6), at(S, 4.4 * ws, 0.9), at(S, 4.7 * ws, 3.5), at(S, 3.4 * ws, 5.4), at(S, 2.0 * ws, 3.0)], AR.l);
+      r.seg(at(hip, -B.ww + 0.8, -4.0), at(hip, B.ww, -4.0), AR.trim);
+      if (AR.chain) for (let v = 1; v < 9; v += 1.5) for (let u2 = -2; u2 < 5; u2 += 1.5) { const q = at(S, u2 * ws, v); if (r.get(q[0], q[1]) === AR.c) r.set(q[0], q[1], AR.d); }
+      if (AR.glow) { const q = at(S, 2.8 * ws, 3); r.set(q[0], q[1], AR.glow); r.set(q[0] + 1, q[1], '#ffffff'); }
+    }
+    if (L.trinket && L.trinket.kind === 'charm') { const q = at(hip, B.hw - 1.6, -1.2); r.set(q[0], q[1], L.trinket.c); r.set(q[0], q[1] + 1, tone(L.trinket.c, 0.3)); r.set(q[0], q[1] + 2, L.trinket.c); }
     if (has('lantern')) { const lc = at(hip, B.hw + 0.6, -1); r.cap(lc[0], lc[1], lc[0], lc[1] + 2, 1.6, '#a2783a'); r.set(lc[0], lc[1] + 1, '#fff2a8'); }
     if (has('gear')) { const gc = at(S, 3 * ws, 3); r.set(gc[0], gc[1], '#e8b84a'); }
 
@@ -3182,6 +3336,8 @@ window.AD = window.AD || {};
 
     // ---- neck and head
     limb(r, S[0], S[1], neck[0], neck[1] + 1, 1.7 * Math.min(1.3, B.w), p.skin, p.skinD);
+    if (AR && AR.has('mantle')) { r.cap(S[0] - 3.2, S[1] - 1.0, S[0] + 3.0, S[1] - 1.4, 1.5, AR.trim); r.cap(S[0] - 3.0, S[1] - 1.6, S[0] + 2.6, S[1] - 1.9, 0.6, tone(AR.trim, 0.3)); }
+    if (L.trinket && L.trinket.kind === 'amulet') { const q = at(S, 2.6 * ws, 2.8); r.seg(at(S, 0.4 * ws, -0.6), q, L.trinket.c); r.seg(at(S, 3.6 * ws, -0.6), q, tone(L.trinket.c, -0.2)); r.ell(q[0], q[1], 1.2, 1.2, L.trinket.gem || L.trinket.c); r.set(q[0] + 0.4, q[1] - 0.4, '#ffffff'); }
     if (has('scarf')) { const sc = L.scarf || p.acc; r.cap(S[0] - 2.6, S[1] - 1.2, S[0] + 2.6, S[1] - 1.4, 1.7, sc); r.cap(S[0] - 2.4, S[1] - 0.6, S[0] - 8 - pose.lean * 8, S[1] + 3 + Math.sin((opt.t || 0) / 8), 1.0, tone(sc, -0.2)); }
     // with the hands raised over the head the near arm goes up behind it, so the face stays clear
     const armsUp = hnT[1] < head[1] - 4;
@@ -3189,7 +3345,7 @@ window.AD = window.AD || {};
 
     // ---- the weapon and the near arm that holds it
     const hand = [armN[2], armN[3]], hb = [armF[2], armF[3]];
-    if (pose.wstate === 'hand' || pose.wstate === 'two') drawHeld(r, W, hand, W.dual ? hb : W.kind === 'bow' && pose.open ? hb : null, pose.w);
+    if (pose.wstate === 'hand' || pose.wstate === 'two') drawHeld(r, W, hand, W.dual ? hb : W.kind === 'bow' && pose.open ? hb : null, pose.w, pose.open);
     if (swordy && pose.wstate === 'sheath') { // the hilt stands out of the scabbard
       const ang = Math.atan2(sc0[1] - sc1[1], sc0[0] - sc1[0]);
       const h1 = [sc0[0] + Math.cos(ang) * 4, sc0[1] + Math.sin(ang) * 4];
@@ -3356,11 +3512,20 @@ window.AD = window.AD || {};
       case 'crossbow': return P({ wstate: 'two', w: D(-25), hn: [4, -29] });
       case 'bow': return P({ wstate: 'hand', w: D(30), hn: [8, -29], hf: [3, -25] });
       case 'gift': return P({ hn: [3, -24], hf: [9, -29], lean: 0.03 });
+      case 'great': return P({ wstate: 'two', w: D(-125), hn: [2, -31], lean: 0.08, hy: 2 }); // shouldered
+      case 'rapier': return P({ wstate: 'hand', w: D(-12), hn: [12, -35], hf: [-4, -40], lean: 0.06, hy: 2.5, fn: [-9, 0], ff: [6, 0] }); // en garde
+      case 'chakram': return P({ wstate: 'hand', w: D(0), hn: [8, -33], hf: [11, -31], lean: 0.1, hy: 2 });
+      case 'maul': return P({ wstate: 'two', w: D(-72), hn: [3, -26] });
+      case 'fan': return P({ wstate: 'hand', w: D(-70), hn: [7, -37], hf: [11, -28], lean: 0.04, open: 0 });
+      case 'scythe': return P({ wstate: 'two', w: D(-82), hn: [2, -28] });
+      case 'whip': return P({ wstate: 'hand', w: D(70), hn: [6, -27], hf: [10, -30], open: 0 });
+      case 'pistol': return P({ wstate: 'hand', w: D(35), hn: [6, -29], hf: [9, -28], lean: 0.04 });
       default: return P({});
     }
   };
   // the gap a weapon wants between the two fighters at the moment it lands
-  const CONTACT = { sword: 30, knife: 22, skillet: 27, club: 27, axe: 26, fist: 21, lance: 44, staff: 36, poker: 36, bayonet: 40, gift: 0, rifle: 0, crossbow: 0, bow: 0, none: 22 };
+  const CONTACT = { sword: 30, knife: 22, skillet: 27, club: 27, axe: 26, fist: 21, lance: 44, staff: 36, poker: 36, bayonet: 40, gift: 0, rifle: 0, crossbow: 0, bow: 0, none: 22,
+    great: 36, rapier: 38, chakram: 0, maul: 32, fan: 24, scythe: 42, whip: 0, pistol: 0 };
 
   // which choreography a strike uses
   M.styleOf = function (W, dist, L) {
@@ -3377,8 +3542,16 @@ window.AD = window.AD || {};
       case 'staff': return far ? 'leap' : 'staff';
       case 'rifle': return 'rifle';
       case 'crossbow': return 'crossbow';
-      case 'bow': return 'bow';
+      case 'bow': return W.long ? 'longbow' : 'bow';
       case 'gift': return 'gift';
+      case 'great': return 'great';
+      case 'rapier': return 'rapier';
+      case 'chakram': return 'chakram';
+      case 'maul': return 'maul';
+      case 'fan': return 'fan';
+      case 'scythe': return 'scythe';
+      case 'whip': return 'whip';
+      case 'pistol': return 'pistol';
       default: return 'fist';
     }
   };
@@ -3666,6 +3839,161 @@ window.AD = window.AD || {};
     return s;
   };
 
+  // ---- the new arsenal
+  // a greatsword: shouldered, carried in on heavy steps, raised high in both hands, brought down
+  S.great = function (c) {
+    const R = c.gap - CONTACT.great, rest = M.rest(c.W);
+    const s = new Seq(rest);
+    s.to(5, mod(rest, { hy: 5, lean: 0.18 })).at('fx', 'dust')
+      .to(12, P({ wstate: 'two', w: D(-135), hn: [1, -33], lean: 0.32, hy: 4, fn: [-14, -1], ff: [9, -2] }), { x: R, e: 'out', ghost: 1, gait: 1 }).at('sfx', 'dash', -12);
+    if (c.crit) {
+      // the whole body turns with the blade once before it falls
+      s.at('fx', 'critglint').hold(8)
+        .to(12, P({ wstate: 'two', w: D(-495), hn: [6, -38], lean: 0.0, hy: 2 }), { e: 'io', ghost: 1 }).at('sfx', 'swing', null, -6)
+        .to(5, P({ wstate: 'two', w: D(-460), hn: [0, -55], lean: -0.18, hy: 0, fn: [-6, -6], ff: [6, -8] }), { y: -16, e: 'out' })
+        .to(3, P({ wstate: 'two', w: D(-280), hn: [17, -22], lean: 0.6, hy: 9, fn: [-14, 0], ff: [11, 0] }), { y: 0, e: 'in' }).at('fx', 'bigslash').at('fx', 'quake', { big: 1 }).at('impact')
+        .hold(14);
+    } else {
+      s.to(6, P({ wstate: 'two', w: D(-100), hn: [0, -54], lean: -0.16, hy: 0 }), { e: 'out' }).at('sfx', 'swing')
+        .hold(3)
+        .to(3, P({ wstate: 'two', w: D(75), hn: [16, -22], lean: 0.55, hy: 8, fn: [-13, 0], ff: [10, 0] }), { e: 'in' }).at('fx', 'slash').at('fx', 'quake').at('impact')
+        .hold(10);
+    }
+    const off = c.crit ? D(-360) : 0;
+    s.to(12, mod(rest, { w: rest.w + off }), { x: 0, y: 0, ghost: 1, gait: 1 }).at('fx', 'dust', null, -2).hold(2);
+    return s;
+  };
+  // a rapier: a small hop into the lunge, three thrusts too quick to count, and a step back
+  S.rapier = function (c) {
+    const R = c.gap - CONTACT.rapier, rest = M.rest(c.W);
+    const lunge = (k) => P({ wstate: 'hand', w: D(-2 + k), hn: [25, -35], hf: [-8, -38], lean: 0.38, hy: 6, fn: [-17, 0], ff: [11, 0] });
+    const back = P({ wstate: 'hand', w: D(-6), hn: [14, -35], hf: [-5, -39], lean: 0.18, hy: 4, fn: [-12, 0], ff: [8, 0] });
+    const s = new Seq(rest);
+    s.to(3, mod(rest, { hy: 4 })).to(5, back, { x: R * 0.5, y: -4, e: 'out' }).at('sfx', 'dash').to(3, back, { x: R * 0.8, y: 0 });
+    if (c.crit) {
+      // the fleche: a running lunge straight through their guard
+      s.at('fx', 'critglint').hold(10)
+        .to(5, lunge(0), { x: R + 14, e: 'snap', ghost: 1 }).at('fx', 'speed').at('fx', 'pierce', { big: 1 }).at('impact')
+        .hold(12);
+    } else {
+      [0, 1, 2].forEach((i) => {
+        s.to(2, lunge(i * 3 - 3), { x: R, e: 'snap' }).at('fx', 'pierce').at('sfx', 'swing');
+        if (i === 2) s.at('impact');
+        s.to(2, back, { x: R - 3 });
+      });
+      s.hold(8);
+    }
+    s.to(9, rest, { x: 0, y: 0, ghost: 1 }).to(2, rest);
+    return s;
+  };
+  // a chakram: wound up behind the back, thrown flat, caught again on the way home
+  S.chakram = function (c) {
+    const rest = M.rest(c.W);
+    const s = new Seq(rest);
+    if (c.crit) s.at('fx', 'critglint').hold(10);
+    s.to(7, P({ wstate: 'hand', w: D(0), hn: [-8, -34], hf: [12, -33], lean: -0.16, hy: 2, fn: [-8, 0], ff: [7, 0] }), { e: 'out' })
+      .to(3, P({ wstate: 'gone', w: D(0), hn: [19, -34], hf: [-2, -31], lean: 0.32, hy: 3, fn: [-9, 0], ff: [8, 0] }), { e: 'snap' }).at('sfx', 'throw')
+      .at('fx', 'ring', { time: 11, big: c.crit, glow: c.W.glow })
+      .hold(11).at('impact')
+      .hold(9)
+      .to(3, P({ wstate: 'hand', w: D(0), hn: [16, -35], hf: [6, -32], lean: 0.1, hy: 2 }), { e: 'snap' }).at('sfx', 'draw')
+      .to(8, rest);
+    return s;
+  };
+  // a maul: walked in, swung once round the body, then up and down on them like a falling roof
+  S.maul = function (c) {
+    const R = c.gap - CONTACT.maul, rest = M.rest(c.W);
+    const s = new Seq(rest);
+    s.to(4, mod(rest, { hy: 5 }))
+      .to(12, P({ wstate: 'two', w: D(-80), hn: [2, -30], lean: 0.3, hy: 4, fn: [-13, -1], ff: [9, -2] }), { x: R, e: 'out', ghost: 1, gait: 1 }).at('sfx', 'dash', -12);
+    if (c.crit) s.at('fx', 'critglint').hold(8);
+    s.to(10, P({ wstate: 'two', w: D(-440), hn: [4, -36], lean: 0.05, hy: 3 }), { e: 'io', ghost: 1 }).at('sfx', 'swing', null, -5)
+      .to(6, P({ wstate: 'two', w: D(-460), hn: [-1, -56], lean: -0.2, hy: 0, fn: [-6, -6], ff: [6, -8] }), { y: c.crit ? -22 : -10, e: 'out' })
+      .to(3, P({ wstate: 'two', w: D(-275), hn: [15, -16], lean: 0.6, hy: 10, fn: [-13, 0], ff: [10, 0] }), { y: 0, e: 'in' }).at('fx', 'quake', { big: 1 }).at('fx', 'thud').at('impact')
+      .hold(12)
+      .to(12, mod(rest, { w: rest.w - D(360) }), { x: 0, ghost: 1, gait: 1 }).to(1, rest);
+    return s;
+  };
+  // a war fan: it opens as she turns, cuts with the edge, and the wind it raises does the rest
+  S.fan = function (c) {
+    const R = c.gap - CONTACT.fan, rest = M.rest(c.W);
+    const s = new Seq(rest);
+    s.to(4, mod(rest, { hy: 4, lean: 0.14 }))
+      .to(9, P({ wstate: 'hand', w: D(-160), hn: [-4, -40], hf: [10, -42], lean: 0.4, hy: 5, fn: [-15, -1], ff: [9, -2], open: 1 }), { x: R, e: 'out', ghost: 1 }).at('sfx', 'dash', -9).at('fx', 'wind');
+    if (c.crit) s.at('fx', 'critglint').hold(10);
+    s.to(3, P({ wstate: 'hand', w: D(-100), hn: [6, -46], hf: [-4, -38], lean: 0.1, hy: 2, open: 1 }), { e: 'out' }).at('sfx', 'swing')
+      .to(3, P({ wstate: 'hand', w: D(40), hn: [18, -28], hf: [-6, -36], lean: 0.44, hy: 5, open: 1 }), { e: 'snap' }).at('fx', 'slash', { small: 1 }).at('fx', 'wind', { big: 1 }).at('impact')
+      .hold(8)
+      .to(4, P({ wstate: 'hand', w: D(-70), hn: [8, -40], hf: [12, -30], lean: 0.1, hy: 3, open: 0 }), { x: R - 6, e: 'out' })
+      .to(9, rest, { x: 0, ghost: 1 }).to(2, rest);
+    return s;
+  };
+  // a scythe: one wide reaping sweep from behind the back across the front
+  S.scythe = function (c) {
+    const R = c.gap - CONTACT.scythe, rest = M.rest(c.W);
+    const s = new Seq(rest);
+    s.to(5, mod(rest, { hy: 4, lean: 0.12 })).at('fx', 'dust')
+      .to(10, P({ wstate: 'two', w: D(-165), hn: [-2, -34], lean: 0.3, hy: 5, fn: [-14, -1], ff: [9, -2] }), { x: R, e: 'out', ghost: 1 }).at('sfx', 'dash', -10);
+    if (c.crit) {
+      s.at('fx', 'critglint').hold(8)
+        .to(10, P({ wstate: 'two', w: D(-525), hn: [4, -36], lean: 0.1, hy: 4 }), { e: 'io', ghost: 1 }).at('fx', 'reap', { big: 1 }).at('sfx', 'swing', null, -5)
+        .to(4, P({ wstate: 'two', w: D(-300), hn: [16, -30], lean: 0.5, hy: 6, fn: [-13, 0], ff: [10, 0] }), { e: 'snap' }).at('fx', 'reap', { big: 1 }).at('impact')
+        .hold(12);
+    } else {
+      s.to(4, P({ wstate: 'two', w: D(-200), hn: [-4, -38], lean: -0.05, hy: 3 }), { e: 'out' }).at('sfx', 'swing')
+        .to(4, P({ wstate: 'two', w: D(-20), hn: [16, -30], lean: 0.48, hy: 6, fn: [-13, 0], ff: [10, 0] }), { e: 'snap' }).at('fx', 'reap').at('impact')
+        .hold(10);
+    }
+    const off = c.crit ? D(-360) : 0;
+    s.to(12, mod(rest, { w: rest.w + off }), { x: 0, ghost: 1 }).to(2, mod(rest, { w: rest.w + off }));
+    return s;
+  };
+  // a chain whip: no need to close in; overhead, then the crack across the gap
+  S.whip = function (c) {
+    const rest = M.rest(c.W);
+    const s = new Seq(rest);
+    if (c.crit) s.at('fx', 'critglint').hold(10);
+    s.to(7, P({ wstate: 'hand', w: D(-150), hn: [-2, -48], hf: [10, -36], lean: -0.12, hy: 1, open: 0.15 }), { x: 10, e: 'out' }).at('sfx', 'swing')
+      .to(3, P({ wstate: 'hand', w: D(-4), hn: [20, -36], hf: [4, -32], lean: 0.32, hy: 4, fn: [-10, 0], ff: [9, 0], open: 1 }), { x: 14, e: 'snap' })
+      .at('fx', 'crack', { big: c.crit }).at('impact')
+      .hold(c.crit ? 12 : 8)
+      .to(6, P({ wstate: 'hand', w: D(40), hn: [10, -32], hf: [8, -31], lean: 0.08, hy: 2, open: 0.3 }), { x: 6 })
+      .to(8, rest, { x: 0 });
+    return s;
+  };
+  // a pistol: from the hip to the eye in one motion; at a crit, fanned three times
+  S.pistol = function (c) {
+    const rest = M.rest(c.W);
+    const aim = P({ wstate: 'hand', w: D(-2), hn: [19, -39], hf: c.W.dual ? [16, -36] : [7, -31], lean: -0.02, hy: 2 });
+    const kick = mod(aim, { w: D(-22), hn: [17, -41], hx: -1 });
+    const s = new Seq(rest);
+    s.to(5, aim, { e: 'snap' }).at('sfx', 'cock');
+    if (c.crit) s.at('fx', 'critglint', { eye: 1 }).hold(12);
+    const shots = c.crit ? 3 : c.W.dual ? 2 : 1;
+    for (let i = 0; i < shots; i++) {
+      s.at('fx', 'muzzle').at('fx', 'tracer').at('sfx', 'shot').to(2, kick, { e: 'snap' });
+      if (i === shots - 1) s.at('impact', null, -1);
+      s.to(3, aim);
+    }
+    s.hold(8).to(7, rest);
+    return s;
+  };
+  // a longbow: drawn to the cheek and loosed high, so the arrow comes down on them like rain
+  S.longbow = function (c) {
+    const rest = M.rest(c.W);
+    const nock = P({ wstate: 'hand', w: D(-38), hn: [12, -45], hf: [8, -40], lean: -0.1, hy: 1, open: 1 });
+    const drawn = P({ wstate: 'hand', w: D(-40), hn: [13, -46], hf: [-3, -38], lean: -0.14, hy: 2, open: 1 });
+    const s = new Seq(rest);
+    s.to(7, nock, { e: 'out' }).to(10, drawn, { e: 'in' }).hold(c.crit ? 4 : 6);
+    if (c.crit) s.at('fx', 'critglint', { eye: 1 }).hold(14);
+    s.at('sfx', 'twang').at('fx', 'proj', { kind: 'arrow', time: 16, arc: 46, n: c.crit ? 3 : 1 })
+      .to(2, P({ wstate: 'hand', w: D(-40), hn: [14, -46], hf: [-6, -36], lean: -0.1, hy: 2 }), { e: 'snap' })
+      .hold(14).at('impact')
+      .hold(8)
+      .to(9, rest);
+    return s;
+  };
+
   // gifts: both hands go up to call it down, then it is sent
   const SPELL = {
     ember: { mode: 'throw', time: 14 }, glassray: { mode: 'throw', time: 4 }, spark: { mode: 'throw', time: 11 }, heatwave: { mode: 'throw', time: 16 },
@@ -3673,6 +4001,7 @@ window.AD = window.AD || {};
     dawn: { mode: 'sky', time: 16 }, thorn: { mode: 'ground', time: 10 }, briar: { mode: 'ground', time: 12 }, stoneshape: { mode: 'ground', time: 15 },
     shadowthorn: { mode: 'ground', time: 11 }, rosestorm: { mode: 'throw', time: 16 }, inkwell: { mode: 'ground', time: 12 }, gust: { mode: 'throw', time: 11 },
     frost: { mode: 'throw', time: 11 }, cyclone: { mode: 'sky', time: 12 }, icelance: { mode: 'throw', time: 11 }, tidebreak: { mode: 'throw', time: 18 }, gale: { mode: 'throw', time: 12 },
+    meteor: { mode: 'sky', time: 18 }, verdance: { mode: 'ground', time: 12 }, maelstrom: { mode: 'throw', time: 14 },
   };
   const TYPE_SPELL = { flame: 'ember', bloom: 'thorn', tide: 'gust', all: 'goldflame' };
   M.spellOf = (W) => (SPELL[W.id] ? W.id : TYPE_SPELL[W.t] || 'ember');
@@ -3896,13 +4225,58 @@ window.AD = window.AD || {};
     } };
   };
 
+  // a chakram in flight: out flat and spinning, through the target, and home again
+  FX.ring = (d, a, o) => {
+    const T = o.time || 11, p0 = a.handNow(), c = o.glow || '#e8ecff';
+    return { life: T * 2 + 2, draw(ctx) {
+      const q = [d.bx() - d.dirB() * 2, ty(d, 36)];
+      const out = this.t <= T, k = out ? this.t / T : 1 - (this.t - T) / T;
+      const x = lerp(p0[0], q[0], EASE.out(clamp(k, 0, 1))), y = lerp(p0[1], q[1], k) - Math.sin(k * Math.PI) * (out ? 6 : -8);
+      const sp = this.t * 1.1;
+      X.ring(ctx, x, y, o.big ? 5 : 4, '#c8ccd8', (o.big ? 5 : 4) * 0.45, 1);
+      for (let i = 0; i < 4; i++) { const a2 = sp + (i * Math.PI) / 2; X.dot(ctx, x + Math.cos(a2) * 5, y + Math.sin(a2) * 2.2, i % 2 ? c : '#ffffff'); }
+      for (let i = 1; i < 4; i++) { ctx.globalAlpha = 0.3 - i * 0.07; X.ring(ctx, x - a.dir * i * 5 * (out ? 1 : -1), y, 4, c, 1.8, 1); }
+      ctx.globalAlpha = 1;
+      if (this.t === T) burst(d, q[0], q[1], o.big ? 14 : 9, [c, '#ffffff'], 2.2, {});
+    } };
+  };
+  // wind off a war fan: streaks and torn petals
+  FX.wind = (d, a, o) => {
+    const big = o && o.big;
+    for (let i = 0; i < (big ? 10 : 5); i++) part(d, { x: a.handNow()[0], y: a.handNow()[1] + (d.rng() - 0.5) * 16, vx: a.dir * (2 + d.rng() * 2.5), vy: (d.rng() - 0.5) * 0.8, c: i % 3 ? '#ffffff' : '#ffb0c0', life: 16, drag: 0.94 });
+    return { life: big ? 14 : 10, draw(ctx) {
+      const k = this.t / (big ? 14 : 10), h = a.handNow();
+      ctx.globalAlpha = 1 - k;
+      for (let i = 0; i < 4; i++) { const y = h[1] - 12 + i * 8, x = h[0] + a.dir * (6 + k * 40 + i * 4); X.line(ctx, x, y, x + a.dir * (14 - i * 2), y + 1, i % 2 ? 'rgba(255,255,255,0.8)' : 'rgba(200,230,255,0.7)'); }
+      ctx.globalAlpha = 1;
+    } };
+  };
+  // the crack at the end of a whip
+  FX.crack = (d, a, o) => {
+    const x = d.bx() - d.dirB() * 6, y = ty(d, 40), big = o && o.big;
+    burst(d, x, y, big ? 14 : 8, ['#ffffff', '#ffe8a0', '#c8ccd8'], 2.2, {});
+    d.texts.push({ s: big ? 'CRACK!!' : 'CRACK', x, y: y - 14, c: '#e8ecff', t: 12 });
+    if (big) AD.fx.flash('#ffffff', 5);
+    return { life: 10, draw(ctx) { const k = this.t / 10; X.star(ctx, x, y, 2 + (1 - k) * (big ? 7 : 5), '#ffffff', '#ffe8a0'); } };
+  };
+  // a scythe's reaping arc: wide, low, and pale
+  FX.reap = (d, a, o) => {
+    const big = o && o.big;
+    return { life: 10, draw(ctx) {
+      const c = a.shoulder(), k = this.t / 10;
+      ctx.globalAlpha = 1 - k;
+      X.arc(ctx, c[0] + a.dir * 4, c[1] + 6, (big ? 34 : 28) * (a.k || 1) * 0.66, a.ang(D(200)), a.ang(D(-10)), big ? 6 : 4, a.glow || '#d8d0f0', '#ffffff');
+      ctx.globalAlpha = 1;
+    } };
+  };
+
   // ---- gifts
   const SPC = {
     flame: ['#fff4c0', '#ffb347', '#e8603a'], bloom: ['#ffd0e0', '#ff6a8a', '#3a8a4a'], tide: ['#ffffff', '#7ad8ff', '#2a6aa8'], all: ['#ffffff', '#ffe28a', '#e8a040'],
     shadow: ['#d8c8ff', '#8a5aca', '#2a1a4a'], ink: ['#6a6a7a', '#1a1a22', '#000000'], stone: ['#c8c0b0', '#8a8070', '#4a4438'], ice: ['#ffffff', '#bfefff', '#6ab0e8'],
   };
   const palOf = (sp) => ({ shadowthorn: SPC.shadow, inkwell: SPC.ink, stoneshape: SPC.stone, frost: SPC.ice, icelance: SPC.ice, goldflame: SPC.all, dawn: SPC.all, glassray: ['#ffffff', '#bff0ff', '#ffb0e0'] }[sp]
-    || ({ ember: SPC.flame, spark: ['#ffffff', '#fff27a', '#8ad0ff'], heatwave: SPC.flame, lightning: ['#ffffff', '#fff27a', '#8ad0ff'], sunspear: SPC.all, phoenix: SPC.flame, thorn: SPC.bloom, briar: SPC.bloom, rosestorm: SPC.bloom, gust: SPC.tide, cyclone: SPC.tide, tidebreak: SPC.tide, gale: SPC.tide }[sp]) || SPC.flame);
+    || ({ meteor: SPC.flame, verdance: ['#e8ffd0', '#7ae07a', '#2a7a3a'], maelstrom: SPC.tide, ember: SPC.flame, spark: ['#ffffff', '#fff27a', '#8ad0ff'], heatwave: SPC.flame, lightning: ['#ffffff', '#fff27a', '#8ad0ff'], sunspear: SPC.all, phoenix: SPC.flame, thorn: SPC.bloom, briar: SPC.bloom, rosestorm: SPC.bloom, gust: SPC.tide, cyclone: SPC.tide, tidebreak: SPC.tide, gale: SPC.tide }[sp]) || SPC.flame);
   M.palOf = palOf;
   FX.charge = (d, a, o) => {
     const pal = palOf(o.spell), big = o.big;
@@ -4167,6 +4541,58 @@ window.AD = window.AD || {};
       if (this.t === T + 3) { burst(d, q[0], q[1], 16, pal, 2.4, { g: 0.08 }); AD.fx.flash('#bfefff', 5); }
     } };
   };
+  // a burning stone from very high up, its trail first, then the crater
+  SP.meteor = (d, a, o, pal) => {
+    const T = o.time;
+    d.dim = Math.max(d.dim, T + 6);
+    return { life: T + 24, draw(ctx) {
+      const q = tgt(d), sx = q[0] + a.dir * 70, sy = -30, R = o.big ? 9 : 7;
+      if (this.t < T) {
+        const k = EASE.in(this.t / T), x = lerp(sx, q[0], k), y = lerp(sy, (M.GY - 6), k);
+        for (let i = 6; i > 0; i--) { const kk = Math.max(0, k - i * 0.035), tx = lerp(sx, q[0], kk), tyy = lerp(sy, (M.GY - 6), kk); X.disc(ctx, tx, tyy, R * (1 - i * 0.12), i > 3 ? 'rgba(255,140,60,0.35)' : pal[1]); }
+        X.disc(ctx, x, y, R, '#5a3a2a'); X.disc(ctx, x - a.dir * 1.5, y - 1.5, R - 3, '#8a5a3a'); X.disc(ctx, x + a.dir * 2, y + 2, R * 0.5, pal[0]);
+        if (this.t % 2 === 0) part(d, { x, y, vx: a.dir * 0.8, vy: -0.6, c: pal[1 + (this.t % 2)], life: 14, s: 2 });
+      } else if (this.t === T) {
+        AD.fx.flash(pal[1], 10); AD.fx.shake(7, 16);
+        burst(d, q[0], (M.GY - 4), o.big ? 28 : 20, pal.concat(['#5a3a2a']), 3, { g: 0.14, vy: -2, s: 2 });
+      } else {
+        const k = (this.t - T) / 24;
+        ctx.globalAlpha = 1 - k;
+        X.disc(ctx, q[0], (M.GY - 1), 22 * (0.6 + k), 'rgba(255,150,60,0.5)', 4 + k * 4);
+        X.ring(ctx, q[0], (M.GY - 2), 8 + k * 40, pal[1], 2 + k * 6, 2);
+        ctx.globalAlpha = 1;
+      }
+    } };
+  };
+  // spring all at once: vines and then flowers opening along them
+  SP.verdance = (d, a, o, pal) => {
+    const vines = SP.briar(d, a, o, pal), T = o.time;
+    return { life: T + 22, draw(ctx) {
+      vines.t = this.t; vines.draw(ctx);
+      if (this.t > T - 4) {
+        const q = tgt(d), k = clamp((this.t - T + 4) / 10, 0, 1), fade = 1 - clamp((this.t - T - 12) / 10, 0, 1);
+        ctx.globalAlpha = fade;
+        for (let i = 0; i < 7; i++) { const x = q[0] - 16 + i * 5.5, y = (M.GY - 4) - ((i * 13) % 20) - i % 3 * 6; X.disc(ctx, x, y, 2.2 * k, i % 2 ? '#ff8ab0' : '#ffe28a'); X.dot(ctx, x, y, '#ffffff'); }
+        ctx.globalAlpha = 1;
+      }
+    } };
+  };
+  // the sea turns once round them: rings of water closing in, then the spray
+  SP.maelstrom = (d, a, o, pal) => {
+    const T = o.time, p0 = a.handNow();
+    return { life: T + 22, draw(ctx) {
+      const q = tgt(d);
+      if (this.t < T * 0.4) { const k = this.t / (T * 0.4); X.disc(ctx, lerp(p0[0], q[0], k), lerp(p0[1], q[1], k), 4, pal[1]); X.disc(ctx, lerp(p0[0], q[0], k), lerp(p0[1], q[1], k), 2, '#ffffff'); return; }
+      const k = clamp((this.t - T * 0.4) / (T * 0.6), 0, 1), fade = 1 - clamp((this.t - T - 10) / 12, 0, 1);
+      ctx.globalAlpha = fade;
+      for (let i = 0; i < 5; i++) {
+        const r0 = (30 - i * 5) * (1 - k * 0.5), ang = this.t * (0.3 + i * 0.06);
+        for (let j = 0; j < 12; j++) { const aa = ang + (j / 12) * Math.PI * 2; X.dot(ctx, q[0] + Math.cos(aa) * r0, q[1] + 4 + Math.sin(aa) * r0 * 0.35 - i * 3, j % 3 ? pal[1 + (i % 2)] : '#ffffff', 2); }
+      }
+      ctx.globalAlpha = 1;
+      if (this.t === T) { AD.fx.flash(pal[1], 6); burst(d, q[0], q[1], 16, pal, 2.4, { vy: -1.5, g: 0.1, s: 2 }); }
+    } };
+  };
   SP.cyclone = (d, a, o, pal) => {
     const T = o.time;
     return { life: T + 22, draw(ctx) {
@@ -4205,6 +4631,383 @@ window.AD = window.AD || {};
   M.FX = FX;
   M.SP = SP;
   M.SPELL = SPELL;
+})(window.AD);
+// ---- js/backdrops.js
+// Duel backdrops. A fight happens where the defender stands: under trees, in a bed of roses, at
+// the water's edge, on a pier, in a hall or a tavern or a cave, on the rooftops; on open ground
+// it happens in the chapter's own country. Each place is painted once into a cached canvas, and
+// weather and small life (leaves, petals, torches, neon, steam, the sea) move over it each frame.
+(function (AD) {
+  'use strict';
+  const G = AD.gfx, W = AD.W, H = AD.H;
+  const HZ = 134, GY = 150; // the horizon, and the line the fighters stand on
+  const BG = (AD.backdrop = {});
+
+  // ---------------------------------------------------------------- where
+  const OF_TILE = {
+    T: 'forest', j: 'orchard', R: 'roses', g: 'flowers', i: 'bells', '~': 'sea', Q: 'sea', '-': 'shallows', p: 'pier', b: 'bridge',
+    '^': 'hills', M: 'peaks', o: 'peaks', s: 'beach', '*': 'snow', F: 'fort', G: 'throne', K: 'throne', P: 'hall', B: 'rooftop', n: 'rooftop',
+    v: 'works', '%': 'springs', h: 'camp', W: 'camp', r: 'ruins', x: 'void', f: 'plaza', S: 'market', c: 'docks',
+  };
+  const OF_BIOME = { city: 'street', coast: 'meadow', hills: 'heath', vale: 'vale', marble: 'terrace', garden: 'garden', spire: 'spire', flats: 'blackfort', interior: 'tavern', dungeon: 'cave', salt: 'saltflat' };
+  BG.sceneAt = function (map, x, y) {
+    const ch = map.at(x, y);
+    let s = OF_TILE[ch];
+    if ((ch === 'w' || ch === 'a' || ch === 't') && !s) s = map.biome === 'interior' ? 'tavern' : map.biome === 'dungeon' ? 'cave' : 'hall';
+    if (s === 'docks' && map.biome !== 'city' && map.biome !== 'coast') s = 'warehouse';
+    if (s === 'sea' && map.biome === 'salt') s = 'saltflat';
+    if (!s) s = map.scene || OF_BIOME[map.biome] || 'street'; // a chapter can name its own ground
+    if (s === 'street' && map.night) s = 'nightstreet';
+    return s;
+  };
+  // places that are indoors have no sky and no weather
+  const INDOOR = { tavern: 1, hall: 1, throne: 1, cave: 1, works: 1, warehouse: 1 };
+  BG.indoor = (s) => !!INDOOR[s];
+
+  // ---------------------------------------------------------------- helpers
+  const rect = (c, x, y, w, h, col) => { c.fillStyle = col; c.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
+  const vgrad = (c, y0, y1, a, b) => { const g = c.createLinearGradient(0, y0, 0, y1); g.addColorStop(0, a); g.addColorStop(1, b); c.fillStyle = g; c.fillRect(-8, y0, W + 16, y1 - y0); };
+  const poly = (c, pts, col) => { c.fillStyle = col; c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]); c.closePath(); c.fill(); };
+  const disc = (c, x, y, r, col) => { c.fillStyle = col; c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); };
+  const ridge = (c, base, amp, f1, f2, col, ph) => {
+    c.fillStyle = col; c.beginPath(); c.moveTo(-8, H);
+    for (let x = -8; x <= W + 8; x += 4) c.lineTo(x, base - amp * (0.6 * Math.sin(x / f1 + ph) + 0.4 * Math.sin(x / f2 + ph * 2.3)));
+    c.lineTo(W + 8, H); c.closePath(); c.fill();
+  };
+  const sh = G.shade, mix = G.mix;
+
+  // ---------------------------------------------------------------- skies
+  const SKY_DAY = {
+    street: ['#7a8ab8', '#d8d0e0'], meadow: ['#5a9ad8', '#e8e0c8'], heath: ['#e8b878', '#f8e0b0'], vale: ['#6aa8e0', '#e0ecf0'], hills: ['#7aa8d8', '#e8ecd8'],
+    peaks: ['#6a90d0', '#e8eef8'], terrace: ['#e8a868', '#f8e8c8'], spire: ['#5a6a7a', '#b8c0c8'], saltflat: ['#a8c8e8', '#f4f8fc'], forest: ['#8ab8d8', '#d8ecd0'],
+    orchard: ['#8ac0e0', '#f0f0d0'], roses: ['#e8a0a8', '#f8e0d8'], flowers: ['#90c0e8', '#f0ecd8'], bells: ['#9a8ad8', '#e8e0f8'], sea: ['#5a9ad8', '#e8f0f8'],
+    shallows: ['#5aa0d8', '#e8f0f8'], pier: ['#6a9ad0', '#f0e8d8'], bridge: ['#7a9ac8', '#e8e8e0'], beach: ['#6ab0e8', '#f8ecd0'], snow: ['#a8b8d0', '#f0f4fa'],
+    rooftop: ['#7a8ab8', '#e8d8d0'], camp: ['#e89a68', '#f8dcb0'], ruins: ['#c8a088', '#f0e0c8'], plaza: ['#8ab0e0', '#f0e8e0'], market: ['#f0a878', '#f8e4c0'],
+    docks: ['#7aa0c8', '#e8e4d8'], springs: ['#c8b8d8', '#f8f0e8'], fort: ['#8aa0c8', '#e8e0d0'], void: ['#5a5a64', '#a8a8b0'],
+  };
+  function sky(c, scene, night, t0) {
+    const day = SKY_DAY[scene] || SKY_DAY.street;
+    const s = scene === 'garden' ? ['#3a2a7a', '#a88ad8'] : scene === 'blackfort' ? ['#1a0a14', '#4a1a24'] : night ? ['#070a22', '#2a2c50'] : day;
+    vgrad(c, -8, HZ + 4, s[0], s[1]);
+    if (night || scene === 'garden' || scene === 'blackfort') {
+      const rng = AD.makeRng(17 + t0);
+      for (let i = 0; i < 60; i++) { c.globalAlpha = 0.3 + rng() * 0.6; rect(c, rng() * W, rng() * 96, 1, 1, rng() < 0.15 ? '#ffe8c0' : '#ffffff'); }
+      c.globalAlpha = 1;
+      if (scene === 'garden') { disc(c, 76, 38, 15, '#e8e8f8'); disc(c, 326, 50, 8, '#d8784a'); }
+      else if (scene !== 'blackfort') { disc(c, 312, 34, 11, 'rgba(240,236,220,0.25)'); disc(c, 312, 34, 9, '#f0ecdc'); disc(c, 309, 32, 2, '#d8d4c4'); }
+    } else if (scene === 'heath' || scene === 'camp' || scene === 'market' || scene === 'ruins' || scene === 'terrace') {
+      disc(c, 84, 46, 22, 'rgba(255,240,200,0.35)'); disc(c, 84, 46, 14, '#fff4d0');
+    }
+    return s;
+  }
+
+  // ---------------------------------------------------------------- far and middle distance
+  function city(c, night, s, opt) {
+    const far = mix(s[1], '#000000', night ? 0.58 : 0.32), near = mix(s[1], '#000000', night ? 0.72 : 0.46);
+    // a far row, a clock tower and a dome, then the near row with its windows
+    for (let i = 0; i < 18; i++) { const x = i * 24 - 10, h = 30 + ((i * 53) % 28); rect(c, x, HZ - h - 6, 22, h + 6, far); }
+    rect(c, 252, HZ - 92, 18, 92, far); poly(c, [[250, HZ - 92], [261, HZ - 112], [272, HZ - 92]], far); disc(c, 261, HZ - 80, 5, night ? '#ffe8a0' : '#e8e4d8'); rect(c, 260, HZ - 82, 1, 3, '#2a2420');
+    disc(c, 120, HZ - 58, 16, far); rect(c, 118, HZ - 80, 4, 8, far);
+    for (let i = 0; i < 13; i++) {
+      const x = i * 32 - 6, h = 34 + ((i * 37) % 30);
+      rect(c, x, HZ - h, 28, h, near); rect(c, x - 2, HZ - h - 3, 32, 3, sh(near, -0.2));
+      for (let yy = HZ - h + 6; yy < HZ - 6; yy += 8) for (let xx = x + 4; xx < x + 24; xx += 7) {
+        const lit = night ? ((xx * 3 + yy * 7 + i) % 5) < 2 : ((xx + yy) % 9) < 1;
+        rect(c, xx, yy, 3, 4, lit ? (night ? ((xx + yy) % 3 ? '#ffd88a' : '#ff8ac0') : '#c8d8e8') : sh(near, -0.25));
+      }
+    }
+    if (opt && opt.neon) [[40, '#ff5fa8'], [168, '#5fe8ff'], [300, '#ffd84a']].forEach(([x, col], k) => { rect(c, x, HZ - 40 - k * 6, 22, 7, sh(col, -0.5)); rect(c, x + 1, HZ - 39 - k * 6, 20, 5, col); });
+    if (opt && opt.lamps) for (let x = 30; x < W; x += 92) { rect(c, x, HZ - 34, 2, 34, '#2a2a34'); rect(c, x - 3, HZ - 38, 8, 5, '#3a3a44'); rect(c, x - 2, HZ - 37, 6, 3, night ? '#ffe8a0' : '#d8d8c8'); }
+  }
+  function hills(c, night, s, opt) {
+    const far = mix(s[1], night ? '#000000' : '#5a7a9a', night ? 0.55 : 0.35), mid = mix(s[1], '#000000', night ? 0.65 : 0.42);
+    if (opt.peaks) {
+      c.fillStyle = mix(s[1], '#4a5a7a', 0.45); c.beginPath(); c.moveTo(-8, HZ);
+      [[-8, 80], [40, 46], [90, 74], [150, 30], [210, 70], [260, 40], [320, 76], [370, 50], [W + 8, 72]].forEach(([x, y]) => c.lineTo(x, y + 4));
+      c.lineTo(W + 8, HZ); c.closePath(); c.fill();
+      [[40, 46], [150, 30], [260, 40], [370, 50]].forEach(([x, y]) => poly(c, [[x - 12, y + 16], [x, y + 4], [x + 12, y + 16], [x + 5, y + 13], [x - 4, y + 15]], night ? '#c8ccd8' : '#f8f8ff'));
+    }
+    ridge(c, HZ - 22, 12, 48, 15, far, 0.4);
+    if (opt.sea) { rect(c, -8, HZ - 14, W + 16, 16, night ? '#1a2a4a' : '#3a7ab8'); for (let x = 0; x < W; x += 18) rect(c, x, HZ - 9, 8, 1, night ? '#2a3a5a' : '#8ac0e8'); }
+    ridge(c, HZ - 6, 7, 30, 11, mid, 1.7);
+    if (opt.trees) for (let i = 0; i < 12; i++) { const x = i * 36 + 8 + (i % 3) * 5, y = HZ - 4 + (i % 2) * 3; poly(c, [[x, y - 22], [x + 8, y], [x - 8, y]], sh(mid, -0.2)); rect(c, x - 1, y, 2, 3, '#3a2a20'); }
+    if (opt.gorse) for (let i = 0; i < 30; i++) { const x = (i * 47) % W, y = HZ - 2 - (i % 4); disc(c, x, y, 3, i % 3 ? '#c8b040' : '#8a8a3a'); }
+  }
+  function treeline(c, night, s, opt) {
+    const deep = night ? '#0e1a14' : '#1e3a2c', mid = night ? '#16261c' : '#2c5244', lit = night ? '#1e3226' : '#3e6e5c';
+    vgrad(c, 40, HZ + 4, mix(s[1], deep, 0.3), deep);
+    for (let i = 0; i < 16; i++) { const x = i * 27 - 6; disc(c, x, HZ - 64 - (i % 3) * 8, 22, mid); disc(c, x + 10, HZ - 74 - (i % 2) * 6, 16, lit); }
+    // trunks in front, the light falling between them
+    for (let i = 0; i < 9; i++) { const x = i * 46 + 6 + ((i * 17) % 13); rect(c, x, HZ - 74, 7 + (i % 2) * 3, 80, night ? '#1a120c' : '#3a2a1c'); rect(c, x + 1, HZ - 74, 2, 80, night ? '#24180e' : '#4a3626'); }
+    if (!night) { c.globalAlpha = 0.12; for (let i = 0; i < 5; i++) poly(c, [[60 + i * 80, 0], [76 + i * 80, 0], [40 + i * 80, HZ + 4], [24 + i * 80, HZ + 4]], '#fff8d0'); c.globalAlpha = 1; }
+    if (opt && opt.fruit) for (let i = 0; i < 16; i++) disc(c, (i * 53) % W, HZ - 60 - (i * 13) % 30, 2, i % 2 ? '#d8e8f0' : '#e8f0a8');
+  }
+  function flowerbed(c, night, s, kind) {
+    hills(c, night, s, { trees: kind !== 'bells' });
+    const col = kind === 'roses' ? ['#e8344e', '#ff8a9e', '#ffcf5a'] : kind === 'bells' ? ['#a98cf0', '#d8c8ff', '#ffffff'] : ['#ffcf5a', '#ff8ab0', '#ffffff', '#8ad8ff'];
+    // hedges, then the bloom
+    rect(c, -8, HZ - 10, W + 16, 12, night ? '#16261c' : '#2e6a34');
+    for (let i = 0; i < 90; i++) { const x = (i * 37) % (W + 8), y = HZ - 9 + (i * 7) % 10; disc(c, x, y, 1.6, col[i % col.length]); }
+  }
+  function seaFar(c, night, s, opt) {
+    rect(c, -8, HZ - 30, W + 16, 34, night ? '#14223e' : '#2a6aaa');
+    vgrad(c, HZ - 30, HZ - 22, night ? '#1a2a48' : '#5aa0d8', night ? '#14223e' : '#2a6aaa');
+    for (let i = 0; i < 40; i++) rect(c, (i * 61) % W, HZ - 26 + (i * 7) % 26, 4 + (i % 3) * 2, 1, night ? '#2a3a5a' : '#8ac0e8');
+    if (opt && opt.light) { rect(c, 332, HZ - 72, 9, 44, '#e8e4d8'); rect(c, 332, HZ - 60, 9, 4, '#c8283a'); rect(c, 330, HZ - 78, 13, 6, '#3a3a44'); rect(c, 333, HZ - 77, 7, 4, night ? '#fff2a8' : '#c8d0d8'); }
+    if (opt && opt.sail) { poly(c, [[90, HZ - 30], [104, HZ - 30], [100, HZ - 26], [94, HZ - 26]], '#3a2a20'); poly(c, [[97, HZ - 52], [97, HZ - 31], [110, HZ - 33]], night ? '#8a8a96' : '#f4f0e8'); }
+  }
+  function colonnade(c, night, s, opt) {
+    const far = mix(s[1], '#000000', night ? 0.55 : 0.2), stone = night ? '#8a8ea0' : '#f0e8d8';
+    if (opt && opt.domes) { disc(c, 90, HZ - 70, 24, night ? '#2a5a4a' : '#4a8a7a'); disc(c, 300, HZ - 64, 18, night ? '#2a5a4a' : '#4a8a7a'); rect(c, 66, HZ - 70, 48, 30, far); rect(c, 282, HZ - 64, 36, 30, far); }
+    rect(c, -8, HZ - 50, W + 16, 52, mix(stone, far, 0.5));
+    rect(c, -8, HZ - 62, W + 16, 10, sh(stone, -0.08)); rect(c, -8, HZ - 52, W + 16, 2, sh(stone, -0.3));
+    for (let i = 0; i < 12; i++) { const x = i * 36 + 4; rect(c, x, HZ - 50, 12, 52, stone); rect(c, x + 2, HZ - 50, 2, 52, sh(stone, 0.15)); rect(c, x + 9, HZ - 50, 3, 52, sh(stone, -0.18)); rect(c, x - 2, HZ - 52, 16, 3, sh(stone, -0.06)); }
+  }
+  function spire(c, night, s) {
+    seaFar(c, night, s, {});
+    rect(c, 186, 8, 28, HZ - 34, night ? '#c8c0b0' : '#f0ebe0'); rect(c, 186, 8, 6, HZ - 34, night ? '#a8a090' : '#d8d0c0');
+    poly(c, [[184, 10], [200, -8], [216, 10]], night ? '#d8d0c0' : '#ffffff');
+    for (let y = 24; y < HZ - 40; y += 18) rect(c, 197, y, 5, 7, night ? '#ffe8a0' : '#5a6a7a');
+    poly(c, [[150, HZ - 26], [180, HZ - 40], [222, HZ - 40], [260, HZ - 26]], night ? '#4a4e5a' : '#8a8e9a');
+  }
+  function saltflat(c, night, s) {
+    rect(c, -8, HZ - 10, W + 16, 14, night ? '#8a90a0' : '#e8eef6');
+    for (let i = 0; i < 6; i++) { const x = 30 + i * 66; rect(c, x, HZ - 26, 2, 18, '#5a5048'); rect(c, x - 4, HZ - 26, 10, 2, '#5a5048'); }
+    c.globalAlpha = 0.25; rect(c, -8, HZ - 30, W + 16, 18, '#ffffff'); c.globalAlpha = 1; // the shimmer on the horizon
+  }
+  function blackfort(c) {
+    rect(c, 150, HZ - 84, 100, 86, '#120a12'); poly(c, [[138, HZ - 82], [200, HZ - 120], [262, HZ - 82]], '#120a12');
+    for (let x = 150; x < 250; x += 12) rect(c, x, HZ - 90, 7, 8, '#120a12');
+    ridge(c, HZ - 4, 6, 40, 13, '#2a1a24', 0.2);
+  }
+  function garden(c) {
+    poly(c, [[-8, HZ - 14], [50, HZ - 46], [112, HZ - 18], [188, HZ - 56], [262, HZ - 20], [338, HZ - 50], [W + 8, HZ - 18], [W + 8, HZ + 4], [-8, HZ + 4]], '#1a1428');
+    c.fillStyle = '#2a4a9a'; c.beginPath(); c.ellipse(200, HZ - 54, 50, 30, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#3a5ab8'; c.beginPath(); c.ellipse(190, HZ - 62, 30, 16, 0, 0, Math.PI * 2); c.fill();
+    rect(c, 195, HZ - 46, 10, 48, '#8a8a9a'); rect(c, 197, HZ - 30, 4, 6, '#ffe8a0');
+    for (let i = 0; i < 30; i++) disc(c, (i * 41) % W, HZ - 4 - (i % 3) * 2, 1.5, i % 2 ? '#a98cf0' : '#ffe28a');
+  }
+  function voidFar(c) {
+    // the world thinned to gray: half a street, coming apart from the top down
+    for (let i = 0; i < 10; i++) { const x = i * 42 + 6, h = 30 + ((i * 29) % 40); rect(c, x, HZ - h, 30, h, '#7a7a84'); for (let k = 0; k < 14; k++) rect(c, x + ((k * 7) % 30), HZ - h - 2 - ((k * 13) % 14), 2, 2, k % 2 ? '#8a8a94' : '#6a6a74'); }
+    c.globalAlpha = 0.4; vgrad(c, 0, HZ, '#b8b8c0', 'rgba(184,184,192,0)'); c.globalAlpha = 1;
+  }
+  function rooftops(c, night, s) {
+    city(c, night, s, { neon: night });
+    const roof = night ? '#2a2a3a' : '#5f6f8c', roofD = night ? '#1e1e2a' : '#47546c';
+    for (let i = 0; i < 6; i++) { const x = i * 76 - 20, y = HZ - 18 + (i % 2) * 8; poly(c, [[x, y + 30], [x + 34, y - 8], [x + 72, y + 30]], i % 2 ? roof : roofD); rect(c, x + 46, y - 6, 8, 14, '#5a3a2a'); rect(c, x + 45, y - 8, 10, 3, '#3a2a20'); }
+  }
+  function tents(c, night, s) {
+    hills(c, night, s, { gorse: !night });
+    [[60, '#c8a878'], [150, '#a8784a'], [290, '#d8c8a8']].forEach(([x, col]) => { poly(c, [[x - 30, HZ + 2], [x, HZ - 34], [x + 30, HZ + 2]], night ? sh(col, -0.6) : col); poly(c, [[x - 6, HZ + 2], [x, HZ - 18], [x + 6, HZ + 2]], '#2a1a14'); });
+    rect(c, 196, HZ - 14, 46, 14, '#5a3a24'); disc(c, 204, HZ, 6, '#3a2a1a'); disc(c, 234, HZ, 6, '#3a2a1a'); poly(c, [[192, HZ - 14], [219, HZ - 30], [246, HZ - 14]], night ? '#4a4a4a' : '#d8d0c0');
+  }
+  function ruins(c, night, s) {
+    hills(c, night, s, {});
+    const st = night ? '#6a6a78' : '#c8c0b0';
+    [[40, 60], [110, 34], [190, 74], [270, 22], [340, 52]].forEach(([x, h], i) => { rect(c, x, HZ - h, 14, h, st); rect(c, x + 10, HZ - h, 4, h, sh(st, -0.25)); if (i % 2) rect(c, x - 3, HZ - h - 4, 20, 5, sh(st, -0.1)); else poly(c, [[x, HZ - h], [x + 14, HZ - h], [x + 9, HZ - h - 6]], st); });
+    rect(c, 108, HZ - 40, 98, 7, st); // a fallen lintel across two
+  }
+  function plaza(c, night, s) {
+    city(c, night, s, { lamps: true });
+    rect(c, 170, HZ - 22, 60, 8, night ? '#6a6a78' : '#c8c0b0'); rect(c, 194, HZ - 46, 12, 26, night ? '#7a7a88' : '#d8d0c0'); disc(c, 200, HZ - 48, 7, night ? '#7a7a88' : '#d8d0c0');
+  }
+  function market(c, night, s) {
+    city(c, night, s, { lamps: night });
+    [[40, '#c8283a'], [130, '#e8c170'], [220, '#3a7ab8'], [310, '#4a8a4a']].forEach(([x, col]) => { rect(c, x, HZ - 22, 56, 22, '#5a3a24'); for (let k = 0; k < 7; k++) rect(c, x - 4 + k * 9, HZ - 32, 9, 10, k % 2 ? col : '#f4f0e8'); for (let k = 0; k < 5; k++) disc(c, x + 8 + k * 10, HZ - 18, 3, ['#ffb347', '#e8344e', '#8ae07a', '#ffe28a'][k % 4]); });
+  }
+  function docks(c, night, s) {
+    seaFar(c, night, s, { sail: 1 });
+    for (let i = 0; i < 5; i++) { const x = 30 + i * 84, y = HZ - 8; rect(c, x, y - 14, 18, 14, '#7a5a3a'); rect(c, x + 2, y - 14, 18, 2, '#9a7a4a'); rect(c, x + 22, y - 9, 12, 9, '#6a4a2a'); }
+    for (let x = 0; x < W; x += 60) { rect(c, x, HZ - 40, 2, 40, '#3a2a20'); c.fillStyle = 'rgba(200,190,160,0.6)'; c.fillRect(x + 2, HZ - 38, 58, 1); }
+  }
+  // ---- indoors
+  function wallWood(c, night) {
+    vgrad(c, -8, HZ + 4, night ? '#3a2418' : '#5a3a26', night ? '#24160e' : '#3a2416');
+    for (let x = -8; x < W + 8; x += 20) rect(c, x, -8, 1, HZ + 12, '#2a1a10');
+    rect(c, -8, HZ - 30, W + 16, 4, '#2a1a10'); rect(c, -8, HZ - 26, W + 16, 30, '#4a2e1c');
+    // shelves of bottles, a lantern, and a booth
+    [[30, 40], [250, 50]].forEach(([x, y]) => { rect(c, x, y, 110, 3, '#2a1a10'); for (let k = 0; k < 12; k++) { const col = ['#3a8a4a', '#8e2f4a', '#c9a35d', '#5a6aa8'][k % 4]; rect(c, x + 4 + k * 9, y - 10, 4, 10, col); rect(c, x + 5 + k * 9, y - 13, 2, 3, col); } });
+    rect(c, 176, 38, 10, 14, '#a2783a'); rect(c, 178, 40, 6, 10, '#ffd88a');
+    rect(c, 150, HZ - 50, 72, 4, '#6a4a30'); rect(c, 150, HZ - 46, 4, 20, '#4a2e1c'); rect(c, 218, HZ - 46, 4, 20, '#4a2e1c');
+  }
+  function wallStone(c, night, opt) {
+    const st = opt.marble ? (night ? '#8a8a98' : '#e8e2d6') : night ? '#3a3a48' : '#6a6a7c';
+    vgrad(c, -8, HZ + 4, st, sh(st, -0.3));
+    for (let y = 0; y < HZ; y += 10) for (let x = (y / 10) % 2 ? -8 : 2; x < W + 8; x += 20) rect(c, x, y, 1, 10, sh(st, -0.18)), rect(c, x, y, 20, 1, sh(st, -0.15));
+    if (opt.windows) for (let i = 0; i < 4; i++) { const x = 30 + i * 100; rect(c, x, 18, 24, 60, '#1a1a2a'); disc(c, x + 12, 18, 12, '#1a1a2a'); rect(c, x + 2, 20, 20, 56, night ? '#2a3a6a' : '#bfe0ff'); disc(c, x + 12, 20, 10, night ? '#2a3a6a' : '#bfe0ff'); rect(c, x + 11, 10, 2, 66, '#1a1a2a'); rect(c, x + 2, 46, 20, 2, '#1a1a2a'); }
+    if (opt.rose) { disc(c, 200, 52, 30, '#2a0a12'); for (let k = 0; k < 12; k++) { const a = (k / 12) * Math.PI * 2; disc(c, 200 + Math.cos(a) * 18, 52 + Math.sin(a) * 18, 7, k % 2 ? '#e8344e' : '#ff8a3a'); } disc(c, 200, 52, 9, '#ffcf5a'); }
+    if (opt.banners) [[60, '#24408a'], [330, '#24408a']].forEach(([x, col]) => { rect(c, x, 14, 22, 60, col); poly(c, [[x, 74], [x + 11, 66], [x + 22, 74]], sh(col, -0.3)); rect(c, x + 8, 30, 6, 6, '#e8c170'); });
+    if (opt.throne) { rect(c, 186, HZ - 64, 28, 66, '#5a1a2a'); rect(c, 182, HZ - 70, 36, 8, '#e8c170'); rect(c, 190, HZ - 56, 20, 30, '#8e2f4a'); }
+  }
+  function cave(c, night) {
+    vgrad(c, -8, HZ + 4, '#14141e', '#2a2a36');
+    for (let i = 0; i < 16; i++) { const x = i * 27 - 4; poly(c, [[x, -8], [x + 16, -8], [x + 8, 18 + (i * 17) % 34]], '#0c0c14'); }
+    ridge(c, HZ - 8, 14, 22, 9, '#1e1e2a', 0.8);
+    [[90, 70], [310, 64]].forEach(([x, y]) => { rect(c, x, y, 3, 14, '#3a2a20'); }); void night;
+  }
+  function works(c, night) {
+    vgrad(c, -8, HZ + 4, '#4a2a24', '#2a1814');
+    for (let y = 0; y < HZ; y += 6) for (let x = (y / 6) % 2 ? -8 : 2; x < W + 8; x += 14) rect(c, x, y, 13, 5, (x + y) % 3 ? '#6a3a2e' : '#5a3226');
+    [[70, '#7aff9a'], [210, '#7aff9a'], [330, '#ffb347']].forEach(([x, col]) => { rect(c, x - 26, HZ - 60, 52, 62, '#3a3a44'); rect(c, x - 22, HZ - 56, 44, 10, col); rect(c, x - 30, HZ - 64, 60, 6, '#5a5a66'); });
+    for (let x = 0; x < W; x += 50) rect(c, x, 20, 6, 30, '#5a5a66'); rect(c, -8, 20, W + 16, 5, '#5a5a66'); void night;
+  }
+  function warehouse(c, night) {
+    wallWood(c, night);
+    for (let i = 0; i < 6; i++) { const x = 20 + i * 64, y = HZ - 26 - (i % 2) * 22; rect(c, x, y, 30, 26, '#8a6a3a'); rect(c, x, y, 30, 2, '#aa8a5a'); rect(c, x + 14, y, 2, 26, '#6a4a2a'); }
+  }
+  function springs(c, night, s) {
+    colonnade(c, night, s, {});
+    rect(c, -8, HZ - 8, W + 16, 10, night ? '#3a6a8a' : '#7ac8e8');
+  }
+
+  // ---------------------------------------------------------------- the ground
+  function ground(c, scene, night, b) {
+    const lit = (col) => (night ? sh(col, -0.45) : col);
+    const band = (col, tex) => {
+      rect(c, -8, HZ, W + 16, H - HZ + 8, lit(col));
+      rect(c, -8, HZ, W + 16, 2, sh(lit(col), -0.25));
+      rect(c, -8, GY - 4, W + 16, 10, sh(lit(col), 0.06));
+      if (tex) tex(lit(col));
+    };
+    const specks = (col) => { for (let i = 0; i < 50; i++) rect(c, (i * 41) % W, HZ + 4 + (i * 7) % 32, 3 + (i % 3), 1, sh(col, i % 2 ? -0.12 : 0.1)); };
+    const cobble = (col) => { for (let y = HZ + 3; y < H; y += 5) for (let x = ((y / 5) % 2) * 6 - 8; x < W + 8; x += 12) rect(c, x, y, 11, 4, sh(col, ((x + y) % 3) * 0.05 - 0.05)); };
+    const planks = (col) => { for (let y = HZ + 2; y < H; y += 6) { rect(c, -8, y, W + 16, 1, sh(col, -0.3)); for (let x = (y % 12) * 3 - 8; x < W; x += 46) rect(c, x, y, 1, 6, sh(col, -0.3)); } };
+    const flags = (col) => { for (let y = HZ + 2; y < H; y += 10) for (let x = ((y / 10) % 2) * 14 - 8; x < W + 8; x += 28) { rect(c, x, y, 27, 9, sh(col, ((x * 3 + y) % 5) * 0.03 - 0.06)); } };
+    const grass = (col) => { specks(col); for (let i = 0; i < 70; i++) { const x = (i * 29) % W, y = HZ + 3 + (i * 11) % 30; rect(c, x, y, 1, 2, sh(col, 0.2)); } };
+    switch (scene) {
+      case 'street': case 'nightstreet': case 'plaza': case 'market': return band(b.cob || '#8a8ea6', cobble);
+      case 'rooftop': return band('#47546c', (col) => { for (let x = -8; x < W; x += 6) rect(c, x, HZ, 1, H, sh(col, -0.2)); });
+      case 'tavern': case 'warehouse': return band('#8a5e3e', planks);
+      case 'hall': case 'fort': return band(b.groundL || '#b8b0a0', flags);
+      case 'throne': band('#8a8070', flags); rect(c, 150, HZ, 100, H - HZ, lit('#8e2f4a')); rect(c, 152, HZ, 2, H - HZ, '#e8c170'); rect(c, 246, HZ, 2, H - HZ, '#e8c170'); return;
+      case 'terrace': case 'spire': case 'springs': return band(b.ground || '#e8e2d6', flags);
+      case 'cave': case 'works': return band(scene === 'works' ? '#4a3a34' : '#3a3a46', specks);
+      case 'beach': return band(b.sand || '#e0cc90', specks);
+      case 'snow': case 'blackfort': return band(night ? '#a8b0c8' : '#e8ecf4', specks);
+      case 'saltflat': return band('#eef2f6', (col) => { for (let i = 0; i < 12; i++) rect(c, (i * 67) % W, HZ + 6 + (i * 9) % 26, 30, 1, sh(col, -0.08)); });
+      case 'void': return band('#8a8a94', specks);
+      case 'pier': case 'bridge': {
+        rect(c, -8, HZ, W + 16, H - HZ + 8, lit('#2a6aaa'));
+        for (let i = 0; i < 30; i++) rect(c, (i * 53) % W, HZ + 2 + (i * 5) % 12, 6, 1, lit('#5aa0d8'));
+        rect(c, -8, GY - 8, W + 16, H - GY + 16, lit(scene === 'bridge' ? '#9a9480' : '#8a6a44'));
+        planks(lit(scene === 'bridge' ? '#9a9480' : '#8a6a44'));
+        if (scene === 'bridge') for (let x = 0; x < W; x += 24) rect(c, x, GY - 26, 3, 18, lit('#7a7464')), rect(c, -8, GY - 26, W + 16, 3, lit('#7a7464'));
+        else for (let x = 10; x < W; x += 70) rect(c, x, GY - 6, 5, H - GY + 8, lit('#5a3a24'));
+        return;
+      }
+      case 'sea': case 'shallows': {
+        band(b.sand || '#c8b890', specks);
+        rect(c, -8, HZ, W + 16, 10, lit('#3a7ab8'));
+        for (let i = 0; i < 20; i++) rect(c, (i * 37) % W, HZ + 2 + (i % 3) * 3, 8, 1, '#8ac0e8');
+        if (scene === 'shallows') { c.globalAlpha = 0.55; rect(c, -8, GY - 6, W + 16, 14, '#5aa0d8'); c.globalAlpha = 1; }
+        return;
+      }
+      default: return band(b.grass || b.ground || '#5a9a52', grass);
+    }
+  }
+
+  // ---------------------------------------------------------------- a scene, painted once
+  function paint(c, scene, map, b) {
+    const night = !!map.night;
+    c.save(); c.translate(8, 8);
+    let s = ['#7a8ab8', '#d8d0e0'];
+    if (!INDOOR[scene]) s = sky(c, scene, night, scene.length);
+    switch (scene) {
+      case 'street': city(c, night, s, { lamps: true }); break;
+      case 'nightstreet': city(c, true, s, { lamps: true, neon: true }); break;
+      case 'meadow': hills(c, night, s, { sea: true, trees: true }); break;
+      case 'heath': hills(c, night, s, { gorse: true }); break;
+      case 'vale': hills(c, night, s, { peaks: true, trees: true }); break;
+      case 'hills': hills(c, night, s, { gorse: map.biome === 'hills', trees: true }); break;
+      case 'peaks': hills(c, night, s, { peaks: true }); break;
+      case 'forest': treeline(c, night, s); break;
+      case 'orchard': treeline(c, night, s, { fruit: 1 }); break;
+      case 'roses': case 'flowers': case 'bells': flowerbed(c, night, s, scene); break;
+      case 'sea': case 'shallows': case 'beach': seaFar(c, night, s, { light: map.biome === 'coast', sail: scene !== 'beach' }); break;
+      case 'pier': case 'bridge': seaFar(c, night, s, { light: true, sail: true }); break;
+      case 'snow': hills(c, night, s, { peaks: true }); break;
+      case 'terrace': colonnade(c, night, s, { domes: true }); break;
+      case 'fort': colonnade(c, night, s, {}); rect(c, -8, HZ - 70, W + 16, 10, night ? '#4a4a58' : '#a8a090'); for (let x = -8; x < W + 8; x += 16) rect(c, x, HZ - 78, 9, 8, night ? '#4a4a58' : '#a8a090'); break;
+      case 'spire': spire(c, night, s); break;
+      case 'saltflat': saltflat(c, night, s); break;
+      case 'blackfort': blackfort(c); break;
+      case 'garden': garden(c); break;
+      case 'void': voidFar(c); break;
+      case 'rooftop': rooftops(c, night, s); break;
+      case 'camp': tents(c, night, s); break;
+      case 'ruins': ruins(c, night, s); break;
+      case 'plaza': plaza(c, night, s); break;
+      case 'market': market(c, night, s); break;
+      case 'docks': docks(c, night, s); break;
+      case 'springs': springs(c, night, s); break;
+      case 'tavern': wallWood(c, night); break;
+      case 'warehouse': warehouse(c, night); break;
+      case 'hall': wallStone(c, night, { marble: map.biome === 'marble' || map.biome === 'spire', windows: true, banners: true }); break;
+      case 'throne': wallStone(c, night, { marble: map.biome === 'marble', rose: true, throne: true }); break;
+      case 'cave': cave(c, night); break;
+      case 'works': works(c, night); break;
+      default: city(c, night, s, {});
+    }
+    ground(c, scene, night, b);
+    // dusk over everything at night, so the fighters stand out
+    if (night && !INDOOR[scene]) { c.globalAlpha = 0.18; rect(c, -8, -8, W + 16, H + 16, '#0a0c24'); c.globalAlpha = 1; }
+    c.restore();
+  }
+  // a few painted scenes are kept; a battle rarely needs more than three
+  const cache = new Map();
+  function layer(scene, map, b) {
+    const key = scene + '|' + map.biome + '|' + (map.night ? 1 : 0);
+    let cv = cache.get(key);
+    if (!cv) {
+      cv = G.canvas(W + 16, H + 16);
+      paint(cv.x, scene, map, b);
+      cache.set(key, cv);
+      if (cache.size > 6) cache.delete(cache.keys().next().value);
+    } else { cache.delete(key); cache.set(key, cv); }
+    return cv;
+  }
+
+  // ---------------------------------------------------------------- what moves
+  const R = (i, k) => ((Math.sin(i * 127.1 + k * 311.7) * 43758.5453) % 1 + 1) % 1; // a steady random per index
+  function life(ctx, scene, map, t) {
+    const night = !!map.night;
+    const out = !INDOOR[scene];
+    if (out && !night && ['street', 'meadow', 'heath', 'vale', 'hills', 'peaks', 'terrace', 'saltflat', 'sea', 'beach', 'pier', 'bridge', 'plaza', 'market', 'docks', 'camp', 'ruins', 'flowers', 'roses'].indexOf(scene) >= 0) {
+      for (let i = 0; i < 5; i++) { const cx = ((i * 97 + t * 0.08) % (W + 80)) - 40, cy = 16 + (i * 23) % 40; ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(Math.round(cx), cy, 34, 5); ctx.fillRect(Math.round(cx) + 6, cy - 3, 18, 3); }
+    }
+    if (scene === 'sea' || scene === 'shallows' || scene === 'pier' || scene === 'bridge' || scene === 'beach' || scene === 'docks' || scene === 'meadow' || scene === 'spire') {
+      ctx.fillStyle = night ? 'rgba(140,170,220,0.5)' : 'rgba(255,255,255,0.7)';
+      for (let i = 0; i < 12; i++) { const x = ((i * 61 + t * 0.4) % (W + 20)) - 10; ctx.fillRect(Math.round(x), HZ - 24 + (i * 7) % 20, 5, 1); }
+    }
+    const drift = (n, cols, fall, sway, size) => {
+      for (let i = 0; i < n; i++) {
+        const x = ((R(i, 1) * W + t * sway * (0.5 + R(i, 2))) % (W + 20)) - 10, y = ((R(i, 3) * H + t * fall * (0.6 + R(i, 4))) % (GY + 10)) - 10;
+        ctx.fillStyle = cols[i % cols.length]; ctx.fillRect(Math.round(x + Math.sin(t / 20 + i) * 3), Math.round(y), size, size);
+      }
+    };
+    if (scene === 'forest' || scene === 'orchard') drift(14, night ? ['#4a6a3a', '#3a5a2a'] : ['#c8a040', '#8ab04a', '#d87a3a'], 0.35, 0.2, 2);
+    if (scene === 'roses' || scene === 'flowers') drift(16, ['#ff8a9e', '#ffffff', '#ffcf5a'], 0.3, 0.4, 2);
+    if (scene === 'bells' || scene === 'garden' || scene === 'void') drift(18, scene === 'void' ? ['rgba(255,255,255,0.5)', '#b8b8c0'] : ['#d8c8ff', '#ffe28a', '#ffffff'], -0.12, 0.15, 1);
+    if (out && (map.weather === 'snow' || scene === 'snow')) drift(40, ['#ffffff', '#e8eef8'], 0.6, 0.25, 1);
+    if (out && map.weather === 'ash') drift(30, ['#8a8a94', '#5a5a64'], 0.4, 0.3, 1);
+    if (scene === 'nightstreet') { if (Math.floor(t / 7) % 9 === 0) { ctx.fillStyle = 'rgba(255,95,168,0.25)'; ctx.fillRect(40, HZ - 52, 24, 12); } }
+    const flame = (x, y) => { const f = Math.sin(t / 5 + x) > 0 ? 1 : 0; ctx.fillStyle = 'rgba(255,200,120,0.18)'; ctx.fillRect(x - 6, y - 8, 14, 14); ctx.fillStyle = '#ff9a3a'; ctx.fillRect(x, y - 2 - f, 3, 4 + f); ctx.fillStyle = '#ffe8a0'; ctx.fillRect(x + 1, y - 1, 1, 2); };
+    if (scene === 'cave') { flame(90, 66); flame(310, 60); for (let i = 0; i < 3; i++) { const y = (t * 0.8 + i * 40) % 120; ctx.fillStyle = 'rgba(160,200,255,0.6)'; ctx.fillRect(60 + i * 120, Math.round(y), 1, 2); } }
+    if (scene === 'fort' || scene === 'hall') { flame(36, HZ - 40); flame(362, HZ - 40); }
+    if (scene === 'tavern' || scene === 'warehouse') { const f = Math.sin(t / 7) * 0.08; ctx.fillStyle = `rgba(255,216,138,${0.12 + f})`; ctx.fillRect(160, 30, 42, 30); }
+    if (scene === 'throne' || scene === 'hall') { ctx.globalAlpha = 0.07 + 0.03 * Math.sin(t / 30); ctx.fillStyle = scene === 'throne' ? '#ff6a5a' : '#fff8d0'; ctx.beginPath(); ctx.moveTo(170, 0); ctx.lineTo(230, 0); ctx.lineTo(260, GY); ctx.lineTo(140, GY); ctx.fill(); ctx.globalAlpha = 1; }
+    if (scene === 'springs') for (let i = 0; i < 8; i++) { const y = HZ - ((t * 0.4 + i * 17) % 50); ctx.fillStyle = `rgba(255,255,255,${0.25 * (1 - (HZ - y) / 50)})`; ctx.fillRect(20 + i * 50 + Math.sin(t / 15 + i) * 4, Math.round(y), 6, 3); }
+    if (scene === 'camp') { flame(170, HZ - 2); }
+    if (scene === 'works') for (let i = 0; i < 3; i++) { const y = HZ - 56 + ((t * 0.3 + i * 4) % 10); ctx.fillStyle = '#c8ffd8'; ctx.fillRect([70, 210, 330][i] - 10 + ((t + i * 9) % 20), Math.round(y), 2, 2); }
+    if (scene === 'blackfort') { ctx.fillStyle = 'rgba(220,40,40,' + (0.6 + 0.3 * Math.sin(t / 20)) + ')'; ctx.beginPath(); ctx.arc(200, HZ - 54, 20, 0, Math.PI * 2); ctx.fill(); }
+  }
+
+  BG.draw = function (ctx, map, b, t, scene) {
+    ctx.drawImage(layer(scene, map, b), -8, -8);
+    life(ctx, scene, map, t);
+  };
+  BG.SCENES = ['street', 'nightstreet', 'meadow', 'heath', 'vale', 'hills', 'peaks', 'forest', 'orchard', 'roses', 'flowers', 'bells', 'sea', 'shallows', 'beach', 'pier', 'bridge', 'snow', 'terrace', 'fort', 'spire', 'saltflat', 'blackfort', 'garden', 'void', 'rooftop', 'camp', 'ruins', 'plaza', 'market', 'docks', 'springs', 'tavern', 'warehouse', 'hall', 'throne', 'cave', 'works'];
 })(window.AD);
 // ---- js/tiles.js
 // Terrain: movement costs and bonuses per tile, plus the pixel art for every biome.
@@ -4995,6 +5798,14 @@ window.AD = window.AD || {};
     severance: ['Severance', 'blade', 12, 90, 20, 6, 1, 1, 35, 'E', 0, { pers: 'kael', sever: 1, desc: 'Cuts what binds. Ignores half of Def.' }],
     swallow: ['Swallow\'s Edge', 'blade', 9, 95, 10, 3, 1, 1, 40, 'E', 0, { pers: 'corvin', spd: 3, desc: '+3 Spd while equipped.' }],
     nobody: ['Nobody\'s Knife', 'blade', 6, 95, 25, 2, 1, 2, 35, 'E', 0, { pers: 'gerace', desc: 'You won\'t see it until it\'s gone.' }],
+    // new steel from the forges of Castemere and the Lenaris market
+    irongreat: ['Iron Greatsword', 'blade', 9, 70, 0, 12, 1, 1, 35, 'D', 900, { desc: 'Two hands, one swing, nothing left standing.' }],
+    steelgreat: ['Steel Greatsword', 'blade', 12, 65, 0, 15, 1, 1, 30, 'C', 1500],
+    silvergreat: ['Silver Greatsword', 'blade', 17, 70, 0, 13, 1, 1, 20, 'A', 2600],
+    rapier: ['Rapier', 'blade', 6, 95, 10, 3, 1, 1, 40, 'D', 900, { eff: ['horse', 'armor'], desc: 'Finds the gap in any armour.' }],
+    duelrapier: ['Duelist\'s Rapier', 'blade', 9, 100, 20, 4, 1, 1, 30, 'B', 2200, { eff: ['horse', 'armor'] }],
+    chakram: ['Chakram', 'blade', 6, 85, 5, 4, 1, 2, 35, 'D', 800, { desc: 'A ring of edged steel. It comes back.' }],
+    moonring: ['Moon Ring', 'blade', 10, 90, 10, 4, 1, 2, 30, 'B', 2000],
     // fists and heavy things
     skillet: ['Iron Skillet', 'fist', 4, 90, 0, 3, 1, 1, 45, 'E', 0, { desc: 'From the Lazyman\'s kitchen. Unsellable, irreplaceable.' }],
     club: ['Club', 'fist', 5, 80, 0, 6, 1, 1, 40, 'E', 300],
@@ -5008,6 +5819,10 @@ window.AD = window.AD || {};
     openhand: ['The Open Hand', 'fist', 12, 100, 10, 0, 1, 1, 60, 'E', 0, { pers: 'abarax', drain: 1, desc: 'Not a fist. Heals Abarax for half the damage.' }],
     twofinger: ['Two Fingers', 'fist', 14, 100, 30, 0, 1, 1, 60, 'E', 0, { pers: 'kesra', desc: 'One breath. Two. Three.' }],
     stonehands: ['Drowned Hands', 'fist', 13, 80, 0, 10, 1, 1, 50, 'E', 0, { pers: 'galt' }],
+    warhammer: ['War Hammer', 'fist', 10, 65, 0, 12, 1, 1, 35, 'D', 900, { eff: ['armor'], desc: 'Armour is just a louder way to lose.' }],
+    maul: ['Iron Maul', 'fist', 14, 60, 0, 16, 1, 1, 25, 'B', 1800, { eff: ['armor'] }],
+    warfan: ['War Fan', 'fist', 6, 90, 10, 3, 1, 1, 40, 'D', 850, { desc: 'Steel ribs under painted silk.' }],
+    cranefan: ['Crane-Wing Fan', 'fist', 10, 95, 15, 3, 1, 1, 30, 'B', 2100],
     // poles
     ironlance: ['Iron Lance', 'pole', 7, 80, 0, 8, 1, 1, 45, 'E', 360],
     harpoon: ['Harpoon', 'pole', 6, 70, 0, 9, 1, 2, 20, 'D', 400],
@@ -5017,6 +5832,10 @@ window.AD = window.AD || {};
     lanternlance: ['Lantern Lance', 'pole', 10, 85, 0, 9, 1, 1, 40, 'E', 0, { pers: 'aurelian', silence: 1, desc: 'A caged flame. Silences gifts it touches.' }],
     poker: ['Henri\'s Poker', 'pole', 7, 95, 10, 4, 1, 1, 50, 'E', 0, { pers: 'henri', desc: 'From the Lazyman\'s stove.' }],
     bwstaff: ['Black-and-White Staff', 'pole', 14, 95, 10, 4, 1, 2, 60, 'E', 0, { pers: 'abarax', avo: 20, desc: 'Turns a blow aside like a river turns a leaf. +20 Avo.' }],
+    scythe: ['Field Scythe', 'pole', 8, 75, 10, 9, 1, 1, 35, 'D', 900, { desc: 'Made for wheat. Works on other things.' }],
+    reaper: ['Reaper\'s Scythe', 'pole', 13, 75, 20, 11, 1, 1, 25, 'B', 2300],
+    chainwhip: ['Chain Whip', 'pole', 6, 85, 5, 5, 1, 2, 35, 'D', 950, { desc: 'Reaches round shields and over shoulders.' }],
+    thornlash: ['Thorn Lash', 'pole', 9, 85, 10, 6, 1, 2, 30, 'B', 2000],
     // shot
     crossbow: ['Crossbow', 'shot', 6, 85, 0, 5, 2, 2, 45, 'E', 540, { eff: ['fly'] }],
     rifle: ['Compact Rifle', 'shot', 8, 75, 0, 7, 2, 3, 30, 'D', 900, { eff: ['fly'] }],
@@ -5024,6 +5843,10 @@ window.AD = window.AD || {};
     musket: ['Crown Musket', 'shot', 7, 80, 0, 7, 2, 2, 40, 'E', 700, { eff: ['fly'] }],
     silverbow: ['Silver Crossbow', 'shot', 12, 80, 0, 6, 2, 2, 20, 'A', 1700, { eff: ['fly'] }],
     plumb: ['Plumb Bow', 'shot', 9, 95, 5, 5, 2, 3, 45, 'E', 0, { pers: 'vehday', eff: ['fly', 'armor'], desc: 'He checked. It\'s level.' }],
+    longbow: ['Longbow', 'shot', 8, 80, 0, 6, 2, 3, 40, 'D', 1000, { eff: ['fly'], desc: 'Six feet of yew. Arrows that fall like rain.' }],
+    yewbow: ['Yew Warbow', 'shot', 12, 80, 5, 8, 2, 3, 30, 'B', 2200, { eff: ['fly'] }],
+    pistol: ['Flintlock Pistol', 'shot', 7, 80, 5, 4, 1, 2, 30, 'D', 1000, { desc: 'Shot that can answer at arm\'s length.' }],
+    twinpistols: ['Twin Pistols', 'shot', 7, 80, 10, 6, 1, 2, 30, 'B', 2400, { brave: 1, desc: 'One in each hand. Strikes twice.' }],
     // flame
     ember: ['Ember', 'flame', 4, 90, 0, 3, 1, 2, 40, 'E', 450],
     glassray: ['Glass Ray', 'flame', 5, 95, 10, 2, 1, 2, 35, 'E', 700],
@@ -5034,6 +5857,7 @@ window.AD = window.AD || {};
     phoenix: ['Phoenix', 'flame', 11, 85, 5, 5, 1, 2, 40, 'E', 0, { pers: 'reigna', desc: 'She believes it will burn. It does.' }],
     goldflame: ['Gold Flame', 'all', 13, 95, 10, 3, 1, 2, 60, 'E', 0, { pers: 'abarax', desc: 'Given, not taken. Never at a disadvantage.' }],
     dawn: ['Last Dawn', 'flame', 13, 85, 5, 5, 1, 2, 50, 'E', 0, { pers: 'aurora' }],
+    meteor: ['Meteor', 'flame', 14, 70, 5, 10, 1, 3, 15, 'A', 3000, { desc: 'Calls down a stone that has been burning since before the world.' }],
     // bloom
     thorn: ['Thorn', 'bloom', 5, 85, 0, 4, 1, 2, 40, 'E', 450],
     briar: ['Briar', 'bloom', 7, 80, 0, 6, 1, 2, 30, 'D', 750],
@@ -5041,6 +5865,7 @@ window.AD = window.AD || {};
     shadowthorn: ['Shadow Thorns', 'bloom', 9, 85, 10, 5, 1, 2, 30, 'C', 1400],
     rosestorm: ['Rose Storm', 'bloom', 12, 90, 0, 6, 1, 2, 40, 'E', 0, { pers: 'liora', desc: 'Every flower in reach turns to look.' }],
     inkwell: ['Ink', 'bloom', 12, 80, 10, 8, 1, 2, 40, 'A', 0],
+    verdance: ['Verdance', 'bloom', 10, 85, 0, 6, 1, 2, 30, 'B', 1800, { desc: 'A whole spring, all at once, in one place.' }],
     // tide
     gust: ['Gust', 'tide', 4, 95, 0, 2, 1, 2, 40, 'E', 450, { eff: ['fly'] }],
     frost: ['Frost', 'tide', 6, 85, 5, 4, 1, 2, 35, 'D', 750],
@@ -5048,6 +5873,7 @@ window.AD = window.AD || {};
     icelance: ['Ice Lances', 'tide', 10, 85, 5, 6, 1, 2, 30, 'B', 1600],
     tidebreak: ['Tidebreak', 'tide', 11, 80, 0, 7, 1, 2, 40, 'E', 0, { pers: 'dray' }],
     gale: ['Gale-Widow', 'tide', 12, 90, 10, 4, 1, 2, 50, 'E', 0, { pers: 'hesper' }],
+    maelstrom: ['Maelstrom', 'tide', 13, 80, 5, 8, 1, 2, 20, 'A', 2800, { desc: 'The sea turns round once and takes them with it.' }],
   };
   // songs: [name, heal base, range, uses, rank, price, extra]
   const SONGS = {
@@ -5097,6 +5923,7 @@ window.AD = window.AD || {};
   Object.entries(IT).forEach(([id, a]) => {
     ITEMS[id] = { id, n: a[0], t: 'item', kind: a[1], val: a[2], uses: a[3], price: a[4], desc: a[5] };
   });
+  AD.iconOf = (d) => (d.weapon ? d.t : d.song ? 'song' : d.gear ? d.gear : 'item');
   AD.item = (id, uses) => ({ id, uses: uses === undefined ? (ITEMS[id] ? ITEMS[id].uses : 1) : uses });
 
   // ---------------------------------------------------------------- what a weapon does besides hurt
@@ -5117,6 +5944,8 @@ window.AD = window.AD || {};
     hookknife: { st: 'root', ch: 50 }, handaxe: { push: 1, ch: 50 }, harpoon: { pull: 1 }, musket: { st: 'blind', ch: 30 }, poker: { st: 'burn', n: 1 },
     skillet: { st: 'blind', ch: 30 }, nightblade: { st: 'blind', ch: 50 }, ivoryblade: { st: 'chill', ch: 50 }, prism: { st: 'blind', ch: 50 },
     bwstaff: { push: 1 }, stonehands: { push: 1 },
+    warfan: { push: 1, ch: 30 }, cranefan: { push: 1, ch: 40 }, chainwhip: { pull: 1, ch: 40 }, thornlash: { st: 'root', ch: 40 },
+    meteor: { st: 'burn', n: 2 }, verdance: { st: 'root', ch: 50 }, maelstrom: { st: 'chill', n: 2 },
   };
   Object.keys(FX).forEach((id) => { ITEMS[id].fx = Object.assign({ ch: 100 }, FX[id]); });
 
@@ -5150,12 +5979,27 @@ window.AD = window.AD || {};
     breakwater: { n: 'Breakwater', cost: 3, mt: 4, st: 'chill', stN: 1, push: 1, desc: 'Mt +4. Chills and pushes.' },
     landslide: { n: 'Landslide', cost: 3, mt: 6, hit: -10, push: 1, desc: 'Mt +6, and a push.' },
     lastlight: { n: 'Last Light', cost: 4, mt: 2, st: 'blind', stN: 1, spread: 1, desc: 'Mt +2. Blinds the target and every foe beside it.' },
+    // the new arsenal
+    cleave: { n: 'Cleave', cost: 4, mt: 6, hit: -15, splash: 0.5, desc: 'Mt +6, and the swing carries into foes beside.' },
+    flurry: { n: 'Flurry', cost: 3, strikes: 3, mt: -3, crit: 10, desc: 'Three thrusts faster than the eye, Mt -3.' },
+    ricochet: { n: 'Ricochet', cost: 3, chain: 0.75, desc: 'The ring bounces on to a foe beside the target.' },
+    shatter: { n: 'Shatter', cost: 3, mt: 4, hit: -10, shatter: 1, desc: 'Mt +4. A hit breaks the foe\'s guard outright.' },
+    tempest: { n: 'Tempest', cost: 3, hit: 10, push: 1, st: 'blind', stN: 1, desc: 'A gust of silk and steel: blinds and pushes.' },
+    reap: { n: 'Reap', cost: 4, crit: 10, splash: 0.5, desc: 'One wide sweep through every foe beside.' },
+    snare: { n: 'Snare', cost: 3, st: 'root', stN: 1, pull: 1, desc: 'Roots the foe and drags them a tile closer.' },
+    volley: { n: 'Volley', cost: 3, strikes: 2, mt: -2, desc: 'Two arrows on one breath, Mt -2.' },
+    quickdraw: { n: 'Quick Draw', cost: 3, crit: 15, noCounter: 1, desc: 'Fires before they move. No counter, Crit +15.' },
+    cataclysm: { n: 'Cataclysm', cost: 3, splash: 0.6, st: 'burn', stN: 2, spread: 1, desc: 'The stone lands among them all. Splash and burn.' },
+    whirlpool: { n: 'Whirlpool', cost: 3, st: 'chill', stN: 1, spread: 1, pull: 1, desc: 'Drags the target in and chills every foe beside.' },
   };
   AD.TYPE_ART = { blade: 'windsweep', fist: 'haymaker', pole: 'skewer', shot: 'deadeye', flame: 'wildfire', bloom: 'overgrowth', tide: 'riptide', all: 'sunburst' };
   const SIG = {
     openhand: 'openpalm', bwstaff: 'riverturn', severance: 'finalcut', twofinger: 'threebreaths', dannys: 'combo', plumb: 'truelevel',
     crowthorn: 'murder', phoenix: 'rebirth', swallow: 'sonic', rosestorm: 'petalstorm', gale: 'eye', nightblade: 'nightfall',
     ivoryblade: 'firstsnow', prism: 'refraction', nobody: 'unseen', poker: 'stoke', tidebreak: 'breakwater', stonehands: 'landslide', dawn: 'lastlight',
+    irongreat: 'cleave', steelgreat: 'cleave', silvergreat: 'cleave', rapier: 'flurry', duelrapier: 'flurry', chakram: 'ricochet', moonring: 'ricochet',
+    warhammer: 'shatter', maul: 'shatter', warfan: 'tempest', cranefan: 'tempest', scythe: 'reap', reaper: 'reap', chainwhip: 'snare', thornlash: 'snare',
+    longbow: 'volley', yewbow: 'volley', pistol: 'quickdraw', twinpistols: 'quickdraw', meteor: 'cataclysm', maelstrom: 'whirlpool',
   };
   Object.keys(SIG).forEach((id) => { ITEMS[id].art = SIG[id]; });
   AD.artId = (d) => (d && d.weapon ? d.art || AD.TYPE_ART[d.t] || null : null);
@@ -5170,43 +6014,116 @@ window.AD = window.AD || {};
     if (f.chain) bits.push('Chain');
     return bits.join(', ') + (f.ch < 100 ? ' ' + f.ch + '%' : '');
   };
+  // ---------------------------------------------------------------- gear
+  // Worn, not wielded: one armour, one outfit, one accessory each. Armour and outfits show on the
+  // wearer on the map and in duels; most accessories do too. st: flat bonuses (hp str mag skl
+  // spd lck def res mov hit avo crit ddg regen bp ward). grow: a bonus that rises with the
+  // wearer's level, n per `every` levels up to cap. wear: how it looks.
+  const GEAR = {
+    // armour, light to heavy, and mantles for those who work in gifts
+    jerkin: ['Leather Jerkin', 'armor', 500, { def: 1, avo: 5 }, null, { pieces: ['breast', 'bracers'], plate: '#6a4a30', trim: '#a87a4a' }, 'Boiled leather. Turns a knife, mostly.'],
+    chainmail: ['Chain Hauberk', 'armor', 1200, { def: 3 }, null, { pieces: ['breast', 'pauldrons'], plate: '#8a8e9a', trim: '#5a5e6a', chain: 1 }, 'Ten thousand rings, every one riveted.'],
+    steelplate: ['Steel Plate', 'armor', 2400, { def: 5, res: 1, spd: -1 }, null, { pieces: ['breast', 'pauldrons', 'bracers', 'greaves'], plate: '#c0c8d8', trim: '#e8c170' }, 'Heavy. Spd -1, and worth it.'],
+    divineplate: ['Divine Plate', 'armor', 0, { def: 7, res: 4, hp: 5, spd: -1 }, null, { pieces: ['breast', 'pauldrons', 'bracers', 'greaves'], plate: '#f2ead4', trim: '#ffd84a', glow: '#fff2b0' }, 'Forged under the Garden. Light as a promise.'],
+    rosemail: ['Rose-Iron Mail', 'armor', 0, { def: 2, res: 1 }, { k: 'def', every: 8, cap: 4 }, { pieces: ['breast', 'pauldrons'], plate: '#8e2f4a', trim: '#ffcf5a' }, 'Grows tougher with its wearer: +1 Def every 8 levels.'],
+    mantle: ['Warded Mantle', 'armor', 1000, { res: 4, def: 1 }, null, { pieces: ['mantle'], plate: '#3a2a6a', trim: '#e8c170' }, 'Stitched with old wards. Gifts slide off it.'],
+    starmantle: ['Starwoven Mantle', 'armor', 3000, { res: 7, def: 2, hp: 3 }, null, { pieces: ['mantle'], plate: '#141a50', trim: '#bfe8ff', stars: 1 }, 'Night sky, by the yard.'],
+    // outfits: a change of clothes, and of manner
+    chefwhites: ['Chef\'s Whites', 'outfit', 600, { hp: 3, def: 1 }, null, { outfit: 'apron', main: '#f4f0e8', sec: '#ffffff', pants: '#3a3a4a' }, 'Double-breasted, so you can flip it when it gets dirty.'],
+    duelistcoat: ['Duelist\'s Coat', 'outfit', 1400, { avo: 5, crit: 5 }, null, { outfit: 'longcoat', main: '#2a2430', sec: '#c8283a', acc: '#e8c170' }, 'Black wool, red lining, and a reputation.'],
+    monkwraps: ['Monk\'s Wraps', 'outfit', 1000, { spd: 1, avo: 5 }, null, { outfit: 'wraps', main: '#d8d0c0', sec: '#8a6a4a' }, 'Light as breathing.'],
+    galagown: ['Gala Gown', 'outfit', 1600, { mag: 1, res: 2, avo: 5 }, null, { outfit: 'gown', main: '#5a1a3a', acc: '#ffe28a' }, 'For the Grand S\u00e9rail, or a duel after it.'],
+    travelcloak: ['Traveler\'s Cloak', 'outfit', 1800, { mov: 1 }, null, { outfit: 'coat', main: '#5a4a3a', sec: '#a8987a', cape: '#4a3a2a' }, 'Every road is shorter in it. +1 Mov.'],
+    nightsuit: ['Night Market Suit', 'outfit', 2000, { crit: 10, lck: 2 }, null, { outfit: 'uniform', main: '#141428', sec: '#2a2a48', acc: '#c8c8ff' }, 'Pressed, pinned, and lucky.'],
+    rosecoat: ['Rose Divine Coat', 'outfit', 0, { avo: 5 }, { k: 'all', every: 10, cap: 3 }, { outfit: 'longcoat', main: '#1e2a4e', sec: '#efe6d6', acc: '#ffffff', extras: ['rose'] }, 'Grows with its wearer: +1 to every stat each 10 levels.'],
+    // accessories
+    tinring: ['Tin Ring', 'acc', 400, { hit: 5 }, null, { trinket: 'ring', c: '#c8c8d0' }, 'Cheap, and somehow lucky.'],
+    signet: ['Signet Ring', 'acc', 1500, { hit: 10, crit: 5 }, null, { trinket: 'ring', c: '#e8c170', gem: '#d8304a' }, 'Someone\'s family. Now yours.'],
+    royalsignet: ['Royal Signet', 'acc', 0, { hit: 15, crit: 10, lck: 3 }, null, { trinket: 'ring', c: '#ffd84a', gem: '#6ad0ff' }, 'The Queen\'s own seal. She would want it used.'],
+    roselocket: ['Rose Locket', 'acc', 900, { hp: 3 }, { k: 'hp', every: 3, cap: 10 }, { trinket: 'amulet', c: '#e8c170', gem: '#e8344e' }, 'A gold rose under glass. +1 HP every 3 levels.'],
+    mooncirclet: ['Moon Circlet', 'acc', 1600, { res: 3, mag: 1 }, null, { trinket: 'circlet', c: '#d8dce8', gem: '#8ad8ff' }, 'Silver, cold to the touch, quiet in the head.'],
+    suncirclet: ['Sun Circlet', 'acc', 0, { mag: 2, res: 2 }, { k: 'mag', every: 10, cap: 3 }, { trinket: 'circlet', c: '#ffd84a', gem: '#ff8a3a' }, 'Warm as noon. +1 Mag every 10 levels.'],
+    silkscarf: ['Silk Scarf', 'acc', 700, { avo: 10 }, null, { trinket: 'scarf', c: '#e8c170' }, 'It moves before you do.'],
+    swiftboots: ['Swift Boots', 'acc', 2500, { mov: 1, spd: 1 }, null, { trinket: 'boots', c: '#8a5a2a' }, 'Soft soles, quick feet. +1 Mov.'],
+    bellcharm: ['Bell Charm', 'acc', 1200, { ward: 1, res: 1 }, null, { trinket: 'earring', c: '#e8c170' }, 'Its chime clears the head: no Burn, Root, Chill or Blind.'],
+    coffeeflask: ['Coffee Flask', 'acc', 1100, { bp: 1 }, null, { trinket: 'charm', c: '#8a5a3a' }, 'Starts every battle with +1 BP.'],
+    gamblerchip: ['Gambler\'s Chip', 'acc', 1300, { lck: 5, ddg: 10 }, null, { trinket: 'earring', c: '#d8304a' }, 'Lck +5, and crits miss you more.'],
+    greengloves: ['Gardener\'s Gloves', 'acc', 1800, { regen: 10 }, null, { trinket: 'gloves', c: '#4a8a4a' }, 'Recovers a tenth of HP each turn.'],
+  };
+  Object.entries(GEAR).forEach(([id, a]) => {
+    ITEMS[id] = { id, n: a[0], t: 'gear', gear: a[1], price: a[2], st: a[3], grow: a[4], wear: a[5], desc: a[6], uses: 1 };
+  });
+  AD.SLOTS = ['armor', 'outfit', 'acc'];
+  AD.SLOT_NAME = { armor: 'Armour', outfit: 'Outfit', acc: 'Accessory' };
+  AD.STAT_ORDER = ['hp', 'str', 'mag', 'skl', 'spd', 'lck', 'def', 'res', 'mov'];
+
+  // ---------------------------------------------------------------- ranks
+  // Skills and arts grow with the one who uses them. A skill is rank I, II at Lv 15 (or on
+  // promotion), III at Lv 15 after it; an art follows the weapon rank (II from B, III at S).
+  AD.effLv = (u) => { const t = (AD.CLASSES[u.cls] || { tier: 1 }).tier; return u.id === 'abarax' ? u.lv + (t - 1) * 5 : u.lv + (t - 1) * 15; };
+  AD.skillRank = (u) => { const t = (AD.CLASSES[u.cls] || { tier: 1 }).tier; return t >= 3 ? 3 : t === 2 ? (u.lv >= 15 ? 3 : 2) : u.lv >= 15 ? 2 : 1; };
+  AD.RN = ['', 'II', 'III'];
+  const pickRank = (str, r) => String(str).replace(/\{([^}]*)\}/g, (m, alts) => { const a = alts.split('|'); return a[Math.min(a.length - 1, r - 1)]; });
+  AD.skillScales = (sk) => !!AD.SKILLS[sk] && AD.SKILLS[sk][1].indexOf('{') >= 0;
+  AD.skillName = (sk, r) => { const d = AD.SKILLS[sk]; if (!d) return sk; return d[0] + (r > 1 && AD.skillScales(sk) ? ' ' + AD.RN[r - 1] : ''); };
+  AD.skillText = (sk, r) => pickRank((AD.SKILLS[sk] || ['', ''])[1], r || 1);
+  AD.artLevel = function (u, d) {
+    if (u.team !== 'p') return AD.skillRank(u);
+    const ri = AD.RANK_AT.reduce((best, v, i) => ((u.wexp && u.wexp[d.t] || 0) >= v ? i : best), 0);
+    return ri >= 5 ? 3 : ri >= 3 ? 2 : 1;
+  };
+  // an art at a level: a little more of everything it already does
+  AD.scaleArt = function (a, lvl) {
+    const o = Object.assign({}, a, { lvl });
+    if (lvl <= 1) return o;
+    const k = lvl - 1;
+    o.n = a.n + ' ' + AD.RN[k];
+    if (a.mt !== undefined || !a.strikes) o.mt = (a.mt || 0) + k * 2;
+    o.hit = (a.hit || 0) + k * 5;
+    if (a.crit) o.crit = a.crit + k * 5;
+    if (a.st && lvl >= 3) o.stN = (a.stN || 1) + 1;
+    if (a.splash) o.splash = Math.min(1, a.splash + k * 0.1);
+    if (a.chain) o.chain = Math.min(1, a.chain + k * 0.1);
+    return o;
+  };
   AD.weaponHelp = function (d) {
     const art = AD.ARTS[AD.artId(d)];
     const line = `Mt ${d.mt}  Hit ${d.hit}  Crit ${d.crt}  Wt ${d.wt}  Rng ${d.rng[0]}-${d.rng[1]}  Rank ${d.rank}`;
     const fx = AD.fxText(d);
-    return [d.desc, line, (fx ? 'On hit: ' + fx + '.  ' : '') + (art ? 'Art: ' + art.n + ' (' + art.cost + ' uses). ' + art.desc : '')].filter(Boolean).join('\n');
+    const grows = d.pers ? 'Grows with its wielder: +1 Mt every ' + (d.pers === 'abarax' ? 5 : 8) + ' levels.' : '';
+    return [d.desc, line, (fx ? 'On hit: ' + fx + '.  ' : '') + (art ? 'Art: ' + art.n + ' (' + art.cost + ' uses). ' + art.desc : ''), grows].filter(Boolean).join('\n');
   };
 
   // ---------------------------------------------------------------- skills
   AD.SKILLS = {
-    getup: ['Get Up', 'Survives the first fatal blow each battle with 1 HP.'],
-    openhand: ['Open Hand', 'Adjacent allies recover 3 HP at the start of each phase.'],
-    abraxas: ['Abraxas', 'Every force recognises him. Gifts never at a disadvantage; +10 Hit.'],
-    crowswatch: ['Crow\'s Watch', '+15 Hit and Avo within 2 tiles of Abarax.'],
+    getup: ['Get Up', 'Survives the first fatal blow each battle with 1 HP{.|, then recovers a fifth of HP.|, then recovers a fifth of HP. Twice a battle.}'],
+    openhand: ['Open Hand', 'Adjacent allies recover {3|5|8} HP at the start of each phase.'],
+    abraxas: ['Abraxas', 'Every force recognises him. Gifts never at a disadvantage; +{10|15|20} Hit.'],
+    crowswatch: ['Crow\'s Watch', '+{15|20|25} Hit and Avo within 2 tiles of Abarax.'],
     shadowstep: ['Shadow Step', 'Can always step out of the shadow beside Abarax.'],
     heavyweight: ['Heavyweight', 'Enemies never land a follow-up attack on him.'],
-    ironskin: ['Iron Skin', 'The first hit taken each enemy phase deals half damage.'],
+    ironskin: ['Iron Skin', 'The first hit taken each enemy phase deals {half|a third of its|a quarter of its} damage.'],
     steal: ['Steal', 'Takes an unequipped item from a slower enemy.'],
     locktouch: ['Locktouch', 'Opens doors and chests without keys.'],
     fence: ['Fence', 'While alive, shops charge 10% less.'],
-    threads: ['Threads', 'Enemies within 2 tiles of Echoe have -15 Hit.'],
-    mindvoice: ['Mind Voice', 'Allies within 3 tiles gain +10 Crit Avo and +5 Avo.'],
-    conviction: ['Conviction', 'Allies within 2 tiles gain +10 Hit and +10 Avo.'],
-    nobodysees: ['Nobody Sees', 'Enemies pick her last. +15 Avo.'],
+    threads: ['Threads', 'Enemies within 2 tiles of Echoe have -{15|20|25} Hit.'],
+    mindvoice: ['Mind Voice', 'Allies within 3 tiles gain +{10|15|20} Crit Avo and +{5|8|10} Avo.'],
+    conviction: ['Conviction', 'Allies within 2 tiles gain +{10|15|20} Hit and Avo.'],
+    nobodysees: ['Nobody Sees', 'Enemies pick her last. +{15|20|25} Avo.'],
     walls: ['Walls', 'Walks through walls and doors.'],
     paint: ['Paint', 'Paints what happens next: an adjacent ally may act again.'],
-    thirdblade: ['Third Blade', 'Beside Abarax, both deal +2 damage.'],
-    duet: ['Duet', 'Beside her twin: +10 Hit, +2 damage, and songs heal more.'],
+    thirdblade: ['Third Blade', 'Beside Abarax, both deal +{2|3|4} damage.'],
+    duet: ['Duet', 'Beside her twin: +{10|15|20} Hit, +{2|3|4} damage, and songs heal more.'],
     blink: ['Blink', 'Can always step to the tile beside her twin.'],
     silence: ['Silence', 'Foes he strikes cannot use gifts or songs until their next turn.'],
     build: ['Build', 'Bridges water and clears rubble beside him.'],
-    fastest: ['Fastest Alive', '+2 Mov. +3 Spd when he attacks first.'],
+    fastest: ['Fastest Alive', '+2 Mov. +{3|4|5} Spd when he attacks first.'],
     sever: ['Sever', 'Her strikes ignore half of Def and Res, and cancel enemy skills.'],
-    bloomground: ['Bloom Ground', 'Allies within 2 recover 5 HP at the start of each phase.'],
-    theway: ['The Way', '+20 Avo. Counters at any range.'],
+    bloomground: ['Bloom Ground', 'Allies within 2 recover {5|8|12} HP at the start of each phase.'],
+    theway: ['The Way', '+{20|25|30} Avo. Counters at any range.'],
     fold: ['Fold', 'Bends the road: draws allies to his side.'],
     twofingers: ['Two Fingers', 'A strike can stop a foe outright, breaking its guard.'],
-    regular: ['Booth Six', '+20 Hit and Avo beside Abarax.'],
+    regular: ['Booth Six', '+{20|25|30} Hit and Avo beside Abarax.'],
     drain: ['Devourer', 'Each hit steals 1 Str, Mag or Def for the rest of the battle.'],
     subtract: ['Subtract', 'Each hit lowers max HP by 2 for the rest of the battle.'],
     unmake: ['Unmake', 'Gray nothing spreads from it every turn.'],
@@ -5214,26 +6131,27 @@ window.AD = window.AD || {};
     lanternaura: ['Lantern', 'Adjacent foes cannot use gifts or songs.'],
     sunlight: ['Show Me', 'Sunlight reaches three tiles.'],
     regen: ['Mending', 'Recovers 20% HP each turn.'],
-    lastworld: ['The Last', 'Fights at full strength for a world nobody remembers. +2 to all.'],
+    lastworld: ['The Last', 'Fights at full strength for a world nobody remembers. +{2|3|4} to all.'],
     gentle: ['Gentle', 'Never kills; leaves foes at 1 HP.'],
     // learned along the way (see AD.LEARN in data_units.js)
-    secondhelping: ['Second Helping', 'Recovers a quarter of max HP after defeating a foe.'],
-    vantage: ['First Word', 'Below half HP, strikes first even when attacked.'],
-    wrath: ['Hot Blood', '+20 Crit while below half HP.'],
-    sol: ['Rose Sol', 'Skl% chance a hit heals half the damage dealt.'],
-    luna: ['Moon Bite', 'Skl% chance a hit ignores half of Def or Res.'],
-    pavise: ['Bulwark', 'Skl% chance to halve damage from an adjacent foe.'],
-    thrift: ['Thrift', 'Lck% chance a strike costs no use.'],
-    galeforce: ['Galeforce', 'Once a turn, defeating a foe on your own turn lets you act again.'],
-    focus: ['Lone Wolf', '+10 Hit and +15 Crit with no ally adjacent.'],
-    charm: ['Charm', 'Allies within 2 tiles deal +2 damage.'],
-    quickriposte: ['Quick Riposte', 'Above half HP, always strikes twice when countering.'],
-    warmhands: ['Warm Hands', 'Songs and Mend restore 10 more HP.'],
-    shelter: ['Shelter', 'Carries a rescued ally with no loss of Spd or Skl.'],
-    kindle: ['Kindle', 'Every hit with a gift sets the foe burning.'],
-    ward: ['Clear Mind', '+4 Res against gifts. Burn, Root, Chill and Blind never take hold.'],
-    trample: ['Trample', '+4 damage against foes on foot.'],
-    slip: ['Slip', 'Moves through tiles held by foes.'],
+    secondhelping: ['Second Helping', 'Recovers {a quarter|a third|half} of max HP after defeating a foe.'],
+    vantage: ['First Word', 'Below {half|60%|75%} HP, strikes first even when attacked.'],
+    wrath: ['Hot Blood', '+{20|30|40} Crit while below half HP.'],
+    sol: ['Rose Sol', '{Skl|Skl x1.25|Skl x1.5}% chance a hit heals {half|half|all} the damage dealt.'],
+    luna: ['Moon Bite', '{Skl|Skl x1.25|Skl x1.5}% chance a hit ignores half of Def or Res.'],
+    pavise: ['Bulwark', '{Skl|Skl x1.25|Skl x1.5}% chance to halve damage from an adjacent foe.'],
+    thrift: ['Thrift', '{Lck|Lck x1.5|Lck x2}% chance a strike costs no use.'],
+    galeforce: ['Galeforce', 'Once a turn, defeating a foe on your own turn lets you act again{.|.|, with a BP back.}'],
+    focus: ['Lone Wolf', '+{10|15|20} Hit and +{15|20|25} Crit with no ally adjacent.'],
+    charm: ['Charm', 'Allies within 2 tiles deal +{2|3|4} damage.'],
+    quickriposte: ['Quick Riposte', 'Above {half|40%|a quarter of} HP, always strikes twice when countering.'],
+    warmhands: ['Warm Hands', 'Songs and Mend restore {10|15|20} more HP.'],
+    shelter: ['Shelter', 'Carries a rescued ally with no loss of Spd or Skl{.|, and they recover a tenth of HP each turn.|, and they recover a fifth of HP each turn.}'],
+    kindle: ['Kindle', 'Every hit with a gift sets the foe burning for {1|2|2} turn{|s|s}{.|.|, and physical hits too.}'],
+    ward: ['Clear Mind', '+{4|6|8} Res against gifts. Burn, Root, Chill and Blind never take hold.'],
+    trample: ['Trample', '+{4|6|8} damage against foes on foot.'],
+    slip: ['Slip', 'Moves through tiles held by foes{.|.|, and +1 Mov.}'],
+    roseheart: ['Rose Heart', 'The Garden stands behind him: +{2|4|6} damage and +{10|15|20} Avo.'],
   };
 
   // ---------------------------------------------------------------- classes
@@ -5353,7 +6271,7 @@ window.AD = window.AD || {};
   // ---------------------------------------------------------------- playable
   U.abarax = {
     name: 'Abarax', cls: 'cook', lv: 1, base: st(20, 6, 4, 6, 7, 6, 5, 3), grow: st(85, 55, 50, 55, 60, 55, 40, 40),
-    items: ['skillet', 'ember', 'stack'], wr: { fist: 31, flame: 0, bloom: 0, tide: 0, pole: 0, all: 0 }, skills: ['getup'],
+    items: ['skillet', 'ember', 'stack'], wr: { fist: 31, flame: 0, bloom: 0, tide: 0, pole: 0, all: 0 }, skills: ['getup', 'roseheart'],
     glow: '#ffb347', lord: 1,
     bio: 'Twenty-one, five-foot-eight, a cook at the Lazyman\'s. Brags like breathing, paints, climbs, fights, sings badly. The flowers turn to look at him.',
     looks: {
@@ -5643,7 +6561,7 @@ window.AD = window.AD || {};
   // ---------------------------------------------------------------- skills learned on the way
   // [class tier, level, skill]; tier 0 is any tier (Abarax keeps his level through the story)
   AD.LEARN = {
-    abarax: [[0, 4, 'secondhelping'], [0, 9, 'sol'], [0, 14, 'charm'], [0, 19, 'vantage']],
+    abarax: [[0, 1, 'roseheart'], [0, 4, 'secondhelping'], [0, 9, 'sol'], [0, 14, 'charm'], [0, 19, 'vantage']],
     vanity: [[1, 6, 'focus'], [1, 12, 'luna'], [2, 5, 'galeforce']],
     benny: [[1, 7, 'quickriposte'], [1, 13, 'pavise'], [2, 6, 'wrath']],
     xav: [[1, 6, 'thrift'], [1, 12, 'slip'], [2, 5, 'focus']],
@@ -5671,6 +6589,32 @@ window.AD = window.AD || {};
     ivo: [[2, 10, 'slip'], [2, 14, 'focus']],
   };
 
+  // ---------------------------------------------------------------- 1.4: everyone a little stronger
+  // Every friend: +5% to each growth and +1 to each base stat (+2 HP). Abarax, who fell behind in
+  // the later books, grows faster still and gets more from both promotions.
+  const BUFF = {
+    grow: 5, abarax: st(10, 10, 10, 5, 5, 5, 10, 10),
+    promo: { rosedivine: st(2, 1, 1, 1, 1, 2, 1, 1), alldivine: st(3, 1, 1, 1, 1, 1, 2, 1) },
+  };
+  Object.keys(U).forEach((id) => {
+    Object.keys(U[id].grow).forEach((k) => { U[id].grow[k] += BUFF.grow + (id === 'abarax' ? BUFF.abarax[k] : 0); });
+    Object.keys(U[id].base).forEach((k) => { U[id].base[k] += k === 'hp' ? 2 : 1; });
+  });
+  Object.keys(BUFF.promo).forEach((c) => { const b = AD.CLASSES[c].bonus; Object.keys(b).forEach((k) => { b[k] += BUFF.promo[c][k]; }); });
+  // a save from before: what the new growths would have given over the levels already gained
+  AD.retroBuff = function (r) {
+    const d = U[r.id];
+    if (!d || !r.stats) return;
+    const tier = AD.CLASSES[r.cls].tier, cap = tier >= 3 ? 40 : 30;
+    const gained = Math.max(0, AD.effLv(r) - AD.effLv({ id: r.id, cls: d.cls, lv: d.lv }));
+    Object.keys(r.stats).forEach((k) => {
+      const extraGrow = BUFF.grow + (r.id === 'abarax' ? BUFF.abarax[k] || 0 : 0);
+      let add = (k === 'hp' ? 2 : 1) + Math.round((gained * extraGrow) / 100);
+      if (r.id === 'abarax') ['rosedivine', 'alldivine'].forEach((c, i) => { if (tier >= i + 2) add += BUFF.promo[c][k] || 0; });
+      r.stats[k] = Math.min(k === 'hp' ? 70 : cap, r.stats[k] + add);
+    });
+  };
+
   // ---------------------------------------------------------------- unit factory
   AD.portFor = function (id, unit) {
     const u = U[id];
@@ -5684,7 +6628,7 @@ window.AD = window.AD || {};
     const d = U[id];
     return {
       id, cls: d.cls, lv: d.lv, exp: 0, stats: Object.assign({}, d.base), items: d.items.map((i) => AD.item(i)),
-      wexp: Object.assign({}, d.wr), skills: d.skills.slice(), supports: {}, kills: 0, battles: 0,
+      wexp: Object.assign({}, d.wr), skills: d.skills.slice(), supports: {}, kills: 0, battles: 0, gear: { armor: null, outfit: null, acc: null },
     };
   };
 })(window.AD);
@@ -6123,7 +7067,8 @@ window.AD = window.AD || {};
     G.panel(ctx, 8, 130, 124, 70);
     G.text(ctx, 'Skills', 15, 135, C.gold);
     const sks = u.skills || [];
-    sks.slice(0, sks.length > 5 ? 4 : 5).forEach((s, k) => G.text(ctx, (AD.SKILLS[s] || [s])[0], 15, 148 + k * 10, C.cream));
+    const rank = AD.skillRank(u);
+    sks.slice(0, sks.length > 5 ? 4 : 5).forEach((s, k) => G.text(ctx, AD.skillName(s, rank), 15, 148 + k * 10, C.cream));
     if (sks.length > 5) G.text(ctx, '+' + (sks.length - 4) + ' more \u25ba', 15, 188, C.gold);
     if (this.page === 2) {
       // every skill in full, then the weapon's art and whatever is ailing them
@@ -6140,14 +7085,15 @@ window.AD = window.AD || {};
         rest.filter(Boolean).forEach((l) => { if (yy <= 186) { G.text(ctx, l, 151, yy, C.gray); yy += 10; } });
         yy += 2;
       };
-      sks.forEach((sk) => { const d = AD.SKILLS[sk] || [sk, '']; put(d[0], d[1]); });
+      sks.forEach((sk) => put(AD.skillName(sk, rank), AD.skillText(sk, rank)));
       const eq = AD.equipped(u);
       if (eq) {
-        const aid = AD.artId(eq.d), ad = aid && AD.ARTS[aid];
+        const aid = AD.artId(eq.d), ad = aid && AD.scaleArt(AD.ARTS[aid], AD.artLevel(u, eq.d));
         if (ad) put('Art: ' + ad.n, ad.cost + ' uses. ' + ad.desc, C.gold);
         const fx = AD.fxText(eq.d);
         if (fx) put('On hit', fx + ' (' + eq.d.n + ')', C.teal);
       }
+      AD.SLOTS.forEach((sl) => { const d = u.gear && u.gear[sl] && AD.ITEMS[u.gear[sl]]; if (d) put(d.n, d.desc, C.teal); });
       Object.keys(u.st || {}).forEach((k) => put(AD.STATUS[k].n, AD.STATUS[k].desc, AD.STATUS[k].c));
       G.text(ctx, '\u25c4\u25ba page   \u25b2\u25bc unit', W - 8, H - 15, C.dim, { align: 'right' });
       return;
@@ -6155,10 +7101,12 @@ window.AD = window.AD || {};
     if (this.page === 0) {
       G.panel(ctx, 138, 8, 124, 128);
       G.text(ctx, 'Stats', 145, 13, C.gold);
+      // gear counts, and shows in teal where it helps
+      const gs = u.gs || (u.gear ? AD.game.gearStats(u) : {});
       STAT_KEYS.forEach((k, j) => {
-        const v = u.stats[k] + ((u.mod && u.mod[k]) || 0);
+        const v = u.stats[k] + ((u.mod && u.mod[k]) || 0) + (gs[k] || 0);
         G.text(ctx, STAT_NAMES[k], 145, 27 + j * 12, C.gray);
-        G.text(ctx, String(v), 186, 27 + j * 12, C.cream, { align: 'right', mono: true });
+        G.text(ctx, String(v), 186, 27 + j * 12, gs[k] > 0 ? C.teal : gs[k] < 0 ? C.rose : C.cream, { align: 'right', mono: true });
         G.bar(ctx, 192, 30 + j * 12, 62, 3, v / 30, C.gold);
       });
       G.text(ctx, 'Mov', 145, 27 + 7 * 12, C.gray); G.text(ctx, String(u.mov), 186, 27 + 7 * 12, C.cream, { align: 'right', mono: true });
@@ -6172,9 +7120,17 @@ window.AD = window.AD || {};
         const d = AD.ITEMS[it.id]; if (!d) return;
         let n = d.n;
         while (G.measure(n) > 80 && n.length > 4) n = n.slice(0, -2) + '\u2026';
-        G.icon(ctx, d.weapon ? d.t : d.song ? 'song' : 'item', 275, 27 + k * 13);
+        G.icon(ctx, AD.iconOf(d), 275, 27 + k * 13);
         G.text(ctx, n, 287, 27 + k * 13, k === u.eq ? C.gold : C.cream);
         G.text(ctx, String(it.uses), 386, 27 + k * 13, C.gray, { align: 'right', mono: true });
+      });
+      // what they wear
+      AD.SLOTS.forEach((sl, k) => {
+        const d = u.gear && u.gear[sl] && AD.ITEMS[u.gear[sl]];
+        let n = d ? d.n : '-';
+        while (G.measure(n) > 96 && n.length > 4) n = n.slice(0, -2) + '\u2026';
+        G.icon(ctx, sl, 275, 96 + k * 11);
+        G.text(ctx, n, 287, 96 + k * 11, d ? C.teal : C.dim);
       });
     } else {
       G.panel(ctx, 138, 8, 254, 128);
@@ -6223,7 +7179,7 @@ window.AD = window.AD || {};
     const h = rows.length, w = Math.max(...rows.map((r) => r.length));
     rows.forEach((r) => { while (r.length < w) r.push('.'); });
     return {
-      w, h, rows, biome: def.biome || 'city', night: !!def.night, weather: def.weather || null, fog: !!def.fog,
+      w, h, rows, biome: def.biome || 'city', scene: def.scene || null, night: !!def.night, weather: def.weather || null, fog: !!def.fog,
       at(x, y) { return x < 0 || y < 0 || x >= w || y >= h ? null : rows[y][x]; },
       set(x, y, ch) { if (x >= 0 && y >= 0 && x < w && y < h) rows[y][x] = ch; },
     };
@@ -6267,8 +7223,10 @@ window.AD = window.AD || {};
     return e || ws[0];
   }
   AD.equipped = equipped;
+  // a skill's value at the unit's rank: I, II or III
+  const rk = (u, a, b, c) => [a, b, c][AD.skillRank(u) - 1];
   function stat(u, k) {
-    let v = (u.stats[k] || 0) + ((u.mod && u.mod[k]) || 0);
+    let v = (u.stats[k] || 0) + ((u.mod && u.mod[k]) || 0) + ((u.gs && u.gs[k]) || 0);
     if (k === 'spd' && u.st && u.st.chill) v -= 4;
     // a friend on your back slows you down
     if (u.carry && (k === 'spd' || k === 'skl') && !has(u, 'shelter')) v = Math.floor(v / 2);
@@ -6282,17 +7240,19 @@ window.AD = window.AD || {};
     const a = id && AD.ARTS[id];
     if (!a) return null;
     if (u.team === 'p' && (!u.items[wo.i] || u.items[wo.i].uses < a.cost)) return null;
-    return Object.assign({ id }, a);
+    return Object.assign({ id }, AD.scaleArt(a, AD.artLevel(u, wo.d)));
   }
   AD.artFor = artFor;
 
   function initUnit(u) {
     u.uid = ++UID;
-    u.mhp = u.mhp || u.stats.hp;
+    u.gs = u.gear ? AD.game.gearStats(u) : null;
+    const gear = (k) => (u.gs && u.gs[k]) || 0;
+    u.mhp = u.mhp || u.stats.hp + gear('hp');
     if (u.hp === undefined) u.hp = u.mhp;
     u.mod = u.mod || {};
-    u.mov = cls(u).mov + (has(u, 'fastest') ? 2 : 0) + (u.movBonus || 0);
-    u.bp = u.bp === undefined ? 1 : u.bp;
+    u.mov = cls(u).mov + (has(u, 'fastest') ? 2 : 0) + (has(u, 'slip') && AD.skillRank(u) >= 3 ? 1 : 0) + (u.movBonus || 0) + gear('mov');
+    u.bp = u.bp === undefined ? 1 + gear('bp') : u.bp;
     u.eq = u.eq || 0;
     const e = equipped(u);
     if (e) u.eq = e.i;
@@ -6304,8 +7264,8 @@ window.AD = window.AD || {};
     const u = {
       id: rec.id, name: d.name, team: 'p', cls: rec.cls, lv: rec.lv, exp: rec.exp,
       stats: Object.assign({}, rec.stats), items: rec.items.map((i) => Object.assign({}, i)),
-      wexp: Object.assign({}, rec.wexp), skills: rec.skills.slice(), rec, glow: d.glow,
-      look: (d.looks[rec.cls] || d.looks[d.cls] || Object.values(d.looks)[0]), movBonus: rec.movBonus || 0, lord: d.lord,
+      wexp: Object.assign({}, rec.wexp), skills: rec.skills.slice(), rec, glow: d.glow, gear: Object.assign({}, rec.gear),
+      look: AD.lookFor(rec), movBonus: rec.movBonus || 0, lord: d.lord,
     };
     u.port = AD.portFor(rec.id, rec);
     return initUnit(u);
@@ -6414,6 +7374,15 @@ window.AD = window.AD || {};
   B.carrierOf = function (o) { return this.units.find((u) => u.id === o.carriedBy && u.carry === o.id && !u.dead && !u.gone) || null; };
   // rooted units stay put
   B.movOf = function (u) { return u.st && u.st.root ? 0 : u.mov; };
+  // after a level or a promotion: gear that grows with its wearer, and the body it is worn on
+  B.regear = function (u) {
+    if (!u.gear) return;
+    const before = (u.gs && u.gs.hp) || 0;
+    u.gs = AD.game.gearStats(u);
+    u.mhp = u.stats.hp + (u.gs.hp || 0);
+    u.hp = Math.min(u.mhp, u.hp + Math.max(0, (u.gs.hp || 0) - before));
+    u.mov = cls(u).mov + (has(u, 'fastest') ? 2 : 0) + (has(u, 'slip') && AD.skillRank(u) >= 3 ? 1 : 0) + (u.movBonus || 0) + (u.gs.mov || 0);
+  };
   B.lord = function () { return this.units.find((u) => u.lord && !u.dead && !u.gone && u.team === 'p') || this.units.find((u) => u.lord && !u.dead && !u.gone); };
   B.terrain = function (x, y) { return TL.info(this.map.at(x, y)); };
   B.visible = function (x, y) {
@@ -6514,63 +7483,73 @@ window.AD = window.AD || {};
       const sever = (w.sever || has(u, 'sever') || (useArt && useArt.sever));
       const ter = this.terrain(foe === d ? d.x : ax, foe === d ? d.y : ay);
       const fx = foe === d ? d.x : ax, fy = foe === d ? d.y : ay;
-      const near = (team, sk, r) => this.alive().some((o) => o !== u && friends(o, u) === (team === 'f') && has(o, sk) && man(o.x, o.y, ux, uy) <= r);
-      const nearFoe = (sk, r, X, Y) => this.alive().some((o) => !friends(o, u) && has(o, sk) && man(o.x, o.y, X, Y) <= r);
-      let mt = w.mt * (eff ? 2 : 1);
+      // personal weapons grow with their one wielder; Abarax's fastest of all
+      const grown = w.pers && u.team === 'p' ? Math.floor(AD.effLv(u) / (w.pers === 'abarax' ? 5 : 8)) : 0;
+      let mt = (w.mt + grown) * (eff ? 2 : 1);
       if (mag && bp) mt = Math.floor(mt * (1 + 0.5 * bp));
       let atk = (mag ? stat(u, 'mag') : stat(u, 'str')) + mt + t;
       const lordNear = this.lord() && man(this.lord().x, this.lord().y, ux, uy) === 1;
-      if (has(u, 'thirdblade') && lordNear) atk += 2;
-      if (u.lord && this.alive('p').some((o) => has(o, 'thirdblade') && man(o.x, o.y, ux, uy) === 1)) atk += 2;
+      if (has(u, 'thirdblade') && lordNear) atk += rk(u, 2, 3, 4);
+      const tb = u.lord && this.alive('p').find((o) => has(o, 'thirdblade') && man(o.x, o.y, ux, uy) === 1);
+      if (tb) atk += rk(tb, 2, 3, 4);
       const twin = this.alive().find((o) => o !== u && friends(o, u) && has(o, 'duet') && man(o.x, o.y, ux, uy) === 1);
-      if (has(u, 'duet') && twin) atk += 2;
-      if (has(u, 'lastworld')) atk += 2;
-      if (this.alive().some((o) => o !== u && o.team === u.team && has(o, 'charm') && man(o.x, o.y, ux, uy) <= 2)) atk += 2;
-      if (has(u, 'trample') && cls(foe).mt === 'foot') atk += 4;
+      if (has(u, 'duet') && twin) atk += rk(u, 2, 3, 4);
+      if (has(u, 'lastworld')) atk += rk(u, 2, 3, 4);
+      if (has(u, 'roseheart')) atk += rk(u, 2, 4, 6);
+      const charmer = this.alive().find((o) => o !== u && o.team === u.team && has(o, 'charm') && man(o.x, o.y, ux, uy) <= 2);
+      if (charmer) atk += rk(charmer, 2, 3, 4);
+      if (has(u, 'trample') && cls(foe).mt === 'foot') atk += rk(u, 4, 6, 8);
       if (useArt && useArt.mt) atk += useArt.mt;
-      let df = mag ? stat(foe, 'res') + (has(foe, 'ward') ? 4 : 0) : stat(foe, 'def') + (ter.def || 0);
-      if (has(foe, 'lastworld')) df += 2;
+      let df = mag ? stat(foe, 'res') + (has(foe, 'ward') ? rk(foe, 4, 6, 8) : 0) : stat(foe, 'def') + (ter.def || 0);
+      if (has(foe, 'lastworld')) df += rk(foe, 2, 3, 4);
       if (sever) df = Math.floor(df / 2);
       const hurt = (v) => Math.floor(Math.max(0, v) * (foe.broken ? 1.5 : 1));
       const dmg = hurt(atk - df);
       // Moon Bite halves what is left of the guard
       const dmgL = hurt(atk - Math.floor(df / 2));
-      let as = stat(u, 'spd') + (w.spd || 0) + (has(u, 'fastest') && initiating ? 3 : 0) - Math.max(0, (w.wt || 0) - stat(u, 'str'));
+      let as = stat(u, 'spd') + (w.spd || 0) + (has(u, 'fastest') && initiating ? rk(u, 3, 4, 5) : 0) - Math.max(0, (w.wt || 0) - stat(u, 'str'));
       let hit = w.hit + stat(u, 'skl') * 2 + Math.floor(stat(u, 'lck') / 2) + t * 15;
-      if (near('f', 'conviction', 2) || has(u, 'conviction')) hit += 10;
-      if (has(u, 'crowswatch') && this.lord() && man(this.lord().x, this.lord().y, ux, uy) <= 2) hit += 15;
-      if (has(u, 'regular') && lordNear) hit += 20;
-      if (has(u, 'duet') && twin) hit += 10;
-      if (has(u, 'abraxas') && mag) hit += 10;
+      const convo = has(u, 'conviction') ? u : this.alive().find((o) => o !== u && friends(o, u) && has(o, 'conviction') && man(o.x, o.y, ux, uy) <= 2);
+      if (convo) hit += rk(convo, 10, 15, 20);
+      if (has(u, 'crowswatch') && this.lord() && man(this.lord().x, this.lord().y, ux, uy) <= 2) hit += rk(u, 15, 20, 25);
+      if (has(u, 'regular') && lordNear) hit += rk(u, 20, 25, 30);
+      if (has(u, 'duet') && twin) hit += rk(u, 10, 15, 20);
+      if (has(u, 'abraxas') && mag) hit += rk(u, 10, 15, 20);
+      if (u.gs && u.gs.hit) hit += u.gs.hit;
       if (u.buff) hit += 20;
       if (u.st && u.st.blind) hit -= 25;
       const lone = !this.alive().some((o) => o !== u && o.team === u.team && man(o.x, o.y, ux, uy) === 1);
-      if (has(u, 'focus') && lone) hit += 10;
+      if (has(u, 'focus') && lone) hit += rk(u, 10, 15, 20);
       if (useArt && useArt.hit) hit += useArt.hit;
-      if (u.team === 'e' && nearFoe('threads', 2, ux, uy)) hit -= 15;
+      const weaver = u.team === 'e' && this.alive().find((o) => !friends(o, u) && has(o, 'threads') && man(o.x, o.y, ux, uy) <= 2);
+      if (weaver) hit -= rk(weaver, 15, 20, 25);
       if (u.team === 'p') hit += AD.game.supportBonus(u, ux, uy, this.alive('p')).hit;
       // foe avoid
       const fwo = foe === d ? dwo : aw;
       const fwd = fwo ? fwo.d : null;
       const fas = stat(foe, 'spd') + (fwd && fwd.spd ? fwd.spd : 0) - Math.max(0, (fwd ? fwd.wt : 0) - stat(foe, 'str'));
       let avo = fas * 2 + stat(foe, 'lck') + (ter.avo || 0);
-      const fNear = (sk, r) => this.alive().some((o) => o !== foe && friends(o, foe) && has(o, sk) && man(o.x, o.y, fx, fy) <= r);
-      if (fNear('conviction', 2) || has(foe, 'conviction')) avo += 10;
-      if (has(foe, 'crowswatch') && this.lord() && man(this.lord().x, this.lord().y, fx, fy) <= 2) avo += 15;
-      if (has(foe, 'nobodysees')) avo += 15;
-      if (has(foe, 'theway')) avo += 20;
+      const fConvo = has(foe, 'conviction') ? foe : this.alive().find((o) => o !== foe && friends(o, foe) && has(o, 'conviction') && man(o.x, o.y, fx, fy) <= 2);
+      if (fConvo) avo += rk(fConvo, 10, 15, 20);
+      if (has(foe, 'crowswatch') && this.lord() && man(this.lord().x, this.lord().y, fx, fy) <= 2) avo += rk(foe, 15, 20, 25);
+      if (has(foe, 'nobodysees')) avo += rk(foe, 15, 20, 25);
+      if (has(foe, 'theway')) avo += rk(foe, 20, 25, 30);
+      if (has(foe, 'roseheart')) avo += rk(foe, 10, 15, 20);
+      if (foe.gs && foe.gs.avo) avo += foe.gs.avo;
       if (fwd && fwd.avo) avo += fwd.avo;
       if (foe.buff) avo += 20;
-      if (fNear('mindvoice', 3)) avo += 5;
-      if (has(foe, 'regular') && this.lord() && man(this.lord().x, this.lord().y, fx, fy) === 1) avo += 20;
+      const voice = this.alive().find((o) => o !== foe && friends(o, foe) && has(o, 'mindvoice') && man(o.x, o.y, fx, fy) <= 3);
+      if (voice) avo += rk(voice, 5, 8, 10);
+      if (has(foe, 'regular') && this.lord() && man(this.lord().x, this.lord().y, fx, fy) === 1) avo += rk(foe, 20, 25, 30);
       if (foe.team === 'p') avo += AD.game.supportBonus(foe, fx, fy, this.alive('p')).avo;
       if (foe.broken) avo = 0;
       const shown = useArt && useArt.sure ? 100 : AD.clamp(hit - avo, 0, 100);
       let crit = w.crt + Math.floor(stat(u, 'skl') / 2) + (u.items.some((i) => i.id === 'ring') ? 10 : 0);
-      if (has(u, 'wrath') && u.hp * 2 < u.mhp) crit += 20;
-      if (has(u, 'focus') && lone) crit += 15;
+      if (has(u, 'wrath') && u.hp * 2 < u.mhp) crit += rk(u, 20, 30, 40);
+      if (has(u, 'focus') && lone) crit += rk(u, 15, 20, 25);
       if (useArt && useArt.crit) crit += useArt.crit;
-      let cavo = stat(foe, 'lck') + (fNear('mindvoice', 3) ? 10 : 0);
+      if (u.gs && u.gs.crit) crit += u.gs.crit;
+      let cavo = stat(foe, 'lck') + (voice ? rk(voice, 10, 15, 20) : 0) + ((foe.gs && foe.gs.ddg) || 0);
       if (sever) cavo = 0;
       const critP = AD.clamp(crit - cavo, 0, 100);
       return { w, wo, dmg, dmgL, atk, sever: !!sever, hit: shown, crit: critP, as, tri: t, eff, mag, brave: !!w.brave, strikes: useArt && useArt.strikes };
@@ -6583,9 +7562,9 @@ window.AD = window.AD || {};
     let aDouble = A && Dd ? A.as >= (dCan ? Dd.as : stat(d, 'spd')) + 4 && !has(d, 'heavyweight') : A && A.as >= stat(d, 'spd') + 4 && !has(d, 'heavyweight');
     if (art && art.strikes) aDouble = false;
     let dDouble = dCan && Dd.as >= A.as + 4 && !has(a, 'heavyweight');
-    if (dCan && has(d, 'quickriposte') && d.hp * 2 >= d.mhp && !has(a, 'heavyweight')) dDouble = true;
+    if (dCan && has(d, 'quickriposte') && d.hp >= d.mhp * rk(d, 0.5, 0.4, 0.25) && !has(a, 'heavyweight')) dDouble = true;
     // First Word: a wounded defender answers before the blow lands
-    const vantage = dCan && has(d, 'vantage') && d.hp * 2 < d.mhp;
+    const vantage = dCan && has(d, 'vantage') && d.hp < d.mhp * rk(d, 0.5, 0.6, 0.75);
     return { a, d, A, D: dCan ? Dd : null, aDouble, dDouble, vantage, boost: art ? 0 : boost || 0, dist, art: art || null };
   };
 
@@ -6622,21 +7601,24 @@ window.AD = window.AD || {};
       const ev = { who, hit, crit, dmg: 0, before: def.hp, mag: S.mag, type: S.w.t };
       if (who === 'a' && art && !used.a) ev.art = art.n;
       let base = S.dmg;
-      if (hit && has(att, 'luna') && AD.rn100() < stat(att, 'skl')) { base = S.dmgL; ev.luna = true; }
+      // rank II and III skills fire more often
+      const odds = (u, k) => stat(u, k) * rk(u, 1, 1.25, 1.5);
+      if (hit && has(att, 'luna') && AD.rn100() < odds(att, 'skl')) { base = S.dmgL; ev.luna = true; }
       let dmg = hit ? base * (crit ? 3 : 1) : 0;
-      if (hit && dmg && has(def, 'pavise') && man(a.x, a.y, d.x, d.y) === 1 && AD.rn100() < stat(def, 'skl')) { dmg = Math.floor(dmg / 2); ev.pavise = true; }
+      if (hit && dmg && has(def, 'pavise') && man(a.x, a.y, d.x, d.y) === 1 && AD.rn100() < odds(def, 'skl')) { dmg = Math.floor(dmg / 2); ev.pavise = true; }
       // iron skin: first hit each enemy phase
-      if (hit && has(def, 'ironskin') && this.phase === 'e' && !def.skinUsed) { dmg = Math.floor(dmg / 2); def.skinUsed = true; }
+      if (hit && has(def, 'ironskin') && this.phase === 'e' && !def.skinUsed) { dmg = Math.floor(dmg / rk(def, 2, 3, 4)); def.skinUsed = true; }
       if (def.gentle !== undefined || att.gentle) { if (dmg >= def.hp) dmg = def.hp - 1; }
       const before = def.hp;
-      let getup = false;
-      if (hit && dmg >= def.hp && has(def, 'getup') && !def.gotUp) { dmg = def.hp - 1; def.gotUp = true; getup = true; }
+      const getup = hit && this.getUp(def, dmg);
+      if (getup) dmg = def.hp - 1;
       def.hp = Math.max(0, def.hp - dmg);
+      if (getup && rk(def, 0, 1, 1)) { def.hp = Math.min(def.mhp, def.hp + Math.floor(def.mhp / 5)); }
       used[who]++;
       if (att.team === 'p') {
         // an art is paid for on its first strike; the rest of a many-strike art comes with it
         const cost = ev.art ? art.cost : who === 'a' && art && art.strikes ? 0 : 1;
-        if (has(att, 'thrift') && AD.rn100() < stat(att, 'lck')) ev.thrift = true;
+        if (has(att, 'thrift') && AD.rn100() < stat(att, 'lck') * rk(att, 1, 1.5, 2)) ev.thrift = true;
         else att.items[wo.i].uses = Math.max(0, att.items[wo.i].uses - cost);
       }
       dealt[who] += dmg;
@@ -6647,6 +7629,7 @@ window.AD = window.AD || {};
         const matches = def.weak.indexOf(S.w.t) >= 0 || (S.w.t === 'all' && def.weak.some((w) => AD.GIFT.indexOf(w) >= 0)) || def.weak.indexOf('all') >= 0 && S.w.t === 'all';
         let chip = matches ? 1 + (S.mag && who === 'a' ? fc.boost : 0) : 0;
         if (has(att, 'twofingers') && AD.rn100() < 30) { chip = def.shield; ev.stop = true; }
+        if (who === 'a' && art && art.shatter) { chip = def.shield; ev.stop = true; }
         if (chip) {
           AD.game.learnWeak(def, S.w.t);
           def.shield = Math.max(0, def.shield - chip);
@@ -6660,7 +7643,7 @@ window.AD = window.AD || {};
       let heal = 0;
       if (hit && S.w.drain) heal += Math.floor(dmg / 2);
       if (hit && who === 'a' && art && art.drain) heal += dmg;
-      if (hit && dmg && has(att, 'sol') && AD.rn100() < stat(att, 'skl')) { heal += Math.floor(dmg / 2); ev.sol = true; }
+      if (hit && dmg && has(att, 'sol') && AD.rn100() < odds(att, 'skl')) { heal += rk(att, 0, 0, 1) ? dmg : Math.floor(dmg / 2); ev.sol = true; }
       if (heal) { const h = Math.min(att.mhp - att.hp, heal); att.hp += h; ev.healed = h; }
       // what the weapon does besides hurt
       if (hit && def.hp > 0) {
@@ -6670,7 +7653,7 @@ window.AD = window.AD || {};
         let st = null;
         if (who === 'a' && art && art.st) st = [art.st, art.stN || 1];
         else if (roll && fx.st) st = [fx.st, fx.n || 1];
-        else if (S.mag && has(att, 'kindle')) st = ['burn', 1];
+        else if (has(att, 'kindle') && (S.mag || rk(att, 0, 0, 1))) st = ['burn', rk(att, 1, 2, 2)];
         if (st && this.inflict(def, st[0], st[1])) ev.status = st[0];
       }
       ev.aHp = a.hp; ev.dHp = d.hp;
@@ -6693,6 +7676,7 @@ window.AD = window.AD || {};
     const out = { hits: [], spread: [] };
     // damage that spills onto the foes beside the target
     let share = art && art.splash ? art.splash : 0, chain = false;
+    if (!share && art && art.chain) { share = art.chain; chain = true; }
     if (!share && fxProc && fx.chain) { share = fx.chain; chain = true; }
     if (share) {
       let near = this.besideFoe(a, d);
@@ -6702,16 +7686,16 @@ window.AD = window.AD || {};
         let dmg = Math.floor(Math.max(0, A.atk - (A.sever ? Math.floor(df / 2) : df)) * share);
         // allies the story needs are never finished off by a stray blow
         if ((o.gentle !== undefined || a.gentle || o.team === 'a') && dmg >= o.hp) dmg = o.hp - 1;
-        let getup = false;
-        if (dmg >= o.hp && has(o, 'getup') && !o.gotUp) { dmg = o.hp - 1; o.gotUp = true; getup = true; }
+        const getup = this.getUp(o, dmg);
+        if (getup) dmg = o.hp - 1;
         o.hp = Math.max(0, o.hp - dmg);
         out.hits.push({ u: o, dmg, getup, chain });
       });
     }
     if (art && art.spread && art.st) this.besideFoe(a, d).forEach((o) => { if (o.hp > 0 && this.inflict(o, art.st, art.stN || 1)) out.spread.push({ u: o, st: art.st }); });
     // a push or a pull moves the target one tile, if there is room
-    if (d.hp > 0 && ((art && art.push) || (fxProc && (fx.push || fx.pull)))) {
-      const pull = !(art && art.push) && fx.pull;
+    if (d.hp > 0 && ((art && (art.push || art.pull)) || (fxProc && (fx.push || fx.pull)))) {
+      const pull = art && (art.push || art.pull) ? !!art.pull : !!fx.pull;
       const ddx = d.x - a.x, ddy = d.y - a.y;
       const [sx, sy] = Math.abs(ddx) >= Math.abs(ddy) ? [Math.sign(ddx), 0] : [0, Math.sign(ddy)];
       const tx = d.x + (pull ? -sx : sx), ty = d.y + (pull ? -sy : sy);
@@ -6721,9 +7705,16 @@ window.AD = window.AD || {};
     }
     return out;
   };
+  // Get Up: once a battle, twice at rank III
+  B.getUp = function (u, dmg) {
+    if (dmg < u.hp || !has(u, 'getup')) return false;
+    if ((u.getups || 0) >= rk(u, 1, 1, 2) || (u.gotUp && !u.getups)) return false;
+    u.getups = (u.getups || 0) + 1; u.gotUp = true;
+    return true;
+  };
   // a status takes hold unless the mind is clear; it lasts through the victim's next own phase
   B.inflict = function (u, k, n) {
-    if (!u || u.hp <= 0 || has(u, 'ward') || !AD.STATUS[k]) return false;
+    if (!u || u.hp <= 0 || has(u, 'ward') || (u.gs && u.gs.ward) || !AD.STATUS[k]) return false;
     u.st = u.st || {};
     const dur = (n || 1) + (this.phase === u.team ? 1 : 0);
     u.st[k] = Math.max(u.st[k] || 0, dur);
@@ -7086,6 +8077,7 @@ window.AD = window.AD || {};
     u.done = true; u.acted = false;
     if (u.galeReady) {
       u.galeReady = false; u.galeUsed = true; u.done = false;
+      if (rk(u, 0, 0, 1)) u.bp = Math.min(5, u.bp + 1);
       AD.audio.sfx('bloom');
       AD.fx.float('GALEFORCE', u.x * TS + HT, u.y * TS - 12, C.teal, { life: 80 });
     }
@@ -7222,7 +8214,7 @@ window.AD = window.AD || {};
     // a kill on your own turn: seconds, or another go
     const killed = (d.hp <= 0 && d.team !== a.team) || fallen.length;
     if (killed && a.hp > 0 && a.team === 'p') {
-      if (has(a, 'secondhelping') && a.hp < a.mhp) { const h = Math.min(a.mhp - a.hp, Math.ceil(a.mhp / 4)); a.hp += h; AD.fx.float('+' + h, a.x * TS + HT, a.y * TS, C.hp); AD.audio.sfx('heal'); }
+      if (has(a, 'secondhelping') && a.hp < a.mhp) { const h = Math.min(a.mhp - a.hp, Math.ceil(a.mhp * rk(a, 0.25, 0.34, 0.5))); a.hp += h; AD.fx.float('+' + h, a.x * TS + HT, a.y * TS, C.hp); AD.audio.sfx('heal'); }
       if (has(a, 'galeforce') && this.phase === 'p' && !a.galeUsed) a.galeReady = true;
     }
     for (const u of fallen) if (a.team === 'p' && a.hp > 0) await this.giveExp(a, Math.ceil(this.expFor(a, u, true, true) / 2));
@@ -7257,13 +8249,17 @@ window.AD = window.AD || {};
     if (u.exp >= 100) {
       u.exp -= 100;
       u.lv++;
+      const rank0 = AD.skillRank(u);
       const gains = AD.game.levelUp(u);
+      this.regear(u);
       if (!AD.TEST) await AD.run(new LevelUp(this, u, gains));
       if (u.lv >= cap) u.exp = 0;
+      // a deeper level can turn every skill up a rank
+      if (AD.skillRank(u) > rank0 && u.skills.some(AD.skillScales)) await AD.notice(u.name + '\'s skills reach rank ' + AD.RN[AD.skillRank(u) - 1] + '.\n' + u.skills.filter(AD.skillScales).map((k) => AD.skillName(k, AD.skillRank(u))).join(', '), { icon: 'star' });
       const got = AD.game.learn(u);
       if (got.length) {
         AD.audio.sfx('levelup');
-        const sk = u.skills.slice(-got.length).map((k) => AD.SKILLS[k][0] + ': ' + AD.SKILLS[k][1]).join('\n');
+        const r = AD.skillRank(u), sk = u.skills.slice(-got.length).map((k) => AD.skillName(k, r) + ': ' + AD.skillText(k, r)).join('\n');
         await AD.notice(u.name + ' learned ' + got.join(' and ') + '!\n' + sk, { icon: 'star' });
       }
     }
@@ -7301,7 +8297,7 @@ window.AD = window.AD || {};
   B.giveItem = async function (u, it) {
     const d = AD.ITEMS[it.id];
     if (!d) return;
-    if (u.items.length < 5) { u.items.push(Object.assign({}, it)); await AD.notice('Got ' + d.n + '.', { icon: d.weapon ? d.t : d.song ? 'song' : 'item' }); }
+    if (u.items.length < 5) { u.items.push(Object.assign({}, it)); await AD.notice('Got ' + d.n + '.', { icon: AD.iconOf(d) }); }
     else { AD.game.toConvoy(it); await AD.notice(d.n + ' was sent to the convoy.', { icon: 'item' }); }
     AD.audio.sfx('chest');
   };
@@ -7324,7 +8320,7 @@ window.AD = window.AD || {};
     u.items[so.i].uses--;
     AD.audio.sfx(so.d.range === 'fold' ? 'warp' : 'heal');
     const healAmt = (o) => {
-      let h = stat(u, 'mag') + so.d.heal + (has(u, 'warmhands') ? 10 : 0);
+      let h = stat(u, 'mag') + so.d.heal + (has(u, 'warmhands') ? rk(u, 10, 15, 20) : 0);
       if (so.d.id === 'duet' && this.alive('p').some((x) => x !== u && (x.id === 'noella' || x.id === 'sierra' || x.id === 'selenne') && man(x.x, x.y, o.x, o.y) <= 1)) h += 10;
       return h;
     };
@@ -7465,7 +8461,7 @@ window.AD = window.AD || {};
   };
   // casters and singers tend the friend they carry, once a turn
   B.canMend = function (u) { const o = this.carried(u); return !!o && tender(u) && o.hp < o.mhp && !sealed(u); };
-  B.mendAmt = function (u) { return 10 + Math.floor(stat(u, 'mag') / 2) + (has(u, 'warmhands') ? 10 : 0); };
+  B.mendAmt = function (u) { return 10 + Math.floor(stat(u, 'mag') / 2) + (has(u, 'warmhands') ? rk(u, 10, 15, 20) : 0); };
   B.rescueFlow = async function (u) {
     const t = await this.pickTarget(u, this.rescuable(u), (o) => 'Rescue ' + o.name + '  HP ' + o.hp + '/' + o.mhp);
     if (!t) return false;
@@ -7537,7 +8533,7 @@ window.AD = window.AD || {};
       const v = await AD.menu({
         title: u.name, items: u.items.map((it, i) => {
           const d = AD.ITEMS[it.id];
-          return { label: d.n, value: i, icon: d.weapon ? d.t : d.song ? 'song' : 'item', right: it.uses, help: d.weapon ? AD.weaponHelp(d) : d.desc || '', color: i === u.eq && d.weapon ? C.gold : undefined };
+          return { label: d.n, value: i, icon: AD.iconOf(d), right: it.uses, help: d.weapon ? AD.weaponHelp(d) : d.desc || '', color: i === u.eq && d.weapon ? C.gold : undefined };
         }),
       });
       if (v === null) return;
@@ -7671,9 +8667,14 @@ window.AD = window.AD || {};
       const t = this.terrain(u.x, u.y);
       if (t.heal) heal += Math.floor((u.mhp * t.heal) / 100);
       if (has(u, 'regen')) heal += Math.floor(u.mhp / 5);
+      if (u.gs && u.gs.regen) heal += Math.floor((u.mhp * u.gs.regen) / 100);
       const lord = this.lord();
-      if (lord && lord !== u && friends(u, lord) && has(lord, 'openhand') && man(u.x, u.y, lord.x, lord.y) === 1) heal += 3;
-      if (this.alive().some((o) => o !== u && friends(o, u) && has(o, 'bloomground') && man(o.x, o.y, u.x, u.y) <= 2)) heal += 5;
+      if (lord && lord !== u && friends(u, lord) && has(lord, 'openhand') && man(u.x, u.y, lord.x, lord.y) === 1) heal += rk(lord, 3, 5, 8);
+      const bloom = this.alive().find((o) => o !== u && friends(o, u) && has(o, 'bloomground') && man(o.x, o.y, u.x, u.y) <= 2);
+      if (bloom) heal += rk(bloom, 5, 8, 12);
+      // Shelter II and III: the one being carried mends on the way
+      const cargo = this.carried(u);
+      if (cargo && has(u, 'shelter') && rk(u, 0, 1, 1) && cargo.hp < cargo.mhp) cargo.hp = Math.min(cargo.mhp, cargo.hp + Math.ceil(cargo.mhp * rk(u, 0, 0.1, 0.2)));
       heal = Math.min(heal, u.mhp - u.hp);
       if (heal > 0 && u.hp > 0) { u.hp += heal; AD.fx.float('+' + heal, u.x * TS + HT, u.y * TS, C.hp); }
       // burning eats a tenth of the body, never the last of it
@@ -7686,7 +8687,7 @@ window.AD = window.AD || {};
       if (u.silenced) u.silenced = Math.max(0, u.silenced - 1);
       u.buff = 0;
       if (ph === 'p' && u.team === 'p') { if (!u.boosted) u.bp = Math.min(5, u.bp + 1); u.boosted = false; }
-      if (ph === 'p' && u.lord && this.ch.getupEveryTurn) u.gotUp = false;
+      if (ph === 'p' && u.lord && this.ch.getupEveryTurn) { u.gotUp = false; u.getups = 0; }
       // break recovery
       if (u.broken) {
         if (u.brokeSkip > 0) { u.brokeSkip--; u.skipThis = true; }
@@ -7752,7 +8753,7 @@ window.AD = window.AD || {};
       if (best) {
         await this.centerOn(u.x, u.y);
         await this.walk(u, this.pathTo(reach, best.v.x, best.v.y));
-        const h = Math.min(best.o.mhp - best.o.hp, stat(u, 'mag') + best.so.d.heal + (has(u, 'warmhands') ? 10 : 0));
+        const h = Math.min(best.o.mhp - best.o.hp, stat(u, 'mag') + best.so.d.heal + (has(u, 'warmhands') ? rk(u, 10, 15, 20) : 0));
         best.o.hp += h; AD.audio.sfx('heal'); AD.fx.float('+' + h, best.o.x * TS + HT, best.o.y * TS, C.hp);
         await AD.wait(20);
         return;
@@ -7957,7 +8958,7 @@ window.AD = window.AD || {};
         case 'aggro': this.units.forEach((u) => { if (!a[1] || u.group === a[1]) { if (u.ai === 'wait' || u.ai === 'hold' || u.ai === 'stay') u.ai = 'charge'; } }); break;
         case 'promote': {
           const u = this.units.find((x) => x.id === a[1] && !x.dead);
-          if (u) { AD.game.promote(u, a[2]); u.look = AD.UNITS[u.id].looks[a[2]] || u.look; u.port = AD.portFor(u.id, u); u.mov = cls(u).mov + (has(u, 'fastest') ? 2 : 0); AD.audio.sfx('levelup'); AD.fx.flash('#ffe8a0', 30); }
+          if (u) { AD.game.promote(u, a[2]); u.look = AD.lookFor(u); u.port = AD.portFor(u.id, u); this.regear(u); AD.audio.sfx('levelup'); AD.fx.flash('#ffe8a0', 30); }
           break;
         }
         case 'skill': { const u = this.units.find((x) => x.id === a[1]); if (u && !has(u, a[2])) { u.skills.push(a[2]); if (u.rec && u.rec.skills.indexOf(a[2]) < 0) u.rec.skills.push(a[2]); } break; }
@@ -8575,6 +9576,8 @@ window.AD = window.AD || {};
     this.shown = { [L.uid]: this.hp[L.uid], [R.uid]: this.hp[R.uid] };
     this.texts = []; this.parts = []; this.fx = []; this.ghosts = [];
     this.biome = TL.BI[bt.map.biome] || TL.BI.city;
+    // the fight happens where the one struck at is standing
+    this.scene = AD.backdrop.sceneAt(bt.map, fc.d.x, fc.d.y);
     const gr = this.biome.grass || this.biome.ground || '#8a8ea6';
     this.dustC = G.shade(gr, 0.25);
     // effects draw from their own generator so a duel never moves the game's dice
@@ -8834,7 +9837,7 @@ window.AD = window.AD || {};
     const [ox, oy] = AD.fx.offset();
     ctx.save();
     ctx.translate(ox, oy);
-    duelBackdrop(ctx, this.bt.map, b, this.t);
+    AD.backdrop.draw(ctx, this.bt.map, b, this.t, this.scene);
     if (this.dim > 0) { ctx.fillStyle = `rgba(5,4,14,${0.45 * Math.min(1, this.dim / 6)})`; ctx.fillRect(-8, -8, W + 16, H + 16); }
     // afterimages, then the fighters: whoever is striking is drawn in front
     this.ghosts.forEach((g) => {
@@ -8992,70 +9995,6 @@ window.AD = window.AD || {};
   Duel.prototype.opaque = true;
   AD.Duel = Duel;
 
-  // a painted strip behind the duel, chosen by the map's biome and time of day
-  function duelBackdrop(ctx, map, b, t) {
-    const night = map.night;
-    const HZ = DGY - 16;
-    const SKY = {
-      city: ['#7a8ab8', '#d8d0e0'], coast: ['#5a9ad8', '#e8e0c8'], hills: ['#e8b878', '#f8e0b0'], vale: ['#6aa8e0', '#e0ecf0'],
-      marble: ['#e8a868', '#f8e8c8'], garden: ['#3a2a7a', '#a88ad8'], spire: ['#5a6a7a', '#b8c0c8'], flats: ['#1a0a14', '#4a1a24'],
-      interior: ['#2a1a14', '#5a3a2a'], dungeon: ['#0a0a12', '#2a2a36'], salt: ['#a8c8e8', '#f4f8fc'],
-    }[map.biome] || ['#7a8ab8', '#d8d0e0'];
-    const sky = night && map.biome !== 'garden' && map.biome !== 'flats' ? ['#070a22', '#26284a'] : SKY;
-    const g = ctx.createLinearGradient(0, 0, 0, HZ);
-    g.addColorStop(0, sky[0]); g.addColorStop(1, sky[1]);
-    ctx.fillStyle = g; ctx.fillRect(-8, -8, W + 16, HZ + 12);
-    if (night || map.biome === 'garden') for (let i = 0; i < 40; i++) { ctx.fillStyle = 'rgba(255,255,255,' + (0.3 + 0.4 * ((i * 7) % 3) / 2) + ')'; ctx.fillRect((i * 53) % W, (i * 29) % 80, 1, 1); }
-    if (map.biome === 'garden') { ctx.fillStyle = '#e8e8f8'; ctx.beginPath(); ctx.arc(76, 38, 15, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#d8784a'; ctx.beginPath(); ctx.arc(326, 50, 8, 0, Math.PI * 2); ctx.fill(); }
-    else if (night) { ctx.fillStyle = '#f0ecdc'; ctx.beginPath(); ctx.arc(312, 34, 10, 0, Math.PI * 2); ctx.fill(); }
-    // drifting clouds in daylight, slow enough to notice only if you look
-    if (!night && ['coast', 'vale', 'hills', 'city', 'salt', 'marble'].indexOf(map.biome) >= 0) {
-      for (let i = 0; i < 5; i++) {
-        const cx = ((i * 97 + t * 0.08) % (W + 80)) - 40, cy = 18 + (i * 23) % 40;
-        ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillRect(Math.round(cx), cy, 34, 5); ctx.fillRect(Math.round(cx) + 6, cy - 3, 18, 3);
-        ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(Math.round(cx) - 4, cy + 5, 40, 2);
-      }
-    }
-    const far = G.mix(sky[1], '#000000', night ? 0.55 : 0.3);
-    const near = G.mix(sky[1], '#000000', night ? 0.7 : 0.45);
-    const kind = map.biome;
-    if (kind === 'city') {
-      for (let i = 0; i < 15; i++) {
-        const x = i * 30 - 8, h = 36 + ((i * 37) % 34);
-        ctx.fillStyle = far; ctx.fillRect(x, HZ - h, 26, h);
-        ctx.fillStyle = G.shade(far, -0.2); ctx.fillRect(x + 2, HZ - h - 3, 22, 3);
-        if (night) for (let yy = HZ - h + 5; yy < HZ - 4; yy += 7) for (let xx = x + 3; xx < x + 23; xx += 6) if (((xx * 3 + yy * 7 + i) % 5) < 2) { ctx.fillStyle = (xx + yy) % 3 ? '#ffd88a' : '#ff8ac0'; ctx.fillRect(xx, yy, 2, 3); }
-      }
-    } else if (kind === 'coast' || kind === 'vale' || kind === 'hills') {
-      ctx.fillStyle = far; ctx.beginPath(); ctx.moveTo(-8, HZ - 8); for (let x = 0; x <= W + 8; x += 16) ctx.lineTo(x, HZ - 28 + Math.sin(x / 48) * 12 + Math.sin(x / 15) * 3); ctx.lineTo(W + 8, HZ + 12); ctx.lineTo(-8, HZ + 12); ctx.fill();
-      if (kind === 'coast') { ctx.fillStyle = night ? '#1a2a4a' : '#3a7ab8'; ctx.fillRect(-8, HZ - 14, W + 16, 16); ctx.fillStyle = night ? '#2a3a5a' : '#6aa8d8'; for (let x = (t * 0.3) % 24 - 24; x < W; x += 24) ctx.fillRect(Math.round(x), HZ - 10, 8, 1); }
-      for (let i = 0; i < 11; i++) { const x = i * 38 + 6, y = HZ - 8 + (i % 3) * 3; ctx.fillStyle = near; ctx.beginPath(); ctx.moveTo(x, y - 22); ctx.lineTo(x + 8, y); ctx.lineTo(x - 8, y); ctx.fill(); }
-    } else if (kind === 'marble' || kind === 'spire') {
-      ctx.fillStyle = far; ctx.fillRect(-8, HZ - 46, W + 16, 48);
-      for (let i = 0; i < 18; i++) { ctx.fillStyle = G.shade(far, 0.15); ctx.fillRect(i * 24, HZ - 56, 7, 56); ctx.fillStyle = G.shade(far, -0.1); ctx.fillRect(i * 24 - 2, HZ - 59, 11, 3); }
-      if (kind === 'spire') { ctx.fillStyle = G.shade(far, 0.3); ctx.fillRect(188, 10, 24, HZ - 20); }
-    } else if (kind === 'garden') {
-      ctx.fillStyle = '#1a1428'; ctx.beginPath(); ctx.moveTo(-8, HZ - 14); ctx.lineTo(50, HZ - 46); ctx.lineTo(112, HZ - 18); ctx.lineTo(188, HZ - 56); ctx.lineTo(262, HZ - 20); ctx.lineTo(338, HZ - 50); ctx.lineTo(W + 8, HZ - 18); ctx.lineTo(W + 8, HZ + 4); ctx.lineTo(-8, HZ + 4); ctx.fill();
-      ctx.fillStyle = '#2a4a9a'; ctx.beginPath(); ctx.ellipse(200, HZ - 54, 50, 30, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#8a8a9a'; ctx.fillRect(195, HZ - 46, 10, 48);
-    } else if (kind === 'flats') {
-      ctx.fillStyle = '#120a12'; ctx.fillRect(150, HZ - 84, 100, 86); ctx.beginPath(); ctx.moveTo(138, HZ - 82); ctx.lineTo(200, HZ - 120); ctx.lineTo(262, HZ - 82); ctx.fill();
-      ctx.fillStyle = 'rgba(220,40,40,' + (0.6 + 0.3 * Math.sin(t / 20)) + ')'; ctx.beginPath(); ctx.arc(200, HZ - 54, 20, 0, Math.PI * 2); ctx.fill();
-    } else if (kind === 'interior' || kind === 'dungeon') {
-      ctx.fillStyle = far; ctx.fillRect(-8, 20, W + 16, HZ - 16);
-      for (let i = 0; i < 9; i++) { ctx.fillStyle = G.shade(far, -0.25); ctx.beginPath(); ctx.arc(i * 52 + 20, HZ - 54, 20, Math.PI, 0); ctx.fill(); ctx.fillRect(i * 52, HZ - 54, 40, 56); }
-      if (kind === 'interior') for (let i = 0; i < 8; i++) { const fl = Math.sin(t / 7 + i) > 0 ? 1 : 0; ctx.fillStyle = '#ffd88a'; ctx.fillRect(i * 56 + 24, HZ - 72 - fl, 4, 6 + fl); }
-    } else if (kind === 'salt') {
-      ctx.fillStyle = '#d8e4f0'; ctx.fillRect(-8, HZ - 10, W + 16, 12);
-    }
-    // ground: a band that recedes, with a few strokes of texture
-    const gr = b.plain === 'snowstone' || b.plain === 'snow' ? (night ? '#7a7e96' : '#c8ccd8') : b.grass || b.ground;
-    ctx.fillStyle = gr; ctx.fillRect(-8, HZ, W + 16, H - HZ + 8);
-    ctx.fillStyle = G.shade(gr, -0.25); ctx.fillRect(-8, HZ, W + 16, 2);
-    ctx.fillStyle = G.shade(gr, 0.06); ctx.fillRect(-8, DGY - 4, W + 16, 10);
-    for (let i = 0; i < 46; i++) { ctx.fillStyle = G.shade(gr, i % 2 ? -0.12 : 0.1); ctx.fillRect((i * 41) % W, HZ + 4 + (i * 7) % 30, 3 + (i % 3), 1); }
-  }
-
   // ---------------------------------------------------------------- trade scene
   AD.TradeScene = function (a, b) { this.a = a; this.b = b; this.side = 0; this.i = 0; this.held = null; };
   AD.TradeScene.prototype.update = function () {
@@ -9103,7 +10042,7 @@ window.AD = window.AD || {};
         if (this.side === s && this.i === i) G.pointer(ctx, x - 6, y - 1);
         if (!it) { G.text(ctx, '-', x + 22, y, C.dim); continue; }
         const d = AD.ITEMS[it.id];
-        G.icon(ctx, d.weapon ? d.t : d.song ? 'song' : 'item', x + 9, y);
+        G.icon(ctx, AD.iconOf(d), x + 9, y);
         G.text(ctx, d.n, x + 22, y, C.cream);
         G.text(ctx, String(it.uses), x + pw - 7, y, C.gray, { align: 'right', mono: true });
       }
@@ -9124,13 +10063,15 @@ window.AD = window.AD || {};
 
   GM.newGame = function (diff, classic) {
     GM.state = {
-      v: 1, diff, classic: !!classic, next: 'c1', done: {}, flags: {}, gold: 1200, roster: {}, party: [], dead: {},
-      convoy: [AD.item('stack'), AD.item('stack')], node: 'bilibara', time: 0, weak: {}, seen: {}, supports: {}, supportLv: {},
+      v: 1, diff, classic: !!classic, next: 'c1', done: {}, flags: { buff14: true, kit14: true }, gold: 1200, roster: {}, party: [], dead: {},
+      convoy: [AD.item('stack'), AD.item('stack')].concat(STARTER.map((id) => AD.item(id))), node: 'bilibara', time: 0, weak: {}, seen: {}, supports: {}, supportLv: {},
       sides: {}, dungeons: {}, secrets: {}, visited: {}, stole: {}, path: {},
     };
     GM.addUnit('abarax', true);
     return GM.state;
   };
+  // a first set of gear, so the slots are never empty for long
+  const STARTER = ['jerkin', 'tinring', 'silkscarf'];
   GM.diff = () => (GM.state ? GM.state.diff : 1);
   GM.classic = () => !!(GM.state && GM.state.classic);
   GM.record = (id) => GM.state && GM.state.roster[id] && !GM.state.dead[id] ? GM.state.roster[id] : null;
@@ -9158,6 +10099,63 @@ window.AD = window.AD || {};
   GM.knowsWeak = (u, t) => { const k = GM.weakKey(u); return !!(GM.state.weak[k] && GM.state.weak[k].indexOf(t) >= 0); };
   GM.price = function (base) { return Math.round(base * (GM.state.party.indexOf('xav') >= 0 && GM.record('xav') ? 0.9 : 1)); };
 
+  // ---------------------------------------------------------------- gear
+  GM.gearItems = (u) => AD.SLOTS.map((s) => u.gear && u.gear[s] && AD.ITEMS[u.gear[s]]).filter(Boolean);
+  // flat bonuses plus whatever has grown with the wearer
+  GM.gearStats = function (u) {
+    const o = {};
+    GM.gearItems(u).forEach((d) => {
+      Object.entries(d.st || {}).forEach(([k, v]) => { o[k] = (o[k] || 0) + v; });
+      if (d.grow) {
+        const n = Math.min(d.grow.cap, Math.floor(AD.effLv(u) / d.grow.every) * (d.grow.n || 1));
+        if (n > 0) (d.grow.k === 'all' ? AD.STAT_ORDER.filter((k) => k !== 'mov') : [d.grow.k]).forEach((k) => { o[k] = (o[k] || 0) + n; });
+      }
+    });
+    return o;
+  };
+  // put the gear on a look: armour over the clothes, an outfit instead of them, a trinket
+  AD.dress = function (L, gear) {
+    const items = AD.SLOTS.map((s) => gear && gear[s] && AD.ITEMS[gear[s]]).filter(Boolean);
+    if (!items.length || L.big) return L;
+    const o = Object.assign({}, L);
+    delete o.key;
+    const addEx = (e) => { o.extras = (o.extras || []).filter((x) => x !== e).concat([e]); };
+    items.forEach((d) => {
+      const w = d.wear || {};
+      if (d.gear === 'outfit') {
+        ['outfit', 'main', 'sec', 'acc', 'pants', 'cape'].forEach((k) => { if (w[k]) o[k] = w[k]; });
+        (w.extras || []).forEach(addEx);
+      } else if (d.gear === 'armor') {
+        o.armor = { pieces: w.pieces, plate: w.plate, trim: w.trim, chain: w.chain, glow: w.glow, stars: w.stars };
+        if (w.pieces.indexOf('mantle') >= 0) o.cape = w.plate;
+      } else if (w.trinket === 'scarf') { addEx('scarf'); o.scarf = w.c; }
+      else if (w.trinket === 'earring') { addEx('earring'); o.earC = w.c; }
+      else if (w.trinket === 'gloves') o.gloves = w.c;
+      else if (w.trinket === 'boots') o.boots = w.c;
+      else o.trinket = { kind: w.trinket, c: w.c, gem: w.gem };
+    });
+    return o;
+  };
+  // how a friend looks in their class, dressed in what they wear
+  const lookMemo = new Map();
+  AD.lookFor = function (rec, cls) {
+    const c = cls || rec.cls;
+    const key = rec.id + '|' + c + '|' + AD.SLOTS.map((sl) => (rec.gear && rec.gear[sl]) || '').join(',');
+    let L = lookMemo.get(key);
+    if (!L) {
+      const d = AD.UNITS[rec.id];
+      L = AD.dress(d.looks[c] || d.looks[d.cls] || Object.values(d.looks)[0], rec.gear);
+      lookMemo.set(key, L);
+    }
+    return L;
+  };
+  GM.equip = function (rec, slot, id) {
+    rec.gear = rec.gear || {};
+    if (rec.gear[slot]) GM.toConvoy(AD.item(rec.gear[slot]));
+    rec.gear[slot] = id || null;
+    if (id) { const i = GM.state.convoy.findIndex((it) => it.id === id); if (i >= 0) GM.state.convoy.splice(i, 1); }
+  };
+
   // ---------------------------------------------------------------- growth
   GM.levelUp = function (u) {
     const d = AD.UNITS[u.id];
@@ -9170,7 +10168,7 @@ window.AD = window.AD || {};
       let g = grow[k] + bonus, n = 0;
       while (g >= 100) { n++; g -= 100; }
       if (AD.rng() * 100 < g) n++;
-      if (k === 'hp') { const before = u.stats.hp; u.stats.hp = Math.min(70, u.stats.hp + n); n = u.stats.hp - before; u.mhp = u.stats.hp; u.hp = Math.min(u.mhp, u.hp + n); }
+      if (k === 'hp') { const before = u.stats.hp; u.stats.hp = Math.min(70, u.stats.hp + n); n = u.stats.hp - before; u.mhp = u.stats.hp + ((u.gs && u.gs.hp) || 0); u.hp = Math.min(u.mhp, u.hp + n); }
       else { const before = u.stats[k]; u.stats[k] = Math.min(cap, u.stats[k] + n); n = u.stats[k] - before; }
       if (n) gains[k] = n;
     });
@@ -9187,7 +10185,7 @@ window.AD = window.AD || {};
       if (u.skills.indexOf(sk) >= 0) return;
       u.skills.push(sk);
       if (u.rec && u.rec.skills.indexOf(sk) < 0) u.rec.skills.push(sk);
-      got.push(AD.SKILLS[sk][0]);
+      got.push(AD.skillName(sk, AD.skillRank(u)));
     });
     return got;
   };
@@ -9239,7 +10237,7 @@ window.AD = window.AD || {};
       if (!c.promo || u.lv < 10) { await AD.notice(c.promo ? 'Reach level 10 first.' : 'Already as far as this road goes.'); return false; }
       if (!await AD.confirm('Promote ' + u.name + ' to ' + AD.CLASSES[c.promo].n + '?')) return false;
       GM.promote(u, c.promo);
-      if (battle) { u.look = AD.UNITS[u.id].looks[u.cls] || u.look; u.port = AD.portFor(u.id, u); u.mov = AD.CLASSES[u.cls].mov + (u.movBonus || 0); }
+      if (battle) { u.look = AD.lookFor(u); u.port = AD.portFor(u.id, u); battle.regear(u); }
       AD.audio.sfx('levelup'); AD.fx.flash('#ffe8a0', 30);
       await AD.notice(u.name + ' became a ' + AD.CLASSES[u.cls].n + '!' + (GM.lastLearned && GM.lastLearned.length ? '\nLearned ' + GM.lastLearned.join(' and ') + '.' : ''), { icon: 'star' });
       used = true;
@@ -9253,13 +10251,14 @@ window.AD = window.AD || {};
 
   GM.supply = async function (u) {
     for (;;) {
-      const v = await AD.menu({ title: 'Convoy (' + GM.state.convoy.length + ')', items: [{ label: 'Take', value: 'take', enabled: GM.state.convoy.length > 0 && u.items.length < 5 }, { label: 'Give', value: 'give', enabled: u.items.length > 0 }] });
+      const v = await AD.menu({ title: 'Convoy (' + GM.state.convoy.length + ')', items: [{ label: 'Take', value: 'take', enabled: GM.state.convoy.some((it) => AD.ITEMS[it.id] && !AD.ITEMS[it.id].gear) && u.items.length < 5 }, { label: 'Give', value: 'give', enabled: u.items.length > 0 }] });
       if (v === null) return;
       if (v === 'take') {
-        const k = await AD.menu({ title: 'Take', max: 9, items: GM.state.convoy.map((it, i) => { const d = AD.ITEMS[it.id]; return { label: d.n, value: i, icon: d.weapon ? d.t : d.song ? 'song' : 'item', right: it.uses }; }) });
+        // gear is worn, not carried: it stays in the convoy for the wardrobe
+        const k = await AD.menu({ title: 'Take', max: 9, items: GM.state.convoy.map((it, i) => ({ it, i, d: AD.ITEMS[it.id] })).filter((o) => !o.d.gear).map(({ it, i, d }) => ({ label: d.n, value: i, icon: AD.iconOf(d), right: it.uses })) });
         if (k !== null) { u.items.push(GM.state.convoy.splice(k, 1)[0]); AD.audio.sfx('select'); }
       } else {
-        const k = await AD.menu({ title: 'Give', items: u.items.map((it, i) => { const d = AD.ITEMS[it.id]; return { label: d.n, value: i, icon: d.weapon ? d.t : d.song ? 'song' : 'item', right: it.uses }; }) });
+        const k = await AD.menu({ title: 'Give', items: u.items.map((it, i) => { const d = AD.ITEMS[it.id]; return { label: d.n, value: i, icon: AD.iconOf(d), right: it.uses }; }) });
         if (k !== null) { GM.state.convoy.push(u.items.splice(k, 1)[0]); AD.audio.sfx('select'); }
       }
       if (u.eq !== undefined) { const e = AD.equipped(u); u.eq = e ? e.i : 0; }
@@ -9408,7 +10407,7 @@ window.AD = window.AD || {};
       map: battle.map.rows.map((r) => r.join('')),
       units: battle.units.filter((u) => !u.gone || u.lord).map((u) => {
         const o = {};
-        ['id', 'name', 'team', 'cls', 'lv', 'exp', 'stats', 'items', 'wexp', 'skills', 'ai', 'boss', 'drop', 'x', 'y', 'hp', 'mhp', 'mod', 'bp', 'eq', 'shield', 'mshield', 'weak', 'broken', 'brokeSkip', 'done', 'dead', 'gone', 'gotUp', 'group', 'wake', 'portId', 'talk', 'glow', 'npc', 'movBonus', 'lord', 'st', 'carry', 'carriedBy', 'silenced', 'galeUsed', 'gentle', 'spare', 'deathLine', 'recruit', 'fleeTo'].forEach((k) => { o[k] = u[k]; });
+        ['id', 'name', 'team', 'cls', 'lv', 'exp', 'stats', 'items', 'wexp', 'skills', 'ai', 'boss', 'drop', 'x', 'y', 'hp', 'mhp', 'mod', 'bp', 'eq', 'shield', 'mshield', 'weak', 'broken', 'brokeSkip', 'done', 'dead', 'gone', 'gotUp', 'group', 'wake', 'portId', 'talk', 'glow', 'npc', 'movBonus', 'lord', 'st', 'carry', 'carriedBy', 'silenced', 'galeUsed', 'gentle', 'spare', 'deathLine', 'recruit', 'fleeTo', 'gear', 'getups'].forEach((k) => { o[k] = u[k]; });
         o.lookCls = u.team === 'p' ? null : u.look;
         return o;
       }),
@@ -9426,10 +10425,10 @@ window.AD = window.AD || {};
     b.baked = AD.tiles.bake(b.map, b.tstate);
     b.units = d.units.map((o) => {
       const u = Object.assign({}, o);
-      if (u.team === 'p') { const rec = GM.state.roster[u.id]; u.rec = rec; const dd = AD.UNITS[u.id]; u.look = dd.looks[u.cls] || Object.values(dd.looks)[0]; u.port = AD.portFor(u.id, u); }
+      if (u.team === 'p') { const rec = GM.state.roster[u.id]; u.rec = rec; u.gear = u.gear || Object.assign({}, rec.gear); u.look = AD.lookFor(u); u.port = AD.portFor(u.id, u); u.gs = GM.gearStats(u); }
       else { u.look = o.lookCls || AD.LOOKS[u.cls]; u.port = u.portId ? AD.PORTS[u.portId] : null; }
       u.uid = Math.floor(Math.random() * 1e9);
-      u.mov = AD.CLASSES[u.cls].mov + (AD.hasSkill(u, 'fastest') ? 2 : 0) + (u.movBonus || 0);
+      u.mov = AD.CLASSES[u.cls].mov + (AD.hasSkill(u, 'fastest') ? 2 : 0) + (u.movBonus || 0) + ((u.gs && u.gs.mov) || 0);
       return u;
     });
     const lord = b.units.find((u) => u.lord && !u.dead);
@@ -9527,6 +10526,17 @@ window.AD = window.AD || {};
     if (!GM.state) return [];
     const notes = [];
     Object.values(AD.CHAPTERS).forEach((ch) => { if (GM.state.done[ch.id]) notes.push(...GM.secureStory(ch, false)); });
+    // 1.4 made everyone stronger: saves from before get the same, as if they had grown with it
+    if (!GM.flag('buff14')) {
+      GM.setFlag('buff14');
+      Object.values(GM.state.roster).forEach((r) => AD.retroBuff(r));
+      notes.push('Everyone in the Garden feels stronger. Abarax most of all.');
+    }
+    if (!GM.flag('kit14')) {
+      GM.setFlag('kit14');
+      STARTER.forEach((id) => GM.toConvoy(AD.item(id)));
+      notes.push('A parcel from the Rue Lumi\u00e8re tailor: a Leather Jerkin, a Tin Ring and a Silk Scarf, in the convoy. Wear them from Prep \u2192 Items \u2192 Gear.');
+    }
     // friends who already passed a level where a new skill comes
     Object.values(GM.state.roster).forEach((r) => {
       if (GM.state.dead[r.id] || !r.skills) return;
@@ -9887,7 +10897,7 @@ window.AD = window.AD || {};
       if (next && next.loc === n.id) { const b = Math.floor(this.t / 10) % 2; G.text(ctx, '\u25bc', x, y - 14 - b, C.rose, { align: 'center' }); }
     });
     // the Garden on the road
-    const L = (GM.record('abarax') && AD.UNITS.abarax.looks[GM.record('abarax').cls]) || AD.UNITS.abarax.looks.cook;
+    const L = GM.record('abarax') ? AD.lookFor(GM.record('abarax')) : AD.UNITS.abarax.looks.cook;
     AD.spr.drawUnit(ctx, L, this.px - cx - 12, this.py - cy - 23, { dir: this.walking ? this.dir : 'idle' });
     AD.fx.post(ctx, { bloomAmt: 0.25 });
     // header
@@ -9933,21 +10943,22 @@ window.AD = window.AD || {};
       const k = await AD.menu({ title: 'Whose items?', items: recs.map((r, i) => ({ label: AD.UNITS[r.id].name, value: i, right: r.items.length + '/5' })).concat([{ label: 'Convoy (' + GM.state.convoy.length + ')', value: 'convoy' }]) });
       if (k === null) return;
       if (k === 'convoy') {
-        const v = await AD.menu({ title: 'Convoy', max: 10, items: GM.state.convoy.length ? GM.state.convoy.map((it, i) => { const d = AD.ITEMS[it.id]; return { label: d.n, value: i, icon: d.weapon ? d.t : d.song ? 'song' : 'item', right: it.uses, help: d.desc }; }) : [{ label: 'Empty', enabled: false }] });
+        const v = await AD.menu({ title: 'Convoy', max: 10, items: GM.state.convoy.length ? GM.state.convoy.map((it, i) => { const d = AD.ITEMS[it.id]; return { label: d.n, value: i, icon: AD.iconOf(d), right: it.uses, help: d.desc }; }) : [{ label: 'Empty', enabled: false }] });
         void v; continue;
       }
       const r = recs[k];
       const u = AD.unitFromRecord(r);
       for (;;) {
-        const v = await AD.menu({ title: u.name, items: [{ label: 'Take from convoy', value: 'take' }, { label: 'Store in convoy', value: 'give' }, { label: 'Trade', value: 'trade', enabled: recs.length > 1 }, { label: 'Use / Equip', value: 'use' }] });
+        const v = await AD.menu({ title: u.name, items: [{ label: 'Take from convoy', value: 'take' }, { label: 'Store in convoy', value: 'give' }, { label: 'Trade', value: 'trade', enabled: recs.length > 1 }, { label: 'Use / Equip', value: 'use' }, { label: 'Gear', value: 'gear', icon: 'armor', help: 'Armour, outfit and an accessory. They show on the character.' }] });
         if (v === null) break;
+        if (v === 'gear') { await AD.run(new AD.Wardrobe(r)); continue; }
         if (v === 'take' || v === 'give') await GM.supply(u);
         if (v === 'trade') {
           const j = await AD.menu({ title: 'Trade with', items: recs.filter((o) => o !== r).map((o) => ({ label: AD.UNITS[o.id].name, value: o.id })) });
           if (j) { const other = AD.unitFromRecord(GM.record(j)); await AD.run(new AD.TradeScene(u, other)); GM.record(j).items = other.items.map((i) => ({ id: i.id, uses: i.uses })); }
         }
         if (v === 'use') {
-          const i = await AD.menu({ title: u.name, items: u.items.map((it, i) => { const d = AD.ITEMS[it.id]; return { label: d.n, value: i, icon: d.weapon ? d.t : d.song ? 'song' : 'item', right: it.uses, help: d.weapon ? AD.weaponHelp(d) : d.desc || '' }; }) });
+          const i = await AD.menu({ title: u.name, items: u.items.map((it, i) => { const d = AD.ITEMS[it.id]; return { label: d.n, value: i, icon: AD.iconOf(d), right: it.uses, help: d.weapon ? AD.weaponHelp(d) : d.desc || '' }; }) });
           if (i !== null) {
             const d = AD.ITEMS[u.items[i].id];
             if (d.weapon) { const [it] = u.items.splice(i, 1); u.items.unshift(it); AD.audio.sfx('select'); }
@@ -9958,6 +10969,115 @@ window.AD = window.AD || {};
         r.stats = Object.assign({}, u.stats); r.cls = u.cls; r.lv = u.lv; r.exp = u.exp; r.skills = u.skills.slice(); r.movBonus = u.movBonus || 0;
       }
     }
+  };
+
+  // ---------------------------------------------------------------- wardrobe
+  // Armour, outfit and accessory for one friend, with the figure dressed live as the cursor moves.
+  AD.Wardrobe = function (rec) {
+    this.rec = rec; this.mode = 'slots'; this.si = 0; this.i = 0; this.list = []; this.t = 0; this.opaque = true;
+    this.dummy = { id: rec.id, cls: rec.cls, lv: rec.lv, look: AD.lookFor(rec) };
+    const wid = (rec.items.find((it) => AD.ITEMS[it.id] && AD.ITEMS[it.id].weapon) || {}).id;
+    this.W = AD.fight.weaponOf(wid ? AD.ITEMS[wid] : null);
+  };
+  const WR = AD.Wardrobe.prototype;
+  // the gear for a slot: one row per kind held in the convoy, and taking off what is worn
+  WR.options = function (slot) {
+    const seen = {};
+    GM.state.convoy.forEach((it) => { const d = AD.ITEMS[it.id]; if (d && d.gear === slot) seen[d.id] = (seen[d.id] || 0) + 1; });
+    const out = Object.keys(seen).map((id) => ({ id, n: seen[id] }));
+    if (this.rec.gear && this.rec.gear[slot]) out.push({ id: null });
+    return out;
+  };
+  // the pick list shows eight rows at a time, keeping the cursor off the edges
+  WR.ROWS = 8;
+  WR.top = function () { return Math.max(0, Math.min(this.i - 3, this.list.length - WR.ROWS)); };
+  WR.preview = function () {
+    if (this.mode !== 'pick') return this.rec.gear || {};
+    const o = this.list[this.i];
+    return Object.assign({}, this.rec.gear, { [AD.SLOTS[this.si]]: o ? o.id : null });
+  };
+  WR.update = function () {
+    this.t++;
+    const d = I.dir(), c = I.consumeClick();
+    if (this.mode === 'slots') {
+      if (d && d[1]) { this.si = (this.si + d[1] + 4) % 4; AD.audio.sfx('cursor'); }
+      let pick = I.pressed('a');
+      if (c && c.x > 200) { const row = Math.floor((c.y - 40) / 26); if (row >= 0 && row < 4) { pick = pick || row === this.si; this.si = row; AD.audio.sfx('cursor'); } }
+      if (pick) {
+        if (this.si === 3) { AD.audio.sfx('select'); this.done(); return; }
+        this.list = this.options(AD.SLOTS[this.si]);
+        if (!this.list.length) { AD.audio.sfx('cancel'); this.empty = 40; return; }
+        this.mode = 'pick'; this.i = 0; AD.audio.sfx('select');
+      }
+      if (I.pressed('b') || I.rclick) { AD.audio.sfx('cancel'); this.done(); }
+      return;
+    }
+    if (d && d[1]) { this.i = (this.i + d[1] + this.list.length) % this.list.length; AD.audio.sfx('cursor'); }
+    let take = I.pressed('a');
+    if (c && c.x > 200) { const k = Math.floor((c.y - 40) / 13), row = k + this.top(); if (k >= 0 && k < WR.ROWS && row < this.list.length) { take = take || row === this.i; this.i = row; AD.audio.sfx('cursor'); } }
+    if (take) {
+      const o = this.list[this.i];
+      GM.equip(this.rec, AD.SLOTS[this.si], o ? o.id : null);
+      AD.audio.sfx(o && o.id ? 'levelup' : 'select');
+      this.mode = 'slots';
+      return;
+    }
+    if (I.pressed('b') || I.rclick) { AD.audio.sfx('cancel'); this.mode = 'slots'; }
+  };
+  WR.draw = function (ctx) {
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#1a2050'); g.addColorStop(1, '#0a0c1e');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const gear = this.preview(), rec = this.rec;
+    const look = AD.dress(AD.lookFor(Object.assign({}, rec, { gear: {} })), gear);
+    this.dummy.look = look;
+    // the figure as it fights, and as it walks the map
+    G.panel(ctx, 8, 8, 186, 192);
+    ctx.fillStyle = 'rgba(10,8,20,0.35)'; ctx.fillRect(58, 177, 66, 3);
+    if (look.mount || look.big) AD.spr.drawUnit(ctx, look, 70, 118, { dir: 'idle', scale: 2 });
+    else AD.fight.draw(ctx, this.dummy, AD.moves.rest(this.W, look), 92, 179, true, { weapon: this.W, scale: 2.1, t: this.t, fem: !!(AD.UNITS[rec.id].port && AD.UNITS[rec.id].port.fem) });
+    AD.spr.drawUnit(ctx, look, 150, 150, { dir: 'idle', scale: 1 });
+    G.text(ctx, AD.UNITS[rec.id].name, 16, 14, C.gold);
+    G.text(ctx, AD.CLASSES[rec.cls].n + '  Lv ' + rec.lv, 16, 25, C.gray);
+    // what changes, worn against tried on
+    const now = GM.gearStats(rec), then = GM.gearStats(Object.assign({}, rec, { gear }));
+    const keys = Object.keys(Object.assign({}, now, then)).filter((k) => (now[k] || 0) !== (then[k] || 0) || (then[k] || 0) !== 0);
+    keys.slice(0, 8).forEach((k, j) => {
+      const a = now[k] || 0, b = then[k] || 0;
+      const nm = (AD.STAT_NAMES[k] || { hit: 'Hit', avo: 'Avo', crit: 'Crit', ddg: 'Dodge', regen: 'Regen%', bp: 'BP', ward: 'Ward' }[k] || k);
+      G.text(ctx, nm, 16, 40 + j * 10, C.gray);
+      G.text(ctx, (b > 0 ? '+' : '') + b, 66, 40 + j * 10, b > a ? C.teal : b < a ? C.rose : C.cream, { align: 'right', mono: true });
+    });
+    // the slots, or the choice for one
+    G.panel(ctx, 200, 8, 192, 192);
+    if (this.mode === 'slots') {
+      G.text(ctx, 'Gear', 208, 14, C.gold);
+      AD.SLOTS.concat(['done']).forEach((sl, k) => {
+        const y = 40 + k * 26, sel = k === this.si;
+        if (sel) { ctx.fillStyle = 'rgba(232,193,112,0.16)'; ctx.fillRect(204, y - 4, 184, 24); }
+        if (sl === 'done') { G.text(ctx, 'Done', 214, y + 4, sel ? C.gold : C.cream); return; }
+        const d = rec.gear && rec.gear[sl] && AD.ITEMS[rec.gear[sl]];
+        G.icon(ctx, sl, 210, y); G.text(ctx, AD.SLOT_NAME[sl], 222, y, C.gray);
+        G.text(ctx, d ? d.n : '(none)', 222, y + 10, d ? C.cream : C.dim);
+      });
+      if (this.empty > 0) { this.empty--; G.text(ctx, 'None in the convoy.', 296, 152, C.rose, { align: 'center' }); }
+    } else {
+      const sl = AD.SLOTS[this.si];
+      G.text(ctx, AD.SLOT_NAME[sl], 208, 14, C.gold);
+      const top = this.top();
+      // more above or below: arrows beside the title
+      if (top > 0) G.text(ctx, '\u25b2', 372, 14, C.gold, { align: 'right' });
+      if (top + WR.ROWS < this.list.length) G.text(ctx, '\u25bc', 384, 14, C.gold, { align: 'right' });
+      this.list.slice(top, top + WR.ROWS).forEach((o, j) => {
+        const k = top + j, y = 40 + j * 13, sel = k === this.i;
+        if (sel) { ctx.fillStyle = 'rgba(232,193,112,0.16)'; ctx.fillRect(204, y - 2, 184, 12); }
+        const d = o.id && AD.ITEMS[o.id];
+        G.text(ctx, d ? d.n : 'Take it off', 212, y, sel ? C.gold : d ? C.cream : C.gray);
+        if (o.n > 1) G.text(ctx, 'x' + o.n, 384, y, C.gray, { align: 'right', mono: true });
+      });
+      const o = this.list[this.i], d = o && o.id && AD.ITEMS[o.id];
+      if (d) G.wrap(d.desc || '', 176).slice(0, 4).forEach((l, k) => G.text(ctx, l, 208, 150 + k * 10, C.gray));
+    }
+    G.text(ctx, this.mode === 'slots' ? 'A: change   B: done' : 'A: wear   B: back', W - 8, H - 15, C.dim, { align: 'right' });
   };
 
   AD.availableSupports = function () {
@@ -10212,7 +11332,7 @@ window.AD = window.AD || {};
     ctx.drawImage(this.baked.grounds[TL.groundFrame()], -cx, -cy);
     const lead = GM.record(this.leader) ? this.leader : 'abarax';
     const rec = GM.record(lead);
-    const L = AD.UNITS[lead].looks[rec.cls] || Object.values(AD.UNITS[lead].looks)[0];
+    const L = AD.lookFor(rec);
     // a walker's legs follow the distance covered, two poses a tile, so the feet never slide
     const stride = (px, py) => Math.floor(((px + py) / TS) * 2) % 4;
     const people = this.npcs.map((n) => {
@@ -10267,7 +11387,7 @@ window.AD = window.AD || {};
       if (v === null) break;
       if (v === 'buy') {
         for (;;) {
-          const items = def.items.filter((id) => !def.cond || !def.cond[id] || GM.flag(def.cond[id])).map((id) => { const d = AD.ITEMS[id]; const p = GM.price(d.price); return { label: d.n, value: id, icon: d.weapon ? d.t : d.song ? 'song' : 'item', right: AD.fmt(p), enabled: GM.state.gold >= p, help: d.weapon ? AD.TYPE_NAME[d.t] + ', ' + d.uses + ' uses. ' + AD.weaponHelp(d) : d.desc || '' }; });
+          const items = def.items.filter((id) => !def.cond || !def.cond[id] || GM.flag(def.cond[id])).map((id) => { const d = AD.ITEMS[id]; const p = GM.price(d.price); return { label: d.n, value: id, icon: AD.iconOf(d), right: AD.fmt(p), enabled: GM.state.gold >= p, help: d.weapon ? AD.TYPE_NAME[d.t] + ', ' + d.uses + ' uses. ' + AD.weaponHelp(d) : d.desc || '' }; });
           const id = await AD.menu({ title: 'Buy   ' + AD.fmt(GM.state.gold) + ' cr', items, w: 200, max: 9, allowDisabled: false });
           if (id === null) break;
           const p = GM.price(AD.ITEMS[id].price);
@@ -10278,7 +11398,7 @@ window.AD = window.AD || {};
         for (;;) {
           const cv = GM.state.convoy;
           if (!cv.length) { await AD.notice('The convoy is empty.'); break; }
-          const k = await AD.menu({ title: 'Sell from convoy', max: 9, w: 200, items: cv.map((it, i) => { const d = AD.ITEMS[it.id]; const p = Math.floor((d.price * it.uses) / (d.uses || 1) / 2); return { label: d.n, value: i, right: AD.fmt(p), enabled: d.price > 0, icon: d.weapon ? d.t : d.song ? 'song' : 'item' }; }) });
+          const k = await AD.menu({ title: 'Sell from convoy', max: 9, w: 200, items: cv.map((it, i) => { const d = AD.ITEMS[it.id]; const p = Math.floor((d.price * it.uses) / (d.uses || 1) / 2); return { label: d.n, value: i, right: AD.fmt(p), enabled: d.price > 0, icon: AD.iconOf(d) }; }) });
           if (k === null) break;
           const it = cv[k], d = AD.ITEMS[it.id];
           const p = Math.floor((d.price * it.uses) / (d.uses || 1) / 2);
@@ -10521,17 +11641,17 @@ window.AD = window.AD || {};
 
   // ---------------------------------------------------------------- shops
   AD.SHOPS = {
-    jardins: { name: 'Jardins Market', items: ['stack', 'bouill', 'coffee', 'doorkey', 'chestkey'], hello: [['@narrate', 'Sunday in the Jardins: cr\u00eape stands, flower carts, and a woman selling keys that fit almost anything.']] },
-    lumiere: { name: 'Rue Lumi\u00e8re Armory', items: ['kitknife', 'tknives', 'ironsword', 'steelsword', 'brass', 'irongaunt', 'steelgaunt', 'ironlance', 'steellance', 'harpoon', 'crossbow', 'musket'], hello: [['@narrate', 'Behind the casino a pawnbroker sells what gamblers left behind. Mostly weapons.']] },
-    oldquarter: { name: 'Old Quarter Curios', items: ['ember', 'glassray', 'spark', 'thorn', 'briar', 'gust', 'frost', 'lullaby', 'harbor', 'threadsight'], hello: [['@narrate', 'A shop that smells of winter jasmine. Every jar holds a little bottled gift.']] },
+    jardins: { name: 'Jardins Market', items: ['stack', 'bouill', 'coffee', 'doorkey', 'chestkey', 'chefwhites', 'monkwraps', 'coffeeflask'], hello: [['@narrate', 'Sunday in the Jardins: cr\u00eape stands, flower carts, and a woman selling keys that fit almost anything.']] },
+    lumiere: { name: 'Rue Lumi\u00e8re Armory', items: ['kitknife', 'tknives', 'ironsword', 'steelsword', 'brass', 'irongaunt', 'steelgaunt', 'ironlance', 'steellance', 'harpoon', 'crossbow', 'musket', 'irongreat', 'rapier', 'chakram', 'warhammer', 'warfan', 'scythe', 'chainwhip', 'pistol', 'jerkin', 'chainmail', 'tinring', 'silkscarf'], hello: [['@narrate', 'Behind the casino a pawnbroker sells what gamblers left behind. Mostly weapons.']] },
+    oldquarter: { name: 'Old Quarter Curios', items: ['ember', 'glassray', 'spark', 'thorn', 'briar', 'gust', 'frost', 'lullaby', 'harbor', 'threadsight', 'mantle', 'roselocket', 'bellcharm'], hello: [['@narrate', 'A shop that smells of winter jasmine. Every jar holds a little bottled gift.']] },
     greendoor: { name: 'The Green Door', items: ['stiletto', 'killerfist', 'bravesword', 'silversword', 'silvergaunt', 'silverlance', 'silverbow', 'lightning', 'icelance', 'shadowthorn', 'silverbolt', 'chit'], hello: [['xav', 'smirk', 'Welcome to the back room. Prices are firm, provenance is vague, and nobody was ever here.']] },
-    mireille: { name: 'Mireille Fish Market', items: ['stack', 'bouill', 'harpoon', 'crossbow', 'gust', 'frost', 'lullaby', 'chestkey', 'doorkey'], hello: [['@narrate', 'Blue boats, red boats, and a fishwife who also sells harpoons, because why not.']] },
-    corvel: { name: 'Corvel Reliquary', items: ['glassray', 'heatwave', 'harbor', 'farcall', 'bellchime', 'threadsight', 'taffy'], hello: [['@narrate', 'Pilgrim trinkets up front. Behind the curtain, the real thing.']] },
-    castemere: { name: 'Castemere Works', items: ['crossbow', 'rifle', 'longrifle', 'silverbow', 'steelgaunt', 'silvergaunt', 'steellance', 'doorkey', 'wrap'], hello: [['@narrate', 'Everything here was built to tolerances. Vehday nods approvingly at the shelves.']] },
-    springs: { name: 'Bathhouse Stall', items: ['stack', 'bouill', 'coffee', 'goldfruit', 'lullaby', 'harbor'], hello: [['@narrate', 'Someone set up a stall by the old columns. It sells towels, pancakes, and, inexplicably, gold fruit.']] },
-    lenaris: { name: 'Lenaris Grand Market', items: ['steelsword', 'silversword', 'steelgaunt', 'silvergaunt', 'steellance', 'silverlance', 'rifle', 'longrifle', 'heatwave', 'lightning', 'stoneshape', 'cyclone', 'icelance', 'farcall', 'bellchime', 'silverbolt'], hello: [['@narrate', 'A colonnade a mile long. Crown, Compact and Church each own a third of it and none may fight here.']] },
-    garden: { name: 'Selenne\'s Garden', items: ['pear', 'bean', 'harbor', 'bellchime', 'lighthouse', 'goldfruit'], hello: [['selenne', 'smile', 'Rain-pears, violet beans, songs I learned before your grandmother was born. Take what you need. Pay what you like. I\'ll charge you anyway.']] },
-    midas: { name: 'Midas\'s Acquisitions', items: ['chit', 'wrap', 'taffy', 'poster', 'eye', 'rosefruit', 'silverbolt', 'coffee'], hello: [['midas', 'grin', 'I made a list of everything you\'d need, then I went out and acquired all of it. Don\'t ask where.']] },
+    mireille: { name: 'Mireille Fish Market', items: ['stack', 'bouill', 'harpoon', 'crossbow', 'gust', 'frost', 'lullaby', 'chestkey', 'doorkey', 'longbow', 'chainwhip', 'jerkin', 'silkscarf'], hello: [['@narrate', 'Blue boats, red boats, and a fishwife who also sells harpoons, because why not.']] },
+    corvel: { name: 'Corvel Reliquary', items: ['glassray', 'heatwave', 'harbor', 'farcall', 'bellchime', 'threadsight', 'taffy', 'mantle', 'mooncirclet', 'bellcharm', 'verdance'], hello: [['@narrate', 'Pilgrim trinkets up front. Behind the curtain, the real thing.']] },
+    castemere: { name: 'Castemere Works', items: ['crossbow', 'rifle', 'longrifle', 'silverbow', 'steelgaunt', 'silvergaunt', 'steellance', 'doorkey', 'wrap', 'steelgreat', 'maul', 'pistol', 'twinpistols', 'chainmail', 'steelplate', 'swiftboots', 'longbow'], hello: [['@narrate', 'Everything here was built to tolerances. Vehday nods approvingly at the shelves.']] },
+    springs: { name: 'Bathhouse Stall', items: ['stack', 'bouill', 'coffee', 'goldfruit', 'lullaby', 'harbor', 'greengloves', 'monkwraps', 'galagown'], hello: [['@narrate', 'Someone set up a stall by the old columns. It sells towels, pancakes, and, inexplicably, gold fruit.']] },
+    lenaris: { name: 'Lenaris Grand Market', items: ['steelsword', 'silversword', 'steelgaunt', 'silvergaunt', 'steellance', 'silverlance', 'rifle', 'longrifle', 'heatwave', 'lightning', 'stoneshape', 'cyclone', 'icelance', 'farcall', 'bellchime', 'silverbolt', 'silvergreat', 'duelrapier', 'moonring', 'cranefan', 'reaper', 'thornlash', 'yewbow', 'steelplate', 'starmantle', 'signet', 'duelistcoat', 'travelcloak', 'meteor', 'maelstrom'], hello: [['@narrate', 'A colonnade a mile long. Crown, Compact and Church each own a third of it and none may fight here.']] },
+    garden: { name: 'Selenne\'s Garden', items: ['pear', 'bean', 'harbor', 'bellchime', 'lighthouse', 'goldfruit', 'starmantle', 'mooncirclet', 'greengloves'], hello: [['selenne', 'smile', 'Rain-pears, violet beans, songs I learned before your grandmother was born. Take what you need. Pay what you like. I\'ll charge you anyway.']] },
+    midas: { name: 'Midas\'s Acquisitions', items: ['chit', 'wrap', 'taffy', 'poster', 'eye', 'rosefruit', 'silverbolt', 'coffee', 'nightsuit', 'gamblerchip', 'signet', 'travelcloak', 'duelistcoat'], hello: [['midas', 'grin', 'I made a list of everything you\'d need, then I went out and acquired all of it. Don\'t ask where.']] },
   };
 
   // ---------------------------------------------------------------- side quests & dungeons registry
@@ -13409,6 +14529,138 @@ window.AD = window.AD || {};
     goal: { type: 'boss', text: 'Silence the Silence' },
     outro: [['wren', 'smile', 'Twenty people breathing. Five children dreaming. Henri snoring. The sea. Don\'t ever let it go quiet.'], ['echoe', 'smile', 'Never. Nobody here is ever alone.']],
     after: [['@give', 'bean']],
+  });
+
+  // ---------------------------------------------------------------- 1.4: three more
+  AD.PORTS.ourika = { name: 'Madame Ourika', skin: '#6a4430', hair: '#e8e0d8', hairStyle: 'tied', eyes: '#2a1a10', eyeShape: 'narrow', main: '#5a1a3a', collar: 'high', sec: '#e8c170', fem: 1, extras: ['spectacles'] };
+  AD.PORTS.brask = { name: 'Mother Brask', skin: '#c89a74', hair: '#8a8478', hairStyle: 'buzz', eyes: '#3a2a1a', eyeShape: 'narrow', main: '#4a3a34', collar: 'apron', sec: '#8a6a4a', fem: 1, extras: ['scar'], jaw: 'square' };
+
+  side({
+    id: 's15', title: 'The Tailor of Rue Lumière', sub: 'Bilibara, the night the rent came due', loc: 'bilibara', req: 'c9', bg: 'tanneries', reward: 2000,
+    before: [
+      ['@bg', 'tanneries'],
+      ['@narrate', 'Madame Ourika has dressed half the Tanneries for forty years, and the other half on credit. Yaska\'s people have decided her shop owes them rent. Tonight they are coming to collect it in kerosene.'],
+      ['ourika', 'serious', 'You boys come in here in my coats and bleed on them, and I mend them, and I say nothing. Tonight you stand in my door.'],
+      ['abarax', 'grin', 'For you, Madame? I\'ll stand in it till spring.'],
+    ],
+    map: {
+      biome: 'city', night: true, weather: 'snow',
+      rows: [
+        'BBBBBBBBBBBBBBBBBBBB',
+        'BBBBnBBBBSBBBBnBBBBB',
+        ',,L,,,,,,,,,,,,,L,,,',
+        ',,,,,,,,,,,,,,,,,,,,',
+        '====================',
+        ',,,,,,,,,,,,,,,,,,,,',
+        ',,L,,,,cc,,,,,,,L,,,',
+        'BBBBBBB,,,,BBBBBBBBB',
+        'BBBBBBB,,,,BBBBBBBBB',
+      ],
+    },
+    deploy: [[8, 2], [9, 2], [10, 2], [8, 3], [9, 3], [10, 3], [7, 2], [11, 2]], max: 8, forced: ['abarax'],
+    units: [
+      tough({ c: 'knuckle', name: 'Yaska\'s Collector', lv: 12, boss: true, x: 18, y: 4, items: ['warhammer', 'chips'], shield: 5, weak: ['pole', 'bloom'], ai: 'charge' }),
+      { c: 'thug', lv: 10, x: 0, y: 3, items: ['club'] }, { c: 'deserter', name: 'Yaska\'s Lash', lv: 10, x: 1, y: 5, items: ['chainwhip'] }, { c: 'thug', lv: 10, x: 19, y: 3 },
+      { c: 'thug', lv: 11, x: 17, y: 5, items: ['pistol'] }, { c: 'thug', lv: 10, x: 8, y: 8 }, { c: 'thug', lv: 11, x: 9, y: 8, items: ['handaxe'], d: 1 },
+    ],
+    goal: { type: 'defend', turns: 6, x: 9, y: 1, text: 'Keep Yaska\'s people out of the tailor\'s for six turns' },
+    lose: [{ reach: [9, 1], say: [['ourika', 'sad', 'Forty years of thread. Go, boys. Go.']] }],
+    events: [
+      { when: { turn: 2, phase: 'e' }, do: [['spawn', [{ c: 'thug', lv: 11, x: 0, y: 4 }, { c: 'thug', lv: 11, x: 19, y: 4, items: ['pistol'] }]]] },
+      { when: { turn: 3, phase: 'e' }, do: [['spawn', [{ c: 'deserter', name: 'Yaska\'s Lash', lv: 11, x: 7, y: 8, items: ['chainwhip'] }, { c: 'knuckle', lv: 11, x: 10, y: 8 }]]] },
+      { when: { turn: 4, phase: 'e' }, do: [['spawn', [{ c: 'thug', lv: 12, x: 0, y: 2, items: ['irongreat'] }, { c: 'thug', lv: 12, x: 19, y: 2, items: ['irongreat'], d: 1 }]]] },
+    ],
+    outro: [
+      ['ourika', 'smile', 'Not one coat lost. Come here. All of you. You are getting measured, and you are not getting a choice.'],
+      ['@narrate', 'Madame Ourika opens the back room. Three things hang there under sheets, the way a gallery hides its best.'],
+    ],
+    after: [['@give', 'rosecoat'], ['@give', 'galagown'], ['@give', 'duelistcoat']],
+  });
+
+  side({
+    id: 's16', title: 'Iron and Embers', sub: 'Castemere Works, the old foundry floor', loc: 'castemere', req: 'c15', need: ['vehday'], bg: 'road', reward: 3000,
+    before: [
+      ['@bg', 'road'],
+      ['@narrate', 'Mother Brask taught Vehday to rivet a bridge. Now the Compact has her foundry, and it is melting down every relic it took from every divine it ever caught, to cast cannon.'],
+      ['brask', 'angry', 'They\'re pouring a saint\'s bell into a gun barrel. In my furnace. Boy, you tell me you brought friends.'],
+      ['vehday', 'serious', 'I brought the best ones I have, Mother.'],
+    ],
+    map: {
+      biome: 'dungeon', scene: 'works',
+      rows: [
+        '##################',
+        '#vv..ww....ww..vv#',
+        '#vv..ww....ww..vv#',
+        '#........cc......#',
+        '#..ww........ww..#',
+        '#..ww........ww..#',
+        '#.....cc....cc...#',
+        '#..v..........v..#',
+        '#................#',
+        '#######....#######',
+      ],
+    },
+    deploy: [[7, 9], [8, 9], [9, 9], [10, 9], [7, 8], [8, 8], [9, 8], [10, 8]], max: 8, forced: ['vehday'],
+    units: [
+      tough({ c: 'officer', name: 'Foundry Warden', lv: 17, boss: true, x: 9, y: 1, items: ['steelgreat', 'maul'], shield: 6, weak: ['fist', 'tide'], ai: 'guard' }),
+      { c: 'compactinf', lv: 15, x: 3, y: 3 }, { c: 'compactinf', lv: 15, x: 14, y: 3, items: ['pistol'] }, { c: 'ironclad', lv: 15, x: 7, y: 4, items: ['warhammer'] },
+      { c: 'ironclad', lv: 15, x: 11, y: 4 }, { c: 'knuckle', lv: 15, x: 4, y: 6, items: ['warfan'] }, { c: 'fusilier', lv: 16, x: 13, y: 6, items: ['longbow'] },
+      { c: 'compactinf', lv: 16, x: 8, y: 2, d: 1, items: ['scythe'] },
+    ],
+    goal: { type: 'boss', text: 'Break the Foundry Warden' },
+    events: [
+      { when: { start: true }, do: [['say', [['brask', 'serious', 'The vats are full of the Church\'s slag. Don\'t touch them. Don\'t let them push you into them, either.']]]] },
+      { when: { turn: 3, phase: 'e' }, do: [['spawn', [{ c: 'compactinf', lv: 16, x: 4, y: 1 }, { c: 'compactinf', lv: 16, x: 13, y: 1, items: ['twinpistols'] }]]] },
+    ],
+    outro: [
+      ['brask', 'grin', 'Hah! That\'s my boy. That\'s my boy and his bridge-wreckers.'],
+      ['brask', 'neutral', 'Here. I poured it this winter out of a rose-iron I was saving for my own coffin. It grows into whoever wears it. Better it grows into you.'],
+    ],
+    after: [['@give', 'rosemail'], ['@give', 'chainmail']],
+  });
+
+  side({
+    id: 's17', title: 'The Reliquary of Moons', sub: 'Under the Hall of the Concord, Lenaris', loc: 'lenaris', req: 'c19', need: ['oren', 'gerace'], bg: 'lenaris', reward: 6000,
+    before: [
+      ['@bg', 'lenaris'],
+      ['oren', 'grin', 'Two hundred years ago I left some things under this hall. Somebody\'s moved in since. Rude.'],
+      ['gerace', 'smile', 'Locked doors, old men and treasure. Finally, a holiday.'],
+    ],
+    map: {
+      biome: 'marble', night: true,
+      rows: [
+        '##################',
+        '#C..P..#GG#..P..C#',
+        '#......#ww#......#',
+        '#..P...D..D...P..#',
+        '#......#..#......#',
+        '####D###..###D####',
+        '#C...aaaaaaaa...C#',
+        '#....aaaaaaaa....#',
+        '#..P.aaaaaaaa.P..#',
+        '#....aaaaaaaa....#',
+        '########....######',
+      ],
+    },
+    deploy: [[8, 10], [9, 10], [10, 10], [11, 10], [8, 9], [9, 9], [10, 9], [11, 9]], max: 8, forced: ['oren'],
+    chests: { '1,1': 'suncirclet', '16,1': 'royalsignet', '1,6': 'swiftboots', '16,6': 'mooncirclet' },
+    units: [
+      tough({ c: 'finger', name: 'Keeper of Moons', lv: 24, boss: true, x: 8, y: 1, items: ['silvergreat', 'maelstrom', 'divineplate'], shield: 7, weak: ['all', 'song'], ai: 'guard' }),
+      { c: 'wraith', name: 'Moon Wraith', lv: 22, x: 3, y: 2 }, { c: 'wraith', name: 'Moon Wraith', lv: 22, x: 14, y: 2 },
+      { c: 'choir', lv: 22, x: 3, y: 7 }, { c: 'choir', lv: 22, x: 14, y: 7, items: ['verdance'] },
+      { c: 'seamwalker', lv: 22, x: 8, y: 4, items: ['cranefan'] }, { c: 'seamwalker', lv: 23, x: 9, y: 3, items: ['moonring'], d: 1 },
+      { c: 'wraith', name: 'Moon Wraith', lv: 23, x: 1, y: 8, d: 2 },
+    ],
+    goal: { type: 'boss', text: 'Defeat the Keeper of Moons (the four chests are worth the detour)' },
+    events: [
+      { when: { start: true }, do: [['say', [['oren', 'neutral', 'Four rooms, four chests, four of my old things. The doors want a thief. The Keeper wants a fight. Give them both.']]]] },
+    ],
+    outro: [
+      ['oren', 'smile', 'There. The plate was mine, once. It never fit. It\'ll fit you.'],
+      ['abarax', 'grin', 'Everything you own is gold and two hundred years old.'],
+      ['oren', 'grin', 'So am I. Wear it well.'],
+    ],
+    after: [['@give', 'starmantle']],
   });
 })(window.AD);
 

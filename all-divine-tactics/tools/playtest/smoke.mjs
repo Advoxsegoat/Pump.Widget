@@ -86,7 +86,7 @@ const logic = await page.evaluate(async () => {
   const res = bt.resolve(fc);
   const aStrikes = res.tl.filter((e) => e.who === 'a' && !e.thrift).length;
   ok(kael.items[0].uses === before - 3 - (aStrikes - 1), 'Windsweep costs 3 uses on its first strike (' + before + ' -> ' + kael.items[0].uses + ', ' + aStrikes + ' strikes)');
-  ok(res.tl[0].art === 'Windsweep', 'first strike carries the art name');
+  ok(/^Windsweep( II| III)?$/.test(res.tl[0].art), 'first strike carries the art name (' + res.tl[0].art + ')');
   kael.items.shift(); kael.eq = 0;
 
   // ---- statuses

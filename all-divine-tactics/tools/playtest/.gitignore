@@ -1,3 +1,4 @@
 # results written by the scripts here
 *.json
 smoke-out/
+smoke14-out/

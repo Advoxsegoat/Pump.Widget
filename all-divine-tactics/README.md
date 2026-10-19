@@ -14,6 +14,83 @@ It runs fully offline and asks for no permissions.
 
 ## What is in this build
 
+### New in 1.4
+
+**Battle scenes happen where the fight is.** Thirty-eight painted backdrops replace the one plain
+field. The scene is chosen from the tile the defender stands on and from the chapter's place: the
+Jardins market with its awnings, the Mireille docks at night, rose gardens, orchards, salt flats,
+the lighthouse spire, the Black Fort, taverns, foundries, throne rooms and the Garden itself.
+Night chapters get night skies, snow falls where it snows, and leaves, petals, torches, neon,
+steam and the sea move.
+
+**Abarax and the whole cast are stronger.** Every friend starts with +2 HP and +1 to every other
+stat, and grows 5% faster in every stat. Abarax grows a further 5–10% faster in each stat (Str,
+Mag, Def, Res and HP the most), his two promotions give more, and he starts with a new skill,
+*Rose Heart*: +2 damage and +10 Avo, rising with rank. His personal weapons gain 1 Mt every 5
+levels, and everyone else's every 8. Saves from before get the same buff, as if they had grown
+with it.
+
+**Skills and arts have ranks.** Thirty-four skills scale: rank I for a first-tier class, II from
+Lv 15 or on promotion, III from Lv 15 of the second tier and for the All-Divine. *Hot Blood III*
+gives +40 Crit where *Hot Blood* gives +20, *Get Up III* works twice a battle, and so on. Arts
+scale with weapon rank. At B they become *II* (Mt +2, Hit +5, Crit +5, wider splash and chain),
+and at S they become *III* (twice that, plus a turn longer on any status). Enemies rank up with
+their level too. The status screen, the forecast and the skill pages show the rank.
+
+**Armour, outfits and accessories, worn where you can see them.** A new *Gear* option under
+*Items* (on the world map and the prep screen) opens a wardrobe for each friend. It previews the
+duel figure and the map figure wearing the piece, and the stat change before you commit. There
+are three slots and twenty-six pieces:
+
+- Seven pieces of armour: Leather Jerkin, Chain Hauberk, Steel Plate, Divine Plate, Rose-Iron
+  Mail, Warded Mantle and Starwoven Mantle. They are drawn as breastplates, pauldrons, bracers,
+  greaves and mantles.
+- Seven outfits that change the clothes: Chef's Whites, Monk's Wraps, Duelist's Coat, Gala Gown,
+  Traveler's Cloak, Night Market Suit and the Rose Divine Coat.
+- Twelve accessories, each one visible: rings, a rose locket, circlets, a silk scarf, earrings,
+  a charm, gloves and boots. Some do more than stats:
+  - the Bell Charm keeps every status off;
+  - the Coffee Flask starts every battle with an extra Boost point;
+  - Gardener's Gloves heal 10% a turn;
+  - Swift Boots give +1 Mov.
+
+Scaling pieces grow with their wearer. The Rose Locket gives +1 HP every 3 levels, Rose-Iron Mail
++1 Def every 8, the Sun Circlet +1 Mag every 10, and the Rose Divine Coat +1 to every stat every
+10 levels. A new game starts with a jerkin, a ring and a scarf, and older saves get the same
+parcel. Shops across the continent stock the rest.
+
+**Twenty-one new weapons, each with its own fight.** Each family below has its own choreography:
+
+- Iron and Silver Greatswords: raised high in both hands and brought down hard enough to shake
+  the ground.
+- Rapier and Duelist's Rapier: a hop into the lunge and three thrusts too quick to count.
+- Chakram and Moon Ring: thrown flat, through the target, and caught on the way home.
+- War Hammer and Iron Maul: swung once round the body, then down like a falling roof.
+- War Fan and Crane-Wing Fan: the fan opens on the turn, cuts with its edge, and the wind does the
+  rest.
+- Field and Reaper's Scythes: one wide reaping sweep.
+- Chain Whip and Thorn Lash: cracked across the gap without closing in. They can drag the foe
+  closer or root them.
+- Longbow and Yew Warbow: drawn to the cheek and loosed high, so the arrow falls on them.
+- Flintlock and Twin Pistols: from the hip to the eye in one motion, fanned three times on a
+  crit.
+- Three new gifts: Meteor, a burning stone from the sky; Verdance, vines and flowers that root;
+  and Maelstrom, the sea turning round them, which chills.
+
+Every family has its own art: *Cleave*, *Flurry*, *Ricochet*, *Shatter* (breaks a boss's shield
+outright), *Tempest*, *Reap*, *Snare*, *Volley*, *Quick Draw*, *Cataclysm* and *Whirlpool*.
+
+**Three new side quests:**
+
+- *The Tailor of Rue Lumière* (after Chapter 9): hold the tailor's shop against Yaska's
+  collectors for six turns. It pays in clothes, among them the Rose Divine Coat.
+- *Iron and Embers* (after Chapter 15, with Vehday): break the Foundry Warden on the old
+  foundry floor at Castemere.
+- *The Reliquary of Moons* (after Chapter 19, with Oren and Gerace): four chests under the Hall
+  of the Concord, and the Keeper of Moons, who drops the Divine Plate.
+
+![New in 1.4: Kael in steel plate and a traveler's cloak cleaving in the Jardins market; Abarax in Divine Plate in the Garden; Liora in a gala gown casting Verdance in the forest; Vehday in the night market suit at the Mireille docks; the skills page with Rose Heart II; the wardrobe](docs/new-in-1.4.png)
+
 ### New in 1.3
 
 **Freezes.** The remaining freezes came from flows that could die quietly and leave the game
@@ -152,6 +229,7 @@ no phantom menu. The other scripts in `tools/playtest/` take the game's path too
 | `faults.mjs <game>` | Throws errors into the flows that used to freeze and checks that each one recovers. |
 | `memprobe.mjs <game>` | Plays battle after battle and prints the heap and live canvases, to catch leaks. |
 | `smoke.mjs <game> <outdir>` | Checks arts, statuses, skills, rescue and suspend, and saves screenshots of the new screens. |
+| `smoke14.mjs <game> <outdir>` | Checks gear, ranks, the stat buffs and the new side quests, and renders sheets of every new weapon's duel, every backdrop and the wardrobe. |
 
 ## Build it yourself
 
