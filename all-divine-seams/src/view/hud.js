@@ -87,8 +87,11 @@ window.AD = window.AD || {};
   }
 
   // ---------------------------------------------------------------- drawing
+  // the quickslots take taps while the HUD is on screen
+  HUD.quickTappable = () => S.drawnAt != null && AD.frame - S.drawnAt <= 2;
   HUD.draw = function (ctx, run) {
     const g = G(), mode = AD.display.mode, L = HUD.layout(mode), W = AD.display.W;
+    S.drawnAt = AD.frame;
     defIcons(g);
     const h = run.hero;
     if (!h) return;

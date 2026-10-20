@@ -7,7 +7,7 @@ window.AD = window.AD || {};
   const FX = (AD.fx = AD.fx || {});
   const G = AD.gfx;
   // the Settings the effects obey (the Settings screen writes these)
-  AD.settings = Object.assign({ shake: 'full', flashes: 'full', numbers: true, effects: true }, AD.settings || {});
+  AD.settings = Object.assign({ shake: 'full', flashes: 'full', numbers: true, effects: true, haptics: true, ctlSize: 100, ctlAlpha: 50, leftHanded: false }, AD.settings || {});
   const gba = () => AD.display.mode === 'gba';
   const TT = () => AD.display.T;
   const rnd = Math.random;

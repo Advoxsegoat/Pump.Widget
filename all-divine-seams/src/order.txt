@@ -1,4 +1,5 @@
 engine/core.js
+engine/input.js
 engine/gfx.js
 engine/audio.js
 art/raster.js

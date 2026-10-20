@@ -283,6 +283,9 @@ window.AD = window.AD || {};
     AD.display.onChange.push(warm);
     bound = [offDepth, () => { const i = AD.display.onChange.indexOf(warm); if (i >= 0) AD.display.onChange.splice(i, 1); }];
     if (AD.audio && AD.audio.bind) bound.push(AD.audio.bind(run.events));
+    // haptics (spec 9.3): a tick on landing a blow, a thump on being hurt
+    bound.push(run.events.on('hit', (p) => { if (p.src === run.hero && p.amount > 0) AD.input.buzz(p.crit ? 18 : 8); }, 99));
+    bound.push(run.events.on('hurt', () => AD.input.buzz(30), 99));
   };
 
   // ---------------------------------------------------------------- the frame

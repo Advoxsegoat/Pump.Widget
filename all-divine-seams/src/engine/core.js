@@ -241,9 +241,11 @@ window.AD = window.AD || {};
     AD.fit = () => {
       const wrap = document.getElementById('stage');
       if (!wrap) return;
-      const r = wrap.getBoundingClientRect();
+      const r = wrap.getBoundingClientRect(), cs = getComputedStyle(wrap);
+      // the stage's padding is where the phone controls sit (landscape): the screen fits inside it
+      const rw = r.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), rh = r.height - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
       const W = AD.display.W, H = AD.display.H;
-      const s = Math.min(r.width / W, r.height / H);
+      const s = Math.min(rw / W, rh / H);
       if (!(s > 0)) return;
       // integer scale when there is room, so pixels stay square and even
       const k = s >= 2 ? Math.floor(s) : s;
