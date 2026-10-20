@@ -152,6 +152,8 @@ window.AD = window.AD || {};
     ctx.drawImage(f, Math.round(W() / 2 - T * 1.5 + an.ox), Math.round(H() * 0.52 - T + an.oy));
     this.menu.draw(ctx);
     if (AD.meta && AD.meta.petals) { G.icon(ctx, 'rose', 6, H() - 13); G.text(ctx, AD.stat.short(AD.meta.petals), 17, H() - 13, C.cream); }
+    // a run save that could not be read was set aside: say so, plainly
+    if (AD.save && AD.save.problem) G.text(ctx, AD.save.problem, W() / 2, H() - 13, C.rose, { align: 'center' });
   };
 
   // ---------------------------------------------------------------- the Garden
@@ -368,7 +370,8 @@ window.AD = window.AD || {};
     run.events.on('pickup', (p) => { if (p.p && p.p.kind === 'cons') say('quick'); }, 99);
     this.say = say;
     if (AD.audio) AD.audio.play(run.room.sealed ? 'fight' : run.region().id);
-    if (AD.save) AD.save.watch(run);
+    // saved from the start: the run was built standing in its first room
+    if (AD.save) { AD.save.watch(run); AD.save.run(run); }
   };
   AD.Play.prototype.pause = function () { AD.run(new AD.Pause(this.run)); };
   AD.Play.prototype.update = function () {

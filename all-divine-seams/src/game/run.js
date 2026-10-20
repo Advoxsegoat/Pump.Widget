@@ -73,7 +73,14 @@ window.AD = window.AD || {};
     return room;
   };
 
+  // the random streams where they stand, for a save to put back
+  P.streamStates = function () { const s = this.streams; return { layout: s.layout.state(), combat: s.combat.state(), loot: s.loot.state() }; };
   P.enterRoom = function (key, side) {
+    // how things stood as the hero came in: a save resumes from exactly here
+    if (key !== 'arena') {
+      const st0 = this.roomState.get(key);
+      this.entry = { key, side, state: st0 ? st0.state : 'unvisited', taken: st0 ? [...st0.taken] : [], streams: this.streamStates() };
+    }
     const old = this.room;
     const h = this.hero;
     if (old && h) { old.grid.release(h.id, h.x, h.y); if (h.move) old.grid.release(h.id, h.move.x1, h.move.y1); old.bodies.delete(h.id); }
@@ -406,6 +413,7 @@ window.AD = window.AD || {};
 
   // ---------------------------------------------------------------- the boss
   P.enterArena = function () {
+    this.entry = { key: 'arena', side: 's', state: 'unvisited', taken: [], streams: this.streamStates() };
     const R = this.region();
     const layout = AD.gen.arena(R.id, this.streams.layout);
     const info = { type: 'boss', doors: { n: null, s: null, w: null, e: null }, gx: -1, gy: -1 };

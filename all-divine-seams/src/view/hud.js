@@ -68,6 +68,8 @@ window.AD = window.AD || {};
     S.hpShown = 1; S.bossT = 0; S.bossShown = 1; S.depth = null;
     S.offs = [
       run.events.on('depthStart', (p) => { const d = AD.regionAt(p.depth).d; S.depth = { text: d.n, sub: d.sub, t: 90 }; }, 96),
+      // a store that will not take the save: said once, and play goes on
+      run.events.on('saveFailed', (p) => { S.notice = { text: p.text, t: 360 }; }, 96),
     ];
   };
   // a line of help the menus can set for a first run

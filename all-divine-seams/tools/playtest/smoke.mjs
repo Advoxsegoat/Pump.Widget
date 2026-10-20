@@ -161,6 +161,22 @@ check(flow.seen[5] === 'Pause' && flow.seen[6] === 'Settings', 'Start pauses; Se
 check(flow.size[0] === 240 && flow.size[1] === 160 && flow.mode === 'gba', 'True GBA from Settings: ' + flow.size);
 check(flow.after === 'Play' && flow.frames2 > flow.frames, 'Resume goes back to play');
 await page.evaluate(() => { AD.display.set('hd'); });
+// close the page mid-run and come back: Continue resumes at the last room entered
+const before = await page.evaluate(() => ({ saved: AD.save.hasRun(), depth: AD.top().run && AD.top().run.depth, coins: AD.top().run && AD.top().run.coins }));
+await page.reload();
+await page.waitForFunction(() => window.AD && AD.top && AD.top());
+const resumed = await page.evaluate(async () => {
+  const step = async (n) => { for (let i = 0; i < (n || 1); i++) { AD.debugStep(1); await null; } };
+  const first = AD.top().menu.items[0].label;
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z' })); await step(1);
+  window.dispatchEvent(new KeyboardEvent('keyup', { key: 'z' })); await step(25);
+  const t = AD.top();
+  return { first, scene: AD.sceneName(t), depth: t.run && t.run.depth, display: AD.display.mode };
+});
+console.log('smoke resume:', JSON.stringify(before), JSON.stringify(resumed));
+check(before.saved, 'the run was saved');
+check(resumed.first === 'Continue' && resumed.scene === 'Play' && resumed.depth === before.depth, 'Continue resumes the run');
+check(resumed.display === 'gba', 'the Settings were kept (True GBA)');
 check(errors.length === 0, 'no page errors: ' + errors.slice(0, 3).join(' | '));
 await browser.close();
 if (fail.length) { console.log('smoke FAILED\n  ' + fail.join('\n  ')); process.exit(1); }

@@ -37,5 +37,6 @@ view/render.js
 view/hud.js
 data/lore.js
 game/meta.js
+game/save.js
 ui/menus.js
 main.js
