@@ -46,14 +46,17 @@ window.AD = window.AD || {};
   };
 
   // ---------------------------------------------------------------- rooms
+  // each room draws its layout from a stream of its own, so the order rooms are visited never
+  // changes them (and the room slide can show a room before it is entered)
+  P.layoutOf = function (key) {
+    const r = AD.rng.make(AD.rng.hash(this.seed + ':' + this.depth + ':room:' + key));
+    return AD.gen.room(this.floor, key, this.region().id, r);
+  };
   P.liveRoom = function (key) {
     let room = this.rooms.get(key);
     if (room) return room;
     const info = this.floor.rooms.get(key);
-    // each room draws its layout from a stream of its own, so the order rooms are visited never changes them
-    const r = AD.rng.make(AD.rng.hash(this.seed + ':' + this.depth + ':room:' + key));
-    const layout = AD.gen.room(this.floor, key, this.region().id, r);
-    room = AD.room.build(this, key, layout, info);
+    room = AD.room.build(this, key, this.layoutOf(key), info);
     this.rooms.set(key, room);
     return room;
   };
@@ -125,7 +128,7 @@ window.AD = window.AD || {};
       const cost = (m.cost || 0) * (m.eliteTier === 2 ? 36 : m.eliteTier === 1 ? 6 : 1);
       if (cost) {
         AD.room.drop(room, m.x, m.y, { kind: 'coins', amount: AD.stat.coinsFor(cost, run.coef()) });
-        if (run.hero && !run.hero.dead) AD.hero.gainXp(run.hero, AD.stat.xpFor(cost));
+        if (run.hero && !run.hero.dead && AD.hero.gainXp(run.hero, AD.stat.xpFor(cost))) room.bus.emit('levelUp', { h: run.hero, level: run.hero.level });
       }
       if (run.gate && m === run.gate.guardian) run.guardianDown(room, m);
       if (m === run.bossBody) run.bossDown(room, m);
@@ -134,6 +137,8 @@ window.AD = window.AD || {};
       room.corpses.push({ look: m.look, defId: m.defId, x: m.fx, y: m.fy, facing: m.facing, t: 0, elite: m.elite });
       AD.ent.remove(room, m);
     }, 90);
+    // the hero's own 'hurt' (spec 6.5): what the sound, the HUD and the effects answer
+    room.bus.on('hit', (p) => { if (p.tgt === run.hero && p.amount > 0) room.bus.emit('hurt', { h: run.hero, amount: p.amount, src: p.src, type: p.type, crit: p.crit }); }, 80);
     // brittle armour lets more through
     room.bus.on('takeMods', (p) => { if (p.tgt === run.hero && run.hero.curse === 'brittle') p.mul *= 1.1; });
     // a test and debug hook: nothing kills the hero

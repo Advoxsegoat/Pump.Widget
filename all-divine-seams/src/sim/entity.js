@@ -92,6 +92,7 @@ window.AD = window.AD || {};
   E.tick = function (room, e) {
     if (e.gone) return;
     if (e.iframes > 0) e.iframes--;
+    if (e.flash > 0) e.flash--;
     if (e.hitstop > 0) { e.hitstop--; return; }
     const m = e.move;
     if (!m) return;

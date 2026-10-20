@@ -162,21 +162,22 @@ window.AD = window.AD || {};
 
   // ground marks of ours: pits and the soft shadows under our props
   function groundMarks(c, rows, b) {
+    for (let Y = 0; Y < rows.length; Y++) for (let X = 0; X < rows[0].length; X++) groundMark(c, rows, X, Y, b);
+  }
+  function groundMark(c, rows, X, Y, b) {
     const h = rows.length, w = rows[0].length;
     const pit = (x, y) => x >= 0 && y >= 0 && x < w && y < h && rows[y][x] === 'O';
-    for (let Y = 0; Y < h; Y++) for (let X = 0; X < w; X++) {
-      const ch = rows[Y][X], x = X * T, y = Y * T;
-      if (ch === 'O') {
-        px(c, x, y, T, T, '#07060c');
-        if (!pit(X, Y - 1)) { px(c, x, y, T, 7, sh(b.wallD, -0.25)); px(c, x, y, T, 1, sh(b.groundD || b.wallD, -0.1)); px(c, x, y + 7, T, 2, '#120e1a'); }
-        if (!pit(X - 1, Y)) px(c, x, y, 1, T, sh(b.wallD, -0.4));
-        if (!pit(X + 1, Y)) px(c, x + T - 1, y, 1, T, sh(b.wallD, -0.4));
-        if (!pit(X, Y + 1)) px(c, x, y + T - 1, T, 1, sh(b.groundL || b.wallT, -0.05));
-        if (rnd(X, Y, 3) < 0.5) px(c, x + 6 + ((rnd(X, Y, 4) * 10) | 0), y + 14, 1, 1, '#2a2438');
-      } else if (FREE.indexOf(ch) >= 0 || ch === 'C') {
-        c.fillStyle = 'rgba(10,8,20,0.24)';
-        for (let dy = -2; dy <= 2; dy++) { const ww = Math.round(9 * Math.sqrt(1 - (dy / 3) * (dy / 3))); c.fillRect(x + 12 - ww, y + 21 + dy, ww * 2, 1); }
-      }
+    const ch = rows[Y][X], x = X * T, y = Y * T;
+    if (ch === 'O') {
+      px(c, x, y, T, T, '#07060c');
+      if (!pit(X, Y - 1)) { px(c, x, y, T, 7, sh(b.wallD, -0.25)); px(c, x, y, T, 1, sh(b.groundD || b.wallD, -0.1)); px(c, x, y + 7, T, 2, '#120e1a'); }
+      if (!pit(X - 1, Y)) px(c, x, y, 1, T, sh(b.wallD, -0.4));
+      if (!pit(X + 1, Y)) px(c, x + T - 1, y, 1, T, sh(b.wallD, -0.4));
+      if (!pit(X, Y + 1)) px(c, x, y + T - 1, T, 1, sh(b.groundL || b.wallT, -0.05));
+      if (rnd(X, Y, 3) < 0.5) px(c, x + 6 + ((rnd(X, Y, 4) * 10) | 0), y + 14, 1, 1, '#2a2438');
+    } else if (FREE.indexOf(ch) >= 0 || ch === 'C') {
+      c.fillStyle = 'rgba(10,8,20,0.24)';
+      for (let dy = -2; dy <= 2; dy++) { const ww = Math.round(9 * Math.sqrt(1 - (dy / 3) * (dy / 3))); c.fillRect(x + 12 - ww, y + 21 + dy, ww * 2, 1); }
     }
   }
 
@@ -277,23 +278,27 @@ window.AD = window.AD || {};
     row.x.drawImage(layer, 0, 0);
   }
 
+  // one row of props: the Tactics painter's (row, or null), with ours laid on
+  function ourRow(row, rows, Y, b) {
+    const h = rows.length, w = rows[0].length;
+    let layer = null;
+    for (let X = 0; X < w; X++) {
+      const ch = rows[Y][X];
+      if (FREE.indexOf(ch) < 0 && DOORS.indexOf(ch) < 0) continue;
+      if (!row) row = G.canvas(w * T, HEAD + T);
+      if (DOORS.indexOf(ch) >= 0) doorProp(row.x, ch, doorSide(X, Y, w, h), X * T, HEAD, b);
+      else { if (!layer) layer = G.canvas(w * T, HEAD + T); freeProp(layer.x, ch, X, Y, X * T, HEAD, b); }
+    }
+    if (layer) outlined(row, layer);
+    return row;
+  }
   function bakeHD(rows, biome, night) {
     const map = proxy(rows, biome, night);
     const B = TL.bake(map, {});
     const b = B.biome;
     const h = rows.length, w = rows[0].length;
     B.grounds.forEach((g) => groundMarks(g.x, rows, b));
-    for (let Y = 0; Y < h; Y++) {
-      let row = B.rows[Y], layer = null;
-      for (let X = 0; X < w; X++) {
-        const ch = rows[Y][X];
-        if (FREE.indexOf(ch) < 0 && DOORS.indexOf(ch) < 0) continue;
-        if (!row) row = B.rows[Y] = G.canvas(w * T, HEAD + T);
-        if (DOORS.indexOf(ch) >= 0) doorProp(row.x, ch, doorSide(X, Y, w, h), X * T, HEAD, b);
-        else { if (!layer) layer = G.canvas(w * T, HEAD + T); freeProp(layer.x, ch, X, Y, X * T, HEAD, b); }
-      }
-      if (layer) outlined(row, layer);
-    }
+    for (let Y = 0; Y < h; Y++) B.rows[Y] = ourRow(B.rows[Y], rows, Y, b);
     // light from our own props
     for (let Y = 0; Y < h; Y++) for (let X = 0; X < w; X++) {
       const ch = rows[Y][X];
@@ -304,8 +309,9 @@ window.AD = window.AD || {};
   }
   // the room in gba: the reducer on every layer; each row is padded by a pixel so its tile starts
   // on a 3-pixel boundary (56 + 1 = 57), which puts the reduced tile at 38
+  const padRow = (c) => { if (!c) return null; const o = G.canvas(c.width, c.height + 1); o.x.drawImage(c, 0, 1); return A.down32(o); };
   function toGba(R) {
-    const pad = (c) => { if (!c) return null; const o = G.canvas(c.width, c.height + 1); o.x.drawImage(c, 0, 1); return A.down32(o); };
+    const pad = padRow;
     return {
       ground: R.ground.map((g) => A.down32(g)), rows: R.rows.map(pad),
       lights: R.lights.map((l) => Object.assign({}, l, { x: two3(l.x), y: two3(l.y), r: two3(l.r) })),
@@ -317,11 +323,57 @@ window.AD = window.AD || {};
   // rows: the room's glyph rows; biome: the depth's ('city', 'dungeon', 'interior'); night: the depth's
   // returns {ground: canvas[4] (animation frames), rows: canvas|null per tile row (each drawn at
   // y * tile - head), lights, biome, head, tile}
+  const hdRoom = (k, rows, biome, night) => rooms.get('hd|' + k) || remember('hd|' + k, bakeHD(rows, biome, night));
+  const keyOf = (rows, biome, night) => biome + '|' + (night ? 1 : 0) + '|' + rows.join('/');
   A.room = function (rows, biome, night) {
-    const k = biome + '|' + (night ? 1 : 0) + '|' + rows.join('/');
-    const hdR = rooms.get('hd|' + k) || remember('hd|' + k, bakeHD(rows, biome, night));
+    const k = keyOf(rows, biome, night);
+    const hdR = hdRoom(k, rows, biome, night);
     if (!gba()) return hdR;
     return rooms.get('gba|' + k) || remember('gba|' + k, toGba(hdR));
+  };
+
+  // a room's art of its own, which A.patch changes in place as the room changes in play (a pot
+  // breaks, grass burns, a door opens): only the changed tiles and the rows round them are redone
+  const copy = (c) => { if (!c) return null; const o = G.canvas(c.width, c.height); o.x.drawImage(c, 0, 0); return o; };
+  const cloneArt = (R) => Object.assign({}, R, { ground: R.ground.map(copy), rows: R.rows.map(copy), lights: R.lights.slice() });
+  A.roomArt = function (rows, biome, night) {
+    const k = keyOf(rows, biome, night);
+    const hdR = hdRoom(k, rows, biome, night);
+    const art = { rows: rows.slice(), biome, night, mode: AD.display.mode, hd: cloneArt(hdR) };
+    if (gba()) art.gba = cloneArt(rooms.get('gba|' + k) || remember('gba|' + k, toGba(hdR)));
+    art.view = art.gba || art.hd;
+    return art;
+  };
+  A.patch = function (art, rows) {
+    const h = rows.length, w = rows[0].length;
+    const tiles = new Set(), rowsY = new Set();
+    for (let Y = 0; Y < h; Y++) for (let X = 0; X < w; X++) {
+      if (art.rows[Y][X] === rows[Y][X]) continue;
+      // water edges and wall faces join their neighbours, so the ring round a change is redone too
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const x = X + dx, y = Y + dy;
+        if (x >= 0 && y >= 0 && x < w && y < h) tiles.add(y * w + x);
+      }
+      for (let dy = -1; dy <= 1; dy++) if (Y + dy >= 0 && Y + dy < h) rowsY.add(Y + dy);
+    }
+    if (!tiles.size) return false;
+    const map = proxy(rows, art.biome, art.night);
+    const hd = art.hd, b = hd.biome;
+    for (const i of tiles) {
+      const X = i % w, Y = (i / w) | 0;
+      TL.groundTile(hd.ground, map, X, Y);
+      hd.ground.forEach((g) => groundMark(g.x, rows, X, Y, b));
+    }
+    for (const Y of rowsY) hd.rows[Y] = ourRow(TL.bakeRow(map, Y, {}), rows, Y, b);
+    if (art.gba) {
+      for (const i of tiles) {
+        const X = i % w, Y = (i / w) | 0;
+        hd.ground.forEach((g, fr) => A.down32Into(g, X * T, Y * T, T, T, art.gba.ground[fr]));
+      }
+      for (const Y of rowsY) art.gba.rows[Y] = padRow(hd.rows[Y]);
+    }
+    art.rows = rows.slice();
+    return true;
   };
 
   // ---------------------------------------------------------------- sprites that change in play
@@ -401,7 +453,54 @@ window.AD = window.AD || {};
       });
     },
   };
-  const SPRITE_AT = { chest: [0, -12], trap: [0, 0], gate: [-12, -36], flame: [0, -12] };
+  // things on the floor to pick up: {kind, c (a draught's colour), scroll, tier, amount}
+  const TIER_C = { common: '#f4eee0', uncommon: '#6ad06a', legendary: '#ef5f6a', boss: '#e8c170', equipment: '#ffb347', spent: '#8a8a96' };
+  A.TIER_C = TIER_C;
+  const PICK = {
+    coins(c, o, f) {
+      const w = [5, 3, 1, 3][f], n = o.amount >= 8 ? 3 : o.amount >= 3 ? 2 : 1;
+      const at = [[12, 15], [8, 17], [15, 18]].slice(0, n);
+      for (const [x, y] of at) { px(c, x - (w >> 1), y - 3, w, 6, '#a8803a'); px(c, x - (w >> 1), y - 3, Math.max(1, w - 1), 5, '#e8c170'); if (w > 2) px(c, x - 1, y - 2, 1, 2, '#fff2b0'); }
+    },
+    heart(c) { px(c, 8, 10, 3, 2, '#e8344e'); px(c, 13, 10, 3, 2, '#e8344e'); px(c, 7, 11, 10, 3, '#e8344e'); px(c, 8, 14, 8, 2, '#c8203a'); px(c, 10, 16, 4, 1, '#c8203a'); px(c, 11, 17, 2, 1, '#a8102a'); px(c, 8, 11, 2, 1, '#ffb0b8'); },
+    key(c) { ell(c, 8, 13, 3, 3, '#e8c170'); ell(c, 8, 13, 1, 1, '#4a3a2a'); px(c, 10, 12, 8, 2, '#e8c170'); px(c, 15, 14, 1, 2, '#e8c170'); px(c, 17, 14, 1, 3, '#e8c170'); px(c, 10, 12, 8, 1, '#fff2b0'); },
+    item(c, o) {
+      const k = TIER_C[o.tier] || TIER_C.common;
+      for (let i = 0; i < 5; i++) px(c, 12 - i, 9 + i, i * 2 + 1, 1, k);
+      for (let i = 0; i < 4; i++) px(c, 12 - (3 - i), 14 + i, (3 - i) * 2 + 1, 1, sh(k, -0.25));
+      px(c, 11, 10, 1, 3, '#ffffff');
+    },
+    cons(c, o) {
+      if (o.bomb) { ell(c, 12, 15, 4, 4, '#2a2a30'); px(c, 10, 12, 2, 2, '#5a5a66'); px(c, 13, 9, 1, 3, '#8a6a4a'); return; }
+      if (o.scroll) { px(c, 7, 9, 10, 9, '#efe2c4'); px(c, 6, 8, 12, 2, '#c8b890'); px(c, 6, 17, 12, 2, '#c8b890'); px(c, 9, 12, 6, 1, o.c || '#8a6a3a'); px(c, 9, 14, 4, 1, o.c || '#8a6a3a'); return; }
+      const k = o.c || '#c8ccd8';
+      px(c, 11, 6, 2, 3, '#8a6a4a'); px(c, 10, 9, 4, 2, '#c8d8e8');
+      ell(c, 12, 15, 5, 4, '#c8d8e8'); ell(c, 12, 16, 4, 3, k); px(c, 9, 13, 1, 2, '#ffffff');
+    },
+    armour(c) { px(c, 7, 8, 10, 10, '#8a8e9a'); px(c, 5, 8, 3, 4, '#8a8e9a'); px(c, 16, 8, 3, 4, '#8a8e9a'); px(c, 10, 8, 4, 2, '#3a3a44'); px(c, 8, 9, 1, 8, '#c0c8d8'); px(c, 7, 17, 10, 1, '#5a5e6a'); },
+    lore(c) { px(c, 7, 7, 10, 12, '#efe2c4'); px(c, 15, 7, 2, 2, '#c8b890'); for (let i = 0; i < 4; i++) px(c, 9, 10 + i * 2, 6 - (i % 2) * 2, 1, '#8a6a3a'); },
+    petal(c) { ell(c, 12, 14, 3, 4, '#e8607e'); px(c, 11, 11, 1, 3, '#ffb0c8'); px(c, 12, 18, 1, 2, '#6ad06a'); },
+  };
+  SPRITES.pickup = function (o, t) {
+    const f = o.kind === 'coins' ? (t >> 3) % 4 : 0;
+    const key = 'pick|' + o.kind + '|' + (o.c || '') + (o.scroll ? 's' : '') + (o.bomb ? 'b' : '') + '|' + (o.tier || '') + '|' + (o.kind === 'coins' ? (o.amount >= 8 ? 3 : o.amount >= 3 ? 2 : 1) : '') + '|' + f;
+    return sprite(key, 24, 24, (c) => (PICK[o.kind] || PICK.item)(c, o, f));
+  };
+  // a lit bomb on the floor, its fuse sparking; {hot} in its last moments
+  SPRITES.bomb = function (o, t) {
+    return sprite('bomb|' + (o.hot ? 1 : 0) + '|' + ((t >> 2) % 2), 24, 24, (c) => {
+      ell(c, 12, 15, 5, 5, o.hot && (t >> 2) % 2 ? '#8a2a2a' : '#2a2a30'); px(c, 9, 11, 3, 2, '#5a5a66');
+      px(c, 13, 8, 1, 3, '#8a6a4a'); px(c, 14, 6, 1, 2, (t >> 2) % 2 ? '#ffb347' : '#fff2b0'); px(c, 15, 5, 1, 1, '#ff6a3a');
+    });
+  };
+  // what monsters throw and shoot: {kind}
+  SPRITES.shot = function (o) {
+    return sprite('shot|' + o.kind, 12, 12, (c) => {
+      if (o.kind === 'ball') { px(c, 4, 4, 4, 4, '#2a2a30'); px(c, 5, 5, 1, 1, '#c8ccd8'); }
+      else { ell(c, 6, 6, 2, 2, '#9a948a'); px(c, 5, 5, 1, 1, '#d8d2c2'); }
+    });
+  };
+  const SPRITE_AT = { chest: [0, -12], trap: [0, 0], gate: [-12, -36], flame: [0, -12], pickup: [0, 0], bomb: [0, 0], shot: [-6, -6] };
   // a prop that changes in play: {c, ox, oy}, placed relative to its tile's top-left
   A.sprite = function (name, o, t) {
     const c = SPRITES[name](o || {}, t || 0);
@@ -412,9 +511,18 @@ window.AD = window.AD || {};
   // ---------------------------------------------------------------- mode changes
   const ACTIONS = ['idle', 'walk', 'attack1', 'attack2', 'attack3', 'spin', 'cast', 'roll', 'hurt', 'dead'];
   // the frames a figure is drawn with, so a mode change rebuilds them before play resumes
+  const SAMPLES = [0, 4, 5, 8, 12, 40];
   function warm(L) {
-    for (const a of ACTIONS) for (const d of SPIN) for (const t of [0, 4, 5, 8, 12]) A.frames(L, a, d, t);
+    for (const a of ACTIONS) for (const d of SPIN) for (const t of SAMPLES) A.frames(L, a, d, t);
   }
+  // every frame these monsters can show, made now rather than the first time one is seen
+  A.warm = function (ids) {
+    for (const id of ids) {
+      const look = lookOf(id);
+      if (A.BEAST[look]) { for (const a of ['idle', 'walk', 'attack1', 'dead']) for (const d of ['left', 'right']) for (const t of [0, 10, 20]) A.monster(id, a, d, t); }
+      else warm(AD.lookFor(look));
+    }
+  };
   A.build = function (mode) {
     if (mode !== 'gba') return;
     warm(AD.lookFor('abarax'));

@@ -30,4 +30,7 @@ art/tiles.js
 data/looks.js
 art/monsters.js
 art/atlas.js
+view/fx.js
+view/render.js
+view/hud.js
 main.js

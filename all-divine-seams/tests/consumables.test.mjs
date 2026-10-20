@@ -54,9 +54,12 @@ test('thrown potions land three tiles ahead', () => {
 
 test('Experience gives a level', () => {
   const run = newRun(8);
+  const ups = [];
+  run.events.on('levelUp', (p) => ups.push(p.level));
   AD.cons.give(run, 'experience');
   use(run, 'experience');
   assert.equal(run.hero.level, 2);
+  assert.deepEqual([...ups], [2]);
 });
 
 test('armour: worn, upgraded, cursed until Remove Curse', () => {

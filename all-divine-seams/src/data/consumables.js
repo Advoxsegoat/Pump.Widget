@@ -114,7 +114,7 @@ window.AD = window.AD || {};
       }
       case 'toxic': { const [x, y] = ahead(run, 3); AD.world.addGas(room, x, y, 'poison', 600); break; }
       case 'mindvision': run.mindVision = 1800; break;
-      case 'experience': AD.hero.gainXp(h, AD.stat.xpToNext(h.level) - h.xp); break;
+      case 'experience': if (AD.hero.gainXp(h, AD.stat.xpToNext(h.level) - h.xp)) room.bus.emit('levelUp', { h, level: h.level }); break;
       case 'identify': {
         if (run.armour && !run.armour.known) { run.armour.known = true; run.events.emit('identified', { id: 'armour' }); break; }
         const unknown = Object.keys(run.bag).find((k) => (isPotion(k) || isScroll(k)) && run.bag[k] > 0 && !C.known(run, k) && k !== 'identify');

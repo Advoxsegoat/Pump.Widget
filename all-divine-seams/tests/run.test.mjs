@@ -159,6 +159,22 @@ test('determinism: same seed, same inputs, same state', () => {
   assert.equal(go(), go());
 });
 
+test('the bus carries hurt and levelUp (spec 6.5) for the sound, the HUD and the effects', () => {
+  const run = newRun(9); run.god = true;
+  gotoRoomOfType(run, 'combat');
+  const seen = [];
+  run.events.on('hurt', (p) => seen.push(['hurt', p.amount]));
+  run.events.on('levelUp', (p) => seen.push(['levelUp', p.level]));
+  const m = [...run.room.bodies.values()].find((b) => b.kind === 'monster') || AD.ai.spawn(run.room, 'grunt', 3, 3, { level: 1 });
+  AD.combat.deal(run.room, { src: m, tgt: run.hero, amount: 7, type: 'normal', proc: 0, mask: [], fixed: true });
+  run.hero.xp = AD.stat.xpToNext(1) - 0.5;
+  m.untargetable = false; m.shimmer = 0;
+  AD.combat.deal(run.room, { src: run.hero, tgt: m, pct: 1e5, type: 'normal', proc: 0, mask: [] });
+  assert.deepEqual(seen.map((s) => s[0]), ['hurt', 'levelUp']);
+  assert.equal(seen[0][1], 7);
+  assert.equal(seen[1][1], 2);
+});
+
 test('death ends the run', () => {
   const run = newRun(9);
   run.hero.getUpUsed = true;

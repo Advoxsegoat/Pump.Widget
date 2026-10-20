@@ -66,3 +66,14 @@ test('hit-stop freezes the glide', () => {
   for (let i = 0; i < 3; i++) AD.ent.tick(room, e);
   assert.equal(e.fx, 5);
 });
+
+test('a struck body\'s white flash wears off, hit-stop or not', () => {
+  const room = testRoom(AD), e = hero(room, 5, 5);
+  e.flash = 6; e.hitstop = 3;
+  for (let i = 0; i < 5; i++) AD.ent.tick(room, e);
+  assert.equal(e.flash, 1);
+  AD.ent.tick(room, e);
+  assert.equal(e.flash, 0);
+  AD.ent.tick(room, e);
+  assert.equal(e.flash, 0);
+});

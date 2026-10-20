@@ -723,6 +723,20 @@
     }
     return { grounds, rows, lights, biome: b };
   };
+  // repaint one tile of the ground in every frame, for a map that changed in play
+  TL.groundTile = function (grounds, map, X, Y) {
+    const b = BI[map.biome] || BI.city;
+    const ch = map.at(X, Y), t = T[ch];
+    grounds.forEach((cv, fr) => {
+      const c = cv.x;
+      c.clearRect(X * S, Y * S, S, S);
+      ground(c, ch, X, Y, X * S, Y * S, b, fr, map);
+      if (t && t.prop && '#BnKDQ'.indexOf(ch) < 0) {
+        c.fillStyle = 'rgba(10,8,20,0.24)';
+        for (let dy = -2; dy <= 2; dy++) { const w = Math.round(10 * Math.sqrt(1 - (dy / 3) * (dy / 3))); c.fillRect(X * S + 12 - w, Y * S + 21 + dy, w * 2, 1); }
+      }
+    });
+  };
   const tmp = G.canvas(8, 8), ol = G.canvas(8, 8);
   function sized(cv, w, h) { if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; } else cv.x.clearRect(0, 0, w, h); cv.x.imageSmoothingEnabled = false; return cv.x; }
   TL.bakeRow = function (map, y, state) {

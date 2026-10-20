@@ -88,6 +88,22 @@ window.AD = window.AD || {};
     return { w: o.w, h: o.h, d, get: (x, y) => d[y * o.w + x] };
   };
 
+  // reduce a region of an HD canvas (x, y, w, h all multiples of 3) into the matching region of
+  // its reduced copy: blocks never cross a 24-pixel tile, so a changed tile reduces on its own
+  A.down32Into = function (src, x, y, w, h, dst) {
+    const id = src.x.getImageData(x, y, w, h).data;
+    const px = new Int32Array(w * h);
+    for (let i = 0; i < w * h; i++) px[i] = id[i * 4 + 3] < 128 ? 0 : ON | (id[i * 4] << 16) | (id[i * 4 + 1] << 8) | id[i * 4 + 2];
+    const o = core(px, w, h, OLP);
+    const img = dst.x.createImageData(o.w, o.h);
+    for (let i = 0; i < o.w * o.h; i++) {
+      const c = o.d[i];
+      if (!c) continue;
+      img.data[i * 4] = (c >> 16) & 255; img.data[i * 4 + 1] = (c >> 8) & 255; img.data[i * 4 + 2] = c & 255; img.data[i * 4 + 3] = 255;
+    }
+    dst.x.putImageData(img, (x * 2) / 3, (y * 2) / 3);
+  };
+
   // the same, on a canvas (browser only); cached per source canvas
   const cache = new WeakMap();
   const OLP = pack(OUT);

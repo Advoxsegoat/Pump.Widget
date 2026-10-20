@@ -323,6 +323,8 @@
     acc: ['...rr...', '..rwwr..', '...gg...', '..g..g..', '.g....g.', '.g....g.', '..g..g..', '...gg...'],
   };
   const ICOL = { '#': '#e6ecff', c: '#b8c0e0', g: '#e8c170', r: '#ef5f6a', w: '#ffffff', b: '#5fb6f5' };
+  // more 8x8 icons, in the same letters
+  G.defIcon = (name, rows) => { ICONS[name] = rows; };
   const iconCache = {};
   G.icon = function (ctx, name, x, y, alpha) {
     let c = iconCache[name];
