@@ -1,4 +1,4 @@
-// Boot: a placeholder title until the menus arrive.
+// Boot: the saved meta and Settings, then the title.
 (function (AD) {
   'use strict';
   if (!AD.Title) {
@@ -9,5 +9,9 @@
       G.text(ctx, 'BETWEEN THE ROOMS', W / 2, H / 2 - 6, G.C.gold, { align: 'center' });
     };
   }
-  window.addEventListener('DOMContentLoaded', () => AD.boot(() => AD.push(new AD.Title())));
+  window.addEventListener('DOMContentLoaded', () => AD.boot(() => {
+    if (AD.save && AD.save.boot) AD.save.boot();
+    if (AD.applySettings) AD.applySettings();
+    AD.push(new AD.Title());
+  }));
 })(window.AD);

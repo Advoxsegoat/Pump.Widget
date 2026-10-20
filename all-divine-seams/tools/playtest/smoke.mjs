@@ -122,6 +122,45 @@ check(audio.ok, 'audio starts: ' + audio.why);
 check(audio.waiting, 'a track change waits for the bar');
 check(audio.switched, 'and then plays the new track');
 console.log('smoke audio:', JSON.stringify(audio));
+// the whole way in, as a player would: title, Garden, the tear, a run, pause, Settings, True GBA
+await page.reload();
+await page.waitForFunction(() => window.AD && AD.top && AD.top());
+const flow = await page.evaluate(async () => {
+  // a frame at a time, letting promises settle between frames as the page's own loop does
+  const step = async (n) => { for (let i = 0; i < (n || 1); i++) { AD.debugStep(1); await null; } };
+  const key = (k, down) => window.dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { key: k }));
+  const tap = async (k) => { key(k, true); await step(1); key(k, false); await step(1); };
+  const hold = async (k, n) => { key(k, true); await step(n); key(k, false); await step(2); };
+  const top = () => AD.sceneName(AD.top());
+  const seen = [top()];
+  await step(5);
+  await tap('z'); await step(25); seen.push(top());
+  const g = AD.top();
+  await hold('ArrowUp', 40); seen.push('hero ' + (g.hero ? g.hero.x + ',' + g.hero.y : '-'));
+  await tap('z'); await step(3); seen.push(top());
+  await tap('z'); await step(25); seen.push(top());
+  const play = AD.top();
+  await step(300);
+  const frames = play.run ? play.run.frames : 0;
+  await tap('Enter'); await step(2); seen.push(top());
+  for (let i = 0; i < 3; i++) await tap('ArrowDown');
+  await tap('z'); await step(2); seen.push(top());
+  await tap('ArrowRight'); await step(3);
+  const size = [AD.canvas.width, AD.canvas.height];
+  await tap('x'); await step(2); seen.push(top());
+  await tap('x'); await step(2); seen.push(top());
+  await step(30);
+  return { seen, frames, size, mode: AD.display.mode, after: top(), frames2: play.run ? play.run.frames : 0 };
+});
+console.log('smoke flow:', JSON.stringify(flow));
+check(flow.seen[1] === 'Garden', 'the title leads to the Garden');
+check(flow.seen[3] === 'Tear', 'the tear opens the run start: ' + flow.seen[2]);
+check(flow.seen[4] === 'Play', 'Begin starts a run');
+check(flow.frames >= 300, 'the run played 300 frames');
+check(flow.seen[5] === 'Pause' && flow.seen[6] === 'Settings', 'Start pauses; Settings opens');
+check(flow.size[0] === 240 && flow.size[1] === 160 && flow.mode === 'gba', 'True GBA from Settings: ' + flow.size);
+check(flow.after === 'Play' && flow.frames2 > flow.frames, 'Resume goes back to play');
+await page.evaluate(() => { AD.display.set('hd'); });
 check(errors.length === 0, 'no page errors: ' + errors.slice(0, 3).join(' | '));
 await browser.close();
 if (fail.length) { console.log('smoke FAILED\n  ' + fail.join('\n  ')); process.exit(1); }

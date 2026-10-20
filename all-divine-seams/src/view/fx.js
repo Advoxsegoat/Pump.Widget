@@ -7,7 +7,7 @@ window.AD = window.AD || {};
   const FX = (AD.fx = AD.fx || {});
   const G = AD.gfx;
   // the Settings the effects obey (the Settings screen writes these)
-  AD.settings = Object.assign({ shake: 'full', flashes: 'full', numbers: true, effects: true, haptics: true, ctlSize: 100, ctlAlpha: 50, leftHanded: false }, AD.settings || {});
+  AD.settings = Object.assign({ shake: 'full', flashes: 'full', numbers: true, effects: true, haptics: true, ctlSize: 100, ctlAlpha: 50, leftHanded: false, music: 50, sfxVol: 60 }, AD.settings || {});
   const gba = () => AD.display.mode === 'gba';
   const TT = () => AD.display.T;
   const rnd = Math.random;
@@ -91,6 +91,7 @@ window.AD = window.AD || {};
   // ---------------------------------------------------------------- the bus
   const centre = (e) => [e.fx + 0.5, e.fy + 0.3];
   FX.bind = function (run) {
+    if (FX.unbind) FX.unbind();
     FX.clear();
     const on = (n, f) => run.events.on(n, f, 95);
     const offs = [
@@ -126,9 +127,8 @@ window.AD = window.AD || {};
   };
   FX.clear = function () { FX.nums.length = 0; FX.sparks.length = 0; FX.trails.length = 0; FX.lights.length = 0; };
 
-  // one step, with the simulation
+  // one step, with the simulation (shake and flash wear off in gfx's FX.update, every frame)
   FX.tick = function () {
-    if (FX.update) FX.update(); // shake and flash wear off (gfx)
     for (const n of FX.nums) { n.t++; n.age++; }
     FX.nums = FX.nums.filter((n) => n.t < n.life);
     for (const s of FX.sparks) { s.t++; s.x += s.vx; s.y += s.vy; s.vy += s.g || 0.004; s.vx *= 0.92; s.vy *= 0.92; }

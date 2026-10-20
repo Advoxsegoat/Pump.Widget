@@ -20,7 +20,8 @@ window.AD = window.AD || {};
   // kept beside the room, not in it, so the simulation's state stays plain data
   const arts = new WeakMap();
   function artOf(room) {
-    const d = AD.regionAt(room.depth).d;
+    // a place outside the depths (the Garden) says its own biome
+    const d = room.biome ? { biome: room.biome, night: !!room.night } : AD.regionAt(room.depth).d;
     let v = arts.get(room);
     if (!v || v.art.mode !== AD.display.mode) {
       v = { art: A.roomArt(room.grid.rows(), d.biome, d.night), version: room.grid.version };
@@ -219,7 +220,7 @@ window.AD = window.AD || {};
         const ch = glyphs[Y][X];
         let s = null;
         if (ch === 'C') s = A.sprite('chest', { big: room.type === 'secret', open: !!room.chests[X + ',' + Y] });
-        else if (ch === 'G') s = A.sprite('gate', run && run.gate && run.room === room ? { charge: run.gate.charge, open: run.gate.open } : { charge: 0 }, f);
+        else if (ch === 'G') s = A.sprite('gate', room.gateLook || (run && run.gate && run.room === room ? { charge: run.gate.charge, open: run.gate.open } : { charge: 0 }), f);
         else if (ch === 'f') s = A.sprite('flame', { f: (f >> 3) % 4 });
         if (s) ctx.drawImage(s.c, ox + X * T + s.ox, oy + Y * T + s.oy);
       }
@@ -289,6 +290,30 @@ window.AD = window.AD || {};
   };
 
   // ---------------------------------------------------------------- the frame
+  function light(ctx, lights, ambient, night, ox, oy) {
+    const W = AD.display.W, H = AD.display.H;
+    const a = DARK[Math.max(0, Math.min(4, ambient))];
+    if (AD.settings.effects) { if (a > 0.02) FX.lighting(ctx, night ? `rgba(6,8,26,${a})` : `rgba(10,8,18,${a})`, lights.concat(FX.lightsAt(ox, oy))); }
+    else { ctx.fillStyle = `rgba(10,8,18,${a * 0.5})`; ctx.fillRect(-8, -8, W + 16, H + 16); }
+  }
+  function finish(ctx) {
+    if (AD.settings.effects && !gba()) FX.post(ctx, { bloom: true, tilt: false, threshold: 205, bloomAmt: 0.3 });
+    FX.drawFlash(ctx, FX.flashPeak());
+  }
+  // a place with no run behind it (the Garden): {ambient, night}
+  V.drawPlace = function (ctx, room, o) {
+    o = o || {};
+    const [sx, sy] = FX.offset();
+    ctx.save();
+    ctx.fillStyle = '#06040a'; ctx.fillRect(0, 0, AD.display.W, AD.display.H);
+    ctx.translate(sx, sy);
+    const lights = drawRoom(ctx, null, room, 0, 0, true);
+    FX.draw(ctx, 0, 0);
+    light(ctx, lights, o.ambient === undefined ? 3 : o.ambient, !!o.night, 0, 0);
+    FX.drawNumbers(ctx, 0, 0);
+    ctx.restore();
+    finish(ctx);
+  };
   V.draw = function (ctx, run) {
     const W = AD.display.W, H = AD.display.H;
     const [sx, sy] = FX.offset();
@@ -307,16 +332,9 @@ window.AD = window.AD || {};
     } else lights = drawRoom(ctx, run, run.room, 0, 0, true);
     FX.draw(ctx, ox, oy);
     const d = AD.regionAt(run.depth).d;
-    if (AD.settings.effects) {
-      const a = DARK[Math.max(0, Math.min(4, d.ambient))];
-      if (a > 0.02) FX.lighting(ctx, d.night ? `rgba(6,8,26,${a})` : `rgba(10,8,18,${a})`, lights.concat(FX.lightsAt(ox, oy)));
-    } else {
-      const a = DARK[Math.max(0, Math.min(4, d.ambient))] * 0.5;
-      ctx.fillStyle = `rgba(10,8,18,${a})`; ctx.fillRect(-8, -8, W + 16, H + 16);
-    }
+    light(ctx, lights, d.ambient, d.night, ox, oy);
     FX.drawNumbers(ctx, ox, oy);
     ctx.restore();
-    if (AD.settings.effects && !gba()) FX.post(ctx, { bloom: true, tilt: false, threshold: 205, bloomAmt: 0.3 });
-    FX.drawFlash(ctx, FX.flashPeak());
+    finish(ctx);
   };
 })(window.AD);

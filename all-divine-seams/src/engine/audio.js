@@ -272,6 +272,10 @@ window.AD = window.AD || {};
     cantAfford: (g, t, p, v) => { T(g, 0.5, 200 * p, t, 0.08, 0.16 * v); T(g, 0.5, 150 * p, t + 0.09, 0.1, 0.16 * v); },
     trap: (g, t, p, v) => { T(g, 0.5, 1500 * p, t, 0.03, 0.16 * v); noise(g, t, 0.1, 0.3 * v, 2500); },
     fall: (g, t, p, v) => T(g, 'sine', 600 * p, t, 0.4, 0.22 * v, { slide: 80 }),
+    // menus
+    cursor: (g, t, p, v) => T(g, 0.5, 1320 * p, t, 0.025, 0.12 * v),
+    select: (g, t, p, v) => { T(g, 0.5, 880 * p, t, 0.04, 0.18 * v); T(g, 0.5, 1320 * p, t + 0.04, 0.06, 0.18 * v); },
+    cancel: (g, t, p, v) => { T(g, 0.5, 660 * p, t, 0.04, 0.16 * v); T(g, 0.5, 440 * p, t + 0.04, 0.06, 0.16 * v); },
   };
   A.NAMES = Object.keys(SFX);
   const lastAt = {};

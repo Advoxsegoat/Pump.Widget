@@ -30,6 +30,8 @@ window.AD = window.AD || {};
     selenne: { skin: '#5a3a2a', hair: '#1a1418', hairStyle: 'braids', eyes: '#c8d0e0', main: '#4a4a6a', sec: '#8a8aa8', outfit: 'robe', held: 'sword', build: 'tall' },
     lucien: folk('#f2dcd0', '#141018', 'short', '#3a3a5a', 'shirt', { build: 'small', held: 'book', eyes: '#a8b8c8' }),
     midas: folk('#f2dcd0', '#e8d088', 'messy', '#4a6a3a', 'shirt', { eyes: '#d8304a', build: 'small' }),
+    // the training yard's straw man
+    dummy: { skin: '#c8a860', hair: '#a88a40', hairStyle: 'messy', eyes: '#3a2a1a', main: '#8a6a3a', sec: '#c8a860', pants: '#6a5030', boots: '#4a3a20', outfit: 'rags', build: 'big' },
   };
   // armour as it shows on the body (Tactics 1.4's armour pieces)
   AD.ARMOUR_LOOK = {

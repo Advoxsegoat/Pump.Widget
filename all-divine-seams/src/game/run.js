@@ -22,12 +22,23 @@ window.AD = window.AD || {};
     this.metMinis = new Set();
     this.banner = null; this.transition = null; this.gate = null;
     this.quick = [null, null];
+    this.rerolls = 0;
     if (AD.cons) { AD.cons.init(this); AD.cons.install(this); }
+    // what was bought in the Garden (spec 5.5)
+    const U = this.unlocks();
+    if (U.has('thirdSlot')) this.quick.push(null);
+    if (U.has('startHealing') && AD.cons) {
+      AD.cons.give(this, 'healing');
+      AD.cons.identify(this, 'healing');
+      this.quick = ['healing', 'bomb'].concat(this.quick.slice(2));
+    }
     this.startDepth(1, true);
+    if (U.has('extraRoll')) { this.hero.bonusRolls = 1; AD.hero.recompute(this.hero); }
   }
   AD.Run = Run;
   const P = Run.prototype;
 
+  P.unlocks = function () { return (this.meta && this.meta.unlocks) || new Set(); };
   P.useQuick = function (pad) { if (AD.cons) AD.cons.tick(this, pad); };
   P.coef = function () { return AD.stat.coefficient(this.difficulty, this.minutes, this.cleared); };
   P.region = function () { return AD.regionAt(this.depth); };
@@ -40,6 +51,7 @@ window.AD = window.AD || {};
     this.roomState = new Map();
     for (const k of this.floor.rooms.keys()) this.roomState.set(k, { state: 'unvisited', taken: new Set() });
     this.gate = null;
+    this.rerolls = this.unlocks().has('chestReroll') ? 1 : 0;
     this.events.emit('depthStart', { depth, first: !!first });
     const S = this.floor.rooms.get(this.floor.start);
     this.enterRoom(S.key, null);
@@ -220,7 +232,7 @@ window.AD = window.AD || {};
 
   P.openChest = function (room, x, y) {
     const k = x + ',' + y;
-    if (room.chests[k]) return false;
+    if (room.chests[k]) return this.rerollChest(room, k);
     const big = room.type === 'secret';
     const lockedTreasure = room.type === 'treasure' && this.floor.keys.some((q) => q.lock === room.key);
     const cost = lockedTreasure ? 0 : AD.stat.chestCost(big ? 50 : 25, this.coef());
@@ -235,8 +247,23 @@ window.AD = window.AD || {};
     else if (big) drop = { kind: 'item', item: this.rollItem(r, [['uncommon', 0.8], ['legendary', 0.2]]) };
     else drop = { kind: 'item', item: this.rollItem(r, [['common', 0.79], ['uncommon', 0.2], ['legendary', 0.01]]) };
     const h = this.hero;
-    AD.room.drop(room, h.x, h.y, drop);
+    const q = AD.room.drop(room, h.x, h.y, drop);
+    (room.chestDrops || (room.chestDrops = {}))[k] = q.id;
     room.bus.emit('chest', { x, y, cost, big });
+    return true;
+  };
+  // A on an open chest again, while what it gave still lies there: the free reroll (an unlock),
+  // once a depth, for another item of the same tier
+  P.rerollChest = function (room, k) {
+    if (!this.rerolls) return false;
+    const id = room.chestDrops && room.chestDrops[k];
+    const p = id && room.pickups.find((q) => q.id === id);
+    if (!p || p.kind !== 'item' || !AD.ITEMS[p.item]) return false;
+    const pool = ITEM_POOL(AD.ITEMS[p.item].tier).filter((i) => i !== p.item);
+    if (!pool.length) return false;
+    p.item = AD.rng.pick(this.streams.loot, pool);
+    this.rerolls--;
+    room.bus.emit('reroll', { p });
     return true;
   };
 
