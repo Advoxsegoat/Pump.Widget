@@ -19,7 +19,6 @@ window.AD = window.AD || {};
     tough: { skin: '#c89a74', hair: '#2a2420', hairStyle: 'buzz', main: '#5a4a3e', sec: '#8a7a6a', outfit: 'longcoat', held: 'knife', build: 'normal' },
     fusilier: { skin: '#e0b894', hair: '#3a2a20', main: '#2a4a9a', sec: '#d8d0b8', acc: '#e8c170', outfit: 'uniform', extras: ['shako'], hat: '#1a2a5a', held: 'rifle' },
     knuckle: { skin: '#b07a54', hair: '#1a1418', hairStyle: 'buzz', main: '#d8d4cc', sec: '#8a8a96', acc: '#8a8a96', outfit: 'wraps', gloves: '#e8e4dc' },
-    hound: { skin: '#6a6a76', hair: '#4a4a56', main: '#5a5a66', build: 'child', outfit: 'rags', eyes: '#ff6a5a', eyeGlow: '#ff6a5a', hairStyle: 'spiky' },
     brassmask: { skin: '#c89a74', hair: '#2a2420', main: '#8a6a2a', sec: '#c9a35d', acc: '#e8c170', outfit: 'longcoat', extras: ['mask'], maskC: '#c9a35d', held: 'sword' },
     // Bilibara's mini-bosses and boss (their looks from the book's chapters)
     goldtooth: { skin: '#c89a74', hair: '#2a2420', hairStyle: 'bald', main: '#8a2e2a', sec: '#e8c170', acc: '#e8c170', outfit: 'longcoat', held: 'knife', extras: ['scar', 'earring', 'mustache'], build: 'big' },

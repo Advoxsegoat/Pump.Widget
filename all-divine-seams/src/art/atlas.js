@@ -44,7 +44,7 @@ window.AD = window.AD || {};
   const STYLE = {
     abarax: ['punch', 'jab', 'palm'], knuckle: ['punch', 'jab', 'palm'], firstknuckle: ['punch', 'jab', 'palm'],
     grunt: 'slash', slinger: 'shoot', bomber: 'slash', shaman: 'cast', pickpocket: 'punch',
-    tough: 'slash', hound: 'punch', fusilier: 'shoot', brassmask: 'slash',
+    tough: 'slash', fusilier: 'shoot', brassmask: 'slash',
     goldtooth: 'slash', fixer: 'slash', marais: 'slash',
   };
   const ELEMENT = { shaman: 'song', firstknuckle: 'all' };
@@ -129,7 +129,7 @@ window.AD = window.AD || {};
     return view(hd(L, action || 'idle', dir || 'down', t || 0, o || {}));
   };
 
-  // monsters: paper dolls through the same frames; the whelp and the rat are painted beasts
+  // monsters: paper dolls through the same frames; the whelp, the rat and the hound are painted beasts
   const lookOf = (id) => ((AD.MONSTERS && AD.MONSTERS[id]) || (AD.BOSSES && AD.BOSSES[id]) || {}).look || id;
   A.monster = function (id, action, dir, t, o) {
     const look = lookOf(id);
@@ -318,8 +318,10 @@ window.AD = window.AD || {};
       biome: R.biome, head: 38, tile: 16,
     };
   }
+  // the last few rooms baked, by layout: a room peeked at through a door is baked once for the slide
+  // and again, from here, as it is entered
   const rooms = new Map();
-  const remember = (k, v) => { rooms.set(k, v); if (rooms.size > 48) rooms.delete(rooms.keys().next().value); return v; };
+  const remember = (k, v) => { rooms.set(k, v); if (rooms.size > 8) rooms.delete(rooms.keys().next().value); return v; };
   // rows: the room's glyph rows; biome: the depth's ('city', 'dungeon', 'interior'); night: the depth's
   // returns {ground: canvas[4] (animation frames), rows: canvas|null per tile row (each drawn at
   // y * tile - head), lights, biome, head, tile}
@@ -335,7 +337,9 @@ window.AD = window.AD || {};
   // a room's art of its own, which A.patch changes in place as the room changes in play (a pot
   // breaks, grass burns, a door opens): only the changed tiles and the rows round them are redone
   const copy = (c) => { if (!c) return null; const o = G.canvas(c.width, c.height); o.x.drawImage(c, 0, 0); return o; };
-  const cloneArt = (R) => Object.assign({}, R, { ground: R.ground.map(copy), rows: R.rows.map(copy), lights: R.lights.slice() });
+  // frames that share a ground still share one in the copy
+  const copyAll = (list) => { const m = new Map(); return list.map((c) => { if (!m.has(c)) m.set(c, copy(c)); return m.get(c); }); };
+  const cloneArt = (R) => Object.assign({}, R, { ground: copyAll(R.ground), rows: R.rows.map(copy), lights: R.lights.slice() });
   A.roomArt = function (rows, biome, night) {
     const k = keyOf(rows, biome, night);
     const hdR = hdRoom(k, rows, biome, night);
@@ -366,6 +370,7 @@ window.AD = window.AD || {};
     }
     for (const Y of rowsY) hd.rows[Y] = ourRow(TL.bakeRow(map, Y, {}), rows, Y, b);
     if (art.gba) {
+      if (hd.ground[1] !== hd.ground[0]) TL.unshare(art.gba.ground);
       for (const i of tiles) {
         const X = i % w, Y = (i / w) | 0;
         hd.ground.forEach((g, fr) => A.down32Into(g, X * T, Y * T, T, T, art.gba.ground[fr]));

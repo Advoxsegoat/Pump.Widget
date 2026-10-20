@@ -1,5 +1,5 @@
-// The Seams' beasts that are not paper dolls: the one-eyed wyvern whelp and the sewer rat. Each is
-// painted into a raster, shaded and outlined like the figures, two frames a pose.
+// The Seams' beasts that are not paper dolls: the one-eyed wyvern whelp, the sewer rat and the gray
+// hound. Each is painted into a raster, shaded and outlined like the figures, two frames a pose.
 window.AD = window.AD || {};
 (function (AD) {
   'use strict';
@@ -62,19 +62,55 @@ window.AD = window.AD || {};
     return finish(r);
   }
 
+  // a gray hound, facing right: lean, low and long-legged; it lopes (f), and pounces with its body
+  // stretched flat, forelegs reaching and jaws open
+  function hound(f, bite) {
+    const r = new Ras(34, 22);
+    const c = '#7a7a88', d = '#55556a', l = '#a4a4b2', eye = '#ff5a4a';
+    const lunge = bite ? 3 : 0, by = bite ? 11 : 12;
+    // tail, raised behind
+    if (bite) { r.line(2, by - 1, 8, by, c); r.line(2, by, 8, by + 1, d); }
+    else { r.line(3, 5 + f, 8, by - 1, c); r.line(4, 5 + f, 9, by - 1, c); }
+    // body: a deep chest and a tucked waist
+    r.ellipse(14 + lunge, by, 7, 3, c);
+    r.ellipse(20 + lunge, by, 4, 4, c);
+    r.row(by - 3, 10 + lunge, 19 + lunge, d);
+    r.ellipse(19 + lunge, by + 2, 3, 1, l);
+    // legs: thin, two pairs that swap as it lopes; in the pounce, stretched fore and aft
+    const leg = (x0, y0, x1, y1) => { r.line(x0, y0, x1, y1, d); r.line(x0 + 1, y0, x1 + 1, y1, c); };
+    if (bite) { leg(21 + lunge, by + 2, 28, by + 6); leg(9, by + 2, 3, by + 6); leg(11, by + 2, 6, by + 7); }
+    else {
+      const a = f ? [-2, 2] : [2, -2];
+      leg(20, by + 2, 20 + a[0], 20); leg(22, by + 2, 22 + a[1], 20);
+      leg(9, by + 2, 9 + a[1], 20); leg(11, by + 2, 11 + a[0], 20);
+    }
+    // neck, head and long muzzle
+    const hx = 25 + lunge + (bite ? 1 : 0), hy = bite ? by - 1 : by - 4;
+    r.line(21 + lunge, by - 2, hx - 1, hy + 1, c); r.line(22 + lunge, by - 1, hx, hy + 2, c);
+    r.ellipse(hx + 1, hy, 3, 2, c);
+    r.rect(hx + 3, hy, 4, 2, c); r.set(hx + 7, hy, '#1a1418');
+    // ear, pricked back, and the red eye
+    r.set(hx - 1, hy - 3, d); r.set(hx, hy - 3, d); r.set(hx, hy - 2, d); r.set(hx - 1, hy - 2, d);
+    r.set(hx + 2, hy - 1, eye); r.set(hx + 3, hy - 1, '#ffd0c8');
+    // jaw: shut, or open with teeth
+    if (bite) { r.row(hy + 2, hx + 2, hx + 7, '#2a1418'); r.row(hy + 3, hx + 2, hx + 6, c); r.set(hx + 4, hy + 2, '#ffffff'); r.set(hx + 6, hy + 2, '#ffffff'); }
+    else r.row(hy + 2, hx + 2, hx + 6, d);
+    return finish(r);
+  }
+
   const PAL = { whelp: { body: '#6a8a4a', belly: '#c8c890', wing: '#4a6a3a', eye: '#ffb000' } };
   const cache = {};
   // frame for a beast: action 'idle'|'walk'|'attack'|'hurt', dir, t
   AD.art = AD.art || {};
   AD.art.beast = function (kind, action, dir, t) {
-    const f = Math.floor(t / (kind === 'rat' ? 6 : 10)) % 2;
+    const f = Math.floor(t / (kind === 'whelp' ? 10 : 6)) % 2;
     const bite = action === 'attack' ? 1 : 0;
     const key = kind + '|' + f + '|' + bite + '|' + (dir === 'left' ? 'l' : 'r');
     if (cache[key]) return cache[key];
-    let c = kind === 'rat' ? rat(f, bite) : whelp(f, bite, PAL.whelp);
+    let c = kind === 'rat' ? rat(f, bite) : kind === 'hound' ? hound(f, bite) : whelp(f, bite, PAL.whelp);
     if (dir === 'left') c = flip(c);
     cache[key] = c;
     return c;
   };
-  AD.art.BEAST = { whelp: { w: 40, h: 34, ox: -8, oy: -18 }, rat: { w: 30, h: 18, ox: -3, oy: 4 } };
+  AD.art.BEAST = { whelp: { w: 40, h: 34, ox: -8, oy: -18 }, rat: { w: 30, h: 18, ox: -3, oy: 4 }, hound: { w: 34, h: 22, ox: -5, oy: 1 } };
 })(window.AD);

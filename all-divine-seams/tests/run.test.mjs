@@ -59,6 +59,25 @@ test('a combat room seals on entry, opens on clearing, rolls a reward', () => {
   assert.equal(run.roomState.get(run.room.key).state, 'cleared');
 });
 
+test('a combat room found asleep opens once everything in it is down', () => {
+  // a quarter of the rooms are found asleep: find one on these seeds and clear it, twenty minutes
+  // in, when a room's budget buys more than one wave
+  let found = 0;
+  for (let seed = 1; seed < 60 && found < 3; seed++) {
+    const run = newRun(seed); tough(run); run.minutes = 20;
+    for (const R of [...run.floor.rooms.values()].filter((r) => r.type === 'combat')) {
+      run.enterRoom(R.key, 's');
+      if (![...run.room.bodies.values()].some((b) => b.kind === 'monster' && b.state === 'asleep')) continue;
+      found++;
+      killAll(run); tickN(run, 2);
+      assert.ok(!sealed(run.room), 'seed ' + seed + ' room ' + R.key + ' opens');
+      assert.equal(run.roomState.get(R.key).state, 'cleared');
+      break;
+    }
+  }
+  assert.equal(found, 3);
+});
+
 test('fresh spawns shimmer: they cannot act or be hit for 18 frames', () => {
   const run = newRun(4821); tough(run);
   gotoRoomOfType(run, 'combat');
@@ -156,6 +175,23 @@ test('the Seam Gate: charges only near it, needs its guardian dead, then leads d
   assert.equal(run.depth, 2);
   assert.equal(run.petals, petals + 1);
   assert.equal(run.hero.getUpUsed, false);
+});
+
+test('away from the exit room (out of a door, or by a Page of Teleport) the gate waits', () => {
+  const run = newRun(4821); tough(run);
+  const R = gotoRoomOfType(run, 'exit');
+  const [gx, gy] = run.gateTile();
+  run.touchGate(); run.place(gx, gy);
+  tickN(run, 300);
+  const charge = run.gate.charge;
+  assert.ok(charge > 0);
+  // somewhere else on the floor: nothing breaks, nothing charges
+  const other = [...run.floor.rooms.values()].find((r) => r.type === 'treasure' || r.type === 'start');
+  run.enterRoom(other.key, null); tickN(run, 600);
+  assert.equal(run.gate.charge, charge);
+  // back at the gate it carries on
+  run.enterRoom(R.key, 's'); tickN(run, 25); run.place(gx, gy); tickN(run, 60);
+  assert.ok(run.gate.charge > charge);
 });
 
 test('determinism: same seed, same inputs, same state', () => {

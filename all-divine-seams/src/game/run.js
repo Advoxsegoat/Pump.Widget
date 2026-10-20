@@ -117,7 +117,7 @@ window.AD = window.AD || {};
         const first = waves.shift();
         const tiles = AD.director.spawnTiles(room, first.length, this.streams.combat);
         first.forEach((s, i) => { if (tiles[i]) AD.ai.spawn(room, s.id, tiles[i][0], tiles[i][1], { level: room.level, elite: s.elite, eliteTier: s.eliteTier, asleep: true }); });
-        AD.director.begin(room, [[]].concat(waves));
+        AD.director.begin(room, [first].concat(waves), true);
       } else AD.director.begin(room, waves);
     } else {
       st.state = 'cleared';
@@ -192,7 +192,8 @@ window.AD = window.AD || {};
     this.tickPickups(room, h);
     for (let i = room.corpses.length - 1; i >= 0; i--) if (++room.corpses[i].t > 40) room.corpses.splice(i, 1);
     if (room.sealed && AD.director.done(room)) this.clearRoom(room);
-    if (this.gate) this.tickGate(room, h);
+    // the gate belongs to the exit room: away from it (out of a door, or teleported) it waits
+    if (this.gate && this.gate.room === room.key) this.tickGate(room, h);
     if (h.dead && !this.over) this.end(false, h.lastHitBy ? (h.lastHitBy.def ? h.lastHitBy.def.n : h.lastHitBy.n || 'the Seams') : 'the Seams');
   };
 
@@ -370,7 +371,7 @@ window.AD = window.AD || {};
       : AD.ai.spawn(room, 'tough', spot[0], spot[1], { level, elite: 'thorned', eliteTier: 1 });
     guardian.guardian = true;
     room.waves = []; room.waveIdx = 0; room.pending = []; room.waveCost = 0;
-    this.gate = { charge: 0, f: 0, guardian, open: false, waveT: 480, tile: [gx, gy], id };
+    this.gate = { charge: 0, f: 0, guardian, open: false, waveT: 480, tile: [gx, gy], id, room: room.key };
     room.bus.emit('gateStart', { gate: this.gate });
     return true;
   };

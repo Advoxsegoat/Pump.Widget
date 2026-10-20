@@ -109,11 +109,13 @@ window.AD = window.AD || {};
     h.skillCd = Math.round(G.cd * h.cdMul);
     h.action = { kind: 'gift', gift: name, t: 0, len: g.wind + g.act + g.rec };
   }
+  // a blow on its active frames: a roll cannot cancel it
+  const landing = (h) => !!h.attacking && h.attacking.frame > h.attacking.def.wind && h.attacking.frame <= h.attacking.def.wind + h.attacking.def.act;
   function startRoll(room, h, dx, dy) {
     const R = AD.HEROES[h.heroId].roll;
     if (h.attacking) { // a roll cancels a blow still winding up or recovering, never one landing
       const t = h.attacking;
-      if (t.frame > t.def.wind && t.frame <= t.def.wind + t.def.act) return false;
+      if (landing(h)) return false;
       room.attacks.splice(room.attacks.indexOf(t), 1);
       h.attacking = null;
     }
@@ -173,12 +175,12 @@ window.AD = window.AD || {};
     // roll
     if (pad.r && h.rolls > 0 && !h.rolling && !h.pushLeft) {
       const [dx, dy] = moving ? dir : h.facing;
-      if (h.move) {
-        // finish the step first: buffer the roll for the frame it lands
+      if (h.move || landing(h)) {
+        // finish the step, or let the blow land: the roll is taken the first frame it can be
         h.queueRoll = [dx, dy];
       } else if (startRoll(room, h, dx, dy)) { h.queueA = false; return; }
     }
-    if (h.queueRoll && !h.move && !h.pushLeft) { const [dx, dy] = h.queueRoll; h.queueRoll = null; if (h.rolls > 0) { startRoll(room, h, dx, dy); return; } }
+    if (h.queueRoll && !h.move && !h.pushLeft && !landing(h)) { const [dx, dy] = h.queueRoll; h.queueRoll = null; if (h.rolls > 0) { startRoll(room, h, dx, dy); return; } }
     if (h.rolling || h.pushLeft) return;
     // equipment
     if (pad.l) AD.items.useEquipment(room, h);

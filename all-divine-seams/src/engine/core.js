@@ -225,9 +225,10 @@ window.AD = window.AD || {};
   }
 
   // test hook: advance the simulation by hand (a hidden tab gets no animation frames)
-  AD.debugStep = function (n) {
+  // n steps, then one frame drawn (o.render === false: none, for long playtests)
+  AD.debugStep = function (n, o) {
     for (let i = 0; i < (n || 1); i++) step();
-    render();
+    if (!o || o.render !== false) render();
     return AD.stack.map(sceneName);
   };
 

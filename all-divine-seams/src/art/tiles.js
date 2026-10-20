@@ -684,19 +684,26 @@
   // ---------------------------------------------------------------- bake
   // map: { w, h, at(x,y), rows: [string], biome }
   const FRAMES = 4;
+  // the ground tiles that animate (water, springs, void)
+  const ANIM = '~-b%x';
+  TL.ANIM = ANIM;
   TL.bake = function (map, state) {
     const b = BI[map.biome] || BI.city;
     const night = !!map.night;
     const W = map.w * S, Hh = map.h * S;
     const grounds = [];
+    // a room with nothing animated has one ground, shown for every frame
+    let animated = false;
+    for (let y = 0; y < map.h && !animated; y++) for (let x = 0; x < map.w; x++) if (ANIM.indexOf(map.at(x, y)) >= 0) { animated = true; break; }
     for (let fr = 0; fr < FRAMES; fr++) {
+      if (fr > 0 && !animated) { grounds.push(grounds[0]); continue; }
       const cv = G.canvas(W, Hh);
       if (fr > 0) {
         // only the animated tiles change between frames
         cv.x.drawImage(grounds[0], 0, 0);
         for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
           const ch = map.at(x, y);
-          if (ch === '~' || ch === '-' || ch === 'b' || ch === '%' || ch === 'x') ground(cv.x, ch, x, y, x * S, y * S, b, fr, map);
+          if (ANIM.indexOf(ch) >= 0) ground(cv.x, ch, x, y, x * S, y * S, b, fr, map);
         }
       } else {
         for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) ground(cv.x, map.at(x, y), x, y, x * S, y * S, b, fr, map);
@@ -723,10 +730,17 @@
     }
     return { grounds, rows, lights, biome: b };
   };
+  // frames that share one ground, given a canvas each (in place), for a tile that starts to animate
+  TL.unshare = function (grounds) {
+    if (grounds.length < 2 || grounds[1] !== grounds[0]) return false;
+    for (let i = 1; i < grounds.length; i++) { const c = G.canvas(grounds[0].width, grounds[0].height); c.x.drawImage(grounds[0], 0, 0); grounds[i] = c; }
+    return true;
+  };
   // repaint one tile of the ground in every frame, for a map that changed in play
   TL.groundTile = function (grounds, map, X, Y) {
     const b = BI[map.biome] || BI.city;
     const ch = map.at(X, Y), t = T[ch];
+    if (ANIM.indexOf(ch) >= 0) TL.unshare(grounds);
     grounds.forEach((cv, fr) => {
       const c = cv.x;
       c.clearRect(X * S, Y * S, S, S);
@@ -764,7 +778,7 @@
     }
     return any ? cv : null;
   };
-  // ground tiles that animate (water, springs, void) step through the baked frames
+  // ground tiles that animate step through the baked frames
   TL.groundFrame = () => Math.floor(AD.frame / 16) % FRAMES;
 })(window.AD);
 

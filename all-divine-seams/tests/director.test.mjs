@@ -78,6 +78,28 @@ test('the next wave comes when the alive cost drops under 30%', () => {
   assert.equal(AD.director.done(room), false);
 });
 
+test('a room found asleep: its first wave is already there and counts toward the next', () => {
+  const room = world();
+  const first = [{ id: 'grunt' }, { id: 'grunt' }];
+  const sleepers = first.map((s, i) => AD.ai.spawn(room, s.id, 8 + i, 6, { level: 1, asleep: true }));
+  AD.director.begin(room, [first, [{ id: 'rat' }]], true);
+  AD.director.tick(room);
+  assert.equal([...room.bodies.values()].filter((b) => b.defId === 'grunt').length, 2, 'nothing spawned over the sleepers');
+  sleepers[0].dead = true; AD.ent.remove(room, sleepers[0]);
+  AD.director.tick(room);
+  assert.equal([...room.bodies.values()].filter((b) => b.defId === 'rat').length, 0);   // 50% left
+  sleepers[1].dead = true; AD.ent.remove(room, sleepers[1]);
+  AD.director.tick(room);
+  assert.equal([...room.bodies.values()].filter((b) => b.defId === 'rat').length, 1);
+});
+
+test('the next wave always comes once nothing is left alive', () => {
+  const room = world();
+  AD.director.begin(room, [[], [{ id: 'rat' }]]);
+  AD.director.tick(room); AD.director.tick(room);
+  assert.equal([...room.bodies.values()].filter((b) => b.defId === 'rat').length, 1);
+});
+
 test('never more than 40 alive', () => {
   const room = world();
   AD.director.begin(room, [Array.from({ length: 120 }, () => ({ id: 'rat' }))]);

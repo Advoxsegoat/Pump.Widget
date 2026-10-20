@@ -366,9 +366,10 @@ window.AD = window.AD || {};
   }
 
   // test hook: advance the simulation by hand (a hidden tab gets no animation frames)
-  AD.debugStep = function (n) {
+  // n steps, then one frame drawn (o.render === false: none, for long playtests)
+  AD.debugStep = function (n, o) {
     for (let i = 0; i < (n || 1); i++) step();
-    render();
+    if (!o || o.render !== false) render();
     return AD.stack.map(sceneName);
   };
 
@@ -469,8 +470,9 @@ window.AD = window.AD || {};
       I.prev[b] = I.held[b];
       const latched = I.latch[b];
       I.latch[b] = false;
-      // a tap already let go of reads as one frame up, then one frame down
-      if (latched && I.prev[b] && !I.src.key[b] && !I.src.touch[b]) I.prev[b] = false;
+      // a press since the last frame reads as one frame up, then down: a tap already let go of, or a
+      // button let go of and pressed again between two frames
+      if (latched && I.prev[b]) I.prev[b] = false;
       I.held[b] = !!(I.src.key[b] || I.src.pad[b] || I.src.touch[b] || latched);
       I.cnt[b] = I.held[b] ? (latched && !I.prev[b] ? 1 : I.cnt[b] + 1) : 0;
     });
@@ -2691,11 +2693,13 @@ window.AD = window.AD || {};
     h.skillCd = Math.round(G.cd * h.cdMul);
     h.action = { kind: 'gift', gift: name, t: 0, len: g.wind + g.act + g.rec };
   }
+  // a blow on its active frames: a roll cannot cancel it
+  const landing = (h) => !!h.attacking && h.attacking.frame > h.attacking.def.wind && h.attacking.frame <= h.attacking.def.wind + h.attacking.def.act;
   function startRoll(room, h, dx, dy) {
     const R = AD.HEROES[h.heroId].roll;
     if (h.attacking) { // a roll cancels a blow still winding up or recovering, never one landing
       const t = h.attacking;
-      if (t.frame > t.def.wind && t.frame <= t.def.wind + t.def.act) return false;
+      if (landing(h)) return false;
       room.attacks.splice(room.attacks.indexOf(t), 1);
       h.attacking = null;
     }
@@ -2755,12 +2759,12 @@ window.AD = window.AD || {};
     // roll
     if (pad.r && h.rolls > 0 && !h.rolling && !h.pushLeft) {
       const [dx, dy] = moving ? dir : h.facing;
-      if (h.move) {
-        // finish the step first: buffer the roll for the frame it lands
+      if (h.move || landing(h)) {
+        // finish the step, or let the blow land: the roll is taken the first frame it can be
         h.queueRoll = [dx, dy];
       } else if (startRoll(room, h, dx, dy)) { h.queueA = false; return; }
     }
-    if (h.queueRoll && !h.move && !h.pushLeft) { const [dx, dy] = h.queueRoll; h.queueRoll = null; if (h.rolls > 0) { startRoll(room, h, dx, dy); return; } }
+    if (h.queueRoll && !h.move && !h.pushLeft && !landing(h)) { const [dx, dy] = h.queueRoll; h.queueRoll = null; if (h.rolls > 0) { startRoll(room, h, dx, dy); return; } }
     if (h.rolling || h.pushLeft) return;
     // equipment
     if (pad.l) AD.items.useEquipment(room, h);
@@ -3471,10 +3475,11 @@ window.AD = window.AD || {};
     return [];
   };
 
-  D.begin = function (room, waves) {
+  // `present`: the first wave is already in the room (a room found asleep), so nothing of it is sent
+  D.begin = function (room, waves, present) {
     room.waves = waves;
     room.waveIdx = 1;
-    room.pending = (waves[0] || []).slice();
+    room.pending = present ? [] : (waves[0] || []).slice();
     room.waveCost = waveCost(waves[0] || []);
   };
   const waveCost = (w) => w.reduce((t, s) => t + eliteCost(AD.MONSTERS[s.id].cost, s.elite ? s.eliteTier || 1 : 0), 0);
@@ -3485,7 +3490,7 @@ window.AD = window.AD || {};
     const live = alive(room);
     if (!room.pending.length && room.waveIdx < room.waves.length) {
       const cost = live.reduce((t, b) => t + eliteCost(b.cost || 0, b.eliteTier || 0), 0);
-      if (cost < room.waveCost * 0.3) {
+      if (cost < room.waveCost * 0.3 || !live.length) {
         const w = room.waves[room.waveIdx++];
         room.pending = w.slice();
         room.waveCost = waveCost(w);
@@ -4986,7 +4991,7 @@ window.AD = window.AD || {};
         const first = waves.shift();
         const tiles = AD.director.spawnTiles(room, first.length, this.streams.combat);
         first.forEach((s, i) => { if (tiles[i]) AD.ai.spawn(room, s.id, tiles[i][0], tiles[i][1], { level: room.level, elite: s.elite, eliteTier: s.eliteTier, asleep: true }); });
-        AD.director.begin(room, [[]].concat(waves));
+        AD.director.begin(room, [first].concat(waves), true);
       } else AD.director.begin(room, waves);
     } else {
       st.state = 'cleared';
@@ -5061,7 +5066,8 @@ window.AD = window.AD || {};
     this.tickPickups(room, h);
     for (let i = room.corpses.length - 1; i >= 0; i--) if (++room.corpses[i].t > 40) room.corpses.splice(i, 1);
     if (room.sealed && AD.director.done(room)) this.clearRoom(room);
-    if (this.gate) this.tickGate(room, h);
+    // the gate belongs to the exit room: away from it (out of a door, or teleported) it waits
+    if (this.gate && this.gate.room === room.key) this.tickGate(room, h);
     if (h.dead && !this.over) this.end(false, h.lastHitBy ? (h.lastHitBy.def ? h.lastHitBy.def.n : h.lastHitBy.n || 'the Seams') : 'the Seams');
   };
 
@@ -5239,7 +5245,7 @@ window.AD = window.AD || {};
       : AD.ai.spawn(room, 'tough', spot[0], spot[1], { level, elite: 'thorned', eliteTier: 1 });
     guardian.guardian = true;
     room.waves = []; room.waveIdx = 0; room.pending = []; room.waveCost = 0;
-    this.gate = { charge: 0, f: 0, guardian, open: false, waveT: 480, tile: [gx, gy], id };
+    this.gate = { charge: 0, f: 0, guardian, open: false, waveT: 480, tile: [gx, gy], id, room: room.key };
     room.bus.emit('gateStart', { gate: this.gate });
     return true;
   };
@@ -6981,19 +6987,26 @@ window.AD = window.AD || {};
   // ---------------------------------------------------------------- bake
   // map: { w, h, at(x,y), rows: [string], biome }
   const FRAMES = 4;
+  // the ground tiles that animate (water, springs, void)
+  const ANIM = '~-b%x';
+  TL.ANIM = ANIM;
   TL.bake = function (map, state) {
     const b = BI[map.biome] || BI.city;
     const night = !!map.night;
     const W = map.w * S, Hh = map.h * S;
     const grounds = [];
+    // a room with nothing animated has one ground, shown for every frame
+    let animated = false;
+    for (let y = 0; y < map.h && !animated; y++) for (let x = 0; x < map.w; x++) if (ANIM.indexOf(map.at(x, y)) >= 0) { animated = true; break; }
     for (let fr = 0; fr < FRAMES; fr++) {
+      if (fr > 0 && !animated) { grounds.push(grounds[0]); continue; }
       const cv = G.canvas(W, Hh);
       if (fr > 0) {
         // only the animated tiles change between frames
         cv.x.drawImage(grounds[0], 0, 0);
         for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
           const ch = map.at(x, y);
-          if (ch === '~' || ch === '-' || ch === 'b' || ch === '%' || ch === 'x') ground(cv.x, ch, x, y, x * S, y * S, b, fr, map);
+          if (ANIM.indexOf(ch) >= 0) ground(cv.x, ch, x, y, x * S, y * S, b, fr, map);
         }
       } else {
         for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) ground(cv.x, map.at(x, y), x, y, x * S, y * S, b, fr, map);
@@ -7020,10 +7033,17 @@ window.AD = window.AD || {};
     }
     return { grounds, rows, lights, biome: b };
   };
+  // frames that share one ground, given a canvas each (in place), for a tile that starts to animate
+  TL.unshare = function (grounds) {
+    if (grounds.length < 2 || grounds[1] !== grounds[0]) return false;
+    for (let i = 1; i < grounds.length; i++) { const c = G.canvas(grounds[0].width, grounds[0].height); c.x.drawImage(grounds[0], 0, 0); grounds[i] = c; }
+    return true;
+  };
   // repaint one tile of the ground in every frame, for a map that changed in play
   TL.groundTile = function (grounds, map, X, Y) {
     const b = BI[map.biome] || BI.city;
     const ch = map.at(X, Y), t = T[ch];
+    if (ANIM.indexOf(ch) >= 0) TL.unshare(grounds);
     grounds.forEach((cv, fr) => {
       const c = cv.x;
       c.clearRect(X * S, Y * S, S, S);
@@ -7061,7 +7081,7 @@ window.AD = window.AD || {};
     }
     return any ? cv : null;
   };
-  // ground tiles that animate (water, springs, void) step through the baked frames
+  // ground tiles that animate step through the baked frames
   TL.groundFrame = () => Math.floor(AD.frame / 16) % FRAMES;
 })(window.AD);
 
@@ -7087,7 +7107,6 @@ window.AD = window.AD || {};
     tough: { skin: '#c89a74', hair: '#2a2420', hairStyle: 'buzz', main: '#5a4a3e', sec: '#8a7a6a', outfit: 'longcoat', held: 'knife', build: 'normal' },
     fusilier: { skin: '#e0b894', hair: '#3a2a20', main: '#2a4a9a', sec: '#d8d0b8', acc: '#e8c170', outfit: 'uniform', extras: ['shako'], hat: '#1a2a5a', held: 'rifle' },
     knuckle: { skin: '#b07a54', hair: '#1a1418', hairStyle: 'buzz', main: '#d8d4cc', sec: '#8a8a96', acc: '#8a8a96', outfit: 'wraps', gloves: '#e8e4dc' },
-    hound: { skin: '#6a6a76', hair: '#4a4a56', main: '#5a5a66', build: 'child', outfit: 'rags', eyes: '#ff6a5a', eyeGlow: '#ff6a5a', hairStyle: 'spiky' },
     brassmask: { skin: '#c89a74', hair: '#2a2420', main: '#8a6a2a', sec: '#c9a35d', acc: '#e8c170', outfit: 'longcoat', extras: ['mask'], maskC: '#c9a35d', held: 'sword' },
     // Bilibara's mini-bosses and boss (their looks from the book's chapters)
     goldtooth: { skin: '#c89a74', hair: '#2a2420', hairStyle: 'bald', main: '#8a2e2a', sec: '#e8c170', acc: '#e8c170', outfit: 'longcoat', held: 'knife', extras: ['scar', 'earring', 'mustache'], build: 'big' },
@@ -7120,8 +7139,8 @@ window.AD = window.AD || {};
   };
 })(window.AD);
 // ---- src/art/monsters.js
-// The Seams' beasts that are not paper dolls: the one-eyed wyvern whelp and the sewer rat. Each is
-// painted into a raster, shaded and outlined like the figures, two frames a pose.
+// The Seams' beasts that are not paper dolls: the one-eyed wyvern whelp, the sewer rat and the gray
+// hound. Each is painted into a raster, shaded and outlined like the figures, two frames a pose.
 window.AD = window.AD || {};
 (function (AD) {
   'use strict';
@@ -7184,21 +7203,57 @@ window.AD = window.AD || {};
     return finish(r);
   }
 
+  // a gray hound, facing right: lean, low and long-legged; it lopes (f), and pounces with its body
+  // stretched flat, forelegs reaching and jaws open
+  function hound(f, bite) {
+    const r = new Ras(34, 22);
+    const c = '#7a7a88', d = '#55556a', l = '#a4a4b2', eye = '#ff5a4a';
+    const lunge = bite ? 3 : 0, by = bite ? 11 : 12;
+    // tail, raised behind
+    if (bite) { r.line(2, by - 1, 8, by, c); r.line(2, by, 8, by + 1, d); }
+    else { r.line(3, 5 + f, 8, by - 1, c); r.line(4, 5 + f, 9, by - 1, c); }
+    // body: a deep chest and a tucked waist
+    r.ellipse(14 + lunge, by, 7, 3, c);
+    r.ellipse(20 + lunge, by, 4, 4, c);
+    r.row(by - 3, 10 + lunge, 19 + lunge, d);
+    r.ellipse(19 + lunge, by + 2, 3, 1, l);
+    // legs: thin, two pairs that swap as it lopes; in the pounce, stretched fore and aft
+    const leg = (x0, y0, x1, y1) => { r.line(x0, y0, x1, y1, d); r.line(x0 + 1, y0, x1 + 1, y1, c); };
+    if (bite) { leg(21 + lunge, by + 2, 28, by + 6); leg(9, by + 2, 3, by + 6); leg(11, by + 2, 6, by + 7); }
+    else {
+      const a = f ? [-2, 2] : [2, -2];
+      leg(20, by + 2, 20 + a[0], 20); leg(22, by + 2, 22 + a[1], 20);
+      leg(9, by + 2, 9 + a[1], 20); leg(11, by + 2, 11 + a[0], 20);
+    }
+    // neck, head and long muzzle
+    const hx = 25 + lunge + (bite ? 1 : 0), hy = bite ? by - 1 : by - 4;
+    r.line(21 + lunge, by - 2, hx - 1, hy + 1, c); r.line(22 + lunge, by - 1, hx, hy + 2, c);
+    r.ellipse(hx + 1, hy, 3, 2, c);
+    r.rect(hx + 3, hy, 4, 2, c); r.set(hx + 7, hy, '#1a1418');
+    // ear, pricked back, and the red eye
+    r.set(hx - 1, hy - 3, d); r.set(hx, hy - 3, d); r.set(hx, hy - 2, d); r.set(hx - 1, hy - 2, d);
+    r.set(hx + 2, hy - 1, eye); r.set(hx + 3, hy - 1, '#ffd0c8');
+    // jaw: shut, or open with teeth
+    if (bite) { r.row(hy + 2, hx + 2, hx + 7, '#2a1418'); r.row(hy + 3, hx + 2, hx + 6, c); r.set(hx + 4, hy + 2, '#ffffff'); r.set(hx + 6, hy + 2, '#ffffff'); }
+    else r.row(hy + 2, hx + 2, hx + 6, d);
+    return finish(r);
+  }
+
   const PAL = { whelp: { body: '#6a8a4a', belly: '#c8c890', wing: '#4a6a3a', eye: '#ffb000' } };
   const cache = {};
   // frame for a beast: action 'idle'|'walk'|'attack'|'hurt', dir, t
   AD.art = AD.art || {};
   AD.art.beast = function (kind, action, dir, t) {
-    const f = Math.floor(t / (kind === 'rat' ? 6 : 10)) % 2;
+    const f = Math.floor(t / (kind === 'whelp' ? 10 : 6)) % 2;
     const bite = action === 'attack' ? 1 : 0;
     const key = kind + '|' + f + '|' + bite + '|' + (dir === 'left' ? 'l' : 'r');
     if (cache[key]) return cache[key];
-    let c = kind === 'rat' ? rat(f, bite) : whelp(f, bite, PAL.whelp);
+    let c = kind === 'rat' ? rat(f, bite) : kind === 'hound' ? hound(f, bite) : whelp(f, bite, PAL.whelp);
     if (dir === 'left') c = flip(c);
     cache[key] = c;
     return c;
   };
-  AD.art.BEAST = { whelp: { w: 40, h: 34, ox: -8, oy: -18 }, rat: { w: 30, h: 18, ox: -3, oy: 4 } };
+  AD.art.BEAST = { whelp: { w: 40, h: 34, ox: -8, oy: -18 }, rat: { w: 30, h: 18, ox: -3, oy: 4 }, hound: { w: 34, h: 22, ox: -5, oy: 1 } };
 })(window.AD);
 // ---- src/art/atlas.js
 // The atlas (spec §9.1): every picture the game draws, in the current display mode. HD art comes
@@ -7247,7 +7302,7 @@ window.AD = window.AD || {};
   const STYLE = {
     abarax: ['punch', 'jab', 'palm'], knuckle: ['punch', 'jab', 'palm'], firstknuckle: ['punch', 'jab', 'palm'],
     grunt: 'slash', slinger: 'shoot', bomber: 'slash', shaman: 'cast', pickpocket: 'punch',
-    tough: 'slash', hound: 'punch', fusilier: 'shoot', brassmask: 'slash',
+    tough: 'slash', fusilier: 'shoot', brassmask: 'slash',
     goldtooth: 'slash', fixer: 'slash', marais: 'slash',
   };
   const ELEMENT = { shaman: 'song', firstknuckle: 'all' };
@@ -7332,7 +7387,7 @@ window.AD = window.AD || {};
     return view(hd(L, action || 'idle', dir || 'down', t || 0, o || {}));
   };
 
-  // monsters: paper dolls through the same frames; the whelp and the rat are painted beasts
+  // monsters: paper dolls through the same frames; the whelp, the rat and the hound are painted beasts
   const lookOf = (id) => ((AD.MONSTERS && AD.MONSTERS[id]) || (AD.BOSSES && AD.BOSSES[id]) || {}).look || id;
   A.monster = function (id, action, dir, t, o) {
     const look = lookOf(id);
@@ -7521,8 +7576,10 @@ window.AD = window.AD || {};
       biome: R.biome, head: 38, tile: 16,
     };
   }
+  // the last few rooms baked, by layout: a room peeked at through a door is baked once for the slide
+  // and again, from here, as it is entered
   const rooms = new Map();
-  const remember = (k, v) => { rooms.set(k, v); if (rooms.size > 48) rooms.delete(rooms.keys().next().value); return v; };
+  const remember = (k, v) => { rooms.set(k, v); if (rooms.size > 8) rooms.delete(rooms.keys().next().value); return v; };
   // rows: the room's glyph rows; biome: the depth's ('city', 'dungeon', 'interior'); night: the depth's
   // returns {ground: canvas[4] (animation frames), rows: canvas|null per tile row (each drawn at
   // y * tile - head), lights, biome, head, tile}
@@ -7538,7 +7595,9 @@ window.AD = window.AD || {};
   // a room's art of its own, which A.patch changes in place as the room changes in play (a pot
   // breaks, grass burns, a door opens): only the changed tiles and the rows round them are redone
   const copy = (c) => { if (!c) return null; const o = G.canvas(c.width, c.height); o.x.drawImage(c, 0, 0); return o; };
-  const cloneArt = (R) => Object.assign({}, R, { ground: R.ground.map(copy), rows: R.rows.map(copy), lights: R.lights.slice() });
+  // frames that share a ground still share one in the copy
+  const copyAll = (list) => { const m = new Map(); return list.map((c) => { if (!m.has(c)) m.set(c, copy(c)); return m.get(c); }); };
+  const cloneArt = (R) => Object.assign({}, R, { ground: copyAll(R.ground), rows: R.rows.map(copy), lights: R.lights.slice() });
   A.roomArt = function (rows, biome, night) {
     const k = keyOf(rows, biome, night);
     const hdR = hdRoom(k, rows, biome, night);
@@ -7569,6 +7628,7 @@ window.AD = window.AD || {};
     }
     for (const Y of rowsY) hd.rows[Y] = ourRow(TL.bakeRow(map, Y, {}), rows, Y, b);
     if (art.gba) {
+      if (hd.ground[1] !== hd.ground[0]) TL.unshare(art.gba.ground);
       for (const i of tiles) {
         const X = i % w, Y = (i / w) | 0;
         hd.ground.forEach((g, fr) => A.down32Into(g, X * T, Y * T, T, T, art.gba.ground[fr]));
@@ -7997,8 +8057,12 @@ window.AD = window.AD || {};
   V.COLOUR_HEX = COLOUR_HEX;
 
   // ---------------------------------------------------------------- each room's art
-  // kept beside the room, not in it, so the simulation's state stays plain data
-  const arts = new WeakMap();
+  // kept beside the room, not in it, so the simulation's state stays plain data. Only the rooms drawn
+  // most lately keep theirs (the room in play, one sliding in, the few behind): a room walked back
+  // into after that is baked again from its tiles as they now stand
+  const arts = new WeakMap(), recent = [];
+  const KEEP = 6;
+  V.KEEP_ART = KEEP;
   function artOf(room) {
     // a place outside the depths (the Garden) says its own biome
     const d = room.biome ? { biome: room.biome, night: !!room.night } : AD.regionAt(room.depth).d;
@@ -8009,6 +8073,12 @@ window.AD = window.AD || {};
     } else if (v.version !== room.grid.version) {
       A.patch(v.art, room.grid.rows());
       v.version = room.grid.version;
+    }
+    if (recent[0] !== room) {
+      const i = recent.indexOf(room);
+      if (i > 0) recent.splice(i, 1);
+      recent.unshift(room);
+      if (recent.length > KEEP) arts.delete(recent.pop());
     }
     return v.art;
   }

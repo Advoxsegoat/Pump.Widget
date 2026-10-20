@@ -65,8 +65,9 @@ window.AD = window.AD || {};
       I.prev[b] = I.held[b];
       const latched = I.latch[b];
       I.latch[b] = false;
-      // a tap already let go of reads as one frame up, then one frame down
-      if (latched && I.prev[b] && !I.src.key[b] && !I.src.touch[b]) I.prev[b] = false;
+      // a press since the last frame reads as one frame up, then down: a tap already let go of, or a
+      // button let go of and pressed again between two frames
+      if (latched && I.prev[b]) I.prev[b] = false;
       I.held[b] = !!(I.src.key[b] || I.src.pad[b] || I.src.touch[b] || latched);
       I.cnt[b] = I.held[b] ? (latched && !I.prev[b] ? 1 : I.cnt[b] + 1) : 0;
     });

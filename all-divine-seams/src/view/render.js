@@ -17,8 +17,12 @@ window.AD = window.AD || {};
   V.COLOUR_HEX = COLOUR_HEX;
 
   // ---------------------------------------------------------------- each room's art
-  // kept beside the room, not in it, so the simulation's state stays plain data
-  const arts = new WeakMap();
+  // kept beside the room, not in it, so the simulation's state stays plain data. Only the rooms drawn
+  // most lately keep theirs (the room in play, one sliding in, the few behind): a room walked back
+  // into after that is baked again from its tiles as they now stand
+  const arts = new WeakMap(), recent = [];
+  const KEEP = 6;
+  V.KEEP_ART = KEEP;
   function artOf(room) {
     // a place outside the depths (the Garden) says its own biome
     const d = room.biome ? { biome: room.biome, night: !!room.night } : AD.regionAt(room.depth).d;
@@ -29,6 +33,12 @@ window.AD = window.AD || {};
     } else if (v.version !== room.grid.version) {
       A.patch(v.art, room.grid.rows());
       v.version = room.grid.version;
+    }
+    if (recent[0] !== room) {
+      const i = recent.indexOf(room);
+      if (i > 0) recent.splice(i, 1);
+      recent.unshift(room);
+      if (recent.length > KEEP) arts.delete(recent.pop());
     }
     return v.art;
   }

@@ -114,6 +114,20 @@ test('a roll dodges a telegraphed blow', () => {
   assert.equal(h.hp, 110);
 });
 
+test('a roll pressed while a blow lands is taken the frame the blow can be cancelled', () => {
+  const { h, run, press, dummy } = world();
+  dummy(6, 5);
+  press('a');
+  // through the wind-up to the frame the palm lands (and the hit-stop that holds it there)
+  for (let i = 0; i < 12 && !(h.attacking && h.attacking.frame > h.attacking.def.wind); i++) run(1);
+  assert.ok(h.attacking && h.attacking.frame > h.attacking.def.wind, 'the blow is landing');
+  h.facing = [0, 1];
+  press('r');
+  run(20);
+  assert.equal(h.rolls, 1, 'the roll was taken');
+  assert.deepEqual([h.x, h.y], [5, 7]);
+});
+
 test('Get Up: once a depth, a lethal blow leaves 1 HP', () => {
   const { room, h, run } = world();
   const big = AD.ent.make(room, { kind: 'monster', team: 'e', x: 8, y: 8, speed: 5, hp: 50, dmg: 999, crit: 0 });

@@ -73,10 +73,11 @@ window.AD = window.AD || {};
     return [];
   };
 
-  D.begin = function (room, waves) {
+  // `present`: the first wave is already in the room (a room found asleep), so nothing of it is sent
+  D.begin = function (room, waves, present) {
     room.waves = waves;
     room.waveIdx = 1;
-    room.pending = (waves[0] || []).slice();
+    room.pending = present ? [] : (waves[0] || []).slice();
     room.waveCost = waveCost(waves[0] || []);
   };
   const waveCost = (w) => w.reduce((t, s) => t + eliteCost(AD.MONSTERS[s.id].cost, s.elite ? s.eliteTier || 1 : 0), 0);
@@ -87,7 +88,7 @@ window.AD = window.AD || {};
     const live = alive(room);
     if (!room.pending.length && room.waveIdx < room.waves.length) {
       const cost = live.reduce((t, b) => t + eliteCost(b.cost || 0, b.eliteTier || 0), 0);
-      if (cost < room.waveCost * 0.3) {
+      if (cost < room.waveCost * 0.3 || !live.length) {
         const w = room.waves[room.waveIdx++];
         room.pending = w.slice();
         room.waveCost = waveCost(w);

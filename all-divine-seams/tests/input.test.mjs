@@ -48,6 +48,20 @@ test('a tap shorter than a frame still counts as one press', () => {
   assert.equal(AD.pad.b, false);
 });
 
+test('let go and pressed again between two frames counts as a second press', () => {
+  I.releaseAll();
+  I.update();
+  I.src.key.r = true; I.latch.r = true;
+  I.update();
+  assert.equal(AD.pad.r, true);
+  // up, then down again, before the next frame reads the keys
+  I.src.key.r = false; I.src.key.r = true; I.latch.r = true;
+  I.update();
+  assert.equal(AD.pad.r, true);
+  I.update();
+  assert.equal(AD.pad.r, false, 'still held is not another press');
+});
+
 test('the touch stick moves the pad; letting go stops it', () => {
   I.releaseAll();
   I.stick.on = true; I.stick.dx = 0.9; I.stick.dy = -0.1;
