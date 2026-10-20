@@ -102,7 +102,14 @@ window.AD = window.AD || {};
     b.busy = n * 5 + reload;
   };
   B.summon = function (room, b, id, n) {
-    const tiles = AD.director.spawnTiles(room, n, rngOf(room));
+    // in the arena they come in at the barred doors the hero didn't use; elsewhere, away from him
+    const r = rngOf(room);
+    let tiles = [];
+    if (room.key === 'arena') {
+      tiles = AD.rng.shuffle(r, ['n', 'w', 'e'].map((d) => AD.room.MOUTH[d]))
+        .filter(([x, y]) => room.grid.passable(x, y, 'walk') && !room.grid.bodyAt(x, y)).slice(0, n);
+    }
+    if (tiles.length < n) tiles = tiles.concat(AD.director.spawnTiles(room, n - tiles.length, r));
     for (const [x, y] of tiles) AD.ai.spawn(room, id, x, y, { level: b.level, shimmer: 18 });
     b.busy = 30;
     room.bus.emit('summon', { b, id, n: tiles.length });

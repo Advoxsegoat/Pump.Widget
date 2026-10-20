@@ -81,6 +81,8 @@ window.AD = window.AD || {};
     const tpl = AD.TEMPLATES[regionId].find((t) => t.type === 'boss');
     let rows = tpl.rows.map((s) => s.split(''));
     if (r() < 0.5) rows = rows.map((row) => row.slice().reverse());
+    // its doors stay barred for the fight: the hero came in below, the Hand comes in at the others
+    for (const [x, y] of Object.values(DOOR_AT)) rows[y][x] = '=';
     return { rows: rows.map((row) => row.join('')), traps: [], template: tpl.id, name: tpl.n };
   };
 })(window.AD);

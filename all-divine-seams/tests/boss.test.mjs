@@ -49,6 +49,18 @@ test('phase two at 66%: the Hand comes, the shield is back', () => {
   assert.equal(b.pips, 4);
 });
 
+test('Call the Hand: the toughs come in at the arena\'s sealed doors, not out of the floor', () => {
+  const { run, b, h, room } = arena();
+  for (const [x, y] of Object.values(AD.gen.DOOR_AT)) assert.equal(room.grid.at(x, y), '=', 'door ' + x + ',' + y);
+  AD.combat.deal(room, rec(h, b, { pct: 3, shield: 2 })); AD.combat.deal(room, rec(h, b, { pct: 3, shield: 2 }));
+  b.hp = Math.floor(b.mhp * 0.65);
+  tickN(run, 2);
+  const mouths = ['n', 'w', 'e'].map((d) => AD.room.MOUTH[d].join(','));
+  const toughs = [...room.bodies.values()].filter((x) => x.defId === 'tough');
+  assert.equal(toughs.length, 2);
+  for (const t of toughs) assert.ok(mouths.includes(t.x + ',' + t.y), 'tough at ' + t.x + ',' + t.y);
+});
+
 test('Knuckle Dash into a vat stuns him', () => {
   const { run, b, room } = arena();
   run.place(7, 8);
