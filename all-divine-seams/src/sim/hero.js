@@ -162,7 +162,7 @@ window.AD = window.AD || {};
     const m = AD.status.mods(h);
     if (m.stunned) return;
     // charging a spin while A is held
-    if (pad.aHeld) h.charge++;
+    if (pad.aHeld && ++h.charge === D.spin.charge) room.bus.emit('charged', { h });
     if (pad.aReleased) {
       if (h.charge >= D.spin.charge) h.queueSpin = true;
       h.charge = 0;

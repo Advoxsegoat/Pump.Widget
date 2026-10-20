@@ -8,7 +8,7 @@ const require = createRequire(path.join(execSync('npm root -g').toString().trim(
 const { chromium } = require('playwright');
 const [game, out = 'out/smoke'] = process.argv.slice(2);
 fs.mkdirSync(out, { recursive: true });
-const browser = await chromium.launch();
+const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
 const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
@@ -105,6 +105,23 @@ check(shots.stats.slide, 'the room slide was drawn');
 check(shots.stats.hits > 0, 'blows landed: ' + shots.stats.hits);
 console.log('smoke play:', JSON.stringify(shots.stats));
 for (const [k, v] of Object.entries(shots.out)) fs.writeFileSync(path.join(out, 'smoke-' + k + '.png'), Buffer.from(v, 'base64'));
+// sound: every name in the table, every track, and a change that waits for the bar
+const audio = await page.evaluate(async () => {
+  const A = AD.audio, wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  A.unlock();
+  if (!A.ctx) return { ok: false, why: 'no AudioContext' };
+  await A.ctx.resume();
+  for (const n of A.NAMES) A.sfx(n, { pitch: 1.1, vol: 0.5 });
+  for (const t of ['title', 'garden', 'boss', 'fight']) { A.play(t, { now: true }); for (let i = 0; i < 10; i++) { A.tick(); await wait(10); } }
+  A.play('bilibara');
+  const waiting = !!A.next && A.song.s === A.SONGS.fight && isFinite(A.song.until) && A.song.until > A.ctx.currentTime;
+  for (let i = 0; i < 160 && A.next; i++) { A.tick(); await wait(15); }
+  return { ok: true, state: A.ctx.state, waiting, switched: A.song && A.song.s === A.SONGS.bilibara };
+});
+check(audio.ok, 'audio starts: ' + audio.why);
+check(audio.waiting, 'a track change waits for the bar');
+check(audio.switched, 'and then plays the new track');
+console.log('smoke audio:', JSON.stringify(audio));
 check(errors.length === 0, 'no page errors: ' + errors.slice(0, 3).join(' | '));
 await browser.close();
 if (fail.length) { console.log('smoke FAILED\n  ' + fail.join('\n  ')); process.exit(1); }

@@ -72,6 +72,16 @@ test('charged spin: hold A for 40 frames, 300% to all eight neighbours', () => {
   for (const d of ring) assert.equal(d.log[d.log.length - 1], 36);
 });
 
+test('a held A tells the bus once, the frame the spin is ready (its glint and sound)', () => {
+  const { room, h, pad, frame } = world();
+  const ready = [];
+  room.bus.on('charged', (p) => ready.push(p.h === h ? room.frame : -1));
+  pad.a = true; pad.aHeld = true; frame();
+  for (let i = 0; i < 60; i++) frame();
+  assert.equal(ready.length, 1);
+  assert.equal(h.charge, 61);
+});
+
 test('Three Gifts: flame, bloom, tide in turn, every 4 s', () => {
   const { h, run, press, dummy } = world();
   h.crit = 0;

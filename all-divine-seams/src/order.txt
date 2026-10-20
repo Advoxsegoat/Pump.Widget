@@ -1,5 +1,6 @@
 engine/core.js
 engine/gfx.js
+engine/audio.js
 art/raster.js
 sim/rng.js
 sim/events.js

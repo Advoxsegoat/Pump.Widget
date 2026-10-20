@@ -140,8 +140,13 @@ test('the Seam Gate: charges only near it, needs its guardian dead, then leads d
   tickN(run, 600);
   assert.equal(run.gate.charge, 0);
   run.place(gx, gy);
+  const hum = [];
+  run.events.on('gateCharging', (p) => hum.push(p.gate.charge));
   tickN(run, 1800);
   assert.equal(run.gate.charge, 1);
+  // a hum every half second while it fills, for its rising tone
+  assert.equal(hum.length, 60);
+  assert.ok(hum.every((c, i) => i === 0 || c > hum[i - 1]));
   assert.equal(run.gate.open, false);
   AD.combat.deal(run.room, { src: run.hero, tgt: run.gate.guardian, pct: 1e6, type: 'normal', proc: 0, mask: [] });
   tickN(run, 2);

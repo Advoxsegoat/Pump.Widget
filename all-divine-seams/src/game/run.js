@@ -344,7 +344,10 @@ window.AD = window.AD || {};
     const g = this.gate;
     if (g.open) return;
     // whole frames, so a full charge is exactly 1
-    if (!h.dead && cheb(h.x, h.y, g.tile[0], g.tile[1]) <= 3 && g.f < 1800) { g.f++; g.charge = g.f / 1800; }
+    if (!h.dead && cheb(h.x, h.y, g.tile[0], g.tile[1]) <= 3 && g.f < 1800) {
+      g.f++; g.charge = g.f / 1800;
+      if (g.f % 30 === 0) room.bus.emit('gateCharging', { gate: g });
+    }
     if (g.charge < 1 && --g.waveT <= 0) {
       g.waveT = 480;
       const w = AD.director.plan(this.streams.combat, this.region().id, this.depth, AD.director.budget(this.coef(), 'gate'))[0] || [];

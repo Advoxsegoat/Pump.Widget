@@ -269,7 +269,7 @@ window.AD = window.AD || {};
   }
 
   // ---------------------------------------------------------------- a run on screen
-  // effects and HUD follow the run's bus; the region's whole cast is drawn now, in this display
+  // effects, HUD and sound follow the run's bus; the region's whole cast is drawn now, in this display
   // mode, so a crowd arriving never pays for its first frames
   const roster = (run) => { const R = run.region().R; return Object.keys(R.weights).concat(R.minis, [R.boss]); };
   let bound = null;
@@ -282,6 +282,7 @@ window.AD = window.AD || {};
     const offDepth = run.events.on('depthStart', () => { if (run.region().id !== region) { region = run.region().id; warm(); } }, 97);
     AD.display.onChange.push(warm);
     bound = [offDepth, () => { const i = AD.display.onChange.indexOf(warm); if (i >= 0) AD.display.onChange.splice(i, 1); }];
+    if (AD.audio && AD.audio.bind) bound.push(AD.audio.bind(run.events));
   };
 
   // ---------------------------------------------------------------- the frame
