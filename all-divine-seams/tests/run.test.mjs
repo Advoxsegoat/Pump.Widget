@@ -283,6 +283,36 @@ test('timers the hero carries count on through a door (Taffy heals 7 s after the
   assert.ok(h.hp > hp, 'Taffy healed in the next room');
 });
 
+test('the map knows what the hero has seen; a Pocket Bell shows every room, Magic Mapping the secret one too', () => {
+  const run = newRun(4821); tough(run);
+  const all = [...run.floor.rooms.values()];
+  const secret = all.find((r) => r.type === 'secret');
+  const seen = run.knownRooms();
+  assert.ok(seen.has(run.room.key) && seen.size < all.length);
+  AD.items.give(run, run.hero, 'pocketbell');
+  AD.items.useEquipment(run.room, run.hero);
+  const bell = run.knownRooms();
+  assert.equal(bell.size, all.length - (secret ? 1 : 0));
+  if (secret) assert.ok(!bell.has(secret.key));
+  AD.cons.give(run, 'mapping', 1); AD.cons.useId(run, 'mapping');
+  assert.equal(run.knownRooms().size, all.length);
+  // a new depth is a new floor, unseen again
+  run.startDepth(2);
+  assert.ok(run.knownRooms().size < run.floor.rooms.size);
+});
+
+test('Mind Vision shows where the monsters are on the floor for 30 s', () => {
+  const run = newRun(4821); tough(run);
+  assert.equal(run.foeRooms().size, 0);
+  AD.cons.give(run, 'mindvision', 1); AD.cons.useId(run, 'mindvision');
+  const fights = [...run.floor.rooms.values()].filter((r) => r.type === 'combat').map((r) => r.key);
+  const foes = run.foeRooms();
+  assert.ok(fights.length && fights.every((k) => foes.has(k)));
+  assert.ok(!foes.has(run.room.key), 'not the empty start room');
+  tickN(run, 1801);
+  assert.equal(run.foeRooms().size, 0);
+});
+
 test('determinism: same seed, same inputs, same state', () => {
   const script = (i) => { const p = PAD(); p.sx = [1, 0, -1, 0][(i >> 5) & 3]; p.sy = [0, 1, 0, -1][(i >> 5) & 3]; p.a = i % 9 === 0; return p; };
   const go = () => { const run = newRun(4821); for (let i = 0; i < 5000; i++) run.tick(script(i)); return run.hash(); };

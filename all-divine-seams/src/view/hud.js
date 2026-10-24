@@ -35,6 +35,8 @@ window.AD = window.AD || {};
       band: { x: mm.x - 4 - 26 - 4 - 64, y: m + 11, w: 64, h: 9 },
       quick0: { x: mm.x, y: mm.y + mm.h + 3, w: qs, h: qs },
       quick1: { x: mm.x + qs + 3, y: mm.y + mm.h + 3, w: qs, h: qs },
+      // the third slot (an unlock), to the left of the other two
+      quick2: { x: mm.x - qs - 3, y: mm.y + mm.h + 3, w: qs, h: qs },
       bossName: { x: Math.round(W * 0.2), y: H - 22, w: Math.round(W * 0.6), h: 9 },
       boss: { x: Math.round(W * 0.2), y: H - 11, w: Math.round(W * 0.6), h: 6 },
       banner: { x: (W - bw) / 2, y: hd ? 44 : 34, w: bw, h: 28 },
@@ -92,6 +94,16 @@ window.AD = window.AD || {};
   // ---------------------------------------------------------------- drawing
   // the quickslots take taps while the HUD is on screen
   HUD.quickTappable = () => S.drawnAt != null && AD.frame - S.drawnAt <= 2;
+  // the quickslot under a point on the screen (a little slack round each), or -1; only the slots
+  // the HUD draws take taps
+  HUD.quickAt = function (x, y, mode) {
+    const L = HUD.layout(mode);
+    for (let i = 0; i < (S.slots || 2); i++) {
+      const r = L['quick' + i], gx = r.w * 0.25, gy = r.h * 0.25;
+      if (x >= r.x - gx && x < r.x + r.w + gx && y >= r.y - gy && y < r.y + r.h + gy) return i;
+    }
+    return -1;
+  };
   HUD.draw = function (ctx, run) {
     const g = G(), mode = AD.display.mode, L = HUD.layout(mode), W = AD.display.W;
     S.drawnAt = AD.frame;
@@ -122,7 +134,9 @@ window.AD = window.AD || {};
     const band = AD.stat.band(run.minutes, run.difficulty);
     g.text(ctx, AD.stat.BANDS[band], L.band.x + L.band.w, L.band.y, BAND_C[band], { align: 'right' });
     minimap(ctx, run, L.minimap);
+    S.slots = Math.min(3, (run.quick || []).length);
     quick(ctx, run, L.quick0, 0); quick(ctx, run, L.quick1, 1);
+    if (S.slots === 3) quick(ctx, run, L.quick2, 2);
     boss(ctx, run, L);
     if (run.banner) banner(ctx, run.banner, L.banner);
     if (S.depth) {
@@ -140,17 +154,12 @@ window.AD = window.AD || {};
   };
   HUD.resetSlowCheck = () => { slow = HUD.slowCheck(); };
 
-  // known rooms of this floor: the ones visited, and the ones seen through their doors
+  // known rooms of this floor (run.knownRooms), with a red mark where Mind Vision sees monsters
   function minimap(ctx, run, r) {
     const F = run.floor, cs = r.w / 9;
     ctx.globalAlpha = 0.55; ctx.fillStyle = '#06081a'; ctx.fillRect(r.x - 1, r.y - 1, r.w + 2, r.h + 2); ctx.globalAlpha = 1;
-    const known = new Set();
-    for (const [k, st] of run.roomState) if (st.state !== 'unvisited') {
-      known.add(k);
-      const R = F.rooms.get(k);
-      // a secret wall gives nothing away until it is opened (then the room behind is visited)
-      for (const [d, link] of Object.entries(R.doors)) if (link && link !== 'secret') { const [dx, dy] = AD.gen.DIRS[d]; known.add((R.gx + dx) + ',' + (R.gy + dy)); }
-    }
+    const known = run.knownRooms(), foes = run.foeRooms();
+    for (const k of foes) known.add(k);
     const here = run.room && run.room.key;
     for (const k of known) {
       const R = F.rooms.get(k);
@@ -158,7 +167,8 @@ window.AD = window.AD || {};
       const st = run.roomState.get(k).state, x = r.x + R.gx * cs, y = r.y + R.gy * cs;
       ctx.fillStyle = k === here ? ((run.frames >> 4) % 2 ? '#ffffff' : '#ffd84a') : st === 'unvisited' ? '#2a2e48' : st === 'entered' ? '#a84a4a' : '#6a6e8e';
       ctx.fillRect(x, y, cs - 1, cs - 1);
-      if (st !== 'unvisited' && R.type === 'exit') { ctx.fillStyle = '#c9b0ff'; ctx.fillRect(x + ((cs - 1) >> 1), y + ((cs - 1) >> 1), 1, 1); }
+      if ((st !== 'unvisited' || run.revealed) && R.type === 'exit') { ctx.fillStyle = '#c9b0ff'; ctx.fillRect(x + ((cs - 1) >> 1), y + ((cs - 1) >> 1), 1, 1); }
+      if (foes.has(k) && k !== here) { const q = Math.max(1, (cs - 1) >> 1); ctx.fillStyle = '#ff4a4a'; ctx.fillRect(x, y, q, q); }
     }
   }
   function quick(ctx, run, r, i) {

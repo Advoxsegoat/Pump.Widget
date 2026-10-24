@@ -148,3 +148,27 @@ test('a Page of Teleport cannot carry the hero out of a sealed fight or the aren
   assert.equal(run.room.key, 'arena');
 });
 
+test('a Page of Upgrade asks what to upgrade once there is armour to choose', () => {
+  const run = newRun(9);
+  assert.deepEqual([...AD.cons.choices(run, 'upgrade')], [], 'nothing to choose: the weapon');
+  AD.cons.wear(run, AD.cons.makeArmour(run, 'jerkin', { known: true, level: 0, cursed: false }));
+  assert.deepEqual([...AD.cons.choices(run, 'upgrade')], ['weapon', 'armour']);
+  assert.deepEqual([...AD.cons.choices(run, 'healing')], []);
+});
+
+test('spare armour can be worn, and armour taken off, unless the worn piece is cursed', () => {
+  const run = newRun(10);
+  const a = AD.cons.makeArmour(run, 'jerkin', { known: true, level: 0, cursed: false });
+  const b = AD.cons.makeArmour(run, 'plate', { known: true, level: 0, cursed: false });
+  AD.cons.wear(run, a); run.spareArmour.push(b);
+  assert.equal(AD.cons.toggleArmour(run, b), 'worn');
+  assert.equal(run.armour, b); assert.ok(run.spareArmour.includes(a));
+  assert.equal(AD.cons.toggleArmour(run, b), 'off');
+  assert.equal(run.armour, null); assert.equal(run.spareArmour.length, 2);
+  const c = AD.cons.makeArmour(run, 'hauberk', { known: true, level: -1, cursed: true, curse: 'heavy' });
+  AD.cons.wear(run, c);
+  assert.equal(AD.cons.toggleArmour(run, c), 'cursed');
+  assert.equal(AD.cons.toggleArmour(run, a), 'cursed');
+  assert.equal(run.armour, c);
+});
+

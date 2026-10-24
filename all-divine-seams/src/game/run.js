@@ -51,6 +51,7 @@ window.AD = window.AD || {};
     this.roomState = new Map();
     for (const k of this.floor.rooms.keys()) this.roomState.set(k, { state: 'unvisited', taken: new Set() });
     this.gate = null;
+    this.revealed = null;
     this.rerolls = this.unlocks().has('chestReroll') ? 1 : 0;
     this.events.emit('depthStart', { depth, first: !!first });
     const S = this.floor.rooms.get(this.floor.start);
@@ -260,8 +261,11 @@ window.AD = window.AD || {};
     if (big && r() < 0.5) drop = { kind: 'item', item: AD.rng.pick(r, ITEM_POOL('equipment')) };
     else if (big) drop = { kind: 'item', item: this.rollItem(r, [['uncommon', 0.8], ['legendary', 0.2]]) };
     else drop = { kind: 'item', item: this.rollItem(r, [['common', 0.79], ['uncommon', 0.2], ['legendary', 0.01]]) };
+    // beside the chest, not under the hero: it waits there to be taken, or rerolled
     const h = this.hero;
-    const q = AD.room.drop(room, h.x, h.y, drop);
+    const spot = [[0, 1], [1, 0], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]].map(([dx, dy]) => [x + dx, y + dy])
+      .find(([tx, ty]) => !(tx === h.x && ty === h.y) && room.grid.passable(tx, ty, 'walk') && !room.grid.bodyAt(tx, ty)) || [h.x, h.y];
+    const q = AD.room.drop(room, spot[0], spot[1], drop);
     (room.chestDrops || (room.chestDrops = {}))[k] = q.id;
     room.bus.emit('chest', { x, y, cost, big });
     return true;
@@ -279,6 +283,32 @@ window.AD = window.AD || {};
     this.rerolls--;
     room.bus.emit('reroll', { p });
     return true;
+  };
+
+  // the rooms of this floor the hero knows: those visited and those seen through their doors (a
+  // secret wall gives nothing away); a Pocket Bell shows every room, Magic Mapping the secret too
+  P.knownRooms = function () {
+    const F = this.floor, known = new Set();
+    for (const [k, st] of this.roomState) if (st.state !== 'unvisited') {
+      known.add(k);
+      const R = F.rooms.get(k);
+      for (const [d, link] of Object.entries(R.doors)) if (link && link !== 'secret') known.add((R.gx + AD.gen.DIRS[d][0]) + ',' + (R.gy + AD.gen.DIRS[d][1]));
+    }
+    if (this.revealed) for (const [k, R] of F.rooms) if (this.revealed === 'all' || R.type !== 'secret') known.add(k);
+    for (const k of [...known]) if (!F.rooms.has(k)) known.delete(k);
+    return known;
+  };
+  // while Mind Vision lasts: the rooms with monsters in them, or a fight still to come
+  P.foeRooms = function () {
+    const out = new Set();
+    if (!(this.mindVision > 0)) return out;
+    for (const [k, R] of this.floor.rooms) {
+      const live = this.rooms.get(k), st = this.roomState.get(k);
+      const alive = live && [...live.bodies.values()].some((e) => (e.kind === 'monster' || e.kind === 'boss') && !e.dead && !e.gone);
+      const toCome = R.type === 'combat' && st.state !== 'cleared';
+      if (alive || toCome) out.add(k);
+    }
+    return out;
   };
 
   P.clearRoom = function (room) {

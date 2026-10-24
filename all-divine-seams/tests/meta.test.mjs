@@ -44,6 +44,22 @@ test('the third quickslot and the extra roll', () => {
   assert.equal(plain.hero.rollMax, AD.HEROES.abarax.base.rolls);
 });
 
+test('a chest\'s item lies beside the chest, not under the hero, so there is time to reroll it', () => {
+  M.reset(); M.petals = 80; M.buy('chestReroll');
+  const run = new AD.Run({ hero: 'abarax', difficulty: 2, seed: 5, meta: M });
+  run.coins = 1e6;
+  const room = run.room;
+  room.grid.set(7, 3, 'C');
+  run.place(7, 4); run.hero.facing = [0, -1];
+  assert.equal(run.openChest(room, 7, 3), true);
+  for (let i = 0; i < 60; i++) run.tick(PAD());
+  const p = room.pickups.find((q) => q.kind === 'item');
+  assert.ok(p, 'still on the floor after a second of standing at the chest');
+  assert.ok(!(p.x === 7 && p.y === 4));
+  assert.ok(Math.max(Math.abs(p.x - 7), Math.abs(p.y - 3)) === 1, 'beside the chest');
+  assert.equal(run.openChest(room, 7, 3), true, 'rerolled');
+});
+
 test('one free chest reroll per depth: A on the open chest again, while its item still lies there', () => {
   M.reset(); M.petals = 80; M.buy('chestReroll');
   const run = new AD.Run({ hero: 'abarax', difficulty: 2, seed: 5, meta: M });

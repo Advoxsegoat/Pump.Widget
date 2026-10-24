@@ -384,6 +384,9 @@ window.AD = window.AD || {};
     if (AD.paused) { AD.paused = false; this.pause(); return; }
     if (AD.pad.start) { this.pause(); return; }
     if (AD.pad.map) { AD.run(new AD.MapView(run)); return; }
+    // a quickslot page that asks a choice first (Upgrade, with armour worn) asks it here
+    const qi = (AD.pad.q || []).findIndex((on, i) => on && AD.cons && AD.cons.choices(run, run.quick[i]).length);
+    if (qi >= 0) { AD.chooseThenUse(run, run.quick[qi]); return; }
     run.tick(AD.pad);
     AD.fx.tick();
     // the hints that are states rather than events
@@ -442,19 +445,31 @@ window.AD = window.AD || {};
   };
 
   // ---------------------------------------------------------------- items: what is carried, and the bag
+  // a page that asks first (Upgrade: the weapon or the armour), then is read
+  const CHOICE = { weapon: 'The weapon: +10% damage', armour: 'The armour' };
+  AD.chooseThenUse = function (run, id) {
+    const items = AD.cons.choices(run, id).map((v) => ({ label: v === 'armour' ? CHOICE.armour + ' (' + AD.cons.armourName(run.armour) + ')' : CHOICE[v], value: v }));
+    return AD.menu({ title: AD.cons.label(run, id) + ': which?', items }).then((v) => {
+      if (!v) return false;
+      const ok = AD.cons.useId(run, id, v);
+      sfx(ok ? 'potion' : 'cancel');
+      return ok;
+    });
+  };
   AD.Items = function (run) { this.run = run; this.i = 0; };
   AD.Items.prototype.cells = function () {
     const run = this.run, h = run.hero, out = [];
     for (const id of h.itemOrder || []) if (h.items[id] > 0) out.push({ kind: 'item', id, n: h.items[id] });
     if (h.equipment) out.push({ kind: 'item', id: h.equipment, n: 1, equip: true });
-    if (run.armour) out.push({ kind: 'armour', id: run.armour.id, n: 1 });
+    if (run.armour) out.push({ kind: 'armour', id: run.armour.id, n: 1, piece: run.armour });
+    for (const p of run.spareArmour || []) out.push({ kind: 'armour', id: p.id, n: 1, piece: p, spare: true });
     for (const [id, n] of Object.entries(run.bag || {})) if (n > 0) out.push({ kind: 'cons', id, n });
     return out;
   };
   AD.Items.prototype.update = function () {
     const cells = this.cells(), cols = AD.display.mode === 'gba' ? 7 : 10;
     const d = I.dir();
-    if (d && cells.length) { this.i = AD.clamp(this.i + d[0] + d[1] * cols, 0, cells.length - 1); sfx('cursor'); }
+    if (d && cells.length) { this.i = AD.clamp(this.i + d[0] + d[1] * cols, 0, cells.length - 1); this.note = null; sfx('cursor'); }
     const click = I.consumeClick();
     if (click) {
       const L = this.layout(cells.length), cx = Math.floor((click.x - L.x) / L.c), cy = Math.floor((click.y - L.y) / L.c);
@@ -466,7 +481,14 @@ window.AD = window.AD || {};
     if (pressedBack()) { sfx('cancel'); this.done(); }
   };
   AD.Items.prototype.use = function (c) {
-    if (c.kind !== 'cons' || !AD.cons) return;
+    if (!AD.cons) return;
+    if (c.kind === 'armour') {
+      const r = AD.cons.toggleArmour(this.run, c.piece);
+      if (r === 'cursed') { sfx('cancel'); this.note = 'The cursed piece will not come off.'; } else sfx('cursor');
+      return;
+    }
+    if (c.kind !== 'cons') return;
+    if (AD.cons.choices(this.run, c.id).length) { AD.chooseThenUse(this.run, c.id).then((ok) => { if (ok) this.done(); }); return; }
     if (AD.cons.useId(this.run, c.id)) { sfx('potion'); this.done(); } else sfx('cancel');
   };
   AD.Items.prototype.layout = function (n) {
@@ -483,15 +505,17 @@ window.AD = window.AD || {};
     cells.forEach((c, j) => {
       const x = L.x + (j % L.cols) * L.c, y = L.y + Math.floor(j / L.cols) * L.c;
       const look = c.kind === 'item' ? { kind: 'item', tier: (AD.ITEMS[c.id] || {}).tier } : c.kind === 'armour' ? { kind: 'armour' } : AD.view.pickupLook(run, { kind: 'cons', id: c.id });
+      if (c.spare) ctx.globalAlpha = 0.6;
       const s = AD.art.sprite('pickup', look, 0);
       ctx.fillStyle = j === this.i ? 'rgba(232,193,112,0.28)' : 'rgba(255,255,255,0.05)'; ctx.fillRect(x, y, L.c - 2, L.c - 2);
       ctx.drawImage(s.c, x + 1, y + 1);
+      ctx.globalAlpha = 1;
       if (c.n > 1) G.text(ctx, AD.stat.short(c.n), x + L.c - 3, y + L.c - 11, C.cream, { align: 'right' });
     });
     const c = cells[this.i];
     if (c) {
-      const name = c.kind === 'item' ? AD.ITEMS[c.id].n + (c.equip ? ' (L)' : '') : c.kind === 'armour' ? AD.cons.armourName(run.armour) : AD.cons.label(run, c.id);
-      const desc = c.kind === 'item' ? AD.ITEMS[c.id].desc : c.kind === 'armour' ? (run.armour.known && run.armour.curse ? AD.cons.CURSE_TEXT[run.armour.curse] : 'Worn where you can see it.') : AD.cons.desc(run, c.id) + '  A: use';
+      const name = c.kind === 'item' ? AD.ITEMS[c.id].n + (c.equip ? ' (L)' : '') : c.kind === 'armour' ? AD.cons.armourName(c.piece) + (c.spare ? ' (carried)' : '') : AD.cons.label(run, c.id);
+      const desc = this.note || (c.kind === 'item' ? AD.ITEMS[c.id].desc : c.kind === 'armour' ? (c.piece.known && c.piece.curse ? AD.cons.CURSE_TEXT[c.piece.curse] + '  ' : '') + (c.spare ? 'A: wear it' : 'Worn where you can see it.  A: take it off') : AD.cons.desc(run, c.id) + '  A: use');
       const lines = G.wrap(desc, W() - 28).slice(0, 2), hh = lines.length * 10 + 18;
       G.panel(ctx, 6, H() - hh - 4, W() - 12, hh);
       G.text(ctx, name, 12, H() - hh, c.kind === 'item' ? AD.art.TIER_C[AD.ITEMS[c.id].tier] || C.cream : C.gold);
@@ -507,12 +531,8 @@ window.AD = window.AD || {};
     ctx.globalAlpha = 0.7; ctx.fillStyle = '#05060c'; ctx.fillRect(0, 0, W(), H()); ctx.globalAlpha = 1;
     const ox = Math.round((W() - 9 * cw) / 2), oy = Math.round((H() - 8 * ch) / 2) + 6;
     G.text(ctx, AD.regionAt(run.depth).d.n + ' - depth ' + run.depth, W() / 2, oy - 14, C.gold, { align: 'center' });
-    const known = new Set();
-    for (const [k, st] of run.roomState) if (st.state !== 'unvisited') {
-      known.add(k);
-      const R = F.rooms.get(k);
-      for (const [d, link] of Object.entries(R.doors)) if (link && link !== 'secret') known.add((R.gx + AD.gen.DIRS[d][0]) + ',' + (R.gy + AD.gen.DIRS[d][1]));
-    }
+    const known = run.knownRooms(), foes = run.foeRooms();
+    for (const k of foes) known.add(k);
     const MARK = { exit: ['G', '#c9b0ff'], treasure: ['$', C.gold], rest: ['f', '#ffb347'], secret: ['?', C.violet], start: ['*', C.cream] };
     for (const k of known) {
       const R = F.rooms.get(k);
@@ -525,8 +545,10 @@ window.AD = window.AD || {};
         const [dx, dy] = AD.gen.DIRS[d];
         if (dx) ctx.fillRect(dx > 0 ? x + cw - 1 : x - 1, y + (ch >> 1) - 1, 2, 2); else ctx.fillRect(x + (cw >> 1) - 1, dy > 0 ? y + ch - 1 : y - 1, 2, 2);
       }
-      const m = st !== 'unvisited' && MARK[R.type];
+      // what each room is shows once it is visited, or the whole floor is revealed
+      const m = (st !== 'unvisited' || run.revealed) && MARK[R.type];
       if (m) G.text(ctx, m[0], x + cw / 2, y + (ch - 9) / 2, m[1], { align: 'center' });
+      if (foes.has(k) && !here) { ctx.fillStyle = '#ff4a4a'; ctx.fillRect(x + 2, y + 2, 3, 3); }
     }
   };
 

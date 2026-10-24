@@ -55,7 +55,7 @@ window.AD = window.AD || {};
     const roomState = [...run.roomState].map(([k, st]) => [k, k === e.key ? { state: e.state, taken: e.taken } : { state: st.state, taken: [...st.taken] }]);
     return {
       v: V, seed: run.seed, difficulty: run.difficulty, heroId: run.heroId, depth: run.depth, frames: run.frames, cleared: run.cleared,
-      coins: run.coins, keys: run.keys, petals: run.petals, kills: run.kills, rerolls: run.rerolls, mindVision: run.mindVision || 0,
+      coins: run.coins, keys: run.keys, petals: run.petals, kills: run.kills, rerolls: run.rerolls, mindVision: run.mindVision || 0, revealed: run.revealed || null,
       metMinis: [...run.metMinis], lore: run.lore || [], found: run.found || [],
       bag: run.bag, quick: run.quick, idTable: { potions: run.idTable.potions, scrolls: run.idTable.scrolls, known: [...run.idTable.known] },
       armour: run.armour, spareArmour: run.spareArmour,
@@ -124,7 +124,7 @@ window.AD = window.AD || {};
     // the run and the hero
     Object.assign(run, {
       frames: d.frames, minutes: d.frames / 3600, cleared: d.cleared, coins: d.coins, keys: d.keys, petals: d.petals, kills: d.kills,
-      rerolls: d.rerolls || 0, mindVision: d.mindVision || 0, metMinis: new Set(d.metMinis || []), lore: d.lore || [], found: d.found || [],
+      rerolls: d.rerolls || 0, mindVision: d.mindVision || 0, revealed: d.revealed || null, metMinis: new Set(d.metMinis || []), lore: d.lore || [], found: d.found || [],
       bag: d.bag || { bomb: 0 }, quick: d.quick || [null, null], armour: d.armour || null, spareArmour: d.spareArmour || [], gate: null, banner: null,
     });
     run.idTable = { potions: d.idTable.potions, scrolls: d.idTable.scrolls, known: new Set(d.idTable.known) };

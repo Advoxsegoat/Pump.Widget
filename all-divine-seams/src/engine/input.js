@@ -125,12 +125,9 @@ window.AD = window.AD || {};
     unlock();
     if (ev.pointerType === 'touch') touchUI();
     const p = canvasPos(ev);
-    if (AD.hud && AD.hud.layout) {
-      const L = AD.hud.layout(AD.display.mode);
-      for (const [i, r] of [[0, L.quick0], [1, L.quick1]]) {
-        const gx = r.w * 0.25, gy = r.h * 0.25;
-        if (p.x >= r.x - gx && p.x < r.x + r.w + gx && p.y >= r.y - gy && p.y < r.y + r.h + gy && AD.hud.quickTappable && AD.hud.quickTappable()) { I.latch['q' + i] = true; ev.preventDefault(); return; }
-      }
+    if (AD.hud && AD.hud.quickAt && AD.hud.quickTappable && AD.hud.quickTappable()) {
+      const i = AD.hud.quickAt(p.x, p.y, AD.display.mode);
+      if (i >= 0) { I.latch['q' + i] = true; ev.preventDefault(); return; }
     }
     I.click = p;
     I.lastDevice = ev.pointerType === 'mouse' ? 'mouse' : 'touch';

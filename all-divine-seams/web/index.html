@@ -530,12 +530,9 @@ window.AD = window.AD || {};
     unlock();
     if (ev.pointerType === 'touch') touchUI();
     const p = canvasPos(ev);
-    if (AD.hud && AD.hud.layout) {
-      const L = AD.hud.layout(AD.display.mode);
-      for (const [i, r] of [[0, L.quick0], [1, L.quick1]]) {
-        const gx = r.w * 0.25, gy = r.h * 0.25;
-        if (p.x >= r.x - gx && p.x < r.x + r.w + gx && p.y >= r.y - gy && p.y < r.y + r.h + gy && AD.hud.quickTappable && AD.hud.quickTappable()) { I.latch['q' + i] = true; ev.preventDefault(); return; }
-      }
+    if (AD.hud && AD.hud.quickAt && AD.hud.quickTappable && AD.hud.quickTappable()) {
+      const i = AD.hud.quickAt(p.x, p.y, AD.display.mode);
+      if (i >= 0) { I.latch['q' + i] = true; ev.preventDefault(); return; }
     }
     I.click = p;
     I.lastDevice = ev.pointerType === 'mouse' ? 'mouse' : 'touch';
@@ -4851,6 +4848,15 @@ window.AD = window.AD || {};
     run.events.emit('wear', { p });
     return true;
   };
+  // a choice a page asks for before it is read: Upgrade asks which, once armour is worn
+  C.choices = (run, id) => (id === 'upgrade' && run.armour ? ['weapon', 'armour'] : []);
+  // the Items screen's armour: the worn piece comes off, a spare goes on; a cursed piece stays on
+  C.toggleArmour = function (run, p) {
+    if (run.armour && run.armour.cursed) return 'cursed';
+    if (p === run.armour) { C.unwear(run); return 'off'; }
+    C.wear(run, p);
+    return 'worn';
+  };
   C.unwear = function (run) {
     if (!run.armour) return true;
     if (run.armour.cursed) return false;
@@ -4947,6 +4953,7 @@ window.AD = window.AD || {};
     this.roomState = new Map();
     for (const k of this.floor.rooms.keys()) this.roomState.set(k, { state: 'unvisited', taken: new Set() });
     this.gate = null;
+    this.revealed = null;
     this.rerolls = this.unlocks().has('chestReroll') ? 1 : 0;
     this.events.emit('depthStart', { depth, first: !!first });
     const S = this.floor.rooms.get(this.floor.start);
@@ -5156,8 +5163,11 @@ window.AD = window.AD || {};
     if (big && r() < 0.5) drop = { kind: 'item', item: AD.rng.pick(r, ITEM_POOL('equipment')) };
     else if (big) drop = { kind: 'item', item: this.rollItem(r, [['uncommon', 0.8], ['legendary', 0.2]]) };
     else drop = { kind: 'item', item: this.rollItem(r, [['common', 0.79], ['uncommon', 0.2], ['legendary', 0.01]]) };
+    // beside the chest, not under the hero: it waits there to be taken, or rerolled
     const h = this.hero;
-    const q = AD.room.drop(room, h.x, h.y, drop);
+    const spot = [[0, 1], [1, 0], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]].map(([dx, dy]) => [x + dx, y + dy])
+      .find(([tx, ty]) => !(tx === h.x && ty === h.y) && room.grid.passable(tx, ty, 'walk') && !room.grid.bodyAt(tx, ty)) || [h.x, h.y];
+    const q = AD.room.drop(room, spot[0], spot[1], drop);
     (room.chestDrops || (room.chestDrops = {}))[k] = q.id;
     room.bus.emit('chest', { x, y, cost, big });
     return true;
@@ -5175,6 +5185,32 @@ window.AD = window.AD || {};
     this.rerolls--;
     room.bus.emit('reroll', { p });
     return true;
+  };
+
+  // the rooms of this floor the hero knows: those visited and those seen through their doors (a
+  // secret wall gives nothing away); a Pocket Bell shows every room, Magic Mapping the secret too
+  P.knownRooms = function () {
+    const F = this.floor, known = new Set();
+    for (const [k, st] of this.roomState) if (st.state !== 'unvisited') {
+      known.add(k);
+      const R = F.rooms.get(k);
+      for (const [d, link] of Object.entries(R.doors)) if (link && link !== 'secret') known.add((R.gx + AD.gen.DIRS[d][0]) + ',' + (R.gy + AD.gen.DIRS[d][1]));
+    }
+    if (this.revealed) for (const [k, R] of F.rooms) if (this.revealed === 'all' || R.type !== 'secret') known.add(k);
+    for (const k of [...known]) if (!F.rooms.has(k)) known.delete(k);
+    return known;
+  };
+  // while Mind Vision lasts: the rooms with monsters in them, or a fight still to come
+  P.foeRooms = function () {
+    const out = new Set();
+    if (!(this.mindVision > 0)) return out;
+    for (const [k, R] of this.floor.rooms) {
+      const live = this.rooms.get(k), st = this.roomState.get(k);
+      const alive = live && [...live.bodies.values()].some((e) => (e.kind === 'monster' || e.kind === 'boss') && !e.dead && !e.gone);
+      const toCome = R.type === 'combat' && st.state !== 'cleared';
+      if (alive || toCome) out.add(k);
+    }
+    return out;
   };
 
   P.clearRoom = function (room) {
@@ -8454,6 +8490,8 @@ window.AD = window.AD || {};
       band: { x: mm.x - 4 - 26 - 4 - 64, y: m + 11, w: 64, h: 9 },
       quick0: { x: mm.x, y: mm.y + mm.h + 3, w: qs, h: qs },
       quick1: { x: mm.x + qs + 3, y: mm.y + mm.h + 3, w: qs, h: qs },
+      // the third slot (an unlock), to the left of the other two
+      quick2: { x: mm.x - qs - 3, y: mm.y + mm.h + 3, w: qs, h: qs },
       bossName: { x: Math.round(W * 0.2), y: H - 22, w: Math.round(W * 0.6), h: 9 },
       boss: { x: Math.round(W * 0.2), y: H - 11, w: Math.round(W * 0.6), h: 6 },
       banner: { x: (W - bw) / 2, y: hd ? 44 : 34, w: bw, h: 28 },
@@ -8511,6 +8549,16 @@ window.AD = window.AD || {};
   // ---------------------------------------------------------------- drawing
   // the quickslots take taps while the HUD is on screen
   HUD.quickTappable = () => S.drawnAt != null && AD.frame - S.drawnAt <= 2;
+  // the quickslot under a point on the screen (a little slack round each), or -1; only the slots
+  // the HUD draws take taps
+  HUD.quickAt = function (x, y, mode) {
+    const L = HUD.layout(mode);
+    for (let i = 0; i < (S.slots || 2); i++) {
+      const r = L['quick' + i], gx = r.w * 0.25, gy = r.h * 0.25;
+      if (x >= r.x - gx && x < r.x + r.w + gx && y >= r.y - gy && y < r.y + r.h + gy) return i;
+    }
+    return -1;
+  };
   HUD.draw = function (ctx, run) {
     const g = G(), mode = AD.display.mode, L = HUD.layout(mode), W = AD.display.W;
     S.drawnAt = AD.frame;
@@ -8541,7 +8589,9 @@ window.AD = window.AD || {};
     const band = AD.stat.band(run.minutes, run.difficulty);
     g.text(ctx, AD.stat.BANDS[band], L.band.x + L.band.w, L.band.y, BAND_C[band], { align: 'right' });
     minimap(ctx, run, L.minimap);
+    S.slots = Math.min(3, (run.quick || []).length);
     quick(ctx, run, L.quick0, 0); quick(ctx, run, L.quick1, 1);
+    if (S.slots === 3) quick(ctx, run, L.quick2, 2);
     boss(ctx, run, L);
     if (run.banner) banner(ctx, run.banner, L.banner);
     if (S.depth) {
@@ -8559,17 +8609,12 @@ window.AD = window.AD || {};
   };
   HUD.resetSlowCheck = () => { slow = HUD.slowCheck(); };
 
-  // known rooms of this floor: the ones visited, and the ones seen through their doors
+  // known rooms of this floor (run.knownRooms), with a red mark where Mind Vision sees monsters
   function minimap(ctx, run, r) {
     const F = run.floor, cs = r.w / 9;
     ctx.globalAlpha = 0.55; ctx.fillStyle = '#06081a'; ctx.fillRect(r.x - 1, r.y - 1, r.w + 2, r.h + 2); ctx.globalAlpha = 1;
-    const known = new Set();
-    for (const [k, st] of run.roomState) if (st.state !== 'unvisited') {
-      known.add(k);
-      const R = F.rooms.get(k);
-      // a secret wall gives nothing away until it is opened (then the room behind is visited)
-      for (const [d, link] of Object.entries(R.doors)) if (link && link !== 'secret') { const [dx, dy] = AD.gen.DIRS[d]; known.add((R.gx + dx) + ',' + (R.gy + dy)); }
-    }
+    const known = run.knownRooms(), foes = run.foeRooms();
+    for (const k of foes) known.add(k);
     const here = run.room && run.room.key;
     for (const k of known) {
       const R = F.rooms.get(k);
@@ -8577,7 +8622,8 @@ window.AD = window.AD || {};
       const st = run.roomState.get(k).state, x = r.x + R.gx * cs, y = r.y + R.gy * cs;
       ctx.fillStyle = k === here ? ((run.frames >> 4) % 2 ? '#ffffff' : '#ffd84a') : st === 'unvisited' ? '#2a2e48' : st === 'entered' ? '#a84a4a' : '#6a6e8e';
       ctx.fillRect(x, y, cs - 1, cs - 1);
-      if (st !== 'unvisited' && R.type === 'exit') { ctx.fillStyle = '#c9b0ff'; ctx.fillRect(x + ((cs - 1) >> 1), y + ((cs - 1) >> 1), 1, 1); }
+      if ((st !== 'unvisited' || run.revealed) && R.type === 'exit') { ctx.fillStyle = '#c9b0ff'; ctx.fillRect(x + ((cs - 1) >> 1), y + ((cs - 1) >> 1), 1, 1); }
+      if (foes.has(k) && k !== here) { const q = Math.max(1, (cs - 1) >> 1); ctx.fillStyle = '#ff4a4a'; ctx.fillRect(x, y, q, q); }
     }
   }
   function quick(ctx, run, r, i) {
@@ -8831,7 +8877,7 @@ window.AD = window.AD || {};
     const roomState = [...run.roomState].map(([k, st]) => [k, k === e.key ? { state: e.state, taken: e.taken } : { state: st.state, taken: [...st.taken] }]);
     return {
       v: V, seed: run.seed, difficulty: run.difficulty, heroId: run.heroId, depth: run.depth, frames: run.frames, cleared: run.cleared,
-      coins: run.coins, keys: run.keys, petals: run.petals, kills: run.kills, rerolls: run.rerolls, mindVision: run.mindVision || 0,
+      coins: run.coins, keys: run.keys, petals: run.petals, kills: run.kills, rerolls: run.rerolls, mindVision: run.mindVision || 0, revealed: run.revealed || null,
       metMinis: [...run.metMinis], lore: run.lore || [], found: run.found || [],
       bag: run.bag, quick: run.quick, idTable: { potions: run.idTable.potions, scrolls: run.idTable.scrolls, known: [...run.idTable.known] },
       armour: run.armour, spareArmour: run.spareArmour,
@@ -8900,7 +8946,7 @@ window.AD = window.AD || {};
     // the run and the hero
     Object.assign(run, {
       frames: d.frames, minutes: d.frames / 3600, cleared: d.cleared, coins: d.coins, keys: d.keys, petals: d.petals, kills: d.kills,
-      rerolls: d.rerolls || 0, mindVision: d.mindVision || 0, metMinis: new Set(d.metMinis || []), lore: d.lore || [], found: d.found || [],
+      rerolls: d.rerolls || 0, mindVision: d.mindVision || 0, revealed: d.revealed || null, metMinis: new Set(d.metMinis || []), lore: d.lore || [], found: d.found || [],
       bag: d.bag || { bomb: 0 }, quick: d.quick || [null, null], armour: d.armour || null, spareArmour: d.spareArmour || [], gate: null, banner: null,
     });
     run.idTable = { potions: d.idTable.potions, scrolls: d.idTable.scrolls, known: new Set(d.idTable.known) };
@@ -9319,6 +9365,9 @@ window.AD = window.AD || {};
     if (AD.paused) { AD.paused = false; this.pause(); return; }
     if (AD.pad.start) { this.pause(); return; }
     if (AD.pad.map) { AD.run(new AD.MapView(run)); return; }
+    // a quickslot page that asks a choice first (Upgrade, with armour worn) asks it here
+    const qi = (AD.pad.q || []).findIndex((on, i) => on && AD.cons && AD.cons.choices(run, run.quick[i]).length);
+    if (qi >= 0) { AD.chooseThenUse(run, run.quick[qi]); return; }
     run.tick(AD.pad);
     AD.fx.tick();
     // the hints that are states rather than events
@@ -9377,19 +9426,31 @@ window.AD = window.AD || {};
   };
 
   // ---------------------------------------------------------------- items: what is carried, and the bag
+  // a page that asks first (Upgrade: the weapon or the armour), then is read
+  const CHOICE = { weapon: 'The weapon: +10% damage', armour: 'The armour' };
+  AD.chooseThenUse = function (run, id) {
+    const items = AD.cons.choices(run, id).map((v) => ({ label: v === 'armour' ? CHOICE.armour + ' (' + AD.cons.armourName(run.armour) + ')' : CHOICE[v], value: v }));
+    return AD.menu({ title: AD.cons.label(run, id) + ': which?', items }).then((v) => {
+      if (!v) return false;
+      const ok = AD.cons.useId(run, id, v);
+      sfx(ok ? 'potion' : 'cancel');
+      return ok;
+    });
+  };
   AD.Items = function (run) { this.run = run; this.i = 0; };
   AD.Items.prototype.cells = function () {
     const run = this.run, h = run.hero, out = [];
     for (const id of h.itemOrder || []) if (h.items[id] > 0) out.push({ kind: 'item', id, n: h.items[id] });
     if (h.equipment) out.push({ kind: 'item', id: h.equipment, n: 1, equip: true });
-    if (run.armour) out.push({ kind: 'armour', id: run.armour.id, n: 1 });
+    if (run.armour) out.push({ kind: 'armour', id: run.armour.id, n: 1, piece: run.armour });
+    for (const p of run.spareArmour || []) out.push({ kind: 'armour', id: p.id, n: 1, piece: p, spare: true });
     for (const [id, n] of Object.entries(run.bag || {})) if (n > 0) out.push({ kind: 'cons', id, n });
     return out;
   };
   AD.Items.prototype.update = function () {
     const cells = this.cells(), cols = AD.display.mode === 'gba' ? 7 : 10;
     const d = I.dir();
-    if (d && cells.length) { this.i = AD.clamp(this.i + d[0] + d[1] * cols, 0, cells.length - 1); sfx('cursor'); }
+    if (d && cells.length) { this.i = AD.clamp(this.i + d[0] + d[1] * cols, 0, cells.length - 1); this.note = null; sfx('cursor'); }
     const click = I.consumeClick();
     if (click) {
       const L = this.layout(cells.length), cx = Math.floor((click.x - L.x) / L.c), cy = Math.floor((click.y - L.y) / L.c);
@@ -9401,7 +9462,14 @@ window.AD = window.AD || {};
     if (pressedBack()) { sfx('cancel'); this.done(); }
   };
   AD.Items.prototype.use = function (c) {
-    if (c.kind !== 'cons' || !AD.cons) return;
+    if (!AD.cons) return;
+    if (c.kind === 'armour') {
+      const r = AD.cons.toggleArmour(this.run, c.piece);
+      if (r === 'cursed') { sfx('cancel'); this.note = 'The cursed piece will not come off.'; } else sfx('cursor');
+      return;
+    }
+    if (c.kind !== 'cons') return;
+    if (AD.cons.choices(this.run, c.id).length) { AD.chooseThenUse(this.run, c.id).then((ok) => { if (ok) this.done(); }); return; }
     if (AD.cons.useId(this.run, c.id)) { sfx('potion'); this.done(); } else sfx('cancel');
   };
   AD.Items.prototype.layout = function (n) {
@@ -9418,15 +9486,17 @@ window.AD = window.AD || {};
     cells.forEach((c, j) => {
       const x = L.x + (j % L.cols) * L.c, y = L.y + Math.floor(j / L.cols) * L.c;
       const look = c.kind === 'item' ? { kind: 'item', tier: (AD.ITEMS[c.id] || {}).tier } : c.kind === 'armour' ? { kind: 'armour' } : AD.view.pickupLook(run, { kind: 'cons', id: c.id });
+      if (c.spare) ctx.globalAlpha = 0.6;
       const s = AD.art.sprite('pickup', look, 0);
       ctx.fillStyle = j === this.i ? 'rgba(232,193,112,0.28)' : 'rgba(255,255,255,0.05)'; ctx.fillRect(x, y, L.c - 2, L.c - 2);
       ctx.drawImage(s.c, x + 1, y + 1);
+      ctx.globalAlpha = 1;
       if (c.n > 1) G.text(ctx, AD.stat.short(c.n), x + L.c - 3, y + L.c - 11, C.cream, { align: 'right' });
     });
     const c = cells[this.i];
     if (c) {
-      const name = c.kind === 'item' ? AD.ITEMS[c.id].n + (c.equip ? ' (L)' : '') : c.kind === 'armour' ? AD.cons.armourName(run.armour) : AD.cons.label(run, c.id);
-      const desc = c.kind === 'item' ? AD.ITEMS[c.id].desc : c.kind === 'armour' ? (run.armour.known && run.armour.curse ? AD.cons.CURSE_TEXT[run.armour.curse] : 'Worn where you can see it.') : AD.cons.desc(run, c.id) + '  A: use';
+      const name = c.kind === 'item' ? AD.ITEMS[c.id].n + (c.equip ? ' (L)' : '') : c.kind === 'armour' ? AD.cons.armourName(c.piece) + (c.spare ? ' (carried)' : '') : AD.cons.label(run, c.id);
+      const desc = this.note || (c.kind === 'item' ? AD.ITEMS[c.id].desc : c.kind === 'armour' ? (c.piece.known && c.piece.curse ? AD.cons.CURSE_TEXT[c.piece.curse] + '  ' : '') + (c.spare ? 'A: wear it' : 'Worn where you can see it.  A: take it off') : AD.cons.desc(run, c.id) + '  A: use');
       const lines = G.wrap(desc, W() - 28).slice(0, 2), hh = lines.length * 10 + 18;
       G.panel(ctx, 6, H() - hh - 4, W() - 12, hh);
       G.text(ctx, name, 12, H() - hh, c.kind === 'item' ? AD.art.TIER_C[AD.ITEMS[c.id].tier] || C.cream : C.gold);
@@ -9442,12 +9512,8 @@ window.AD = window.AD || {};
     ctx.globalAlpha = 0.7; ctx.fillStyle = '#05060c'; ctx.fillRect(0, 0, W(), H()); ctx.globalAlpha = 1;
     const ox = Math.round((W() - 9 * cw) / 2), oy = Math.round((H() - 8 * ch) / 2) + 6;
     G.text(ctx, AD.regionAt(run.depth).d.n + ' - depth ' + run.depth, W() / 2, oy - 14, C.gold, { align: 'center' });
-    const known = new Set();
-    for (const [k, st] of run.roomState) if (st.state !== 'unvisited') {
-      known.add(k);
-      const R = F.rooms.get(k);
-      for (const [d, link] of Object.entries(R.doors)) if (link && link !== 'secret') known.add((R.gx + AD.gen.DIRS[d][0]) + ',' + (R.gy + AD.gen.DIRS[d][1]));
-    }
+    const known = run.knownRooms(), foes = run.foeRooms();
+    for (const k of foes) known.add(k);
     const MARK = { exit: ['G', '#c9b0ff'], treasure: ['$', C.gold], rest: ['f', '#ffb347'], secret: ['?', C.violet], start: ['*', C.cream] };
     for (const k of known) {
       const R = F.rooms.get(k);
@@ -9460,8 +9526,10 @@ window.AD = window.AD || {};
         const [dx, dy] = AD.gen.DIRS[d];
         if (dx) ctx.fillRect(dx > 0 ? x + cw - 1 : x - 1, y + (ch >> 1) - 1, 2, 2); else ctx.fillRect(x + (cw >> 1) - 1, dy > 0 ? y + ch - 1 : y - 1, 2, 2);
       }
-      const m = st !== 'unvisited' && MARK[R.type];
+      // what each room is shows once it is visited, or the whole floor is revealed
+      const m = (st !== 'unvisited' || run.revealed) && MARK[R.type];
       if (m) G.text(ctx, m[0], x + cw / 2, y + (ch - 9) / 2, m[1], { align: 'center' });
+      if (foes.has(k) && !here) { ctx.fillStyle = '#ff4a4a'; ctx.fillRect(x + 2, y + 2, 3, 3); }
     }
   };
 

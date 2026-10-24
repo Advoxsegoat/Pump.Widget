@@ -44,3 +44,18 @@ test('the slow-frame notice: only in hd, only when the first 300 frames of play 
   for (let i = 0; i < 400; i++) any = G.sample(40, 'gba') || any;
   assert.equal(any, false, 'already in True GBA');
 });
+
+test('the third quickslot, once unlocked, has a place of its own on screen and takes taps', () => {
+  for (const mode of ['hd', 'gba']) {
+    const L = AD.hud.layout(mode);
+    assert.ok(L.quick2, mode);
+    for (const k of ['quick0', 'quick1', 'minimap', 'clock', 'band', 'coins', 'keys', 'bombs', 'hp', 'level', 'gift']) assert.ok(!overlap(L.quick2, L[k]), mode + ' quick2/' + k);
+  }
+  const L = AD.hud.layout('hd'), mid = (r) => [r.x + r.w / 2, r.y + r.h / 2];
+  AD.hud.state.slots = 3;
+  assert.equal(AD.hud.quickAt(...mid(L.quick2), 'hd'), 2);
+  assert.equal(AD.hud.quickAt(...mid(L.quick0), 'hd'), 0);
+  AD.hud.state.slots = 2;
+  assert.equal(AD.hud.quickAt(...mid(L.quick2), 'hd'), -1, 'no third slot drawn, no tap there');
+});
+

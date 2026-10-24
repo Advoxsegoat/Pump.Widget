@@ -182,6 +182,15 @@ window.AD = window.AD || {};
     run.events.emit('wear', { p });
     return true;
   };
+  // a choice a page asks for before it is read: Upgrade asks which, once armour is worn
+  C.choices = (run, id) => (id === 'upgrade' && run.armour ? ['weapon', 'armour'] : []);
+  // the Items screen's armour: the worn piece comes off, a spare goes on; a cursed piece stays on
+  C.toggleArmour = function (run, p) {
+    if (run.armour && run.armour.cursed) return 'cursed';
+    if (p === run.armour) { C.unwear(run); return 'off'; }
+    C.wear(run, p);
+    return 'worn';
+  };
   C.unwear = function (run) {
     if (!run.armour) return true;
     if (run.armour.cursed) return false;
