@@ -1,0 +1,98 @@
+# Builds the Between the Rooms APK with the official Android SDK on GitHub's runners, after the
+# game's own tests. Every run uploads the APK as a workflow artifact. Pushing a tag like
+# all-divine-seams-v0.1.0 also publishes it as a GitHub Release. See all-divine-seams/README.md.
+name: Between the Rooms APK
+
+on:
+  push:
+    branches: ['**']
+    tags: ['all-divine-seams-v*']
+    paths:
+      - 'all-divine-seams/**'
+      - '.github/workflows/all-divine-seams-apk.yml'
+  pull_request:
+    paths:
+      - 'all-divine-seams/**'
+      - '.github/workflows/all-divine-seams-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # only used by the tag release step
+    defaults:
+      run:
+        working-directory: all-divine-seams/android
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # the page the app ships must be the one its sources build, and its tests must pass
+      - name: Tests and build check
+        working-directory: all-divine-seams
+        run: |
+          npm test
+          cp web/index.html "$RUNNER_TEMP/committed.html"
+          node tools/build.mjs
+          cmp web/index.html "$RUNNER_TEMP/committed.html" || { echo 'web/index.html is stale: run node tools/build.mjs'; exit 1; }
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Pick version and signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/all-divine-seams-v* ]]; then
+            version="${GITHUB_REF_NAME#all-divine-seams-v}"
+          else
+            version="dev-$GITHUB_RUN_NUMBER"
+          fi
+          echo "VERSION_NAME=$version" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+            echo "Signing $version with the private release key"
+          else
+            echo "Signing $version with the committed sideload key (no ANDROID_KEYSTORE_BASE64 secret)"
+          fi
+
+      - name: Build
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          tasks=assembleRelease
+          # a Play Store bundle is only useful when signed with the private key
+          if [ -n "${ANDROID_KEYSTORE_FILE:-}" ]; then tasks="$tasks bundleRelease"; fi
+          ./gradlew --no-daemon $tasks
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/between-the-rooms-$VERSION_NAME.apk"
+          if [ -f app/build/outputs/bundle/release/app-release.aab ]; then
+            cp app/build/outputs/bundle/release/app-release.aab "dist/between-the-rooms-$VERSION_NAME.aab"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: between-the-rooms-${{ env.VERSION_NAME }}
+          path: all-divine-seams/android/dist/
+          if-no-files-found: error
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/all-divine-seams-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.apk \
+            --title "Between the Rooms $VERSION_NAME" \
+            --notes "Android build of The All-Divine: Between the Rooms. Download the .apk on your phone and open it to install."

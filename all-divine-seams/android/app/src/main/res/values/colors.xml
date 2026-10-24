@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- the game page background (CSS var ink) -->
+    <color name="ink">#07080F</color>
+</resources>
