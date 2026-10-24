@@ -158,6 +158,8 @@ window.AD = window.AD || {};
     }, 90);
     // the hero's own 'hurt' (spec 6.5): what the sound, the HUD and the effects answer
     room.bus.on('hit', (p) => { if (p.tgt === run.hero && p.amount > 0) room.bus.emit('hurt', { h: run.hero, amount: p.amount, src: p.src, type: p.type, crit: p.crit }); }, 80);
+    // a cracked wall blown open is a way through from both sides
+    room.bus.on('opened', (p) => { if (p.secret) run.openLink(room, p.x, p.y, 'secret'); });
     // brittle armour lets more through
     room.bus.on('takeMods', (p) => { if (p.tgt === run.hero && run.hero.curse === 'brittle') p.mul *= 1.1; });
     // a test and debug hook: nothing kills the hero
@@ -218,17 +220,21 @@ window.AD = window.AD || {};
   P.unlock = function (room, x, y) {
     this.keys--;
     room.grid.set(x, y, 'D');
-    const side = SIDE_OF(x, y), info = room.info;
-    if (side && info.doors[side] === 'locked') {
-      info.doors[side] = 'open';
-      const [dx, dy] = AD.gen.DIRS[side];
-      const nk = (info.gx + dx) + ',' + (info.gy + dy);
-      const N = this.floor.rooms.get(nk);
-      if (N) N.doors[AD.gen.OPP[side]] = 'open';
-      const live = this.rooms.get(nk);
-      if (live) { const [ox, oy] = AD.gen.DOOR_AT[AD.gen.OPP[side]]; live.grid.set(ox, oy, 'D'); }
-    }
+    this.openLink(room, x, y, 'locked');
     room.bus.emit('unlock', { x, y });
+  };
+  // a locked door or a cracked wall opened at (x, y): the floor records the way as open on both
+  // sides, and the room beyond, if it has been built, opens its side too
+  P.openLink = function (room, x, y, was) {
+    const side = SIDE_OF(x, y), info = room.info;
+    if (!side || !info || info.doors[side] !== was) return;
+    info.doors[side] = 'open';
+    const [dx, dy] = AD.gen.DIRS[side];
+    const nk = (info.gx + dx) + ',' + (info.gy + dy);
+    const N = this.floor.rooms.get(nk);
+    if (N) N.doors[AD.gen.OPP[side]] = 'open';
+    const live = this.rooms.get(nk);
+    if (live) { const [ox, oy] = AD.gen.DOOR_AT[AD.gen.OPP[side]]; live.grid.set(ox, oy, live.sealed ? '=' : 'D'); }
   };
 
   P.rollItem = function (r, odds) {

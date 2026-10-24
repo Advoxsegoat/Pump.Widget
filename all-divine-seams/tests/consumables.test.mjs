@@ -128,3 +128,23 @@ test('identify names the worn armour first', () => {
   AD.cons.give(run, 'identify'); use(run, 'identify');
   assert.equal(p.known, true);
 });
+
+test('a Page of Teleport cannot carry the hero out of a sealed fight or the arena', () => {
+  const run = newRun(4821);
+  const R = [...run.floor.rooms.values()].find((r) => r.type === 'combat');
+  run.enterRoom(R.key, 's'); tickN(run, 5);
+  assert.ok(run.room.sealed);
+  const notes = [];
+  run.events.on('notice', (p) => notes.push(p.text));
+  AD.cons.give(run, 'teleport', 1);
+  // read and used up, and so named, but the Seams hold the hero where the fight is
+  assert.equal(use(run, 'teleport'), true);
+  assert.equal(run.room.key, R.key);
+  assert.equal(AD.cons.known(run, 'teleport'), true);
+  assert.equal(notes.length, 1);
+  run.enterArena(); tickN(run, 5);
+  AD.cons.give(run, 'teleport', 1);
+  use(run, 'teleport');
+  assert.equal(run.room.key, 'arena');
+});
+

@@ -127,7 +127,8 @@ window.AD = window.AD || {};
     for (const [x, y] of tiles) {
       if (!g.inside(x, y)) continue;
       const t = AD.tileInfo(g.at(x, y));
-      if (t.cracked) { g.set(x, y, 'D'); room.bus.emit('opened', { x, y, secret: true }); }
+      // a door now, barred like the others while the room is sealed
+      if (t.cracked) { g.set(x, y, room.sealed ? '=' : 'D'); room.bus.emit('opened', { x, y, secret: true }); }
       else if (t.explosive) { g.set(x, y, '.'); chain.push([x, y]); }
       else if (t.breakable || t.cut) Wd.breakAt(room, x, y);
     }

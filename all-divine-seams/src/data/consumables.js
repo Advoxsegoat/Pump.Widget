@@ -128,6 +128,8 @@ window.AD = window.AD || {};
       case 'removecurse': if (run.armour) { run.armour.cursed = false; run.armour.curse = null; C.apply(run); } break;
       case 'mapping': run.revealed = 'all'; break;
       case 'teleport': {
+        // a sealed fight and the arena hold the hero: the page is read, and nothing moves
+        if (room.sealed || room.key === 'arena') { room.bus.emit('notice', { text: 'The Seams hold you here.' }); break; }
         const safe = [...run.roomState.entries()].filter(([k, s]) => s.state === 'cleared' && k !== room.key).map(([k]) => k);
         if (safe.length) run.enterRoom(AD.rng.pick(run.streams.loot, safe), null); else ok = false;
         break;

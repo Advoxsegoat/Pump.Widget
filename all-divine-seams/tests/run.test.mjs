@@ -194,6 +194,56 @@ test('away from the exit room (out of a door, or by a Page of Teleport) the gate
   assert.ok(run.gate.charge > charge);
 });
 
+// out of the room through the door on `side`, from its mouth
+function walkOut(run, side) {
+  run.place(...AD.room.MOUTH[side]);
+  const pad = PAD(); [pad.sx, pad.sy] = AD.gen.DIRS[side];
+  for (let i = 0; i < 120 && !run.transition; i++) run.tick(pad);
+  tickN(run, 25);
+}
+const nextKey = (R, side) => (R.gx + AD.gen.DIRS[side][0]) + ',' + (R.gy + AD.gen.DIRS[side][1]);
+
+test('a cracked wall bombed open is a door both ways: into the secret room and back out', () => {
+  let tried = 0;
+  for (let seed = 1; seed < 60 && tried < 3; seed++) {
+    const run = newRun(seed); tough(run);
+    const S = [...run.floor.rooms.values()].find((r) => r.type === 'secret');
+    const side = S && Object.keys(S.doors).find((d) => S.doors[d] === 'secret' && run.floor.rooms.has(nextKey(S, d)));
+    if (!side) continue;
+    // the neighbour, cleared, with its cracked wall toward the secret room
+    const nKey = nextKey(S, side), toS = AD.gen.OPP[side];
+    run.enterRoom(nKey, null); tickN(run, 25); killAll(run); tickN(run, 2);
+    const [wx, wy] = AD.gen.DOOR_AT[toS];
+    assert.equal(run.room.grid.at(wx, wy), '%');
+    AD.world.blast(run.room, [[wx, wy]], run.hero);
+    walkOut(run, toS);
+    assert.equal(run.room.key, S.key, 'seed ' + seed + ': into the secret room');
+    walkOut(run, side);
+    assert.equal(run.room.key, nKey, 'seed ' + seed + ': and back out the way in');
+    tried++;
+  }
+  assert.equal(tried, 3);
+});
+
+test('a cracked wall blown open in a sealed fight stays barred until the room is clear', () => {
+  for (let seed = 1; seed < 60; seed++) {
+    const run = newRun(seed); tough(run);
+    const S = [...run.floor.rooms.values()].find((r) => r.type === 'secret');
+    const side = S && Object.keys(S.doors).find((d) => S.doors[d] === 'secret' && run.floor.rooms.get(nextKey(S, d)) && run.floor.rooms.get(nextKey(S, d)).type === 'combat');
+    if (!side) continue;
+    const toS = AD.gen.OPP[side];
+    run.enterRoom(nextKey(S, side), null); tickN(run, 5);
+    assert.ok(run.room.sealed);
+    const [wx, wy] = AD.gen.DOOR_AT[toS];
+    AD.world.blast(run.room, [[wx, wy]], run.hero);
+    assert.equal(run.room.grid.at(wx, wy), '=');
+    killAll(run); tickN(run, 2);
+    assert.equal(run.room.grid.at(wx, wy), 'D');
+    return;
+  }
+  assert.fail('no combat room beside a secret room in 60 seeds');
+});
+
 test('determinism: same seed, same inputs, same state', () => {
   const script = (i) => { const p = PAD(); p.sx = [1, 0, -1, 0][(i >> 5) & 3]; p.sy = [0, 1, 0, -1][(i >> 5) & 3]; p.a = i % 9 === 0; return p; };
   const go = () => { const run = newRun(4821); for (let i = 0; i < 5000; i++) run.tick(script(i)); return run.hash(); };

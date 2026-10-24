@@ -3698,7 +3698,8 @@ window.AD = window.AD || {};
     for (const [x, y] of tiles) {
       if (!g.inside(x, y)) continue;
       const t = AD.tileInfo(g.at(x, y));
-      if (t.cracked) { g.set(x, y, 'D'); room.bus.emit('opened', { x, y, secret: true }); }
+      // a door now, barred like the others while the room is sealed
+      if (t.cracked) { g.set(x, y, room.sealed ? '=' : 'D'); room.bus.emit('opened', { x, y, secret: true }); }
       else if (t.explosive) { g.set(x, y, '.'); chain.push([x, y]); }
       else if (t.breakable || t.cut) Wd.breakAt(room, x, y);
     }
@@ -4777,6 +4778,8 @@ window.AD = window.AD || {};
       case 'removecurse': if (run.armour) { run.armour.cursed = false; run.armour.curse = null; C.apply(run); } break;
       case 'mapping': run.revealed = 'all'; break;
       case 'teleport': {
+        // a sealed fight and the arena hold the hero: the page is read, and nothing moves
+        if (room.sealed || room.key === 'arena') { room.bus.emit('notice', { text: 'The Seams hold you here.' }); break; }
         const safe = [...run.roomState.entries()].filter(([k, s]) => s.state === 'cleared' && k !== room.key).map(([k]) => k);
         if (safe.length) run.enterRoom(AD.rng.pick(run.streams.loot, safe), null); else ok = false;
         break;
@@ -5032,6 +5035,8 @@ window.AD = window.AD || {};
     }, 90);
     // the hero's own 'hurt' (spec 6.5): what the sound, the HUD and the effects answer
     room.bus.on('hit', (p) => { if (p.tgt === run.hero && p.amount > 0) room.bus.emit('hurt', { h: run.hero, amount: p.amount, src: p.src, type: p.type, crit: p.crit }); }, 80);
+    // a cracked wall blown open is a way through from both sides
+    room.bus.on('opened', (p) => { if (p.secret) run.openLink(room, p.x, p.y, 'secret'); });
     // brittle armour lets more through
     room.bus.on('takeMods', (p) => { if (p.tgt === run.hero && run.hero.curse === 'brittle') p.mul *= 1.1; });
     // a test and debug hook: nothing kills the hero
@@ -5092,17 +5097,21 @@ window.AD = window.AD || {};
   P.unlock = function (room, x, y) {
     this.keys--;
     room.grid.set(x, y, 'D');
-    const side = SIDE_OF(x, y), info = room.info;
-    if (side && info.doors[side] === 'locked') {
-      info.doors[side] = 'open';
-      const [dx, dy] = AD.gen.DIRS[side];
-      const nk = (info.gx + dx) + ',' + (info.gy + dy);
-      const N = this.floor.rooms.get(nk);
-      if (N) N.doors[AD.gen.OPP[side]] = 'open';
-      const live = this.rooms.get(nk);
-      if (live) { const [ox, oy] = AD.gen.DOOR_AT[AD.gen.OPP[side]]; live.grid.set(ox, oy, 'D'); }
-    }
+    this.openLink(room, x, y, 'locked');
     room.bus.emit('unlock', { x, y });
+  };
+  // a locked door or a cracked wall opened at (x, y): the floor records the way as open on both
+  // sides, and the room beyond, if it has been built, opens its side too
+  P.openLink = function (room, x, y, was) {
+    const side = SIDE_OF(x, y), info = room.info;
+    if (!side || !info || info.doors[side] !== was) return;
+    info.doors[side] = 'open';
+    const [dx, dy] = AD.gen.DIRS[side];
+    const nk = (info.gx + dx) + ',' + (info.gy + dy);
+    const N = this.floor.rooms.get(nk);
+    if (N) N.doors[AD.gen.OPP[side]] = 'open';
+    const live = this.rooms.get(nk);
+    if (live) { const [ox, oy] = AD.gen.DOOR_AT[AD.gen.OPP[side]]; live.grid.set(ox, oy, live.sealed ? '=' : 'D'); }
   };
 
   P.rollItem = function (r, odds) {
@@ -8461,6 +8470,7 @@ window.AD = window.AD || {};
       run.events.on('depthStart', (p) => { const d = AD.regionAt(p.depth).d; S.depth = { text: d.n, sub: d.sub, t: 90 }; }, 96),
       // a store that will not take the save: said once, and play goes on
       run.events.on('saveFailed', (p) => { S.notice = { text: p.text, t: 360 }; }, 96),
+      run.events.on('notice', (p) => { S.notice = { text: p.text, t: 240 }; }, 96),
     ];
   };
   // a line of help the menus can set for a first run
@@ -8854,11 +8864,13 @@ window.AD = window.AD || {};
     if (d.depth !== run.depth) run.startDepth(d.depth);
     // the floor's doors as they were (unlocked ones stay open), and what each room has been
     for (const [k, doors] of d.doors || []) { const R = run.floor.rooms.get(k); if (R) Object.assign(R.doors, doors); }
-    run.roomState = new Map((d.roomState || []).map(([k, st]) => [k, { state: st.state, taken: new Set(st.taken) }]));
+    // a room left before it was cleared is met fresh (what was taken there stays taken): saved as
+    // it was left, it would come back barred, with no fight in it to clear
+    run.roomState = new Map((d.roomState || []).map(([k, st]) => [k, { state: st.state === 'entered' ? 'unvisited' : st.state, taken: new Set(st.taken) }]));
     for (const k of run.floor.rooms.keys()) if (!run.roomState.has(k)) run.roomState.set(k, { state: 'unvisited', taken: new Set() });
     run.rooms = new Map();
     for (const R of d.rooms || []) {
-      if (!run.floor.rooms.has(R.key)) continue;
+      if (!run.floor.rooms.has(R.key) || run.roomState.get(R.key).state === 'unvisited') continue;
       const room = run.liveRoom(R.key);
       R.rows.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (room.grid.at(x, y) !== row[x]) room.grid.set(x, y, row[x]); });
       room.chests = R.chests || {}; room.chestDrops = R.chestDrops || {};

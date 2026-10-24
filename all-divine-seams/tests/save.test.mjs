@@ -58,6 +58,27 @@ test('a room comes back as it was left: broken pots stay broken, an open chest s
   assert.equal(back.openChest(back.room, 4, 3), false, 'no second item from it');
 });
 
+test('a room left before it was cleared comes back fresh on a resume, never barred and empty', () => {
+  fresh();
+  const run = newRun(4821);
+  const R = [...run.floor.rooms.values()].find((r) => r.type === 'combat');
+  run.enterRoom(R.key, 's'); tickN(run, 5);
+  assert.ok(run.room.sealed);
+  // out of it before it was cleared (as a Page of Teleport once could)
+  run.enterRoom(run.floor.start, null); tickN(run, 5);
+  AD.save.run(run);
+  const back = AD.save.loadRun();
+  back.enterRoom(R.key, 's'); tickN(back, 25);
+  assert.ok(back.room.sealed, 'the fight is there again');
+  for (let i = 0; i < 600 && !AD.director.done(back.room); i++) {
+    for (const b of [...back.room.bodies.values()]) if (b.kind === 'monster' && !b.dead && !b.untargetable) AD.combat.deal(back.room, { src: back.hero, tgt: b, pct: 1e5, type: 'normal', proc: 0, mask: [] });
+    tickN(back, 1);
+  }
+  tickN(back, 2);
+  assert.equal(back.roomState.get(R.key).state, 'cleared');
+  assert.ok(!back.room.grid.rows().join('').includes('='), 'its doors open');
+});
+
 test('a half-charged gate restarts', () => {
   fresh();
   const run = newRun(4821);

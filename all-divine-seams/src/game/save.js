@@ -107,11 +107,13 @@ window.AD = window.AD || {};
     if (d.depth !== run.depth) run.startDepth(d.depth);
     // the floor's doors as they were (unlocked ones stay open), and what each room has been
     for (const [k, doors] of d.doors || []) { const R = run.floor.rooms.get(k); if (R) Object.assign(R.doors, doors); }
-    run.roomState = new Map((d.roomState || []).map(([k, st]) => [k, { state: st.state, taken: new Set(st.taken) }]));
+    // a room left before it was cleared is met fresh (what was taken there stays taken): saved as
+    // it was left, it would come back barred, with no fight in it to clear
+    run.roomState = new Map((d.roomState || []).map(([k, st]) => [k, { state: st.state === 'entered' ? 'unvisited' : st.state, taken: new Set(st.taken) }]));
     for (const k of run.floor.rooms.keys()) if (!run.roomState.has(k)) run.roomState.set(k, { state: 'unvisited', taken: new Set() });
     run.rooms = new Map();
     for (const R of d.rooms || []) {
-      if (!run.floor.rooms.has(R.key)) continue;
+      if (!run.floor.rooms.has(R.key) || run.roomState.get(R.key).state === 'unvisited') continue;
       const room = run.liveRoom(R.key);
       R.rows.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (room.grid.at(x, y) !== row[x]) room.grid.set(x, y, row[x]); });
       room.chests = R.chests || {}; room.chestDrops = R.chestDrops || {};
