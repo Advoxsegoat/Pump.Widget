@@ -92,7 +92,8 @@ window.AD = window.AD || {};
   I.stickUp = function () { const s = I.stick; s.on = false; s.id = null; s.dx = 0; s.dy = 0; if (I.onStick) I.onStick(null); };
   // let go of everything; 'hidden' (the page went away) also pauses
   I.releaseAll = function (why) {
-    BTN.forEach((b) => { I.src.key[b] = false; I.src.touch[b] = false; I.latch[b] = false; });
+    // fingers whose lift may never arrive (a paused WebView) are forgotten too
+    BTN.forEach((b) => { I.src.key[b] = false; I.src.touch[b] = false; I.latch[b] = false; if (I.fingers && I.fingers[b]) I.fingers[b].clear(); });
     I.stickUp();
     if (typeof document !== 'undefined' && document.querySelectorAll) document.querySelectorAll('#controls .down').forEach((el) => el.classList.remove('down'));
     if (why) AD.paused = true;
@@ -168,21 +169,28 @@ window.AD = window.AD || {};
     const up = (ev) => { if (I.stick.on && ev.pointerId === I.stick.id) I.stickUp(); };
     ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((n) => zone.addEventListener(n, up));
   }
+  // the fingers on each on-screen button: it is held while any of them is down
+  I.fingers = {};
+  I.touchDown = function (b, id) {
+    (I.fingers[b] = I.fingers[b] || new Set()).add(id);
+    I.src.touch[b] = true; I.latch[b] = true; I.lastDevice = 'touch';
+  };
+  I.touchUp = function (b, id) {
+    const f = I.fingers[b];
+    if (f) f.delete(id);
+    if (f && f.size) return false;
+    I.src.touch[b] = false;
+    return true;
+  };
   function bindButtons() {
     document.querySelectorAll('#controls [data-btn]').forEach((el) => {
       const b = el.getAttribute('data-btn');
-      const ids = new Set();
       const on = (ev) => {
         ev.preventDefault(); unlock(); touchUI();
-        ids.add(ev.pointerId);
-        I.src.touch[b] = true; I.latch[b] = true; el.classList.add('down'); I.lastDevice = 'touch';
+        I.touchDown(b, ev.pointerId); el.classList.add('down');
         try { el.setPointerCapture(ev.pointerId); } catch (e) { /* synthetic pointers have nothing to capture */ }
       };
-      const off = (ev) => {
-        ids.delete(ev.pointerId);
-        if (ids.size) return;
-        I.src.touch[b] = false; el.classList.remove('down');
-      };
+      const off = (ev) => { if (I.touchUp(b, ev.pointerId)) el.classList.remove('down'); };
       el.addEventListener('pointerdown', on);
       ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((n) => el.addEventListener(n, off));
       el.addEventListener('contextmenu', (ev) => ev.preventDefault());

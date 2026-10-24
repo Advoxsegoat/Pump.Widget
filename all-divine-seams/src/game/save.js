@@ -142,8 +142,9 @@ window.AD = window.AD || {};
   // ---------------------------------------------------------------- the Garden's data
   S.meta = function () {
     if (!AD.meta) return false;
+    // a failure here is noted for itself: the one-time notice belongs to the run, where it shows
     const ok = AD.store.set('meta', AD.meta.toJSON());
-    if (!ok) S.warned = true;
+    if (!ok) S.metaFailed = true;
     return ok;
   };
   S.boot = function () {

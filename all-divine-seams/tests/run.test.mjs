@@ -244,6 +244,45 @@ test('a cracked wall blown open in a sealed fight stays barred until the room is
   assert.fail('no combat room beside a secret room in 60 seeds');
 });
 
+test('walking back into a room does not stack the hero\'s items', () => {
+  const run = newRun(4821); tough(run);
+  const h = run.hero;
+  AD.items.give(run, h, 'warmmitts');
+  const blow = () => {
+    const m = AD.ent.make(run.room, { kind: 'monster', team: 'e', x: 12, y: 2, speed: 0.001, hp: 1e6, dmg: 0, crit: 0 });
+    h.crit = 0;
+    let got = 0;
+    const off = run.room.bus.on('hit', (p) => { if (p.tgt === m) got = p.amount; });
+    AD.combat.deal(run.room, { src: h, tgt: m, pct: 1, type: 'normal', proc: 1, mask: [] });
+    off(); AD.ent.remove(run.room, m);
+    return got;
+  };
+  const start = run.room.key, first = blow();
+  const S = run.floor.rooms.get(start);
+  const d = Object.keys(S.doors).find((k) => S.doors[k] === 'open');
+  const next = nextKey(S, d);
+  for (let i = 0; i < 3; i++) { run.enterRoom(next, AD.gen.OPP[d]); tickN(run, 3); run.enterRoom(start, d); tickN(run, 3); }
+  assert.equal(blow(), first);
+});
+
+test('timers the hero carries count on through a door (Taffy heals 7 s after the last hurt)', () => {
+  const run = newRun(4821); tough(run);
+  const h = run.hero;
+  AD.items.give(run, h, 'taffy');
+  tickN(run, 1200);
+  const src = AD.ent.make(run.room, { kind: 'monster', team: 'e', x: 12, y: 2, speed: 0.001, hp: 100, dmg: 30, crit: 0 });
+  AD.combat.deal(run.room, { src, tgt: h, pct: 1, type: 'normal', proc: 0, mask: [] });
+  AD.ent.remove(run.room, src);
+  const S = run.floor.rooms.get(run.room.key);
+  const d = Object.keys(S.doors).find((k) => S.doors[k] === 'open');
+  run.enterRoom(nextKey(S, d), AD.gen.OPP[d]);
+  killAll(run);
+  h.regen = 0;
+  const hp = h.hp;
+  tickN(run, 600);
+  assert.ok(h.hp > hp, 'Taffy healed in the next room');
+});
+
 test('determinism: same seed, same inputs, same state', () => {
   const script = (i) => { const p = PAD(); p.sx = [1, 0, -1, 0][(i >> 5) & 3]; p.sy = [0, 1, 0, -1][(i >> 5) & 3]; p.a = i % 9 === 0; return p; };
   const go = () => { const run = newRun(4821); for (let i = 0; i < 5000; i++) run.tick(script(i)); return run.hash(); };

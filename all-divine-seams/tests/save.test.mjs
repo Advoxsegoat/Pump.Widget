@@ -108,6 +108,18 @@ test('saving without storage notices once and keeps playing', () => {
   storage.full(false);
 });
 
+test('a Garden save that fails does not use up the run\'s notice', () => {
+  fresh();
+  storage.full(true);
+  AD.save.meta();   // a Setting changed, or Midas paid, before any run
+  const run = newRun(3);
+  let notices = 0;
+  run.events.on('saveFailed', () => notices++);
+  AD.save.run(run);
+  assert.equal(notices, 1);
+  storage.full(false);
+});
+
 test('an unreadable save is set aside, with a plain message, and nothing breaks', () => {
   fresh();
   AD.store.setRaw('run', '{bad');

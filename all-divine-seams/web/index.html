@@ -497,7 +497,8 @@ window.AD = window.AD || {};
   I.stickUp = function () { const s = I.stick; s.on = false; s.id = null; s.dx = 0; s.dy = 0; if (I.onStick) I.onStick(null); };
   // let go of everything; 'hidden' (the page went away) also pauses
   I.releaseAll = function (why) {
-    BTN.forEach((b) => { I.src.key[b] = false; I.src.touch[b] = false; I.latch[b] = false; });
+    // fingers whose lift may never arrive (a paused WebView) are forgotten too
+    BTN.forEach((b) => { I.src.key[b] = false; I.src.touch[b] = false; I.latch[b] = false; if (I.fingers && I.fingers[b]) I.fingers[b].clear(); });
     I.stickUp();
     if (typeof document !== 'undefined' && document.querySelectorAll) document.querySelectorAll('#controls .down').forEach((el) => el.classList.remove('down'));
     if (why) AD.paused = true;
@@ -573,21 +574,28 @@ window.AD = window.AD || {};
     const up = (ev) => { if (I.stick.on && ev.pointerId === I.stick.id) I.stickUp(); };
     ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((n) => zone.addEventListener(n, up));
   }
+  // the fingers on each on-screen button: it is held while any of them is down
+  I.fingers = {};
+  I.touchDown = function (b, id) {
+    (I.fingers[b] = I.fingers[b] || new Set()).add(id);
+    I.src.touch[b] = true; I.latch[b] = true; I.lastDevice = 'touch';
+  };
+  I.touchUp = function (b, id) {
+    const f = I.fingers[b];
+    if (f) f.delete(id);
+    if (f && f.size) return false;
+    I.src.touch[b] = false;
+    return true;
+  };
   function bindButtons() {
     document.querySelectorAll('#controls [data-btn]').forEach((el) => {
       const b = el.getAttribute('data-btn');
-      const ids = new Set();
       const on = (ev) => {
         ev.preventDefault(); unlock(); touchUI();
-        ids.add(ev.pointerId);
-        I.src.touch[b] = true; I.latch[b] = true; el.classList.add('down'); I.lastDevice = 'touch';
+        I.touchDown(b, ev.pointerId); el.classList.add('down');
         try { el.setPointerCapture(ev.pointerId); } catch (e) { /* synthetic pointers have nothing to capture */ }
       };
-      const off = (ev) => {
-        ids.delete(ev.pointerId);
-        if (ids.size) return;
-        I.src.touch[b] = false; el.classList.remove('down');
-      };
+      const off = (ev) => { if (I.touchUp(b, ev.pointerId)) el.classList.remove('down'); };
       el.addEventListener('pointerdown', on);
       ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((n) => el.addEventListener(n, off));
       el.addEventListener('contextmenu', (ev) => ev.preventDefault());
@@ -2608,6 +2616,13 @@ window.AD = window.AD || {};
 
   // hand a hero (with its run state) into a new room
   H.enter = function (room, h, x, y) {
+    // what the hero carries stamped on the last room's clock moves onto this room's
+    if (h.clockAt !== undefined) {
+      const shift = room.frame - h.clockAt;
+      if (h.hurtAt !== undefined) h.hurtAt += shift;
+      h.combo.lastEnd += shift;
+    }
+    h.clockAt = room.frame;
     h.id = ++room.nextId;
     h.x = x; h.y = y; h.fx = x; h.fy = y; h.move = null; h.buf = null; h.pushLeft = 0; h.busy = 0; h.attacking = null; h.queueA = false; h.queueSpin = false; h.gone = false;
     room.bodies.set(h.id, h);
@@ -2615,7 +2630,10 @@ window.AD = window.AD || {};
     H.install(room, h);
   };
 
+  // once per room and hero: rooms live for the whole depth, and the hero walks back into them
   H.install = function (room, h) {
+    if (room.heroBound === h) return;
+    room.heroBound = h;
     AD.items.install(room, h);
     // Get Up: once a depth, a lethal blow leaves 1 HP
     room.bus.on('lethal', (p) => {
@@ -2717,6 +2735,7 @@ window.AD = window.AD || {};
   }
 
   H.control = function (room, h, pad) {
+    h.clockAt = room.frame;
     if (h.dead || h.gone) return;
     const D = AD.HEROES[h.heroId];
     // timers
@@ -8899,8 +8918,9 @@ window.AD = window.AD || {};
   // ---------------------------------------------------------------- the Garden's data
   S.meta = function () {
     if (!AD.meta) return false;
+    // a failure here is noted for itself: the one-time notice belongs to the run, where it shows
     const ok = AD.store.set('meta', AD.meta.toJSON());
-    if (!ok) S.warned = true;
+    if (!ok) S.metaFailed = true;
     return ok;
   };
   S.boot = function () {

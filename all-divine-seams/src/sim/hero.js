@@ -24,6 +24,13 @@ window.AD = window.AD || {};
 
   // hand a hero (with its run state) into a new room
   H.enter = function (room, h, x, y) {
+    // what the hero carries stamped on the last room's clock moves onto this room's
+    if (h.clockAt !== undefined) {
+      const shift = room.frame - h.clockAt;
+      if (h.hurtAt !== undefined) h.hurtAt += shift;
+      h.combo.lastEnd += shift;
+    }
+    h.clockAt = room.frame;
     h.id = ++room.nextId;
     h.x = x; h.y = y; h.fx = x; h.fy = y; h.move = null; h.buf = null; h.pushLeft = 0; h.busy = 0; h.attacking = null; h.queueA = false; h.queueSpin = false; h.gone = false;
     room.bodies.set(h.id, h);
@@ -31,7 +38,10 @@ window.AD = window.AD || {};
     H.install(room, h);
   };
 
+  // once per room and hero: rooms live for the whole depth, and the hero walks back into them
   H.install = function (room, h) {
+    if (room.heroBound === h) return;
+    room.heroBound = h;
     AD.items.install(room, h);
     // Get Up: once a depth, a lethal blow leaves 1 HP
     room.bus.on('lethal', (p) => {
@@ -133,6 +143,7 @@ window.AD = window.AD || {};
   }
 
   H.control = function (room, h, pad) {
+    h.clockAt = room.frame;
     if (h.dead || h.gone) return;
     const D = AD.HEROES[h.heroId];
     // timers

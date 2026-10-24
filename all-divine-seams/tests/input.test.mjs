@@ -89,6 +89,16 @@ test('losing the page releases everything and pauses', () => {
   assert.equal(AD.paused, true);
 });
 
+test('a finger whose lift never arrived leaves nothing held once the page comes back', () => {
+  I.releaseAll(); I.update();
+  I.touchDown('a', 7); I.update();
+  assert.equal(AD.pad.aHeld, true);
+  I.releaseAll('hidden');            // the app went away; finger 7's lift never arrives
+  I.update();
+  I.touchDown('a', 8); I.update(); I.touchUp('a', 8); I.update();
+  assert.equal(AD.pad.aHeld, false);
+});
+
 test('the keyboard map follows spec 4.2', () => {
   const K = I.KEYMAP;
   assert.equal(K.ArrowLeft, 'left'); assert.equal(K.a, 'left'); assert.equal(K.d, 'right');
