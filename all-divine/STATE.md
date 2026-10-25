@@ -13,7 +13,7 @@ What is done, what is next, and where the decisions live. Every task's final com
 - F0 Task 7: Rig: AnimationTree (speed-blended locomotion, two-slot move layer, stepped playback), hitboxes, contact sheets (`tools/test.sh`: 175 passed, 0 failed; with `--render`: 181 passed, 0 failed).
 - F0 Task 8: Moves: MoveData, marks on the Marks track, 9-frame input buffer, clip checker; jab, cross, roll (`tools/test.sh`: 274 passed, 0 failed; with `--render`: 280 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 - F0 Task 9: Actor, brains (player, script), locomotion, move runner reading marks; buffer and cancel rules; press-to-motion ≤ 2 frames (`tools/test.sh`: 305 passed, 0 failed; with `--render`: 311 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
-- F0 Task 10: Character look: palette resource (ramps, dyes), toon shader held to the palette (`tools/test.sh`: 317 passed, 0 failed; with `--render`: 327 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
+- F0 Task 10: Character look: palette resource (ramps, dyes), toon shader held to the palette (`tools/test.sh`: 317 passed, 0 failed; with `--render`: 328 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 
 ## Next
 
@@ -46,8 +46,9 @@ all-divine/tools/godot.sh -s res://tools/anim/build_library.gd -- --ual1 "$(pyth
 all-divine/tools/godot.sh -s res://tools/clip_check.gd   # every move's marks and every actor's required clips against the rules; prints "clip_check: N moves, M actors OK" or each problem, exit 1
 all-divine/tools/godot.sh -s res://tools/anim/set_marks.gd -- res://assets/anim/abarax/palm_jab.tres marks.json
                                                # write a clip's marks from [{"frame": 10, "kind": "hitbox_on", "args": {"id": "palm_l"}}, ...]; replaces its Marks tracks
-all-divine/tools/godot.sh --render -s res://tools/sheets/contact_sheet.gd -- --rig res://actors/abarax/abarax_rig.tscn --out out/sheets/abarax.png
-                                               # a contact sheet of the rig's clips (--clips a,b for some); a relative --out lands under all-divine/
+all-divine/tools/godot.sh --render -s res://tools/sheets/contact_sheet.gd -- --def res://data/actors/abarax.tres --out out/sheets/abarax.png
+                                               # a contact sheet of the actor's clips in its palette (--clips a,b for some; --rig <rig.tscn>
+                                               # instead of --def for a bare rig in its imported materials); a relative --out lands under all-divine/
 ```
 
 Every file under `assets/` needs a row in [`ASSETS.md`](ASSETS.md); `tests/tools/test_ledger.gd` checks it.

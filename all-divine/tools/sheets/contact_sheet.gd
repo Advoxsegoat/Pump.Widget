@@ -3,11 +3,12 @@ extends SceneTree
 ## Contact sheets: an actor's clips frame by frame, as the game camera shows them, laid out on one
 ## picture for reviewing clips and their marks.
 ##
-##   tools/godot.sh --render -s res://tools/sheets/contact_sheet.gd -- --rig res://actors/abarax/abarax_rig.tscn \
+##   tools/godot.sh --render -s res://tools/sheets/contact_sheet.gd -- --def res://data/actors/abarax.tres \
 ##       --out out/sheets/abarax.png [--clips a,b]
 ##
-## Needs a display (--render): a headless run cannot draw. --clips defaults to every clip of the rig. A
-## relative --out is taken from the project folder (all-divine/), wherever the command is run from.
+## Give the actor's definition (--def), or a bare rig scene (--rig <rig.tscn>), not both. Needs a display
+## (--render): a headless run cannot draw. --clips defaults to every clip of the rig. A relative --out is
+## taken from the project folder (all-divine/), wherever the command is run from.
 ## Exits 0 when the sheet is written, 1 if it could not be made, 2 for a wrong command line.
 ##
 ## Each clip gets a cell for every frame that has a mark, or, if it has none, six frames spread evenly
@@ -16,9 +17,9 @@ extends SceneTree
 ## size, six to a row, each with a label "<clip> f<frame>" (frames at 60 per second, counted the way
 ## marks are), and the whole sheet is captured from a SubViewport.
 ##
-## The actor is drawn in his palette, under a white sun of energy 1, so every pixel of him is one of his
-## palette's tones: the def's palette when given a def, and Abarax's (FALLBACK_PALETTE) for a bare rig
-## scene, which has none of its own.
+## Given a def, the actor is drawn in the def's palette, under a white sun of energy 1, so every pixel of
+## him is one of its tones. A bare rig keeps the materials its model was imported with, as an actor
+## without a palette does in the game.
 
 const PIXEL_STAGE := preload("res://render/pixel_stage.tscn")
 const COLUMNS := 6
@@ -30,8 +31,6 @@ const EVEN_CELLS := 6
 const FRAME_RATE := 60
 ## Where the cell is centred: this far above the actor's feet, in metres.
 const BODY_CENTRE := 0.9
-## The palette a rig is drawn in when it comes without a def.
-const FALLBACK_PALETTE := "res://data/palettes/abarax.tres"
 
 
 func _initialize() -> void:
@@ -64,8 +63,6 @@ static func render(def_or_rig: Variant, clips: PackedStringArray, cell := Vector
 	var palette := _palette(def_or_rig)
 	if palette != null:
 		rig.apply_palette(palette)
-	elif rig.palette == null:
-		rig.apply_palette(load(FALLBACK_PALETTE) as Palette)
 	var camera := CameraRig.new()
 	camera.target = rig
 	camera.stage = stage
@@ -212,6 +209,7 @@ static func _compose(images: Array[Image], labels: PackedStringArray, cell: Vect
 
 func _run(args: PackedStringArray) -> int:
 	var rig_path := ""
+	var def_path := ""
 	var out := ""
 	var clips := PackedStringArray()
 	var i := 0
@@ -221,6 +219,8 @@ func _run(args: PackedStringArray) -> int:
 		match arg:
 			"--rig":
 				rig_path = value
+			"--def":
+				def_path = value
 			"--out":
 				out = value
 			"--clips":
@@ -232,13 +232,14 @@ func _run(args: PackedStringArray) -> int:
 			printerr("contact_sheet.gd: %s needs a value" % arg)
 			return _usage()
 		i += 2
-	if rig_path == "" or out == "":
+	if (rig_path == "") == (def_path == "") or out == "":
 		return _usage()
-	var scene := load(rig_path) as PackedScene
-	if scene == null:
-		printerr("contact_sheet.gd: cannot load the rig '%s'" % rig_path)
+	var source_path := def_path if def_path != "" else rig_path
+	var source: Resource = load(source_path) if def_path != "" else (load(source_path) as PackedScene)
+	if source == null:
+		printerr("contact_sheet.gd: cannot load '%s'" % source_path)
 		return 1
-	var sheet: Image = await render(scene, clips)
+	var sheet: Image = await render(source, clips)
 	if sheet == null:
 		return 1
 	var path := out
@@ -255,5 +256,5 @@ func _run(args: PackedStringArray) -> int:
 
 
 func _usage() -> int:
-	printerr("usage: tools/godot.sh --render -s res://tools/sheets/contact_sheet.gd -- --rig <rig.tscn> --out <file.png> [--clips a,b]")
+	printerr("usage: tools/godot.sh --render -s res://tools/sheets/contact_sheet.gd -- (--def <actor.tres> | --rig <rig.tscn>) --out <file.png> [--clips a,b]")
 	return 2

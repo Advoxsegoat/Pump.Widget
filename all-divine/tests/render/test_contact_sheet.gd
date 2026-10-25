@@ -3,6 +3,7 @@ extends TestCase
 ## per frame, six to a row, each cell 160x120 internal pixels drawn x2.
 
 const RIG := "res://actors/abarax/abarax_rig.tscn"
+const DEF := "res://data/actors/abarax.tres"
 const LIB := "res://assets/anim/abarax/library.tres"
 const CELL := Vector2i(320, 240)
 ## The top of a cell, where its label is drawn. Everything below it is the picture of the actor.
@@ -45,31 +46,44 @@ func test_sheet_has_a_cell_per_frame_and_content() -> void:
 	assert_true(jab_poses.size() > 1, "the palm_jab cells show different poses")
 
 
-# The actor is drawn in his palette: given his def, the sheet uses its palette; given a bare rig scene, it
-# falls back to Abarax's. Under the sheet's white sun every pixel of him is one of his tones, so a good
-# number of game pixels below the label are, with his cream shirt (main), blue (sec) and rose scarf among them.
-func test_the_actor_is_drawn_in_his_palette() -> void:
-	var def := load("res://data/actors/abarax.tres") as ActorDef
-	var from_def: Image = await ContactSheet.render(def, ["idle"])
-	var from_rig: Image = await ContactSheet.render(load(RIG), ["idle"])
-	assert_ne(from_def, null, "the sheet rendered")
-	if from_def == null or from_rig == null:
+# Given an actor's def, the sheet draws the actor in the def's own palette: under its white sun every pixel
+# of him is one of the palette's tones, so a good number of game pixels below the label are. Abarax shows
+# his cream shirt (main), blue (sec) and rose scarf; with slot 7 dyed green in his def, the green shows and
+# the rose is gone, so the palette comes from the def and from nothing else.
+func test_a_def_draws_the_actor_in_its_palette() -> void:
+	var def := load(DEF) as ActorDef
+	var dyed := def.duplicate() as ActorDef
+	dyed.palette = def.palette.with_dye(7, Color("#40c040"))
+	var plain_img: Image = await ContactSheet.render(def, ["idle"])
+	var dyed_img: Image = await ContactSheet.render(dyed, ["idle"])
+	assert_ne(plain_img, null, "the sheet rendered")
+	assert_ne(dyed_img, null, "the dyed sheet rendered")
+	if plain_img == null or dyed_img == null:
 		return
-	assert_eq(from_rig.get_data(), from_def.get_data(), "a bare rig is drawn in Abarax's palette")
-	var tones := def.palette.tones.slice(0, 9 * Palette.TONES)
-	var slots := {}
-	var count := 0
-	for y in range(LABEL_BAND, CELL.y, 2):
-		for x in range(0, CELL.x, 2):
-			var c := from_def.get_pixel(x, y)
-			for i in tones.size():
-				if maxf(maxf(absf(c.r - tones[i].r), absf(c.g - tones[i].g)), absf(c.b - tones[i].b)) <= 2.0 / 255.0:
-					count += 1
-					slots[i / Palette.TONES] = true
-					break
-	assert_true(count >= MIN_DRAWN / 2, "%d game pixels of the first cell are his tones" % count)
+	var plain := _palette_pixels(plain_img, def.palette)
+	assert_true(plain["count"] >= MIN_DRAWN / 2, "%d game pixels of the first cell are his tones" % plain["count"])
 	for slot in [3, 4, 7]:
-		assert_true(slots.has(slot), "slot %d (%s) shows" % [slot, def.palette.slot_names[slot]])
+		assert_true((plain["slots"] as Dictionary).has(slot), "slot %d (%s) shows" % [slot, def.palette.slot_names[slot]])
+	var with_dye := _palette_pixels(dyed_img, dyed.palette)
+	assert_true(with_dye["count"] >= MIN_DRAWN / 2, "%d game pixels of the dyed cell are its tones" % with_dye["count"])
+	assert_true((with_dye["slots"] as Dictionary).has(7), "the green dye of slot 7 shows")
+	assert_false((_palette_pixels(dyed_img, def.palette, [7])["slots"] as Dictionary).has(7), "no rose is left")
+
+
+# A bare rig scene, with no def, keeps the materials its model was imported with, as an actor without a
+# palette does in the game: it is not drawn in Abarax's palette (or any other).
+func test_a_bare_rig_keeps_its_own_materials() -> void:
+	var def := load(DEF) as ActorDef
+	var dressed: Image = await ContactSheet.render(def, ["idle"])
+	var bare: Image = await ContactSheet.render(load(RIG), ["idle"])
+	assert_ne(bare, null, "the sheet rendered")
+	if dressed == null or bare == null:
+		return
+	assert_false(bare.get_data() == dressed.get_data(), "the bare rig's sheet is not the dressed one")
+	var found := _palette_pixels(bare, def.palette)
+	var rose := _palette_pixels(bare, def.palette, [7])
+	assert_true(found["count"] * 4 < _palette_pixels(dressed, def.palette)["count"], "only %d game pixels happen to match his tones" % found["count"])
+	assert_false((rose["slots"] as Dictionary).has(7), "no rose scarf")
 
 
 func test_cells_are_mark_frames_or_six_even_frames() -> void:
@@ -132,3 +146,26 @@ func _mark_frames(anim: Animation) -> PackedInt32Array:
 	var frames := PackedInt32Array(found.keys())
 	frames.sort()
 	return frames
+
+
+# How much of the first cell, below its label, is drawn in `palette`'s tones of `slots` (default 0-8):
+# {count: game pixels within 2/255 of one of them, slots: the slots seen}. Every game pixel is a 2x2 block
+# on the sheet, so only the top-left pixel of each block is looked at.
+func _palette_pixels(sheet: Image, palette: Palette, slots: Array = range(9)) -> Dictionary:
+	var seen := {}
+	var count := 0
+	for y in range(LABEL_BAND, CELL.y, 2):
+		for x in range(0, CELL.x, 2):
+			var c := sheet.get_pixel(x, y)
+			for slot: int in slots:
+				var hit := false
+				for t in Palette.TONES:
+					var tone := palette.tone(slot, t)
+					if maxf(maxf(absf(c.r - tone.r), absf(c.g - tone.g)), absf(c.b - tone.b)) <= 2.0 / 255.0:
+						hit = true
+						break
+				if hit:
+					count += 1
+					seen[slot] = true
+					break
+	return {"count": count, "slots": seen}
