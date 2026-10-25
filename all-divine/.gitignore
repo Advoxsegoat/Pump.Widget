@@ -1,0 +1,6 @@
+.godot/
+.tools/
+.cache/
+out/*
+!out/.gdignore
+tools/.venv/

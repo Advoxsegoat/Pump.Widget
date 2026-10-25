@@ -1,0 +1,45 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="The All-Divine"
+config/features=PackedStringArray("4.7")
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/size/resizable=true
+window/stretch/mode="disabled"
+
+[layer_names]
+
+3d_physics/layer_1="world"
+3d_physics/layer_2="ik_surface"
+3d_physics/layer_3="actor"
+3d_physics/layer_4="hurtbox"
+3d_physics/layer_5="hitbox"
+3d_physics/layer_6="interact"
+
+[physics]
+
+common/physics_ticks_per_second=60
+common/physics_interpolation=true
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=0
+renderer/rendering_method="forward_plus"
+renderer/rendering_method.mobile="gl_compatibility"
+renderer/rendering_method.web="gl_compatibility"
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=0
+lights_and_shadows/positional_shadow/soft_shadow_filter_quality=0
+anti_aliasing/quality/msaa_3d=0
