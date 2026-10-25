@@ -52,11 +52,37 @@ func test_ground_speeds_are_plausible_and_ordered() -> void:
 	var walk: float = lib.get_animation("walk").get_meta("ground_speed")
 	var jog: float = lib.get_animation("jog").get_meta("ground_speed")
 	var sprint: float = lib.get_animation("sprint").get_meta("ground_speed")
-	# Measured on the pack's root-motion clips: walk 0.975, jog 5.357, sprint 8.25 m/s.
+	# The pack's root-motion clips travel at walk 0.975, jog 5.357 and sprint 8.25 m/s; scaled to Abarax's
+	# longer legs (ruling R5, hip ratio 1.0353) they measure 1.009, 5.546 and 8.542.
 	assert_true(walk >= 0.9 and walk <= 2.2, "walk %s" % walk)
-	assert_true(jog >= 2.5 and jog <= 5.5, "jog %s" % jog)
-	assert_true(sprint >= 4.5 and sprint <= 8.5, "sprint %s" % sprint)
+	assert_true(jog >= 2.5 and jog <= 6.0, "jog %s" % jog)
+	assert_true(sprint >= 4.5 and sprint <= 9.0, "sprint %s" % sprint)
 	assert_true(walk < jog and jog < sprint, "walk %s < jog %s < sprint %s" % [walk, jog, sprint])
+
+
+func test_idle_feet_meet_the_ground() -> void:
+	# Ruling R5: with the model's root at y = 0, mid-clip the lower toe bone is at the ground, within 1.5 cm.
+	var lib := load(LIB) as AnimationLibrary
+	var scene := load(MODEL) as PackedScene
+	var model := track(scene.instantiate()) as Node3D
+	var skeleton := model.get_node(ClipBuilder.skeleton_path(scene)) as Skeleton3D
+	var idle := lib.get_animation("idle")
+	var lowest := _lowest_toe(skeleton, idle, idle.length / 2.0)
+	assert_near(lowest, 0.0, 0.015, "the lower of ball_l and ball_r is at y = %s" % lowest)
+
+
+func test_a_foot_reaches_the_ground_somewhere_in_every_loop() -> void:
+	# The same rule over whole cycles: the lowest toe of idle, walk, jog and sprint is within 2 cm of the ground.
+	var lib := load(LIB) as AnimationLibrary
+	var scene := load(MODEL) as PackedScene
+	var model := track(scene.instantiate()) as Node3D
+	var skeleton := model.get_node(ClipBuilder.skeleton_path(scene)) as Skeleton3D
+	for n in ["idle", "walk", "jog", "sprint"]:
+		var anim := lib.get_animation(n)
+		var lowest := INF
+		for i in 24:
+			lowest = minf(lowest, _lowest_toe(skeleton, anim, anim.length * i / 24.0))
+		assert_near(lowest, 0.0, 0.02, "%s: lowest toe over the cycle is at y = %s" % [n, lowest])
 
 
 func test_every_track_targets_a_real_bone() -> void:
@@ -104,3 +130,24 @@ func test_locomotion_clips_stay_in_place_and_the_roll_carries_root_motion() -> v
 	for n in ["idle", "walk", "jog", "sprint", "t_pose", "palm_jab", "palm_cross"]:
 		assert_eq(lib.get_animation(n).find_track(root, Animation.TYPE_POSITION_3D), -1, "%s has no root travel" % n)
 	assert_true(lib.get_animation("dodge_roll").find_track(root, Animation.TYPE_POSITION_3D) >= 0)
+
+
+# --- helpers ---
+
+# Poses the skeleton as `anim` does at `time` and returns the lower global y of the two toe bones.
+func _lowest_toe(skeleton: Skeleton3D, anim: Animation, time: float) -> float:
+	skeleton.reset_bone_poses()
+	for i in anim.get_track_count():
+		var bone := skeleton.find_bone(str(anim.track_get_path(i).get_concatenated_subnames()))
+		match anim.track_get_type(i):
+			Animation.TYPE_POSITION_3D:
+				skeleton.set_bone_pose_position(bone, anim.position_track_interpolate(i, time))
+			Animation.TYPE_ROTATION_3D:
+				skeleton.set_bone_pose_rotation(bone, anim.rotation_track_interpolate(i, time))
+			Animation.TYPE_SCALE_3D:
+				skeleton.set_bone_pose_scale(bone, anim.scale_track_interpolate(i, time))
+	var lowest := INF
+	for toe in ["ball_l", "ball_r"]:
+		var pose := skeleton.get_bone_global_pose(skeleton.find_bone(toe))
+		lowest = minf(lowest, (skeleton.global_transform * pose).origin.y)
+	return lowest

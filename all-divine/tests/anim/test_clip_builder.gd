@@ -8,8 +8,10 @@ const SKEL := NodePath("Armature/Skeleton3D")
 const BONES: PackedStringArray = ["root", "pelvis", "hand_l"]
 const DIR := "user://clip_builder_fixture"
 
+# The hip height of the mannequin the fixture clips were authored on.
+const SOURCE_HIP := 0.9
 # A mannequin skeleton: three of Abarax's bones and one he does not have.
-const JOINTS: Array = [["root", -1], ["pelvis", 0], ["hand_l", 1], ["mannequin_extra", 1]]
+const JOINTS: Array = [["root", -1], ["pelvis", 0, Vector3(0.0, SOURCE_HIP, 0.0)], ["hand_l", 1], ["mannequin_extra", 1]]
 
 
 func after_each() -> void:
@@ -140,6 +142,42 @@ func test_rewrite_paths_copies_the_clip_and_leaves_the_input_alone() -> void:
 	assert_eq(out.track_get_interpolation_type(0), Animation.INTERPOLATION_NEAREST)
 	assert_eq(a.track_get_path(t), before, "the input keeps its paths")
 	assert_eq(a.get_track_count(), 1)
+
+
+func test_rewrite_paths_scales_root_and_pelvis_positions_by_the_hip_ratio() -> void:
+	# Ruling R5: a mannequin hip at 0.9 m moved onto a skeleton whose hip is at 1.0 m.
+	var a := _anim()
+	for bone in ["root", "pelvis"]:
+		var t := a.add_track(Animation.TYPE_POSITION_3D)
+		a.track_set_path(t, "Armature/Skeleton3D:" + bone)
+		a.position_track_insert_key(t, 0.0, Vector3(0.0, 0.9, 0.0))
+		a.position_track_insert_key(t, 1.0, Vector3(0.45, 0.9, 1.8))
+	_rotation(a, "pelvis")
+	var out := ClipBuilder.rewrite_paths(a, SKEL, BONES, 1.0 / SOURCE_HIP)
+	for bone in ["root", "pelvis"]:
+		var t := out.find_track(NodePath("Model/Armature/Skeleton3D:" + bone), Animation.TYPE_POSITION_3D)
+		assert_true(t >= 0, bone)
+		assert_vec_near(out.track_get_key_value(t, 0), Vector3(0.0, 1.0, 0.0), 1e-5)
+		assert_vec_near(out.track_get_key_value(t, 1), Vector3(0.5, 1.0, 2.0), 1e-5)
+	var r := out.find_track(NodePath("Model/Armature/Skeleton3D:pelvis"), Animation.TYPE_ROTATION_3D)
+	assert_eq(out.track_get_key_value(r, 1), Quaternion(Vector3.UP, 1.0), "rotations are not scaled")
+	assert_vec_near(a.track_get_key_value(0, 1), Vector3(0.45, 0.9, 1.8), 1e-6)  # the input is left alone
+	var plain := ClipBuilder.rewrite_paths(a, SKEL, BONES)
+	assert_vec_near(plain.track_get_key_value(0, 1), Vector3(0.45, 0.9, 1.8), 1e-6)  # the ratio defaults to 1
+
+
+# --- hip_height ---
+
+func test_hip_height_is_the_rest_height_of_the_pelvis() -> void:
+	var model := track((load(MODEL) as PackedScene).instantiate()) as Node
+	var skeleton := model.get_node(ClipBuilder.skeleton_path(load(MODEL))) as Skeleton3D
+	assert_near(ClipBuilder.hip_height(skeleton), 0.9491, 0.001, "Abarax")
+	var pack := ClipBuilder.load_gltf(_write_gltf("hip.gltf", {"Idle": [_channel("hand_l", "rotation", [0.0, 1.0], [Quaternion.IDENTITY, Quaternion.IDENTITY])]}))
+	assert_near(pack["hip_height"], SOURCE_HIP, 1e-4, "read from a glTF skeleton")
+	var bare := Skeleton3D.new()
+	bare.add_bone("root")
+	assert_eq(ClipBuilder.hip_height(bare), 0.0, "no pelvis")
+	bare.free()
 
 
 # --- ground_speed ---
@@ -284,7 +322,7 @@ func test_build_sets_loop_length_step_and_ground_speed_from_the_config() -> void
 	assert_eq(idle.get_meta("step_fps"), 0, "step_fps is on every clip, 0 unless the config says")
 	assert_eq(running.get_meta("step_fps"), 0)
 	assert_eq(roll.get_meta("step_fps"), 12)
-	assert_near(running.get_meta("ground_speed"), 3.0, 1e-3, "3 m of root travel in the 1 s run")
+	assert_near(running.get_meta("ground_speed"), 3.0 * _hip_ratio(), 2e-3, "3 m of root travel in the 1 s run, scaled to Abarax")
 	assert_false(idle.has_meta("ground_speed"), "only clips with ground_speed_from get one")
 	assert_false(roll.has_meta("ground_speed"))
 	# The roll came from the clip with root motion, the run did not.
@@ -344,6 +382,32 @@ func test_build_keeps_marks_when_it_runs_again() -> void:
 	assert_eq(call["args"], [{"name": "whoosh"}])
 	var lib := _load(run["out"] + "/library.tres") as AnimationLibrary
 	assert_ne(lib.get_animation("roll").find_track(NodePath("Marks"), Animation.TYPE_METHOD), -1, "the library sees it")
+
+
+func test_build_scales_root_and_pelvis_by_the_models_hip_height_over_the_sources() -> void:
+	# Ruling R5. The mannequin's hip is at 0.9 m, this model's at 1.0 m, so positions grow by 1/0.9.
+	var run := _build_setup()
+	assert_eq(ClipBuilder.build(run["cfg"], run["sources"], run["out"], _write_model(1.0)), OK)
+	var running := _load(run["out"] + "/run.tres") as Animation
+	var pelvis := running.find_track(NodePath("Model/Armature/Skeleton3D:pelvis"), Animation.TYPE_POSITION_3D)
+	assert_vec_near(running.track_get_key_value(pelvis, 0), Vector3(0.0, 1.0, 0.0) / SOURCE_HIP, 1e-4)
+	assert_vec_near(running.track_get_key_value(pelvis, running.track_get_key_count(pelvis) - 1), Vector3(0.0, 1.1, 0.0) / SOURCE_HIP, 1e-4)
+	assert_near(running.get_meta("ground_speed"), 3.0 / SOURCE_HIP, 2e-3, "the root motion that ground_speed measures is scaled too")
+	var roll := _load(run["out"] + "/roll.tres") as Animation
+	var root := roll.find_track(NodePath("Model/Armature/Skeleton3D:root"), Animation.TYPE_POSITION_3D)
+	assert_vec_near(roll.track_get_key_value(root, roll.track_get_key_count(root) - 1), Vector3(0.0, 0.0, 5.0 / SOURCE_HIP), 1e-4)
+	var turn := roll.find_track(NodePath("Model/Armature/Skeleton3D:hand_l"), Animation.TYPE_ROTATION_3D)
+	assert_eq(roll.track_get_key_value(turn, roll.track_get_key_count(turn) - 1), Quaternion(Vector3.UP, 1.0), "rotations are not scaled")
+
+
+func test_build_fails_when_a_source_skeleton_has_no_pelvis() -> void:
+	var run := _build_setup()
+	var bare := DIR.path_join("bare.gltf")
+	assert_eq(GltfFixture.write(bare, [["root", -1], ["hand_l", 0]],
+		{"Idle": [_channel("hand_l", "rotation", [0.0, 1.0], [Quaternion.IDENTITY, Quaternion(Vector3.UP, 1.0)])]}), OK)
+	_write_text(run["cfg"], "[idle]\nsource=\"bare\"\nclip=\"Idle\"\n")
+	var err: int = quietly(func() -> int: return ClipBuilder.build(run["cfg"], {"bare": bare}, run["out"], MODEL))
+	assert_ne(err, OK)
 
 
 func test_build_fails_on_a_clip_the_source_does_not_have() -> void:
@@ -418,6 +482,40 @@ func _write_text(path: String, text: String) -> void:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	file.store_string(text)
 	file.close()
+
+
+# Abarax's hip height over the fixture mannequin's.
+func _hip_ratio() -> float:
+	var model := track((load(MODEL) as PackedScene).instantiate()) as Node
+	return ClipBuilder.hip_height(model.get_node(ClipBuilder.skeleton_path(load(MODEL))) as Skeleton3D) / SOURCE_HIP
+
+
+# A model scene (Model / Armature / Skeleton3D with root, pelvis and hand_l) whose pelvis rests `hip`
+# metres up, saved to user://. Returns its path.
+func _write_model(hip: float) -> String:
+	var model := Node3D.new()
+	model.name = "Model"
+	var armature := Node3D.new()
+	armature.name = "Armature"
+	model.add_child(armature)
+	armature.owner = model
+	var skeleton := Skeleton3D.new()
+	skeleton.name = "Skeleton3D"
+	armature.add_child(skeleton)
+	skeleton.owner = model
+	skeleton.add_bone("root")
+	skeleton.add_bone("pelvis")
+	skeleton.set_bone_parent(1, 0)
+	skeleton.set_bone_rest(1, Transform3D(Basis.IDENTITY, Vector3(0.0, hip, 0.0)))
+	skeleton.add_bone("hand_l")
+	skeleton.set_bone_parent(2, 1)
+	var scene := PackedScene.new()
+	scene.pack(model)
+	model.free()
+	DirAccess.make_dir_recursive_absolute(DIR)
+	var path := DIR.path_join("model_hip_%s.tscn" % str(hip).replace(".", "_"))
+	assert_eq(ResourceSaver.save(scene, path), OK)
+	return path
 
 
 # file name -> text, for every file directly in `dir`.

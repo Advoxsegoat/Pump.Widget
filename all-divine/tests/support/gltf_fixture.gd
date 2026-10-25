@@ -4,8 +4,9 @@ extends RefCounted
 ## run without the Quaternius pack: an "Armature" node over a joint hierarchy, one skin, the
 ## animations, no meshes, one embedded buffer.
 ##
-## joints: [[name, parent index or -1], ...]; the first is the root, and a parent comes before its
-##         children. Each joint other than the root rests 0.25 m above its parent.
+## joints: [[name, parent index or -1, rest position (optional)], ...]; the first is the root, and a parent
+##         comes before its children. A joint without a rest position rests 0.25 m above its parent (the
+##         root, at its parent's origin).
 ## clips:  {clip name: [channel, ...]}, a channel being
 ##         {"bone": name, "path": "translation" | "rotation" | "scale",
 ##          "times": [seconds, ...], "values": [Vector3 or Quaternion, ...]}
@@ -43,8 +44,12 @@ func _write(path: String, joints: Array, clips: Dictionary) -> Error:
 	var joint_nodes: Array = []
 	for i in joints.size():
 		var node := {"name": joints[i][0]}
+		var rest := Vector3(0.0, 0.25, 0.0) if joints[i][1] >= 0 else Vector3.ZERO
+		if joints[i].size() > 2:
+			rest = joints[i][2]
+		if rest != Vector3.ZERO:
+			node["translation"] = [rest.x, rest.y, rest.z]
 		if joints[i][1] >= 0:
-			node["translation"] = [0.0, 0.25, 0.0]
 			var parent: Dictionary = nodes[joints[i][1] + 1]
 			parent["children"] = parent.get("children", []) + [i + 1]
 		nodes.append(node)
