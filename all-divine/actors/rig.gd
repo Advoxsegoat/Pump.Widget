@@ -23,7 +23,13 @@ extends Node3D
 ## run, so a move shows exactly the time the gameplay says, stepped if its clip asks for that.
 ##
 ## Nothing animates until tick() is called: the actor calls it once per physics frame. The rig sets itself
-## up in _ready, so it must be in the scene tree before anything else is called.
+## up in _ready, so it must be in the scene tree before anything else is called (apply_palette aside).
+##
+## The model is drawn in its palette's colours once apply_palette is called (the actor does, with its
+## def's palette); until then it keeps the materials it was imported with.
+
+## The shader every body is drawn with: the toon light ramp held to the palette.
+const TOON_SHADER := preload("res://render/shaders/toon_character.gdshader")
 
 ## The tree's parameters.
 const LOCO_SPEED := &"parameters/loco/blend_position"
@@ -37,6 +43,8 @@ const STEP_FPS_META := &"step_fps"
 
 var skeleton: Skeleton3D
 var tree: AnimationTree
+## The palette the body is drawn in, or null before apply_palette.
+var palette: Palette
 
 var _hitboxes := {}  # id (StringName) -> its Area3D
 var _slot := -1  # the slot of the current move: 0 is move_a, 1 is move_b, -1 before the first move
@@ -60,6 +68,23 @@ func _ready() -> void:
 	skeleton = found[0] if not found.is_empty() else null
 	for attachment in $Hitboxes.get_children():
 		_hitboxes[StringName(attachment.name)] = attachment.get_node("zone") as Area3D
+
+
+## A material that draws a body in `p`'s colours: the toon shader, reading the palette's texture.
+static func toon_material(p: Palette) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = TOON_SHADER
+	material.set_shader_parameter(&"palette", p.to_texture())
+	return material
+
+
+## Draws the body in `p`'s colours: one toon material, shared, as the material_override of every
+## MeshInstance3D under Model. Calling it again (a dye, say) replaces it.
+func apply_palette(p: Palette) -> void:
+	palette = p
+	var material := toon_material(p)
+	for mesh in $Model.find_children("*", "MeshInstance3D", true, false):
+		(mesh as MeshInstance3D).material_override = material
 
 
 ## Where the clip of a stepped move is shown at gameplay time `t`: on a grid of `fps` steps per second,

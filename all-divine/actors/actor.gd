@@ -1,9 +1,9 @@
 class_name Actor
 extends CharacterBody3D
 ## Anyone who moves and fights: Abarax, and later his foes. This CharacterBody3D is the body (a capsule
-## on the `actor` layer that collides with `world`); its Rig, made from the def's rig_scene, is how it
-## looks; its Brain says what it wants (player, script, later an AI), and can be swapped at any time;
-## its MoveRunner plays its moves, and Locomotion moves it when no move does.
+## on the `actor` layer that collides with `world`); its Rig, made from the def's rig_scene and drawn in
+## the def's palette, is how it looks; its Brain says what it wants (player, script, later an AI), and
+## can be swapped at any time; its MoveRunner plays its moves, and Locomotion moves it when no move does.
 ##
 ## Each physics frame, in this order:
 ##   1. frame += 1
@@ -46,6 +46,8 @@ func _ready() -> void:
 	rig = def.rig_scene.instantiate() as Rig
 	rig.name = &"Rig"
 	add_child(rig)
+	if def.palette != null:
+		rig.apply_palette(def.palette)
 	stats = Stats.from_def(def)
 	locomotion = Locomotion.new(def.locomotion)
 	locomotion.facing_yaw = rotation.y

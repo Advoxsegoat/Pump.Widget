@@ -13,10 +13,11 @@ What is done, what is next, and where the decisions live. Every task's final com
 - F0 Task 7: Rig: AnimationTree (speed-blended locomotion, two-slot move layer, stepped playback), hitboxes, contact sheets (`tools/test.sh`: 175 passed, 0 failed; with `--render`: 181 passed, 0 failed).
 - F0 Task 8: Moves: MoveData, marks on the Marks track, 9-frame input buffer, clip checker; jab, cross, roll (`tools/test.sh`: 274 passed, 0 failed; with `--render`: 280 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 - F0 Task 9: Actor, brains (player, script), locomotion, move runner reading marks; buffer and cancel rules; press-to-motion ≤ 2 frames (`tools/test.sh`: 305 passed, 0 failed; with `--render`: 311 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
+- F0 Task 10: Character look: palette resource (ramps, dyes), toon shader held to the palette (`tools/test.sh`: 317 passed, 0 failed; with `--render`: 327 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 
 ## Next
 
-F0 Task 10
+F0 Task 11
 
 ## Decisions
 

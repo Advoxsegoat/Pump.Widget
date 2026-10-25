@@ -45,6 +45,33 @@ func test_sheet_has_a_cell_per_frame_and_content() -> void:
 	assert_true(jab_poses.size() > 1, "the palm_jab cells show different poses")
 
 
+# The actor is drawn in his palette: given his def, the sheet uses its palette; given a bare rig scene, it
+# falls back to Abarax's. Under the sheet's white sun every pixel of him is one of his tones, so a good
+# number of game pixels below the label are, with his cream shirt (main), blue (sec) and rose scarf among them.
+func test_the_actor_is_drawn_in_his_palette() -> void:
+	var def := load("res://data/actors/abarax.tres") as ActorDef
+	var from_def: Image = await ContactSheet.render(def, ["idle"])
+	var from_rig: Image = await ContactSheet.render(load(RIG), ["idle"])
+	assert_ne(from_def, null, "the sheet rendered")
+	if from_def == null or from_rig == null:
+		return
+	assert_eq(from_rig.get_data(), from_def.get_data(), "a bare rig is drawn in Abarax's palette")
+	var tones := def.palette.tones.slice(0, 9 * Palette.TONES)
+	var slots := {}
+	var count := 0
+	for y in range(LABEL_BAND, CELL.y, 2):
+		for x in range(0, CELL.x, 2):
+			var c := from_def.get_pixel(x, y)
+			for i in tones.size():
+				if maxf(maxf(absf(c.r - tones[i].r), absf(c.g - tones[i].g)), absf(c.b - tones[i].b)) <= 2.0 / 255.0:
+					count += 1
+					slots[i / Palette.TONES] = true
+					break
+	assert_true(count >= MIN_DRAWN / 2, "%d game pixels of the first cell are his tones" % count)
+	for slot in [3, 4, 7]:
+		assert_true(slots.has(slot), "slot %d (%s) shows" % [slot, def.palette.slot_names[slot]])
+
+
 func test_cells_are_mark_frames_or_six_even_frames() -> void:
 	var plain := Animation.new()
 	plain.length = 0.5

@@ -6,6 +6,8 @@ extends Resource
 @export var id: StringName
 ## The scene with the actor's Rig (see actors/rig.gd).
 @export var rig_scene: PackedScene
+## The colours the rig is drawn in (see render/palette.gd). None leaves the model's own materials.
+@export var palette: Palette
 ## Input action -> move id, for the moves the actor starts from rest. Moves reached by cancelling into
 ## them are named by their clips' cancel_open marks instead.
 @export var moveset: Dictionary = {}

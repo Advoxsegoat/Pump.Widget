@@ -15,6 +15,10 @@ extends SceneTree
 ## gameplay CameraRig, so it shows exactly the pixels a player would see. Cells are drawn at twice their
 ## size, six to a row, each with a label "<clip> f<frame>" (frames at 60 per second, counted the way
 ## marks are), and the whole sheet is captured from a SubViewport.
+##
+## The actor is drawn in his palette, under a white sun of energy 1, so every pixel of him is one of his
+## palette's tones: the def's palette when given a def, and Abarax's (FALLBACK_PALETTE) for a bare rig
+## scene, which has none of its own.
 
 const PIXEL_STAGE := preload("res://render/pixel_stage.tscn")
 const COLUMNS := 6
@@ -26,6 +30,8 @@ const EVEN_CELLS := 6
 const FRAME_RATE := 60
 ## Where the cell is centred: this far above the actor's feet, in metres.
 const BODY_CENTRE := 0.9
+## The palette a rig is drawn in when it comes without a def.
+const FALLBACK_PALETTE := "res://data/palettes/abarax.tres"
 
 
 func _initialize() -> void:
@@ -33,9 +39,10 @@ func _initialize() -> void:
 
 
 ## Renders the sheet for the rig in `def_or_rig` (a rig scene, or anything with a `rig_scene`, like an
-## actor's definition) and the given clips, or every clip of the rig if `clips` is empty. `cell` is the
-## size of a cell in game pixels. Takes a few frames, so it must be awaited. Needs a display. Returns
-## null, after an error, if there is no rig, no display or no clip to draw.
+## actor's definition, whose `palette` it is then drawn in) and the given clips, or every clip of the rig
+## if `clips` is empty. `cell` is the size of a cell in game pixels. Takes a few frames, so it must be
+## awaited. Needs a display. Returns null, after an error, if there is no rig, no display or no clip to
+## draw.
 static func render(def_or_rig: Variant, clips: PackedStringArray, cell := Vector2i(160, 120)) -> Image:
 	var scene := _rig_scene(def_or_rig)
 	if scene == null:
@@ -54,6 +61,11 @@ static func render(def_or_rig: Variant, clips: PackedStringArray, cell := Vector
 	_furnish(stage.world)
 	var rig := scene.instantiate() as Rig
 	stage.world.add_child(rig)
+	var palette := _palette(def_or_rig)
+	if palette != null:
+		rig.apply_palette(palette)
+	elif rig.palette == null:
+		rig.apply_palette(load(FALLBACK_PALETTE) as Palette)
 	var camera := CameraRig.new()
 	camera.target = rig
 	camera.stage = stage
@@ -124,7 +136,15 @@ static func _rig_scene(def_or_rig: Variant) -> PackedScene:
 	return null
 
 
-# A plain stage for the actor: a ground to stand on, a sun from the camera's side and some sky light.
+# The palette of `def_or_rig` when it has one (an actor's definition), else null (a rig scene has none).
+static func _palette(def_or_rig: Variant) -> Palette:
+	if def_or_rig is Object:
+		return (def_or_rig as Object).get(&"palette") as Palette
+	return null
+
+
+# A plain stage for the actor: a ground to stand on, a white sun of energy 1 from the camera's side (the
+# light the toon shader holds to the palette) and some sky light for the ground.
 static func _furnish(world: SubViewport) -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
@@ -137,7 +157,7 @@ static func _furnish(world: SubViewport) -> void:
 	world.add_child(environment)
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-50.0, 30.0, 0.0)
-	sun.light_energy = 0.75  # With the sky light, a lit face of the default material stays below white.
+	sun.light_energy = 1.0
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 20.0
 	world.add_child(sun)
