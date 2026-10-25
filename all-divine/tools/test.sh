@@ -34,9 +34,30 @@ if ! "$HERE/godot.sh" --import >"$import_log" 2>&1 || grep -q 'ERROR' "$import_l
 	cat "$import_log"
 fi
 
+# Passes its input through, minus the engine's "Could not set V-Sync mode" warning and the "at:" line
+# that follows it. xvfb's GLX has no swap-control extension, so every render run prints it once at the
+# first frame; it says nothing about the tests. Nothing else is touched.
+drop_vsync_warning() {
+	awk '
+		/^WARNING: Could not set V-Sync mode/ { skip = 1; next }
+		skip && /^[[:space:]]+at: / { skip = 0; next }
+		{ skip = 0; print; fflush() }
+	'
+}
+
+run_godot() {
+	timeout -k 10 "${TEST_TIMEOUT:-900}" "$HERE/godot.sh" ${mode[@]+"${mode[@]}"} --fixed-fps 60 -s res://tools/test/run.gd -- ${runner_args[@]+"${runner_args[@]}"}
+}
+
 # A test that never finishes would hang the run for good, so the run is capped (TEST_TIMEOUT seconds).
 status=0
-timeout -k 10 "${TEST_TIMEOUT:-900}" "$HERE/godot.sh" ${mode[@]+"${mode[@]}"} --fixed-fps 60 -s res://tools/test/run.gd -- ${runner_args[@]+"${runner_args[@]}"} || status=$?
+if [ ${#mode[@]} -eq 0 ]; then
+	run_godot || status=$?
+else
+	# Render modes run under xvfb-run, which folds Godot's stderr into stdout, so stdout is where the
+	# warning is. With pipefail the pipeline's status is Godot's (or timeout's), not the filter's.
+	run_godot | drop_vsync_warning || status=$?
+fi
 if [ "$status" -eq 124 ]; then
 	echo "test.sh: the run was still going after ${TEST_TIMEOUT:-900}s and was stopped (set TEST_TIMEOUT to change this)" >&2
 fi
