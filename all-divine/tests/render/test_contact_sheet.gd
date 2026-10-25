@@ -5,6 +5,14 @@ extends TestCase
 const RIG := "res://actors/abarax/abarax_rig.tscn"
 const LIB := "res://assets/anim/abarax/library.tres"
 const CELL := Vector2i(320, 240)
+## The top of a cell, where its label is drawn. Everything below it is the picture of the actor.
+const LABEL_BAND := 40
+## A pixel is part of the actor (or its shadow) when a channel is this far from the ground's colour.
+## The empty ground varies by about 1/255 across a cell; the actor and its shadow differ by far more.
+const BACKGROUND_TOLERANCE := 0.03
+## Fewest game pixels of actor and shadow a cell must show. Abarax and his shadow cover 500 to 1,000 of
+## the 160x100 below the label in every clip, so this is far above a stray pixel and far below a figure.
+const MIN_DRAWN := 200
 
 
 func test_sheet_has_a_cell_per_frame_and_content() -> void:
@@ -20,17 +28,17 @@ func test_sheet_has_a_cell_per_frame_and_content() -> void:
 	var cells := 6 + jab_cells
 	assert_eq(img.get_width(), 6 * CELL.x)
 	assert_eq(img.get_height(), ceili(cells / 6.0) * CELL.y)
-	# Each cell has more than 4 distinct colours.
+	# Below the label, each cell shows the actor: a good number of pixels that are not the ground, in more
+	# than 4 distinct colours, around the middle of the cell (the crop is centred on him).
 	var looks := []
 	for i in cells:
-		var at := Vector2i(i % 6, i / 6) * CELL
-		var colours := {}
-		# Every internal pixel is a 2x2 block, so its top-left output pixel stands for it.
-		for y in range(0, CELL.y, 2):
-			for x in range(0, CELL.x, 2):
-				colours[img.get_pixelv(at + Vector2i(x, y)).to_rgba32()] = true
-		assert_true(colours.size() > 4, "cell %d has %d colours" % [i, colours.size()])
-		looks.append(img.get_region(Rect2i(at, CELL)).get_data())
+		var region := img.get_region(Rect2i(Vector2i(i % 6, i / 6) * CELL + Vector2i(0, LABEL_BAND), CELL - Vector2i(0, LABEL_BAND)))
+		var drawn := _drawn(region)
+		assert_true(drawn["count"] >= MIN_DRAWN, "cell %d shows %d pixels of actor" % [i, drawn["count"]])
+		assert_true(drawn["colours"] > 4, "cell %d: the actor has %d colours" % [i, drawn["colours"]])
+		var middle := CELL / 2 - Vector2i(0, LABEL_BAND)  # The centre of the cell, where the region starts.
+		assert_true((drawn["box"] as Rect2i).grow(1).has_point(middle), "cell %d: the actor (%s) is around the middle %s" % [i, drawn["box"], middle])
+		looks.append(region.get_data())
 	var jab_poses := {}
 	for i in range(6, cells):
 		jab_poses[looks[i]] = true
@@ -55,6 +63,36 @@ func test_cells_are_mark_frames_or_six_even_frames() -> void:
 
 func test_label_names_clip_and_frame() -> void:
 	assert_eq(ContactSheet.cell_label(&"palm_jab", 10), "palm_jab f10")
+
+
+# What of `region` is not the ground: {count, colours, box} of the pixels whose colour is more than
+# BACKGROUND_TOLERANCE from the region's most common colour (the ground). Every game pixel is a 2x2 block
+# on the sheet, so only the top-left pixel of each block is looked at, and count is in game pixels.
+func _drawn(region: Image) -> Dictionary:
+	var seen := {}
+	for y in range(0, region.get_height(), 2):
+		for x in range(0, region.get_width(), 2):
+			var c := region.get_pixel(x, y)
+			seen[c] = seen.get(c, 0) + 1
+	var ground := Color()
+	var most := 0
+	for c: Color in seen:
+		if seen[c] > most:
+			most = seen[c]
+			ground = c
+	var count := 0
+	var colours := {}
+	var box := Rect2i()
+	for c: Color in seen:
+		if maxf(maxf(absf(c.r - ground.r), absf(c.g - ground.g)), absf(c.b - ground.b)) > BACKGROUND_TOLERANCE:
+			count += seen[c]
+			colours[c] = true
+	for y in range(0, region.get_height(), 2):
+		for x in range(0, region.get_width(), 2):
+			var c := region.get_pixel(x, y)
+			if colours.has(c):
+				box = Rect2i(x, y, 1, 1) if box.size == Vector2i.ZERO else box.expand(Vector2i(x, y))
+	return {"count": count, "colours": colours.size(), "box": box}
 
 
 # The frames (at 60 Hz) of the keys on the clip's Marks method track, each once, in order.
