@@ -47,15 +47,25 @@ static func combine(stick: Vector2, keys: Vector2) -> Vector2:
 
 
 ## The movement the player is asking for, in screen space (right is +x, up is -y), at most length 1.
-## `devices` are the gamepads whose left stick counts (the strongest wins); by default, every one connected.
+## It reads what move_left, move_right, move_up and move_down are bound to, so any of them can be
+## rebound to a key, a mouse button, a gamepad button or a gamepad axis. Bound axes make the analog
+## part: how far each is pushed in its bound direction gives x and y, which the radial deadzone
+## shapes (see shape_stick). Bound buttons and keys make the digital part, a unit vector.
+## The longer of the two wins (see combine).
+## `devices` are the gamepads that count (the strongest analog push wins); by default, every one connected.
 func move_vector(devices: Array[int] = Input.get_connected_joypads()) -> Vector2:
-	var stick := Vector2.ZERO
+	var analog := Vector2.ZERO
 	for device in devices:
-		var shaped := shape_stick(Vector2(Input.get_joy_axis(device, JOY_AXIS_LEFT_X), Input.get_joy_axis(device, JOY_AXIS_LEFT_Y)))
-		if shaped.length_squared() > stick.length_squared():
-			stick = shaped
-	var keys := Vector2(_digital(&"move_right") - _digital(&"move_left"), _digital(&"move_down") - _digital(&"move_up"))
-	return combine(stick, keys)
+		var raw := Vector2(
+				_pushed(&"move_right", device) - _pushed(&"move_left", device),
+				_pushed(&"move_down", device) - _pushed(&"move_up", device))
+		var shaped := shape_stick(raw)
+		if shaped.length_squared() > analog.length_squared():
+			analog = shaped
+	var digital := Vector2(
+			_down(&"move_right", devices) - _down(&"move_left", devices),
+			_down(&"move_down", devices) - _down(&"move_up", devices))
+	return combine(analog, digital)
 
 
 ## The gameplay actions that went down this frame.
@@ -164,12 +174,25 @@ func _read(path: String, map: Dictionary) -> String:
 	return ""
 
 
-# 1 while any key or mouse button bound to `action` is down, else 0. Gamepad events are left out:
-# the stick is read as a vector by move_vector.
-func _digital(action: StringName) -> int:
+# How far, from 0 to 1, a gamepad axis bound to `action` is pushed in the bound direction.
+# The strongest of the action's axes counts.
+func _pushed(action: StringName, device: int) -> float:
+	var strongest := 0.0
+	for event in InputMap.action_get_events(action):
+		if event is InputEventJoypadMotion:
+			strongest = maxf(strongest, Input.get_joy_axis(device, event.axis) * signf(event.axis_value))
+	return strongest
+
+
+# 1 while any key, mouse button or gamepad button (on one of `devices`) bound to `action` is down, else 0.
+func _down(action: StringName, devices: Array[int]) -> int:
 	for event in InputMap.action_get_events(action):
 		if event is InputEventKey and Input.is_physical_key_pressed(event.physical_keycode):
 			return 1
 		if event is InputEventMouseButton and Input.is_mouse_button_pressed(event.button_index):
 			return 1
+		if event is InputEventJoypadButton:
+			for device in devices:
+				if Input.is_joy_button_pressed(device, event.button_index):
+					return 1
 	return 0

@@ -7,6 +7,11 @@ func after_each() -> void:
 	for key in [KEY_W, KEY_A, KEY_S, KEY_D]:
 		_key_event(key, false)
 	_stick(0, 0.0, 0.0)
+	_axis(0, JOY_AXIS_RIGHT_X, 0.0)
+	_axis(0, JOY_AXIS_RIGHT_Y, 0.0)
+	_pad_button(0, JOY_BUTTON_DPAD_LEFT, false)
+	_pad_button(0, JOY_BUTTON_DPAD_UP, false)
+	_pad_button(0, JOY_BUTTON_DPAD_RIGHT, false)
 	Input.action_release(&"palm")
 	DirAccess.remove_absolute(FILE)
 	await frames(1)
@@ -33,6 +38,29 @@ func _stick(device: int, x: float, y: float) -> void:
 		event.axis_value = pair[1]
 		Input.parse_input_event(event)
 	Input.flush_buffered_events()
+
+func _axis(device: int, axis: JoyAxis, value: float) -> void:
+	var event := InputEventJoypadMotion.new()
+	event.device = device
+	event.axis = axis
+	event.axis_value = value
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+func _pad_button(device: int, index: JoyButton, pressed: bool) -> void:
+	var event := InputEventJoypadButton.new()
+	event.device = device
+	event.button_index = index
+	event.pressed = pressed
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+# An axis event to bind: `direction` is -1 or 1.
+func _motion(axis: JoyAxis, direction: float) -> InputEventJoypadMotion:
+	var event := InputEventJoypadMotion.new()
+	event.axis = axis
+	event.axis_value = direction
+	return event
 
 func _describe_all(action: StringName) -> Array:
 	return InputMap.action_get_events(action).map(func(e): return Bindings.event_to_data(e))
@@ -147,6 +175,74 @@ func test_move_vector_uses_the_strongest_of_several_pads() -> void:
 	_stick(1, 0.0, 1.0)
 	assert_eq(Inputs.move_vector([0, 1] as Array[int]), Vector2(0, 1))
 	_stick(1, 0.0, 0.0)
+
+# --- move_vector reads what the move actions are bound to ---
+
+func test_move_vector_follows_a_gamepad_button_bound_to_a_move_action() -> void:
+	Inputs.rebind(&"move_left", _button(JOY_BUTTON_DPAD_LEFT))
+	_pad_button(0, JOY_BUTTON_DPAD_LEFT, true)
+	assert_eq(Inputs.move_vector([0] as Array[int]), Vector2(-1, 0))
+	_pad_button(0, JOY_BUTTON_DPAD_LEFT, false)
+	assert_eq(Inputs.move_vector([0] as Array[int]), Vector2.ZERO)
+
+func test_a_gamepad_button_on_a_move_action_moves_as_fast_as_the_keys_diagonally() -> void:
+	Inputs.rebind(&"move_left", _button(JOY_BUTTON_DPAD_LEFT))
+	Inputs.rebind(&"move_up", _button(JOY_BUTTON_DPAD_UP))
+	_pad_button(0, JOY_BUTTON_DPAD_LEFT, true)
+	_pad_button(0, JOY_BUTTON_DPAD_UP, true)
+	var v := Inputs.move_vector([0] as Array[int])
+	assert_vec_near(Vector3(v.x, v.y, 0), Vector3(-0.70710678, -0.70710678, 0), 1e-5)
+
+func test_a_gamepad_button_counts_only_for_the_pads_asked_about() -> void:
+	Inputs.rebind(&"move_left", _button(JOY_BUTTON_DPAD_LEFT))
+	_pad_button(0, JOY_BUTTON_DPAD_LEFT, true)
+	assert_eq(Inputs.move_vector([1] as Array[int]), Vector2.ZERO)
+	assert_eq(Inputs.move_vector([] as Array[int]), Vector2.ZERO)
+
+func test_a_stick_no_longer_moves_once_its_direction_is_rebound_to_a_button() -> void:
+	Inputs.rebind(&"move_left", _button(JOY_BUTTON_DPAD_LEFT))   # move_left lets go of the left stick
+	_stick(0, -1.0, 0.0)
+	assert_eq(Inputs.move_vector([0] as Array[int]), Vector2.ZERO)
+	_stick(0, 1.0, 0.0)
+	assert_eq(Inputs.move_vector([0] as Array[int]), Vector2(1, 0), "move_right still reads the stick")
+
+func test_move_vector_follows_axes_bound_to_the_move_actions() -> void:
+	Inputs.rebind(&"move_left", _motion(JOY_AXIS_RIGHT_X, -1.0))
+	Inputs.rebind(&"move_right", _motion(JOY_AXIS_RIGHT_X, 1.0))
+	_axis(0, JOY_AXIS_RIGHT_X, 0.6)
+	assert_vec_near(Vector3(Inputs.move_vector([0] as Array[int]).x, 0, 0), Vector3(0.5, 0, 0), 1e-4)
+	_axis(0, JOY_AXIS_RIGHT_X, -1.0)
+	assert_eq(Inputs.move_vector([0] as Array[int]), Vector2(-1, 0), "the right stick's other direction")
+	_axis(0, JOY_AXIS_RIGHT_X, 0.0)
+	_stick(0, 1.0, 0.0)
+	assert_eq(Inputs.move_vector([0] as Array[int]), Vector2.ZERO, "the left stick's X no longer moves")
+	_stick(0, 0.0, -1.0)
+	assert_eq(Inputs.move_vector([0] as Array[int]), Vector2(0, -1), "up and down are still on the left stick")
+
+func test_stick_drift_is_still_ignored_on_rebound_axes_and_across_sticks() -> void:
+	Inputs.rebind(&"move_left", _motion(JOY_AXIS_RIGHT_X, -1.0))
+	Inputs.rebind(&"move_right", _motion(JOY_AXIS_RIGHT_X, 1.0))
+	for drift in [0.1, 0.15, 0.19, -0.19]:
+		_axis(0, JOY_AXIS_RIGHT_X, drift)
+		assert_eq(Inputs.move_vector([0] as Array[int]), Vector2.ZERO, "right X at %s" % drift)
+	# x from the right stick and y from the left stick make one vector: 0.14 and 0.14 are 0.198 long.
+	_axis(0, JOY_AXIS_RIGHT_X, 0.14)
+	_stick(0, 0.0, 0.14)
+	assert_eq(Inputs.move_vector([0] as Array[int]), Vector2.ZERO)
+
+func test_a_trigger_bound_to_a_move_action_moves_through_the_deadzone() -> void:
+	Inputs.rebind(&"move_down", _motion(JOY_AXIS_TRIGGER_RIGHT, 1.0))
+	_axis(0, JOY_AXIS_TRIGGER_RIGHT, 0.6)
+	assert_vec_near(Vector3(0, Inputs.move_vector([0] as Array[int]).y, 0), Vector3(0, 0.5, 0), 1e-4)
+	_axis(0, JOY_AXIS_TRIGGER_RIGHT, 0.0)
+
+func test_the_larger_of_a_bound_button_and_a_bound_stick_wins() -> void:
+	Inputs.rebind(&"move_up", _button(JOY_BUTTON_DPAD_UP))
+	_pad_button(0, JOY_BUTTON_DPAD_UP, true)
+	_stick(0, 0.7, 0.0)
+	assert_eq(Inputs.move_vector([0] as Array[int]), Vector2(0, -1), "the button is a full push")
+	_pad_button(0, JOY_BUTTON_DPAD_UP, false)
+	assert_vec_near(Vector3(Inputs.move_vector([0] as Array[int]).x, 0, 0), Vector3(0.625, 0, 0), 1e-4)
 
 # --- buttons ---
 
