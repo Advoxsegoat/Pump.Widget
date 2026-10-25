@@ -1,0 +1,22 @@
+[gd_resource type="AnimationLibrary" format=3]
+
+[ext_resource type="Animation" path="res://assets/anim/abarax/dodge_roll.tres" id="1_c3328"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/idle.tres" id="2_lu6v3"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/jog.tres" id="3_02tpq"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/palm_cross.tres" id="4_nedxh"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/palm_jab.tres" id="5_dmner"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/sprint.tres" id="6_rl8gj"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/t_pose.tres" id="7_ac2f2"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/walk.tres" id="8_twp2h"]
+
+[resource]
+_data = {
+&"dodge_roll": ExtResource("1_c3328"),
+&"idle": ExtResource("2_lu6v3"),
+&"jog": ExtResource("3_02tpq"),
+&"palm_cross": ExtResource("4_nedxh"),
+&"palm_jab": ExtResource("5_dmner"),
+&"sprint": ExtResource("6_rl8gj"),
+&"t_pose": ExtResource("7_ac2f2"),
+&"walk": ExtResource("8_twp2h")
+}
