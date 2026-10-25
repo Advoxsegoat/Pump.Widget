@@ -1,6 +1,6 @@
 # The All-Divine (action RPG): foundation design
 
-Status: draft for the owner's review, 2026-10-25. This spec covers the foundation and the first
+Status: approved by the owner, 2026-10-25. This spec covers the foundation and the first
 playable slice. Later stages (more Gifts, more regions, the full story) get their own specs on top
 of it.
 
@@ -27,7 +27,7 @@ the pipeline they plug into.
 | Engine | Godot 4 (one pinned stable version), plain-text project in git |
 | Animation | Rigged 3D characters drawn through a pixel-art shader, so they read as sprites but move like people. One rig plays combat, cutscenes and close-ups from any angle. Turning the filter down later gives full 3D |
 | World | Handcrafted, interconnected regions from the book. Rose shrines; petals lost on death and recovered once; shortcuts that loop regions back on themselves |
-| Powers | You are always Abarax, the All-Divine, on the Open Hand, starting with one of six powers: Flame, Bloom, Tide, Spark (electricity), Light or the Bell (Mother Kesra's resonance). Gold Flame awakens in the story and lets you mix them. Mother Kesra also teaches every skill she learns, to any build, through her quest line |
+| Powers | You are always Abarax, the All-Divine, on the Open Hand, starting with one of seven powers: Flame, Bloom, Tide, Spark (electricity), Light, Shadow or the Bell (Mother Kesra's resonance). Gold Flame awakens in the story and lets you mix them. Mother Kesra also teaches every skill she learns, to any build, through her quest line |
 | Storyboards | The owner describes a scene; Claude makes a shot-by-shot sheet, then an in-engine animatic video. A scene is final only once the owner approves it |
 | Assets | Free and openly licensed only, plus what Claude makes: Quaternius and Kenney (CC0), CMU motion capture, Blender's Python module. No Mixamo (free, but not an open licence) |
 | First slice | The Open Hand plus Flame, polished. A Bilibara stretch: 3–4 enemy types, a mini-boss, First Knuckle. Two shrines, the corpse run, levels and Flame items. One cutscene and First Knuckle's entrance. 20–30 minutes that feel great |
@@ -160,8 +160,8 @@ another layer's internals.
 - Real lights (torches, lamps, the Gifts' glow) with shadows, plus day and night per region.
 - Weather: snow and rain particles, puddles and wind on foliage.
 - Gift effects as GPU particles snapped to the pixel grid: Flame embers, Bloom petals, Tide water,
-  Spark arcs, Light rays and motes, the Bell's visible rings of sound. Light and Spark are also real
-  light sources in the scene.
+  Spark arcs, Light rays and motes, Shadow's ink, the Bell's visible rings of sound. Light and Spark
+  are also real light sources in the scene, and Shadow reads the real shadows they cast.
 
 ### 3.5 Readability rules
 
@@ -225,6 +225,9 @@ When not locked on, keyboard and mouse aim facing toward the cursor. Every contr
     is briefly paralysed (in *Tactics*, Spark and Lightning chain and pierce armour);
   - **Light** blinds and reveals: rays and radiance that blind foes, light up dark places, and show
     hidden doors and unseen enemies (from *Tactics*' Glass Ray, Dawn and Last Light);
+  - **Shadow** moves through shade: short steps between the shadows the scene's real lights cast
+    (from *Tactics*' Shadow Step), strikes from behind that crit, and darkness that smothers light
+    and dims enemies' sight. It is strongest in dark places, the mirror of Light;
   - **the Bell** rings: resonant strikes wear down posture faster, a timed rhythm of three breaths
     rewards precise inputs, and a toll stuns and scatters everything nearby.
 
@@ -274,7 +277,7 @@ When not locked on, keyboard and mouse aim facing toward the cursor. Every contr
   - **Vigor**: HP;
   - **Endurance**: stamina and equip load;
   - **Might**: the Open Hand;
-  - **Flame**, **Bloom**, **Tide**, **Spark**, **Light** and **Bell**: power affinities.
+  - **Flame**, **Bloom**, **Tide**, **Spark**, **Light**, **Shadow** and **Bell**: power affinities.
   The starting power begins higher. Others can be raised, but their arts are usable only after Gold
   Flame awakens.
 - **Equipment** (all data, from the owner's lists):
@@ -393,7 +396,7 @@ Each milestone ends with a build the owner plays on their PC, plus their notes.
 |---|---|---|
 | F0 | Foundation | The Godot project; the render pipeline (pixel-art rigs, HD-2D world, upscale and snapping); the actor, brain and move system; the test harness and clip checker; `STATE.md` and `ASSETS.md`; Abarax rigged with locomotion and liveliness layers. A lit courtyard to walk in, where walking already feels good |
 | F1 | Combat core | The Open Hand moveset, dodge, guard and parry, stamina, poise and posture, finishers, perilous attacks, hit feel, lock-on. One enemy archetype with tiers I–III. An arena |
-| F2 | Flame and builds | The Flame kit and Gift meter (built so the other five powers plug in as data); attributes and levels; equipment, scaling and dyes; the CSV importer with the owner's first item lists; found skills |
+| F2 | Flame and builds | The Flame kit and Gift meter (built so the other six powers plug in as data); attributes and levels; equipment, scaling and dyes; the CSV importer with the owner's first item lists; found skills |
 | F3 | The world | The Bilibara stretch: shrines, petals and the corpse run, saves, a shortcut loop, 3–4 enemy types, a gank squad and its secret weakness, the mini-boss |
 | F4 | Cinematics | The Director, storyboard sheets, animatic export; the first cutscene and First Knuckle's entrance through the owner's approval loop; finishers as combat moments |
 | F5 | First Knuckle and polish | The boss with its phases and perilous attacks; a feel-tuning pass; a performance pass. The 20–30 minute slice |
@@ -425,7 +428,7 @@ Each milestone gets its own implementation plan, written when the one before it 
 
 ## 12. Out of scope for this foundation
 
-- The full kits of Bloom, Tide, Spark, Light and the Bell: their systems exist from F2; their
+- The full kits of Bloom, Tide, Spark, Light, Shadow and the Bell: their systems exist from F2; their
   content comes after the slice, one power at a time. Kesra's quest line and teachings likewise.
 - Regions beyond the Bilibara stretch.
 - The full story.
