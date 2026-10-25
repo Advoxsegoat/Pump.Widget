@@ -14,10 +14,11 @@ What is done, what is next, and where the decisions live. Every task's final com
 - F0 Task 8: Moves: MoveData, marks on the Marks track, 9-frame input buffer, clip checker; jab, cross, roll (`tools/test.sh`: 274 passed, 0 failed; with `--render`: 280 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 - F0 Task 9: Actor, brains (player, script), locomotion, move runner reading marks; buffer and cancel rules; press-to-motion ≤ 2 frames (`tools/test.sh`: 305 passed, 0 failed; with `--render`: 311 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 - F0 Task 10: Character look: palette resource (ramps, dyes), toon shader held to the palette (`tools/test.sh`: 317 passed, 0 failed; with `--render`: 328 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
+- F0 Task 11: Screen look: depth outlines, tilt-shift DOF, depth+height fog, bloom, grading, vignette; renderer-agnostic (`tools/test.sh`: 328 passed, 0 failed; with `--render`: 352 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 
 ## Next
 
-F0 Task 11
+F0 Task 12
 
 ## Decisions
 
@@ -33,6 +34,9 @@ From the repository root:
 bash all-divine/tools/setup.sh                 # once: Godot into all-divine/.tools/godot/ (add --templates, --bpy)
 all-divine/tools/test.sh                       # every headless test; --filter=<part of a test id>
 all-divine/tools/test.sh --render              # also the tests that need a display (xvfb, gl_compatibility)
+all-divine/tools/test.sh --render --update-golden --filter=test_screen_post
+                                               # rewrite tests/render/golden/post_scene_compat.png, the screen look in
+                                               # Compatibility, which a --forward-plus run compares Forward+ against
 all-divine/tools/godot.sh --render <args...>   # any Godot call with a display; without --render it is --headless
 python3 -I all-divine/tools/assets/fetch.py fetch all   # download, hash-check and extract the asset packs into .cache/ (--accept-new records a changed hash)
 python3 -I all-divine/tools/assets/import_kenney.py     # copy the listed Kenney town pieces into assets/env/kenney_town/
