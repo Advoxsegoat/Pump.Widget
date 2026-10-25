@@ -13,6 +13,12 @@ config_version=5
 config/name="The All-Divine"
 config/features=PackedStringArray("4.7")
 
+[autoload]
+
+Game="*res://core/game.gd"
+Inputs="*res://core/inputs.gd"
+Registry="*res://core/registry.gd"
+
 [display]
 
 window/size/viewport_width=1920

@@ -60,6 +60,19 @@ func fail(msg: String) -> void:
 	_record(msg, "")
 
 
+## Calls `fn` (which must not await) with the engine's error and warning printing switched off,
+## then restores the previous setting and returns what `fn` returned.
+## Use it for code whose error or warning path is under test: the engine prints every push_error
+## and push_warning to stderr, which would clutter a green run, and switching printing off also
+## hides them from the TestLogger. So assert on what `fn` returns, not on the error itself.
+func quietly(fn: Callable) -> Variant:
+	var previous := Engine.print_error_messages
+	Engine.print_error_messages = false
+	var result: Variant = fn.call()
+	Engine.print_error_messages = previous
+	return result
+
+
 ## Awaits n physics frames. Every test starts on a physics frame, so after
 ## `await frames(n)` Engine.get_physics_frames() has risen by exactly n.
 func frames(n: int) -> void:

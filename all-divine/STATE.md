@@ -5,10 +5,11 @@ What is done, what is next, and where the decisions live. Every task's final com
 ## Done
 
 - F0 Task 1: toolchain, project skeleton and the headless test runner (`tools/test.sh`: 4 passed, 0 failed).
+- F0 Task 2: Core autoloads: Game, Inputs (§4.1 bindings, rebinding, deadzone), Registry, audio buses (`tools/test.sh`: 85 passed, 0 failed).
 
 ## Next
 
-F0 Task 2
+F0 Task 3
 
 ## Decisions
 
