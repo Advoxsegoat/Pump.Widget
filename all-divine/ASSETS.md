@@ -10,3 +10,4 @@ Every file under `assets/` has a row here, and `tests/tools/test_ledger.gd` chec
 | Path | Source | Licence | Changes |
 |---|---|---|---|
 | assets/env/kenney_town/ | Kenney Fantasy Town Kit 2.0, https://kenney.nl/assets/fantasy-town-kit | CC0 1.0 | pieces copied unchanged |
+| assets/characters/abarax/ | Quaternius: Universal Base Characters (Superhero_Male head, hairstyle Hair_SimpleParted), https://quaternius.itch.io/universal-base-characters; Modular Character Outfits - Fantasy (Male_Peasant), https://quaternius.itch.io/modular-character-outfits-fantasy | CC0 1.0 | head-only, parts assembled on one skeleton as separate meshes, scarf bones added, palette slots in UV2, decimated to ≤4,000 tris, textures removed (tools/anim/build_abarax.py) |
