@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ActorDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://actors/actor_def.gd" id="1_def"]
+[ext_resource type="PackedScene" path="res://actors/abarax/abarax_rig.tscn" id="2_rig"]
+
+[resource]
+script = ExtResource("1_def")
+id = &"fixture_actor"
+rig_scene = ExtResource("2_rig")
+moveset = {
+&"palm": &"dull"
+}

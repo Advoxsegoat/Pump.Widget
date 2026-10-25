@@ -24,8 +24,6 @@ const ZOOM := 2
 const EVEN_CELLS := 6
 ## Mark times are counted in frames at this rate (the physics rate).
 const FRAME_RATE := 60
-## The method track that holds a clip's marks.
-const MARKS_TRACK := NodePath("Marks")
 ## Where the cell is centred: this far above the actor's feet, in metres.
 const BODY_CENTRE := 0.9
 
@@ -93,10 +91,10 @@ static func render(def_or_rig: Variant, clips: PackedStringArray, cell := Vector
 static func cell_frames(anim: Animation) -> PackedInt32Array:
 	var frames := PackedInt32Array()
 	for t in anim.get_track_count():
-		if anim.track_get_type(t) != Animation.TYPE_METHOD or anim.track_get_path(t) != MARKS_TRACK:
+		if not Marks.is_marks_track(anim, t):
 			continue
 		for k in anim.track_get_key_count(t):
-			var frame := roundi(anim.track_get_key_time(t, k) * FRAME_RATE)
+			var frame := Marks.frame_of(anim.track_get_key_time(t, k))
 			if not frames.has(frame):
 				frames.append(frame)
 	if not frames.is_empty():

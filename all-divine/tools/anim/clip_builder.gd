@@ -27,8 +27,9 @@ const IDENTITY_SCALE_EPSILON := 1e-4
 const GROUND_SPEED_DECIMALS := 3
 ## The bone whose rest height is the hip height.
 const HIP_BONE := "pelvis"
-## The name of the method track that holds a clip's marks (see moves/marks.gd).
-const MARKS_TRACK := "Marks"
+## The marks live on the method track(s) that moves/marks.gd names and knows how to find. By path rather
+## than by class name, so the builder also runs before the project has been imported.
+const _Marks := preload("res://moves/marks.gd")
 
 const _SECTION_KEYS: PackedStringArray = ["source", "clip", "loop", "length", "step_fps", "ground_speed_from"]
 
@@ -154,15 +155,13 @@ static func ground_speed(rm_anim: Animation, skel: NodePath) -> float:
 
 
 ## Copies every track of `old_anim` that is not a bone track (position, rotation or scale) into
-## `new_anim`, the "Marks" method track first. This is how hand-added tracks survive a rebuild.
+## `new_anim`, the Marks method tracks first (see Marks.TRACK). This is how hand-added tracks survive a rebuild.
 static func merge_kept_tracks(new_anim: Animation, old_anim: Animation) -> void:
 	for want_marks in [true, false]:
 		for i in old_anim.get_track_count():
 			if _is_bone_track(old_anim, i):
 				continue
-			var is_marks := old_anim.track_get_type(i) == Animation.TYPE_METHOD \
-				and old_anim.track_get_path(i) == NodePath(MARKS_TRACK)
-			if is_marks == want_marks:
+			if _Marks.is_marks_track(old_anim, i) == want_marks:
 				old_anim.copy_track(i, new_anim)
 
 

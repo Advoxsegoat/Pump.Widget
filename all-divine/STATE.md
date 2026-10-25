@@ -11,10 +11,11 @@ What is done, what is next, and where the decisions live. Every task's final com
 - F0 Task 5: Abarax model: Quaternius head + peasant outfit + scarf bones, palette slots in UV2, ≤4,000 tris (`tools/test.sh`: 120 passed, 0 failed; with `--render`: 123 passed, 0 failed; `tools/bpy_test.sh`: 14 passed).
 - F0 Task 6: Animation library: UAL clips extracted to text .tres, retimed, ground speeds measured, marks preserved on rebuild (`tools/test.sh`: 158 passed, 0 failed; with `--render`: 161 passed, 0 failed).
 - F0 Task 7: Rig: AnimationTree (speed-blended locomotion, two-slot move layer, stepped playback), hitboxes, contact sheets (`tools/test.sh`: 175 passed, 0 failed; with `--render`: 181 passed, 0 failed).
+- F0 Task 8: Moves: MoveData, marks on the Marks track, 9-frame input buffer, clip checker; jab, cross, roll (`tools/test.sh`: 274 passed, 0 failed; with `--render`: 280 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 
 ## Next
 
-F0 Task 8
+F0 Task 9
 
 ## Decisions
 
@@ -40,6 +41,9 @@ all-divine/tools/.venv/bin/python -I all-divine/tools/anim/build_abarax.py \
     --out all-divine/assets/characters/abarax/abarax.glb   # rebuild Abarax's model (same bytes every time), then tools/test.sh reimports it
 all-divine/tools/godot.sh -s res://tools/anim/build_library.gd -- --ual1 "$(python3 -I all-divine/tools/assets/fetch.py path ual1)"
                                                # rebuild assets/anim/abarax/ from assets/anim/clips.cfg (marks on existing clips are kept), then godot.sh --import
+all-divine/tools/godot.sh -s res://tools/clip_check.gd   # every move's marks and every actor's required clips against the rules; prints "clip_check: N moves, M actors OK" or each problem, exit 1
+all-divine/tools/godot.sh -s res://tools/anim/set_marks.gd -- res://assets/anim/abarax/palm_jab.tres marks.json
+                                               # write a clip's marks from [{"frame": 10, "kind": "hitbox_on", "args": {"id": "palm_l"}}, ...]; replaces its Marks tracks
 all-divine/tools/godot.sh --render -s res://tools/sheets/contact_sheet.gd -- --rig res://actors/abarax/abarax_rig.tscn --out out/sheets/abarax.png
                                                # a contact sheet of the rig's clips (--clips a,b for some); a relative --out lands under all-divine/
 ```
