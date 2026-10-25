@@ -7,10 +7,11 @@ What is done, what is next, and where the decisions live. Every task's final com
 - F0 Task 1: toolchain, project skeleton and the headless test runner (`tools/test.sh`: 4 passed, 0 failed).
 - F0 Task 2: Core autoloads: Game, Inputs (§4.1 bindings, rebinding, deadzone), Registry, audio buses (`tools/test.sh`: 93 passed, 0 failed).
 - F0 Task 3: Pixel stage: 640×360 → integer upscale, texel-snapped ortho camera, sub-pixel offset (`tools/test.sh`: 108 passed, 0 failed; with `--render`: 111 passed, 0 failed).
+- F0 Task 4: Asset intake (itch/Kenney fetch with hashes) and the ASSETS.md ledger check (`tools/test.sh`: 114 passed, 0 failed; with `--render`: 117 passed, 0 failed; Python tools: 28 passed).
 
 ## Next
 
-F0 Task 4
+F0 Task 5
 
 ## Decisions
 
@@ -27,7 +28,12 @@ bash all-divine/tools/setup.sh                 # once: Godot into all-divine/.to
 all-divine/tools/test.sh                       # every headless test; --filter=<part of a test id>
 all-divine/tools/test.sh --render              # also the tests that need a display (xvfb, gl_compatibility)
 all-divine/tools/godot.sh --render <args...>   # any Godot call with a display; without --render it is --headless
+python3 -I all-divine/tools/assets/fetch.py fetch all   # download, hash-check and extract the asset packs into .cache/ (--accept-new records a changed hash)
+python3 -I all-divine/tools/assets/import_kenney.py     # copy the listed Kenney town pieces into assets/env/kenney_town/
+python3 -I -m unittest discover -s all-divine/tools/assets/tests   # the Python tools' tests
 ```
+
+Every file under `assets/` needs a row in [`ASSETS.md`](ASSETS.md); `tests/tools/test_ledger.gd` checks it.
 
 A test is a method named `test_*` in a `tests/**/test_*.gd` file that extends `TestCase`. Its id is `res://tests/area/test_x.gd::test_y`.
 

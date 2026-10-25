@@ -4,3 +4,4 @@
 out/*
 !out/.gdignore
 tools/.venv/
+__pycache__/
