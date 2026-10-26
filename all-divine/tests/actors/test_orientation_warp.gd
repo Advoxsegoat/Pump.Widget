@@ -146,6 +146,19 @@ func test_actor_turns_to_its_face_target_standing_still() -> void:
 	assert_true(actor.global_position.length() < 0.01, "and he did not move")
 
 
+func test_sprinting_faces_the_way_it_goes() -> void:
+	# A sprint is a run, not a strafe: with a face target to the north, sprinting east faces east.
+	var arena := TestArena.make(self)
+	var brain := ScriptBrain.new([{"frames": 40, "move": Vector2(1, 0), "hold": [&"dodge"], "face_target": Vector3(0, 0, 20)}])
+	var actor := TestArena.spawn(arena, load(ABARAX) as ActorDef, brain)
+	while not brain.done():
+		await frames(1)
+	assert_true(actor.locomotion.sprinting)
+	assert_near(angle_difference(actor.locomotion.facing_yaw, PI / 2), 0.0, 0.05, "facing the way he runs")
+	assert_near(actor.rig.warp.angle, 0.0, 1e-6, "no strafe")
+	assert_near(float(actor.rig.tree.get(&"parameters/loco_scale/scale")), 1.0, 1e-6)
+
+
 # How many degrees further `bone` has turned about up on `r` than on `ref`, each in its own rig's space:
 # the yaw of the bone's +Z projected onto the ground, against the rig's facing.
 func _turn(r: Rig, ref: Rig, bone: StringName) -> float:

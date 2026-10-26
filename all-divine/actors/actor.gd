@@ -13,9 +13,9 @@ extends CharacterBody3D
 ##      press starts one; this is how a press shows on the frame it is made
 ##   5. on a frame with no move, locomotion turns the stick into a velocity, sprinting while dodge is held,
 ##      and with the intent's face_target set the body turns toward the target (at the turn rate) rather
-##      than toward the way it goes; on a frame a move ran (one that ended this frame too), the velocity is
-##      the move's root motion, and locomotion takes it over, so it carries on from the move's speed when
-##      the move is done
+##      than toward the way it goes, unless it sprints (a sprint runs where it goes, as in Souls); on a
+##      frame a move ran (one that ended this frame too), the velocity is the move's root motion, and
+##      locomotion takes it over, so it carries on from the move's speed when the move is done
 ##   6. move_and_slide, with gravity when off the floor
 ##   7. the body turns to locomotion's facing
 ##   8. the rig is given the strafe (the way the body goes against the way it faces, when it keeps facing a
@@ -90,7 +90,7 @@ func _physics_process(delta: float) -> void:
 		locomotion.carry(planar)
 	else:
 		planar = locomotion.tick(intent.move, intent.held.has(SPRINT_ACTION), delta)
-		if intent.face_target is Vector3:
+		if _keeps_facing(intent):
 			var to_target := _flat_to(intent.face_target)
 			if not to_target.is_zero_approx():
 				locomotion.facing_yaw = Locomotion.turn_toward(facing_before, Locomotion.yaw_of(to_target),
@@ -108,11 +108,16 @@ func _physics_process(delta: float) -> void:
 	rig.tick(delta)
 
 
+# Whether the body keeps facing the intent's face_target: it has one, and is not sprinting.
+func _keeps_facing(intent: Intent) -> bool:
+	return intent.face_target is Vector3 and not locomotion.sprinting
+
+
 # The way the body goes (`planar`, its ground velocity) against the way it faces, in radians about up, while
-# it keeps facing the intent's face_target; 0 when it has none, or is not going anywhere.
+# it keeps facing a target; 0 when it does not, or is not going anywhere.
 func _strafe_angle(intent: Intent, planar: Vector3) -> float:
 	var flat := Vector2(planar.x, planar.z)
-	if not (intent.face_target is Vector3) or flat.length() < STRAFE_MIN_SPEED:
+	if not _keeps_facing(intent) or flat.length() < STRAFE_MIN_SPEED:
 		return 0.0
 	return angle_difference(locomotion.facing_yaw, Locomotion.yaw_of(flat))
 

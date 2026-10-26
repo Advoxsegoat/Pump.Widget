@@ -1,9 +1,9 @@
 class_name HitReact
 extends SkeletonModifier3D
 ## The body gives under a blow. react() kicks the upper body away from the hit: a blow from in front
-## tips it back, one from the left rolls it to the right. A spring-damper (stiffness 180, damping 14 per
-## unit of lean) brings it back: it peaks about 0.09 s after the kick, sways a little past upright, and has
-## settled by 0.6 s. The lean is shared up the spine (spine_01 0.3, spine_02 0.3, spine_03 0.2, neck_01 0.1,
+## tips it back, one from the left rolls it to the right. A spring-damper on the lean (stiffness 180 and
+## damping 14, for a unit mass) brings it back: it peaks about 0.08 s after the kick, sways a little past
+## upright, and has settled by 0.6 s. The lean is shared up the spine (spine_01 0.3, spine_02 0.3, spine_03 0.2, neck_01 0.1,
 ## Head 0.1), each bone turning about the same axis across the lean, so the head carries all of it and the
 ## hips none. Kicks add up, so a flurry stacks.
 ##
