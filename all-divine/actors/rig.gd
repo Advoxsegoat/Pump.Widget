@@ -45,6 +45,10 @@ const SLOT_NODES: Array[StringName] = [&"move_a", &"move_b"]
 const SLOT_SEEKS: Array[StringName] = [&"parameters/seek_a/seek_request", &"parameters/seek_b/seek_request"]
 ## Clip metadata: the rate a clip is shown at, in steps per second; 0 (or none) means smooth.
 const STEP_FPS_META := &"step_fps"
+## Degrees either side of OrientationWarp.BACKWARD_FROM_DEG (110°) a strafe must pass to switch the cycle's
+## direction: forward turns backward past 115°, and backward turns forward inside 105°. In between, the
+## direction it had holds, so noise at the threshold cannot flip the legs tick by tick.
+const STRAFE_SWITCH_BAND_DEG := 5.0
 
 var skeleton: Skeleton3D
 var tree: AnimationTree
@@ -66,6 +70,7 @@ var _ab_time := 0.0
 var _layer := 0.0
 var _layer_goal := 0.0
 var _layer_time := 0.0
+var _backward := false  # the locomotion cycle's direction from the last set_strafe
 # Each bone's pose in the skeleton's space as last shown, modifiers included. The skeleton puts the clips'
 # pose back once it has drawn the modified one, so this is the only place the shown pose can be read.
 var _shown: Array[Transform3D] = []
@@ -128,14 +133,20 @@ func set_locomotion(speed: float, backward: bool) -> void:
 
 
 ## Sets how far the way the actor moves is from the way it faces: `angle` in radians about up (positive
-## turns +Z toward +X), 0 when it goes the way it faces. The orientation warp turns the hips toward the
-## path. Returns whether locomotion should play backward (OrientationWarp.solve: past 110°), for
-## set_locomotion.
+## turns +Z toward +X), 0 when it goes the way it faces. Returns whether locomotion should play backward,
+## for set_locomotion: past 110° (OrientationWarp.solve), but with STRAFE_SWITCH_BAND_DEG of hysteresis, so
+## it changes direction only past 115° or back inside 105°. The orientation warp turns the hips for that
+## direction: toward the path, or toward its opposite.
 func set_strafe(angle: float) -> bool:
-	if warp == null:
-		return OrientationWarp.solve(angle, 0.0)["backward"]
-	warp.angle = angle
-	return OrientationWarp.solve(angle, deg_to_rad(warp.max_angle_deg))["backward"]
+	var off := absf(wrapf(angle, -PI, PI))
+	if _backward:
+		_backward = off >= deg_to_rad(OrientationWarp.BACKWARD_FROM_DEG - STRAFE_SWITCH_BAND_DEG)
+	else:
+		_backward = off > deg_to_rad(OrientationWarp.BACKWARD_FROM_DEG + STRAFE_SWITCH_BAND_DEG)
+	if warp != null:
+		warp.angle = angle
+		warp.backward = _backward
+	return _backward
 
 
 ## Sets how out of breath the body is, 0 (at rest) to 1; it fades back to rest by itself over six seconds.

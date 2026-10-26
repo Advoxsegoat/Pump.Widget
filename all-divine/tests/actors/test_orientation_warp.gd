@@ -100,6 +100,55 @@ func test_backward_plays_locomotion_in_reverse() -> void:
 	assert_true(r.set_strafe(deg_to_rad(-150)))
 
 
+func test_forward_holds_until_past_the_band() -> void:
+	# The switch at 110° has a band either way: forward turns backward only past 115°.
+	var r := rig()
+	for deg in [109.0, 111.0, 109.5, 114.9]:
+		assert_false(r.set_strafe(deg_to_rad(deg)), "%s° stays forward" % deg)
+	assert_true(r.set_strafe(deg_to_rad(116)), "116° goes backward")
+	var l := rig()
+	for deg in [-109.0, -111.0, -109.5]:
+		assert_false(l.set_strafe(deg_to_rad(deg)), "%s° stays forward" % deg)
+	assert_true(l.set_strafe(deg_to_rad(-116)), "and so on the other side")
+
+
+func test_backward_holds_until_back_inside_the_band() -> void:
+	# Backward turns forward again only inside 105°, and in between the hips keep the backward warp.
+	var warped := rig(); var plain := rig()
+	assert_true(warped.set_strafe(deg_to_rad(116)))
+	assert_true(warped.set_strafe(deg_to_rad(108)), "108° stays backward")
+	for i in 20:
+		warped.tick(DT); plain.tick(DT)
+	assert_near(_turn(warped, plain, &"pelvis"), -70.0, 2.0, "the hips face away from the path: wrap(108° - 180°), clamped")
+	assert_true(warped.set_strafe(deg_to_rad(105.5)), "105.5° still backward")
+	assert_false(warped.set_strafe(deg_to_rad(104)), "104° returns forward")
+	for i in 20:
+		warped.tick(DT); plain.tick(DT)
+	assert_near(_turn(warped, plain, &"pelvis"), 70.0, 2.0, "and the hips turn toward the path again")
+	var l := rig()
+	assert_true(l.set_strafe(deg_to_rad(-116)))
+	assert_true(l.set_strafe(deg_to_rad(-108)), "-108° stays backward")
+	assert_false(l.set_strafe(deg_to_rad(-104)), "-104° returns forward")
+
+
+func test_noise_at_the_threshold_does_not_chatter() -> void:
+	# A path held at 110° with a degree of noise either way, at a jog: the cycle never reverses, and the
+	# hips settle rather than shaking.
+	var warped := rig(); var plain := rig()
+	var yaws: Array[float] = []
+	for i in 60:
+		var noise := (1.0 if i % 2 == 0 else -1.0) * (0.3 + 0.7 * fposmod(i * 0.618, 1.0))
+		var back := warped.set_strafe(deg_to_rad(110.0 + noise))
+		assert_false(back, "tick %d at %.2f° stays forward" % [i, 110.0 + noise])
+		warped.set_locomotion(5.546, back); plain.set_locomotion(5.546, false)
+		warped.tick(DT); plain.tick(DT)
+		assert_near(float(warped.tree.get(&"parameters/loco_scale/scale")), 1.0, 1e-6, "tick %d" % i)
+		yaws.append(_turn(warped, plain, &"pelvis"))
+	for i in range(1, yaws.size()):
+		assert_true(yaws[i] >= yaws[i - 1] - 0.05, "the hips only turn one way: %.2f° then %.2f° at tick %d" % [yaws[i - 1], yaws[i], i])
+	assert_near(yaws[-1], 70.0, 1.0, "and settle at the clamp")
+
+
 func test_actor_strafes_around_its_face_target() -> void:
 	var arena := TestArena.make(self)
 	var target := Vector3(0, 0, 20)
