@@ -1,9 +1,12 @@
-[gd_scene load_steps=20 format=3]
+[gd_scene load_steps=23 format=3]
 
 [ext_resource type="Script" path="res://actors/rig.gd" id="1_rig"]
 [ext_resource type="PackedScene" path="res://assets/characters/abarax/abarax.glb" id="2_model"]
 [ext_resource type="AnimationLibrary" path="res://assets/anim/abarax/library.tres" id="3_library"]
 [ext_resource type="Script" path="res://actors/mark_sink.gd" id="4_marks"]
+[ext_resource type="Script" path="res://actors/liveliness/orientation_warp.gd" id="5_warp"]
+[ext_resource type="Script" path="res://actors/liveliness/breathing.gd" id="6_breathing"]
+[ext_resource type="Script" path="res://actors/liveliness/hit_react.gd" id="7_hit_react"]
 
 [sub_resource type="AnimationNodeAnimation" id="loco_idle"]
 animation = &"idle"
@@ -82,6 +85,15 @@ height = 1.7
 script = ExtResource("1_rig")
 
 [node name="Model" parent="." instance=ExtResource("2_model")]
+
+[node name="OrientationWarp" type="SkeletonModifier3D" parent="Model/Armature/Skeleton3D"]
+script = ExtResource("5_warp")
+
+[node name="Breathing" type="SkeletonModifier3D" parent="Model/Armature/Skeleton3D"]
+script = ExtResource("6_breathing")
+
+[node name="HitReact" type="SkeletonModifier3D" parent="Model/Armature/Skeleton3D"]
+script = ExtResource("7_hit_react")
 
 [node name="AnimationTree" type="AnimationTree" parent="."]
 root_node = NodePath("..")
