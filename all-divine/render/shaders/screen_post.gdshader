@@ -15,7 +15,7 @@
 //                   draws it), in the pixel's colour x 0.35; a crease where the normals rebuilt from the
 //                   depths of a pixel and a 4-neighbour less than 0.25 m away differ by more than 40
 //                   degrees (the nearer of the two draws it), x 0.7. Nothing at the far plane is outlined.
-//                   col = mix(col, line, outline x (1 - coc)).
+//                   On a line pixel, col = mix(col, line, outline x (1 - coc)); other pixels are left.
 //   fog             f = fog_strength x (1 - exp(-density x max(depth - 8, 0)))
 //                       x exp(-max(world_y - fog_height, 0) x 0.5);  col = mix(col, fog_color, f).
 shader_type spatial;
@@ -91,17 +91,26 @@ vec3 view_position(ivec2 p, ivec2 size, mat4 inv_projection) {
 	return view.xyz / view.w;
 }
 
-// The step along the surface at pixel p toward its neighbour p + d or from p - d, whichever is nearer
-// to p in depth (and on screen), so the step stays on p's own surface when an edge is beside it.
+// The step along the surface at pixel p, one pixel in direction d: to p + d or from p - d, on whichever
+// side the surface carries on straight through p, judged by how far p's depth is from the line through
+// the two pixels on that side (|2 d(p +- d) - d(p +- 2d) - d(p)|). That side is on p's own face, so near a
+// crease the step stays on it wherever the crease falls within the pixel. (Picking the neighbour nearer
+// in depth instead takes the chord across the crease about as often, which blends the two faces' normals:
+// creases then flicker between missing and 2 px wide as things move by less than a pixel.)
 vec3 surface_step(vec3 at, ivec2 p, ivec2 d, ivec2 size, mat4 inv_projection) {
-	bool ahead_on = on_screen(p + d, size);
-	bool behind_on = on_screen(p - d, size);
-	vec3 ahead = ahead_on ? view_position(p + d, size, inv_projection) : at;
-	vec3 behind = behind_on ? view_position(p - d, size, inv_projection) : at;
-	if (ahead_on && (!behind_on || abs(ahead.z - at.z) <= abs(at.z - behind.z))) {
-		return ahead - at;
+	vec3 ahead = at;
+	vec3 behind = at;
+	float ahead_miss = 1e30;
+	float behind_miss = 1e30;
+	if (on_screen(p + 2 * d, size)) {
+		ahead = view_position(p + d, size, inv_projection);
+		ahead_miss = abs(2.0 * ahead.z - view_position(p + 2 * d, size, inv_projection).z - at.z);
 	}
-	return at - behind;
+	if (on_screen(p - 2 * d, size)) {
+		behind = view_position(p - d, size, inv_projection);
+		behind_miss = abs(2.0 * behind.z - view_position(p - 2 * d, size, inv_projection).z - at.z);
+	}
+	return ahead_miss <= behind_miss ? ahead - at : at - behind;
 }
 
 // The surface normal at pixel p rebuilt from the depths around it (not normalised; its direction is
@@ -161,7 +170,10 @@ void fragment() {
 				}
 			}
 		}
-		col = mix(col, sharp * shade, weight);
+		// Only where there is a line: everywhere else the colour is left as the depth of field made it.
+		if (shade < 1.0) {
+			col = mix(col, sharp * shade, weight);
+		}
 	}
 
 	// Fog.

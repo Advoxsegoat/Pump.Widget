@@ -22,6 +22,13 @@ const FAR_B := Color(0.95, 0.90, 0.80)
 ## furthest from each other's inverse (a colour sent straight through comes back 3 to 4 steps off).
 const PLANE_A := Color(0.56, 0.62, 0.44)
 const PLANE_B := Color(0.20, 0.24, 0.08)
+## A card facing the camera, 2.5 m nearer than the focus: constant depth, so its blur is exactly
+## smoothstep(1, 5, 2.5) = 0.31640625 everywhere on it.
+const CARD := Color(0.25, 0.70, 0.65)
+const CARD_NEARER := 2.5
+const CARD_COC := 0.31640625
+## A 4 m roof ridge whose two faces lean 30 degrees either side of up: a 60-degree crease.
+const RIDGE := Color(0.85, 0.75, 0.35)
 ## flat_colour.gdshader's shades of a face toward +Y and toward +Z (the two kinds this camera sees).
 const SHADES := [1.0, 0.78]
 ## One 8-bit step.
@@ -187,6 +194,107 @@ func test_dof_keeps_focus_sharp_blurs_far() -> void:
 	assert_eq(near_changed, 0, "pixels of the box in focus that changed")
 	assert_true(far_edge > 300, "the far box has colour edges (%d)" % far_edge)
 	assert_true(far_soft >= 0.9 * far_edge, "%d of %d far colour-edge pixels are blurred" % [far_soft, far_edge])
+
+
+# Depth of field and outline together: the outline only touches the pixels it draws a line on. Every other
+# pixel is exactly as the depth of field alone leaves it, however blurred; a line pixel is
+# mix(blurred, line, outline x (1 - coc)). The card, 2.5 m nearer than the focus, is outlined at
+# 1 - 0.316 of the full line.
+func test_outline_leaves_the_blur_alone_off_its_lines() -> void:
+	var card := _flat(_quad(1.0), Vector3(5, 0, 0) + rig.camera.global_basis.z * CARD_NEARER, CARD, CARD, 1.0)
+	card.global_basis = rig.camera.global_basis
+	var raw: Image = await _raw()
+	var lines: Image = await _with(_only("outline"))
+	var blurred: Image = await _with(_only("dof_strength"))
+	var both_settings := _only("dof_strength")
+	both_settings.outline = 1.0
+	var both: Image = await _with(both_settings)
+	var raw_ids := _ints(raw)
+	var line_ids := _ints(lines)
+	var blurred_ids := _ints(blurred)
+	var both_ids := _ints(both)
+
+	var plain_blurred := 0
+	var plain_off := 0
+	var examples := []
+	for i in W * H:
+		if _diff(line_ids[i], raw_ids[i]) > 1:
+			continue  # a line pixel
+		if _diff(blurred_ids[i], raw_ids[i]) > 1:
+			plain_blurred += 1
+		if _diff(both_ids[i], blurred_ids[i]) > 1:
+			plain_off += 1
+			if examples.size() < 5:
+				examples.append("(%d,%d) %06x, blur alone %06x" % [i % W, i / W, both_ids[i], blurred_ids[i]])
+	assert_true(plain_blurred > 20000, "plenty of plain pixels are blurred (%d)" % plain_blurred)
+	assert_eq(plain_off, 0, "plain pixels that the outline moved off the blur: %s" % [examples])
+
+	var card_mask := _mask(raw_ids, [CARD], [1.0])
+	var edge := 0
+	var edge_off := 0
+	var edge_examples := []
+	var tolerance := _formula_tolerance(1.0) + 0.5 * STEP
+	for y in range(1, H - 1):
+		for x in range(1, W - 1):
+			var i := y * W + x
+			if not card_mask[i] or (card_mask[i - 1] and card_mask[i + 1] and card_mask[i - W] and card_mask[i + W]):
+				continue
+			edge += 1
+			var r := raw.get_pixel(x, y)
+			var expected := blurred.get_pixel(x, y).lerp(Color(r.r * 0.35, r.g * 0.35, r.b * 0.35), 1.0 - CARD_COC)
+			if not _near(both.get_pixel(x, y), expected, tolerance):
+				edge_off += 1
+				if edge_examples.size() < 5:
+					edge_examples.append("(%d,%d) %s, expected %s" % [x, y, both.get_pixel(x, y).to_html(false), expected.to_html(false)])
+	assert_true(edge > 100, "the card has an outline (%d pixels)" % edge)
+	assert_eq(edge_off, 0, "card-edge pixels off mix(blurred, line, 1 - coc): %s" % [edge_examples])
+
+
+# A 60-degree crease is drawn one pixel wide wherever it falls within a pixel: the ridge is moved up the
+# screen an eighth of a texel at a time, and every column across it has exactly one crease pixel (0.7 of
+# its colour) at every step.
+func test_a_crease_is_one_pixel_wide_at_every_sub_pixel_phase() -> void:
+	var prism := PrismMesh.new()
+	prism.size = Vector3(3.0, 1.5 * tan(deg_to_rad(30.0)), 4.0)
+	var ridge := _flat(prism, Vector3.ZERO, RIDGE, RIDGE, 1.0)
+	ridge.rotation_degrees = Vector3(0, 90, 0)  # the ridge along X, one face toward the camera
+	var base := Vector3(-6.0, -1.0 + prism.size.y * 0.5, 3.0)
+	var up := rig.camera.global_basis.y
+	for k in 8:
+		ridge.position = base + up * PixelSnap.TEXEL * k / 8.0
+		var raw: Image = await _raw()
+		var post: Image = await _with(_only("outline"))
+		var raw_ids := _ints(raw)
+		var post_ids := _ints(post)
+		var mask := _mask(raw_ids, [RIDGE], [1.0])
+		# Per column: the ridge's pixels, and those darkened to a crease line.
+		var drawn := PackedInt32Array()
+		var lines := PackedInt32Array()
+		drawn.resize(W)
+		lines.resize(W)
+		for i in W * H:
+			if mask[i]:
+				drawn[i % W] += 1
+				if _scaled_to(post_ids[i], raw_ids[i], 0.7):
+					lines[i % W] += 1
+		var first := W
+		var last := -1
+		for x in W:
+			if drawn[x] > 0:
+				first = mini(first, x)
+				last = maxi(last, x)
+		# The two columns at each end are on the ridge's outline, which takes over from the crease there.
+		var columns := 0
+		var wrong := 0
+		var examples := []
+		for x in range(first + 2, last - 1):
+			columns += 1
+			if lines[x] != 1:
+				wrong += 1
+				if examples.size() < 5:
+					examples.append("x %d: %d" % [x, lines[x]])
+		assert_true(columns > 100, "phase %d/8: the ridge spans %d columns" % [k, columns])
+		assert_eq(wrong, 0, "phase %d/8: columns without exactly one crease pixel: %s" % [k, examples])
 
 
 # With only the fog on: pixels move toward the fog colour, the far box more than the near one (0.24 against
@@ -373,6 +481,13 @@ func _flat(mesh: Mesh, at: Vector3, a: Color, b: Color, cell: float) -> MeshInst
 	instance.position = at
 	stage.world.add_child(instance)
 	return instance
+
+
+# A camera-facing card: a QuadMesh `side` metres square.
+func _quad(side: float) -> QuadMesh:
+	var q := QuadMesh.new()
+	q.size = Vector2(side, side)
+	return q
 
 
 # Settings with every strength off but `strength`, which is at its default.
