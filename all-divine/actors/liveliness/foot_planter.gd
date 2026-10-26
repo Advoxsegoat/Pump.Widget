@@ -15,7 +15,9 @@ extends SkeletonModifier3D
 ## The hips drop by min(offsets, 0), no further than max_drop. Each IK target is the animated foot plus
 ## that foot's offset; the drop is what lets the lower foot reach it. A foot with no ground blends its
 ## offset to 0, and so do both while `planting` is off (the rig turns it off while the body is airborne).
-## Every offset is smoothed: each tick it closes 1 - e^(-blend_speed * delta) of its gap.
+## Every offset is smoothed: each tick it closes 1 - e^(-blend_speed * delta) of its gap. But no foot is
+## shown below the ground under it: an offset never falls below ground.y + ankle_height - its animated y,
+## so a stepping foot that crosses onto a higher step goes up onto it at once instead of sinking into it.
 ##
 ## The IK bends a leg at the hip and knee and carries the foot with the calf, which would tip the toes
 ## down on a step. So each foot is turned back by the turn the IK gave its calf on the tick before, which
