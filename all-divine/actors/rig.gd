@@ -317,6 +317,9 @@ func stop_move(blend_out: float) -> void:
 ## `delta`, then advances the tree by `delta`, which applies the pose to the skeleton straight away, and
 ## runs the skeleton's modifiers over it with the same `delta`. The shown pose (shown_pose, bone_global, the
 ## skin, the hitboxes) is this tick's, modifiers included, as soon as this returns.
+## Call it in the physics step, as the actor does. The engine's modifiers (the legs' IK, the look) aim at
+## the markers this places; with physics interpolation on, outside the physics step they read where the
+## markers were at the start of the frame, so the legs and head would aim a frame late.
 func tick(delta: float) -> void:
 	for slot in 2:
 		# The slot that is fading out keeps playing on its own clock while it still shows.

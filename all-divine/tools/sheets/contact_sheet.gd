@@ -19,7 +19,8 @@ extends SceneTree
 ##
 ## Each cell's pose is held for SETTLE_TICKS physics ticks before it is drawn, so what hangs off the body
 ## (Abarax's scarf, a spring bone that only moves as time passes) has come to rest for it, the way it
-## would if the actor stood in that pose.
+## would if the actor stood in that pose. The ticks run in the physics step, as the actor's do (see
+## Rig.tick): outside it the engine's modifiers would aim at where their targets were a frame before.
 ##
 ## Given a def, the actor is drawn in the def's palette, under a white sun of energy 1, so every pixel of
 ## him is one of its tones. A bare rig keeps the materials its model was imported with, as an actor
@@ -86,6 +87,7 @@ static func render(def_or_rig: Variant, clips: PackedStringArray, cell := Vector
 			push_error("ContactSheet: the rig has no clip '%s'" % clip)
 			continue
 		for frame in cell_frames(rig.tree.get_animation(clip)):
+			await tree.physics_frame
 			rig.play_move(clip, 0.0)
 			rig.set_move_time(float(frame) / FRAME_RATE)
 			for i in SETTLE_TICKS:

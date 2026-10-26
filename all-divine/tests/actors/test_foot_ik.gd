@@ -79,7 +79,9 @@ func test_rig_has_the_planter_and_both_legs() -> void:
 
 
 func test_no_ground_leaves_the_legs_alone() -> void:
-	# With nothing under the feet (a bare rig, as in a contact sheet), every clip's legs are its own.
+	# With nothing under the feet (a bare rig, as in a contact sheet), every clip's legs are its own. Each
+	# pose is a physics frame after the last, as a contact sheet's cells are: the IK must aim at this
+	# tick's targets, not the last frame's.
 	var r: Rig = track(load(RIG).instantiate())
 	var plain: Rig = track(load(RIG).instantiate())
 	for child in plain.skeleton.get_children():
@@ -90,6 +92,7 @@ func test_no_ground_leaves_the_legs_alone() -> void:
 		for rr: Rig in [r, plain]:
 			rr.play_move(clip, 0.0)
 		for f in range(0, int(r.tree.get_animation(clip).length * 60), 3):
+			await frames(1)
 			for rr: Rig in [r, plain]:
 				rr.set_move_time(f / 60.0)
 				rr.tick(DT)
