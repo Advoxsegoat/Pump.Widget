@@ -17,6 +17,10 @@ extends SceneTree
 ## size, six to a row, each with a label "<clip> f<frame>" (frames at 60 per second, counted the way
 ## marks are), and the whole sheet is captured from a SubViewport.
 ##
+## Each cell's pose is held for SETTLE_TICKS physics ticks before it is drawn, so what hangs off the body
+## (Abarax's scarf, a spring bone that only moves as time passes) has come to rest for it, the way it
+## would if the actor stood in that pose.
+##
 ## Given a def, the actor is drawn in the def's palette, under a white sun of energy 1, so every pixel of
 ## him is one of its tones. A bare rig keeps the materials its model was imported with, as an actor
 ## without a palette does in the game.
@@ -31,6 +35,8 @@ const EVEN_CELLS := 6
 const FRAME_RATE := 60
 ## Where the cell is centred: this far above the actor's feet, in metres.
 const BODY_CENTRE := 0.9
+## How many ticks (at FRAME_RATE) each cell's pose is held before it is drawn: 0.75 s.
+const SETTLE_TICKS := 45
 
 
 func _initialize() -> void:
@@ -82,7 +88,8 @@ static func render(def_or_rig: Variant, clips: PackedStringArray, cell := Vector
 		for frame in cell_frames(rig.tree.get_animation(clip)):
 			rig.play_move(clip, 0.0)
 			rig.set_move_time(float(frame) / FRAME_RATE)
-			rig.tick(0.0)
+			for i in SETTLE_TICKS:
+				rig.tick(1.0 / FRAME_RATE)
 			# The skin follows the skeleton at the end of the frame, then the frame is drawn.
 			await RenderingServer.frame_post_draw
 			images.append(stage.world.get_texture().get_image().get_region(crop))

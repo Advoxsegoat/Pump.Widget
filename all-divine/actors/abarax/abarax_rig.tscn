@@ -1,4 +1,4 @@
-[gd_scene load_steps=23 format=3]
+[gd_scene load_steps=24 format=3]
 
 [ext_resource type="Script" path="res://actors/rig.gd" id="1_rig"]
 [ext_resource type="PackedScene" path="res://assets/characters/abarax/abarax.glb" id="2_model"]
@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://actors/liveliness/orientation_warp.gd" id="5_warp"]
 [ext_resource type="Script" path="res://actors/liveliness/breathing.gd" id="6_breathing"]
 [ext_resource type="Script" path="res://actors/liveliness/hit_react.gd" id="7_hit_react"]
+[ext_resource type="Script" path="res://actors/liveliness/foot_planter.gd" id="8_foot_planter"]
 
 [sub_resource type="AnimationNodeAnimation" id="loco_idle"]
 animation = &"idle"
@@ -94,6 +95,93 @@ script = ExtResource("6_breathing")
 
 [node name="HitReact" type="SkeletonModifier3D" parent="Model/Armature/Skeleton3D"]
 script = ExtResource("7_hit_react")
+
+[node name="FootPlanter" type="SkeletonModifier3D" parent="Model/Armature/Skeleton3D" node_paths=PackedStringArray("target_l", "target_r", "pole_l", "pole_r")]
+script = ExtResource("8_foot_planter")
+target_l = NodePath("../../../../IKTarget_l")
+target_r = NodePath("../../../../IKTarget_r")
+pole_l = NodePath("../../../../IKPole_l")
+pole_r = NodePath("../../../../IKPole_r")
+
+[node name="LegIK_l" type="TwoBoneIK3D" parent="Model/Armature/Skeleton3D"]
+setting_count = 1
+settings/0/target_node = NodePath("../../../../IKTarget_l")
+settings/0/pole_node = NodePath("../../../../IKPole_l")
+settings/0/root_bone_name = "thigh_l"
+settings/0/middle_bone_name = "calf_l"
+settings/0/end_bone_name = "foot_l"
+
+[node name="LegIK_r" type="TwoBoneIK3D" parent="Model/Armature/Skeleton3D"]
+setting_count = 1
+settings/0/target_node = NodePath("../../../../IKTarget_r")
+settings/0/pole_node = NodePath("../../../../IKPole_r")
+settings/0/root_bone_name = "thigh_r"
+settings/0/middle_bone_name = "calf_r"
+settings/0/end_bone_name = "foot_r"
+
+[node name="LookNeck" type="LookAtModifier3D" parent="Model/Armature/Skeleton3D"]
+target_node = NodePath("../../../../LookTarget")
+influence = 0.4
+bone_name = "neck_01"
+forward_axis = 4
+primary_rotation_axis = 1
+use_secondary_rotation = true
+duration = 0.3
+transition_type = 1
+ease_type = 1
+use_angle_limitation = true
+symmetry_limitation = true
+primary_limit_angle = 2.443461
+secondary_limit_angle = 1.22173
+
+[node name="LookHead" type="LookAtModifier3D" parent="Model/Armature/Skeleton3D"]
+target_node = NodePath("../../../../LookTarget")
+bone_name = "Head"
+forward_axis = 4
+primary_rotation_axis = 1
+use_secondary_rotation = true
+duration = 0.3
+transition_type = 1
+ease_type = 1
+use_angle_limitation = true
+symmetry_limitation = true
+primary_limit_angle = 2.443461
+secondary_limit_angle = 1.22173
+
+[node name="Scarf" type="SpringBoneSimulator3D" parent="Model/Armature/Skeleton3D"]
+setting_count = 1
+settings/0/root_bone_name = "scarf_01"
+settings/0/end_bone_name = "scarf_04"
+settings/0/extend_end_bone = true
+settings/0/end_bone/direction = 2
+settings/0/end_bone/length = 0.175
+settings/0/radius/value = 0.02
+settings/0/stiffness/value = 0.5
+settings/0/drag/value = 0.4
+settings/0/gravity/value = 2.0
+settings/0/gravity/direction = Vector3(0, -1, 0)
+
+[node name="Chest" type="SpringBoneCollisionCapsule3D" parent="Model/Armature/Skeleton3D/Scarf"]
+bone_name = &"spine_03"
+radius = 0.16
+height = 0.665
+position_offset = Vector3(0, 0.043, -0.016)
+
+[node name="Hips" type="SpringBoneCollisionCapsule3D" parent="Model/Armature/Skeleton3D/Scarf"]
+bone_name = &"pelvis"
+radius = 0.13
+height = 0.5
+position_offset = Vector3(0, 0.06, 0)
+
+[node name="IKTarget_l" type="Marker3D" parent="."]
+
+[node name="IKTarget_r" type="Marker3D" parent="."]
+
+[node name="IKPole_l" type="Marker3D" parent="."]
+
+[node name="IKPole_r" type="Marker3D" parent="."]
+
+[node name="LookTarget" type="Marker3D" parent="."]
 
 [node name="AnimationTree" type="AnimationTree" parent="."]
 root_node = NodePath("..")
