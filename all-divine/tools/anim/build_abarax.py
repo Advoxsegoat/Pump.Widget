@@ -30,8 +30,6 @@ Blender works Z up with this character facing -Y, so "back" below is +Y. The exp
 glTF's Y up, facing +Z.
 """
 import argparse
-import contextlib
-import io
 import logging
 import math
 import sys
@@ -43,6 +41,9 @@ import bmesh
 import numpy as np
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this folder off sys.path
+from bpy_common import export_glb, quiet_gltf, reset_scene  # noqa: E402
 
 # --- inputs (inside the extract folders) ---
 
@@ -115,22 +116,6 @@ class BuildError(Exception):
 
 
 # --- scene helpers ---
-
-def reset_scene():
-    bpy.ops.wm.read_factory_settings(use_empty=True)
-
-
-@contextlib.contextmanager
-def quiet_gltf():
-    """The glTF add-on logs at the level bpy.app.debug_value picks; 3 keeps only critical messages,
-    so its info lines stay out of the build's output. The old value is put back afterwards."""
-    previous = bpy.app.debug_value
-    bpy.app.debug_value = 3
-    try:
-        yield
-    finally:
-        bpy.app.debug_value = previous
-
 
 class _DropMissingImages(logging.Filter):
     """The base .gltf names two normal maps (T_Hair_1_Normal_png.png, T_Eye_Normal_png.png) the pack
@@ -599,36 +584,6 @@ def one_material(objects):
         bpy.data.images.remove(image)
 
 
-# --- step 8: export ---
-
-def export(path):
-    """Writes the scene as a GLB. The exporter prints an "ERROR ... is not available" line for each
-    optional compression library (Draco, MeshOptimizer) the bpy wheel lacks; neither is used here,
-    so those lines are dropped and anything else it prints is passed on."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    printed = io.StringIO()
-    with quiet_gltf(), contextlib.redirect_stdout(printed):
-        result = _export(path)
-    for line in printed.getvalue().splitlines():
-        if line.strip() and "is not available because library could not be found" not in line:
-            print(line)
-    if result != {"FINISHED"} or not path.is_file():
-        raise BuildError(f"could not export {path}")
-
-
-def _export(path):
-    return bpy.ops.export_scene.gltf(
-        filepath=str(path), check_existing=False, export_format="GLB",
-        export_yup=True, use_selection=False, export_apply=False,
-        export_texcoords=True, export_normals=True, export_tangents=False,
-        export_vertex_color="NONE", export_all_vertex_colors=False, export_attributes=False,
-        export_materials="EXPORT", export_image_format="NONE",
-        export_skins=True, export_influence_nb=4, export_all_influences=False, export_def_bones=False,
-        export_rest_position_armature=True, export_leaf_bone=False,
-        export_animations=False, export_morph=False,
-        export_cameras=False, export_lights=False, export_extras=False)
-
-
 # --- the build ---
 
 def build(ubc, outfits, out):
@@ -695,7 +650,7 @@ def build(ubc, outfits, out):
     one_material(objects)
 
     # 8. export
-    export(Path(out))
+    export_glb(Path(out), BuildError)
 
     total = sum(triangles(o) for o in objects)
     print(f"build_abarax: {out}: {total} triangles, {len(keep.data.bones)} bones")

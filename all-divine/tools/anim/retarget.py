@@ -36,8 +36,6 @@ into Z up facing -Y. Euler channels compose in the order they are listed: Zrotat
 Rz Ry Rx. The clip is baked: one key per BVH frame on every bone, at the BVH's frame rate.
 """
 import argparse
-import contextlib
-import io
 import json
 import math
 import sys
@@ -46,6 +44,9 @@ from pathlib import Path
 import bpy  # first: the bpy module is what makes mathutils importable
 
 from mathutils import Matrix, Vector
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this folder off sys.path
+from bpy_common import export_glb, quiet_gltf, reset_scene  # noqa: E402
 
 # glTF/BVH axes (Y up, +Z in front) -> Blender's (Z up, -Y in front): (x, y, z) -> (x, -z, y)
 TO_BLENDER = Matrix(((1.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0)))
@@ -231,22 +232,6 @@ def parse_bvh(path):
 
 # --- scene helpers ---
 
-def reset_scene():
-    bpy.ops.wm.read_factory_settings(use_empty=True)
-
-
-@contextlib.contextmanager
-def quiet_gltf():
-    """The glTF add-on logs at the level bpy.app.debug_value picks; 3 keeps only critical messages,
-    so its info lines stay out of the output. The old value is put back afterwards."""
-    previous = bpy.app.debug_value
-    bpy.app.debug_value = 3
-    try:
-        yield
-    finally:
-        bpy.app.debug_value = previous
-
-
 def import_armature(path):
     """Imports a glTF file into the (reset) scene and returns its one armature object."""
     path = Path(path)
@@ -401,39 +386,6 @@ def key_poses(armature, poses, name, fps, fps_base):
                 keys(pose_bone, "location", index, [pose[bone_name][1][index] for pose in poses])
 
 
-# --- export ---
-
-def export(path):
-    """Writes the scene as a GLB. The exporter prints an "ERROR ... is not available" line for each
-    optional compression library (Draco, MeshOptimizer) the bpy wheel lacks; neither is used here,
-    so those lines are dropped and anything else it prints is passed on."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    printed = io.StringIO()
-    with quiet_gltf(), contextlib.redirect_stdout(printed):
-        result = _export(path)
-    for line in printed.getvalue().splitlines():
-        if line.strip() and "is not available because library could not be found" not in line:
-            print(line)
-    if result != {"FINISHED"} or not path.is_file():
-        raise RetargetError(f"could not export {path}")
-
-
-def _export(path):
-    # the model's settings are build_abarax.py's; the animation is baked at every frame of the action
-    return bpy.ops.export_scene.gltf(
-        filepath=str(path), check_existing=False, export_format="GLB",
-        export_yup=True, use_selection=False, export_apply=False,
-        export_texcoords=True, export_normals=True, export_tangents=False,
-        export_vertex_color="NONE", export_all_vertex_colors=False, export_attributes=False,
-        export_materials="EXPORT", export_image_format="NONE",
-        export_skins=True, export_influence_nb=4, export_all_influences=False, export_def_bones=False,
-        export_rest_position_armature=True, export_leaf_bone=False,
-        export_animations=True, export_animation_mode="ACTIONS", export_force_sampling=True,
-        export_frame_range=False, export_frame_step=1, export_optimize_animation_size=False,
-        export_anim_slide_to_zero=False, export_morph=False,
-        export_cameras=False, export_lights=False, export_extras=False)
-
-
 # --- the tool ---
 
 def retarget(bvh, bonemap, target, tpose, tpose_clip, out, name):
@@ -465,7 +417,7 @@ def retarget(bvh, bonemap, target, tpose, tpose_clip, out, name):
     key_poses(armature, poses, name, fps, fps_base)
     if len(bpy.data.actions) != 1:  # the export writes every action: the clip must be the only one
         raise RetargetError(f"expected {name!r} to be the only action, found {len(bpy.data.actions)}")
-    export(Path(out))
+    export_glb(Path(out), RetargetError, animations=True)  # the model as build_abarax.py writes it, and the clip
 
     kept = sorted(n for n in names if n not in drives)
     print(f"retarget: {out}: {len(poses)} frames at {fps / fps_base:g} fps, clip {name!r}")
