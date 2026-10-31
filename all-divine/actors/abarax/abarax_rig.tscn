@@ -1,0 +1,239 @@
+[gd_scene load_steps=24 format=3]
+
+[ext_resource type="Script" path="res://actors/rig.gd" id="1_rig"]
+[ext_resource type="PackedScene" path="res://assets/characters/abarax/abarax.glb" id="2_model"]
+[ext_resource type="AnimationLibrary" path="res://assets/anim/abarax/library.tres" id="3_library"]
+[ext_resource type="Script" path="res://actors/mark_sink.gd" id="4_marks"]
+[ext_resource type="Script" path="res://actors/liveliness/orientation_warp.gd" id="5_warp"]
+[ext_resource type="Script" path="res://actors/liveliness/breathing.gd" id="6_breathing"]
+[ext_resource type="Script" path="res://actors/liveliness/hit_react.gd" id="7_hit_react"]
+[ext_resource type="Script" path="res://actors/liveliness/foot_planter.gd" id="8_foot_planter"]
+
+[sub_resource type="AnimationNodeAnimation" id="loco_idle"]
+animation = &"idle"
+
+[sub_resource type="AnimationNodeAnimation" id="loco_walk"]
+animation = &"walk"
+
+[sub_resource type="AnimationNodeAnimation" id="loco_jog"]
+animation = &"jog"
+
+[sub_resource type="AnimationNodeAnimation" id="loco_sprint"]
+animation = &"sprint"
+
+[sub_resource type="AnimationNodeBlendSpace1D" id="loco"]
+min_space = 0.0
+max_space = 10.0
+value_label = "m/s"
+sync_mode = 1
+blend_point_0/node = SubResource("loco_idle")
+blend_point_0/pos = 0.0
+blend_point_0/name = &"idle"
+blend_point_1/node = SubResource("loco_walk")
+blend_point_1/pos = 1.009
+blend_point_1/name = &"walk"
+blend_point_2/node = SubResource("loco_jog")
+blend_point_2/pos = 5.546
+blend_point_2/name = &"jog"
+blend_point_3/node = SubResource("loco_sprint")
+blend_point_3/pos = 8.542
+blend_point_3/name = &"sprint"
+
+[sub_resource type="AnimationNodeTimeScale" id="loco_scale"]
+
+[sub_resource type="AnimationNodeAnimation" id="move_a"]
+animation = &"idle"
+
+[sub_resource type="AnimationNodeAnimation" id="move_b"]
+animation = &"idle"
+
+[sub_resource type="AnimationNodeTimeSeek" id="seek_a"]
+
+[sub_resource type="AnimationNodeTimeSeek" id="seek_b"]
+
+[sub_resource type="AnimationNodeBlend2" id="move_ab"]
+
+[sub_resource type="AnimationNodeBlend2" id="move_blend"]
+
+[sub_resource type="AnimationNodeBlendTree" id="tree"]
+nodes/output/position = Vector2(200, 100)
+nodes/loco/node = SubResource("loco")
+nodes/loco/position = Vector2(-400, 0)
+nodes/loco_scale/node = SubResource("loco_scale")
+nodes/loco_scale/position = Vector2(-200, 0)
+nodes/move_a/node = SubResource("move_a")
+nodes/move_a/position = Vector2(-600, 200)
+nodes/move_b/node = SubResource("move_b")
+nodes/move_b/position = Vector2(-600, 400)
+nodes/seek_a/node = SubResource("seek_a")
+nodes/seek_a/position = Vector2(-400, 200)
+nodes/seek_b/node = SubResource("seek_b")
+nodes/seek_b/position = Vector2(-400, 400)
+nodes/move_ab/node = SubResource("move_ab")
+nodes/move_ab/position = Vector2(-200, 300)
+nodes/move_blend/node = SubResource("move_blend")
+nodes/move_blend/position = Vector2(0, 100)
+node_connections = [&"output", 0, &"move_blend", &"loco_scale", 0, &"loco", &"seek_a", 0, &"move_a", &"seek_b", 0, &"move_b", &"move_ab", 0, &"seek_a", &"move_ab", 1, &"seek_b", &"move_blend", 0, &"loco_scale", &"move_blend", 1, &"move_ab"]
+
+[sub_resource type="SphereShape3D" id="palm_zone"]
+radius = 0.18
+
+[sub_resource type="CapsuleShape3D" id="body"]
+radius = 0.35
+height = 1.7
+
+[node name="Rig" type="Node3D"]
+script = ExtResource("1_rig")
+
+[node name="Model" parent="." instance=ExtResource("2_model")]
+
+[node name="OrientationWarp" type="SkeletonModifier3D" parent="Model/Armature/Skeleton3D"]
+script = ExtResource("5_warp")
+
+[node name="Breathing" type="SkeletonModifier3D" parent="Model/Armature/Skeleton3D"]
+script = ExtResource("6_breathing")
+
+[node name="HitReact" type="SkeletonModifier3D" parent="Model/Armature/Skeleton3D"]
+script = ExtResource("7_hit_react")
+
+[node name="FootPlanter" type="SkeletonModifier3D" parent="Model/Armature/Skeleton3D" node_paths=PackedStringArray("target_l", "target_r", "pole_l", "pole_r")]
+script = ExtResource("8_foot_planter")
+target_l = NodePath("../../../../IKTarget_l")
+target_r = NodePath("../../../../IKTarget_r")
+pole_l = NodePath("../../../../IKPole_l")
+pole_r = NodePath("../../../../IKPole_r")
+
+[node name="LegIK_l" type="TwoBoneIK3D" parent="Model/Armature/Skeleton3D"]
+setting_count = 1
+settings/0/target_node = NodePath("../../../../IKTarget_l")
+settings/0/pole_node = NodePath("../../../../IKPole_l")
+settings/0/root_bone_name = "thigh_l"
+settings/0/middle_bone_name = "calf_l"
+settings/0/end_bone_name = "foot_l"
+
+[node name="LegIK_r" type="TwoBoneIK3D" parent="Model/Armature/Skeleton3D"]
+setting_count = 1
+settings/0/target_node = NodePath("../../../../IKTarget_r")
+settings/0/pole_node = NodePath("../../../../IKPole_r")
+settings/0/root_bone_name = "thigh_r"
+settings/0/middle_bone_name = "calf_r"
+settings/0/end_bone_name = "foot_r"
+
+[node name="LookNeck" type="LookAtModifier3D" parent="Model/Armature/Skeleton3D"]
+target_node = NodePath("../../../../LookTarget")
+influence = 0.4
+bone_name = "neck_01"
+forward_axis = 4
+primary_rotation_axis = 1
+use_secondary_rotation = true
+duration = 0.3
+transition_type = 1
+ease_type = 1
+use_angle_limitation = true
+symmetry_limitation = true
+primary_limit_angle = 2.443461
+secondary_limit_angle = 1.22173
+
+[node name="LookHead" type="LookAtModifier3D" parent="Model/Armature/Skeleton3D"]
+target_node = NodePath("../../../../LookTarget")
+bone_name = "Head"
+forward_axis = 4
+primary_rotation_axis = 1
+use_secondary_rotation = true
+duration = 0.3
+transition_type = 1
+ease_type = 1
+use_angle_limitation = true
+symmetry_limitation = true
+primary_limit_angle = 2.443461
+secondary_limit_angle = 1.22173
+
+[node name="Scarf" type="SpringBoneSimulator3D" parent="Model/Armature/Skeleton3D"]
+setting_count = 1
+settings/0/root_bone_name = "scarf_01"
+settings/0/end_bone_name = "scarf_04"
+settings/0/extend_end_bone = true
+settings/0/end_bone/direction = 2
+settings/0/end_bone/length = 0.175
+settings/0/radius/value = 0.02
+settings/0/stiffness/value = 0.5
+settings/0/drag/value = 0.4
+settings/0/gravity/value = 2.0
+settings/0/gravity/direction = Vector3(0, -1, 0)
+
+[node name="Chest" type="SpringBoneCollisionCapsule3D" parent="Model/Armature/Skeleton3D/Scarf"]
+bone_name = &"spine_03"
+radius = 0.16
+height = 0.665
+position_offset = Vector3(0, 0.043, -0.016)
+
+[node name="Hips" type="SpringBoneCollisionCapsule3D" parent="Model/Armature/Skeleton3D/Scarf"]
+bone_name = &"pelvis"
+radius = 0.13
+height = 0.5
+position_offset = Vector3(0, 0.06, 0)
+
+[node name="IKTarget_l" type="Marker3D" parent="."]
+
+[node name="IKTarget_r" type="Marker3D" parent="."]
+
+[node name="IKPole_l" type="Marker3D" parent="."]
+
+[node name="IKPole_r" type="Marker3D" parent="."]
+
+[node name="LookTarget" type="Marker3D" parent="."]
+
+[node name="AnimationTree" type="AnimationTree" parent="."]
+root_node = NodePath("..")
+root_motion_track = NodePath("Model/Armature/Skeleton3D:root")
+callback_mode_process = 2
+libraries/ = ExtResource("3_library")
+tree_root = SubResource("tree")
+parameters/loco/blend_position = 0.0
+parameters/loco_scale/scale = 1.0
+parameters/seek_a/seek_request = -1.0
+parameters/seek_b/seek_request = -1.0
+parameters/move_ab/blend_amount = 0.0
+parameters/move_blend/blend_amount = 0.0
+
+[node name="Marks" type="Node" parent="."]
+script = ExtResource("4_marks")
+
+[node name="Hitboxes" type="Node3D" parent="."]
+
+[node name="palm_l" type="BoneAttachment3D" parent="Hitboxes"]
+bone_name = "hand_l"
+use_external_skeleton = true
+external_skeleton = NodePath("../../Model/Armature/Skeleton3D")
+
+[node name="zone" type="Area3D" parent="Hitboxes/palm_l"]
+collision_layer = 16
+collision_mask = 8
+monitoring = false
+
+[node name="shape" type="CollisionShape3D" parent="Hitboxes/palm_l/zone"]
+shape = SubResource("palm_zone")
+
+[node name="palm_r" type="BoneAttachment3D" parent="Hitboxes"]
+bone_name = "hand_r"
+use_external_skeleton = true
+external_skeleton = NodePath("../../Model/Armature/Skeleton3D")
+
+[node name="zone" type="Area3D" parent="Hitboxes/palm_r"]
+collision_layer = 16
+collision_mask = 8
+monitoring = false
+
+[node name="shape" type="CollisionShape3D" parent="Hitboxes/palm_r/zone"]
+shape = SubResource("palm_zone")
+
+[node name="Hurtbox" type="Area3D" parent="."]
+collision_layer = 8
+collision_mask = 0
+monitoring = false
+
+[node name="shape" type="CollisionShape3D" parent="Hurtbox"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("body")
+
+[editable path="Model"]

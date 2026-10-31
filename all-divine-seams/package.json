@@ -1,0 +1,9 @@
+{
+  "name": "between-the-rooms",
+  "private": true,
+  "description": "The All-Divine: Between the Rooms",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}
