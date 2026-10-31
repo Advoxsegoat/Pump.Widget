@@ -82,12 +82,12 @@ class Builder:
 	var _lamp := {}  # the `lamps` line: colour, range, energy, up
 	var _counts := {}  # how many nodes of each name so far
 	var _line := 0
-	var _solid := 0
-	var _ik := 0
+	var _world_and_feet := 0  # the collision bits of `world` and `ik_surface`
+	var _feet := 0  # of `ik_surface` alone
 
 	func build(text: String) -> Node3D:
-		_solid = layer_bit("world") | layer_bit("ik_surface")
-		_ik = layer_bit("ik_surface")
+		_world_and_feet = layer_bit("world") | layer_bit("ik_surface")
+		_feet = layer_bit("ik_surface")
 		_root = Node3D.new()
 		_root.name = "Courtyard"
 		_root.set_script(REGION)
@@ -200,12 +200,12 @@ class Builder:
 
 	# A box of floor, top at y = 0, in the flagstones, on world and ik_surface.
 	func _floor(width: float, depth: float) -> void:
-		var body := _body("Floor", _root, _solid)
+		var body := _body("Floor", _root, _world_and_feet)
 		_box(body, Vector3(width, 1.0, depth), Transform3D(Basis(), Vector3(0, -0.5, 0)), FLAGSTONE)
 
 	func _terrace(rect: Rect2, height: float) -> void:
 		_terraces.append({rect = rect, height = height})
-		var body := _body(_name("Terrace"), _root, _solid)
+		var body := _body(_name("Terrace"), _root, _world_and_feet)
 		var centre := rect.get_center()
 		_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, height / 2, centre.y)), FLAGSTONE)
 
@@ -225,7 +225,7 @@ class Builder:
 		_root.add_child(stairs)
 		# Step i's tread is at (i + 1) rise, from i run to (i + 1) run up the stairs (toward local -Z); the
 		# last is level with the ground it climbs to.
-		var steps := _body("Steps", stairs, _ik)
+		var steps := _body("Steps", stairs, _feet)
 		for i in count:
 			var height := (i + 1) * rise
 			_box(steps, Vector3(frame.width, height, run), Transform3D(Basis(), Vector3(0, height / 2, -(i + 0.5) * run)), FLAGSTONE)
@@ -249,7 +249,7 @@ class Builder:
 		if top <= 0.0:
 			_problem("a ramp needs higher ground past its top")
 			return
-		var body := _body(_name("Ramp"), _root, _solid)
+		var body := _body(_name("Ramp"), _root, _world_and_feet)
 		body.transform = frame.transform
 		var points := PackedVector3Array()
 		for x in [-width / 2, width / 2]:
@@ -305,7 +305,7 @@ class Builder:
 			var depth := maxf(SOLID_DEPTH, box.size.x * SCALE)
 			var middle := (a + b) / 2 - facing * depth / 2
 			var size := Vector3(length, top, depth) if is_zero_approx(along.y) else Vector3(depth, top, length)
-			var body := _body("Body", run, _solid)
+			var body := _body("Body", run, _world_and_feet)
 			_box(body, size, Transform3D(Basis(), Vector3(middle.x, top / 2, middle.y)), null)
 
 	# A Kenney piece standing at `at`, turned `yaw` degrees, colliding as MODELS says: a holder named after it
@@ -332,7 +332,7 @@ class Builder:
 			"trunk":
 				_cylinder(holder, TRUNK_RADIUS, TRUNK_HEIGHT, Vector3(0, TRUNK_HEIGHT / 2, 0))
 			_:
-				_box(_body("Body", holder, _solid), size, Transform3D(Basis(), centre), null)
+				_box(_body("Body", holder, _world_and_feet), size, Transform3D(Basis(), centre), null)
 		return holder
 
 	# A lantern at `at` with its lamp (the `lamps` line), which casts shadows if `shadow`.
@@ -490,7 +490,7 @@ class Builder:
 		collision.name = "Shape"
 		collision.shape = shape
 		collision.position = at
-		_body("Body", holder, _solid).add_child(collision)
+		_body("Body", holder, _world_and_feet).add_child(collision)
 
 	# The child of the root called `group_name`, made the first time.
 	func _group(group_name: String) -> Node3D:
@@ -548,10 +548,14 @@ class Builder:
 			return Vector2.ZERO
 		return WAYS[words[index]]
 
+	# The height a y= word gives, or null when there is none (or it is not a number, which is a problem).
 	func _y_option(words: PackedStringArray) -> Variant:
 		for word in words:
 			if word.begins_with("y="):
-				return word.trim_prefix("y=").to_float()
+				var value := word.trim_prefix("y=")
+				if value.is_valid_float():
+					return value.to_float()
+				_problem("'%s' is not a height" % word)
 		return null
 
 	# The line less its comment: a # at its start or followed by a space, and the rest (a colour's # is not one).

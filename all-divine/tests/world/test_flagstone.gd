@@ -32,7 +32,8 @@ func test_flagstone_is_a_2_m_tile_of_four_stones_and_mortar() -> void:
 		assert_true(stone.s < 0.15, "%s is a grey" % key)
 		assert_true(stone.r > stone.g and stone.r > stone.b and stone.b >= stone.g, "%s leans rose" % key)
 		assert_true(stone.v > mortar.v + 0.1, "the mortar %s is darker than %s" % [mortar.to_html(false), key])
-	# The mortar is lines, not the bulk of the tile; every stone grey is well used.
+	# The mortar is lines, not the bulk of the tile (under a quarter of it); every stone grey is well used (each
+	# over a sixteenth).
 	assert_true(counts[by_value[0]] < 1024, "the mortar covers %d texels" % counts[by_value[0]])
 	for key: String in by_value.slice(1):
 		assert_true(counts[key] > 256, "%s covers %d texels" % [key, counts[key]])

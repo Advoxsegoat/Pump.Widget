@@ -17,10 +17,11 @@ What is done, what is next, and where the decisions live. Every task's final com
 - F0 Task 11: Screen look: depth outlines, tilt-shift DOF, depth+height fog, bloom, grading, vignette; renderer-agnostic (`tools/test.sh`: 328 passed, 0 failed; with `--render`: 354 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 - F0 Task 12: Liveliness I: 8-way locomotion by orientation warping, breathing, procedural hit reactions (`tools/test.sh`: 351 passed, 0 failed; with `--render`: 377 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 - F0 Task 13: Liveliness II: foot IK on slopes and stairs, head and neck look-at, spring-bone scarf (`tools/test.sh`: 383 passed, 0 failed; with `--render`: 409 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
+- F0 Task 14: The courtyard (Kenney town kit, flagstones at 32 texels/m, lanterns) and the main scene; --selftest (`tools/test.sh`: 405 passed, 0 failed; with `--render`: 435 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK; `tools/godot.sh -- --selftest`: exit 0). `world/courtyard/courtyard.tscn` is the source now: `tools/world/build_courtyard.gd` made it once from `layout.txt`; edit the scene, and do not build it again (that would overwrite the edits).
 
 ## Next
 
-F0 Task 14
+F0 Task 15
 
 ## Decisions
 
@@ -55,6 +56,16 @@ all-divine/tools/godot.sh -s res://tools/anim/set_marks.gd -- res://assets/anim/
 all-divine/tools/godot.sh --render -s res://tools/sheets/contact_sheet.gd -- --def res://data/actors/abarax.tres --out out/sheets/abarax.png
                                                # a contact sheet of the actor's clips in its palette (--clips a,b for some; --rig <rig.tscn>
                                                # instead of --def for a bare rig in its imported materials); a relative --out lands under all-divine/
+all-divine/tools/godot.sh -s res://tools/art/make_textures.gd   # write assets/env/textures/flagstone.png (seeded: the same bytes every run)
+all-divine/tools/godot.sh -s res://tools/world/build_courtyard.gd
+                                               # how world/courtyard/courtyard.tscn was made from layout.txt, once: the scene is the
+                                               # source now, and building again would overwrite whatever was changed in it
+all-divine/tools/godot.sh -- --selftest        # the game (main/main.tscn) runs a scripted circuit of the courtyard for 600 physics
+                                               # frames and exits 0, or 1 if anything logged an error (add --fixed-fps 60 for full speed)
+all-divine/.tools/godot/Godot_v4.7.2-stable_linux.x86_64 --path all-divine
+                                               # play: WASD or the left stick to move, Space/Shift (A) to roll and hold to
+                                               # sprint, left mouse (RB) to jab; F3 the debug overlay, F4 the screen look
+                                               # off and on, Esc (Start) to pause
 ```
 
 Every file under `assets/` needs a row in [`ASSETS.md`](ASSETS.md); `tests/tools/test_ledger.gd` checks it.

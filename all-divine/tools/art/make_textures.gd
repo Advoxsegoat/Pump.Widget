@@ -5,9 +5,9 @@ extends SceneTree
 ## afterwards. Exits 0, or 1 if a file could not be written.
 
 const OUT_DIR := "res://assets/env/textures"
-## Texels per metre in the world, and the flagstone tile's side in texels: 64, a 2 m tile.
+## Texels per metre in the world, and the flagstone tile's side: 2 m, so 64 texels.
 const TEXELS_PER_METRE := 32
-const FLAGSTONE_SIZE := 64
+const FLAGSTONE_SIZE := 2 * TEXELS_PER_METRE
 const FLAGSTONE_SEED := 7
 ## The stone greys, darkest first: greys of value 0.55, 0.61, 0.67 and 0.73, each a tenth of the way toward
 ## Abarax's rose (#e8607e), so the courtyard's stone is warm without being pink.

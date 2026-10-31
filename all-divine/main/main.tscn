@@ -1,0 +1,28 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://main/main.gd" id="1_main"]
+[ext_resource type="PackedScene" path="res://render/pixel_stage.tscn" id="2_stage"]
+[ext_resource type="PackedScene" path="res://world/courtyard/courtyard.tscn" id="3_courtyard"]
+[ext_resource type="PackedScene" path="res://actors/actor.tscn" id="4_actor"]
+[ext_resource type="Resource" path="res://data/actors/abarax.tres" id="5_abarax"]
+[ext_resource type="Script" path="res://render/camera_rig.gd" id="6_camera_rig"]
+[ext_resource type="Script" path="res://main/debug_overlay.gd" id="7_overlay"]
+
+[node name="Main" type="Node"]
+process_mode = 3
+script = ExtResource("1_main")
+
+[node name="PixelStage" parent="." instance=ExtResource("2_stage")]
+process_mode = 1
+
+[node name="Region" parent="PixelStage/World" instance=ExtResource("3_courtyard")]
+
+[node name="Player" parent="PixelStage/World" instance=ExtResource("4_actor")]
+def = ExtResource("5_abarax")
+
+[node name="CameraRig" type="Node3D" parent="PixelStage/World"]
+script = ExtResource("6_camera_rig")
+
+[node name="DebugOverlay" type="CanvasLayer" parent="."]
+visible = false
+script = ExtResource("7_overlay")

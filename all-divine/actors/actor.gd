@@ -84,6 +84,16 @@ func set_brain(b: Brain) -> void:
 	brain_changed.emit(b)
 
 
+## Puts the actor at `at` (a spawn, a teleport): there, facing its +Z, at rest, with nothing for physics
+## interpolation to smooth over from where it was. Call it once the actor is ready.
+func place(at: Transform3D) -> void:
+	global_transform = at.orthonormalized()
+	velocity = Vector3.ZERO
+	locomotion.speed = 0.0
+	locomotion.facing_yaw = rotation.y
+	reset_physics_interpolation()
+
+
 ## The way the body faces, in the world: its +Z.
 func facing() -> Vector3:
 	return global_basis.z

@@ -94,6 +94,26 @@ func test_script_brain_walks_and_faces_east() -> void:
 	assert_true(actor.is_on_floor(), "standing on the arena floor")
 
 
+# place() is a spawn or a teleport: the actor is there at once, facing the transform's +Z (and keeps facing it,
+# wanting nothing), at rest, and physics interpolation does not draw him sliding over from where he was.
+func test_place_stands_the_actor_there_at_rest_facing_its_way() -> void:
+	var arena := TestArena.make(self)
+	var actor := TestArena.spawn(arena, _def(), ScriptBrain.new([{frames = 30, move = Vector2(1, 0)}]))
+	await frames(30)
+	assert_true(actor.locomotion.speed > 1.0, "he is jogging before he is placed")
+	var at := Transform3D(Basis(Vector3.UP, deg_to_rad(-120)), Vector3(3, 0, -4))
+	actor.set_brain(Brain.new())
+	actor.place(at)
+	assert_vec_near(actor.global_position, at.origin, 1e-6, "he is there")
+	assert_vec_near(actor.get_global_transform_interpolated().origin, at.origin, 1e-6, "and drawn there, not on the way")
+	assert_near(actor.locomotion.facing_yaw, deg_to_rad(-120), 1e-5, "facing the transform's +Z")
+	assert_near(actor.locomotion.speed, 0.0, 1e-9, "at rest")
+	assert_vec_near(actor.velocity, Vector3.ZERO, 1e-9, "not moving")
+	await frames(10)
+	assert_vec_near(actor.global_position, at.origin, 0.01, "he stays there")
+	assert_near(actor.rotation.y, deg_to_rad(-120), 1e-4, "still facing that way")
+
+
 func test_drift_does_not_move_actor() -> void:
 	var arena := TestArena.make(self)
 	var actor := TestArena.spawn(arena, _def(), DriftBrain.new())
