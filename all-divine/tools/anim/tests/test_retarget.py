@@ -492,6 +492,7 @@ class BvhFile(unittest.TestCase):
             ("frame count", good.replace("Frames: 2", "Frames: 3")),
             ("no frame time", good.replace("Frame Time: 0.033333", "Frame Time: 0")),
             ("no hierarchy", "MOTION\nFrames: 1\nFrame Time: 0.03\n0\n"),
+            ("two joints of a name", good.replace("JOINT Spine1", "JOINT Spine", 1)),
         ):
             with self.assertRaises(retarget.RetargetError, msg=name):
                 self.parse(text)

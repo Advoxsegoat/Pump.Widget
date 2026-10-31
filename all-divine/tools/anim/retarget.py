@@ -51,7 +51,7 @@ from mathutils import Matrix, Vector
 TO_BLENDER = Matrix(((1.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0)))
 FROM_BLENDER = TO_BLENDER.transposed()
 IDENTITY = Matrix.Identity(3)
-AXES = {"X": Vector((1.0, 0.0, 0.0)), "Y": Vector((0.0, 1.0, 0.0)), "Z": Vector((0.0, 0.0, 1.0))}
+AXES = ("X", "Y", "Z")
 
 
 class RetargetError(Exception):
@@ -124,7 +124,7 @@ class Bvh:
         root, row = self.joints[0], self.frames[frame]
         position = root.offset.copy()
         for axis, column in root.position:
-            position["XYZ".index(axis)] = row[column]
+            position[AXES.index(axis)] = row[column]
         return position
 
     def world_rotations(self, frame):
@@ -222,6 +222,10 @@ def parse_bvh(path):
     except ValueError:
         raise RetargetError(f"{path}: the motion data has something that is not a number")
     frames = [numbers[i * width:(i + 1) * width] for i in range(count)]
+    names = [joint.name for joint in joints]
+    for name in sorted(set(names)):
+        if names.count(name) > 1:
+            raise RetargetError(f"{path}: two joints are called {name}")
     return Bvh(joints, end_sites, frame_time, frames)
 
 
