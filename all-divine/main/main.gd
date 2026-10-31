@@ -7,9 +7,10 @@ extends Node
 ## PlayerBrain turned by the camera's yaw); the camera takes him as its target and snaps to him; and the stage
 ## puts on the look (data/render/default_settings.tres) in the region's grade.
 ##
-## F3 shows or hides the debug overlay; F4 turns the screen look off and on; the menu button (Esc, Start)
-## pauses and resumes. This node runs while the game is paused (to hear the menu button); the stage, and so
-## the world in it, stops.
+## F3 shows or hides the debug overlay; F4 turns the screen look off and on; F11 or Alt+Enter switches between
+## borderless fullscreen, where the game starts, and a 1280x720 window (WindowToggle); the menu button (Esc,
+## Start) pauses and resumes. This node runs while the game is paused (to hear the menu button); the stage, and
+## so the world in it, stops.
 ##
 ## With --selftest (a user argument: godot -- --selftest) Abarax runs a scripted circuit of the courtyard instead
 ## (selftest_circuit) for SELFTEST_FRAMES physics frames; the SelfTest autoload (core/self_test.gd), listening
@@ -37,6 +38,8 @@ const SELFTEST_MOVE_FRAMES := 40
 
 ## Whether the screen look is on (F4).
 var look_on := true
+## The window F11 and Alt+Enter switch: the game's own, unless a test gives it another.
+@onready var window: Window = get_window()
 
 
 func _ready() -> void:
@@ -56,6 +59,10 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if WindowToggle.is_toggle(event):
+		WindowToggle.apply(window)
+		get_viewport().set_input_as_handled()
+		return
 	var key := event as InputEventKey
 	if key != null and key.pressed and not key.echo:
 		match key.keycode:
