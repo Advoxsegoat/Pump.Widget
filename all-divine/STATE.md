@@ -59,7 +59,7 @@ F1 Combat core (spec §9): write its plan.
 - Spec: [`docs/superpowers/specs/2026-10-25-all-divine-rpg-foundation-design.md`](../docs/superpowers/specs/2026-10-25-all-divine-rpg-foundation-design.md)
 - Plan: [`docs/superpowers/plans/2026-10-25-all-divine-rpg-f0-foundation.md`](../docs/superpowers/plans/2026-10-25-all-divine-rpg-f0-foundation.md)
 - CI: [`.github/workflows/all-divine.yml`](../.github/workflows/all-divine.yml) (jobs: `test`, `render`, `render-forward-plus`, `export`; `export` waits for `test`, and uploads the builds before it runs the Linux one)
-- Rulings made while building: [`.superpowers/sdd/2026-10-25-all-divine-rpg-f0-foundation/progress.md`](../.superpowers/sdd/2026-10-25-all-divine-rpg-f0-foundation/progress.md)
+- Rulings made while building, and the deferred review minors (the F1 polish backlog): [`docs/superpowers/plans/2026-10-25-all-divine-rpg-f0-foundation-record.md`](../docs/superpowers/plans/2026-10-25-all-divine-rpg-f0-foundation-record.md)
 
 ## How to run
 
