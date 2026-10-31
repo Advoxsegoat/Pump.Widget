@@ -115,7 +115,7 @@ func test_floor_is_32_texels_per_metre() -> void:
 	var floor_mesh := meshes[0] as MeshInstance3D
 	assert_true(floor_mesh.mesh is BoxMesh, "the floor is a box")
 	var material := floor_mesh.material_override as ShaderMaterial
-	assert_ne(material, null, "the floor has a ShaderMaterial")
+	assert_true(material != null, "the floor has a ShaderMaterial")
 	assert_eq(material.shader.resource_path, TOON_WORLD, "the floor is drawn in toon_world")
 	assert_eq(material.get_shader_parameter(&"world_uv"), true, "world_uv")
 	assert_eq(material.get_shader_parameter(&"texels_per_metre"), 32.0, "32 texels per metre")

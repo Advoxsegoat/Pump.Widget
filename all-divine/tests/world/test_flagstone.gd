@@ -71,7 +71,7 @@ func test_flagstone_is_made_the_same_every_time() -> void:
 	var b := MAKE_TEXTURES.flagstone()
 	assert_eq(a.get_data(), b.get_data(), "two makes are the same")
 	var committed := Image.load_from_file(ProjectSettings.globalize_path(FLAGSTONE))
-	assert_ne(committed, null, "the committed texture loads")
+	assert_true(committed != null, "the committed texture loads")
 	if committed != null:
 		committed.convert(a.get_format())
 		assert_eq(committed.get_data(), a.get_data(), "the committed texture is what make_textures makes")

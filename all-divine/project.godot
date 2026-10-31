@@ -16,6 +16,7 @@ config/features=PackedStringArray("4.7")
 
 [autoload]
 
+SelfTest="*res://core/self_test.gd"
 Game="*res://core/game.gd"
 Inputs="*res://core/inputs.gd"
 Registry="*res://core/registry.gd"

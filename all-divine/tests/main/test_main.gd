@@ -1,7 +1,7 @@
 extends TestCase
 ## The main scene (main/main.tscn): it boots into PLAY with Abarax at the courtyard's spawn, the camera on him
-## and the screen look on; F3 shows the debug overlay, F4 turns the look off, the menu button (Esc) pauses;
-## and --selftest runs a scripted circuit of the courtyard and exits 0 when nothing logged an error.
+## and the screen look on; F3 shows the debug overlay, F4 turns the look off, the menu button (Esc) pauses.
+## The self-test (--selftest) is tests/main/test_selftest.gd's.
 
 const MAIN := "res://main/main.tscn"
 const DEFAULT_SETTINGS := "res://data/render/default_settings.tres"
@@ -67,7 +67,7 @@ func test_main_boots_into_play_with_player_and_camera() -> void:
 	assert_eq(rig.stage, _stage(main), "the camera reports to the stage")
 	assert_vec_near(rig.global_position, player.global_position, 1e-3, "the camera starts on the player")
 	var stage := _stage(main)
-	assert_ne(stage.settings, null, "the look is on")
+	assert_true(stage.settings != null, "the look is on")
 	if stage.settings != null:
 		assert_eq(stage.settings.resource_path, DEFAULT_SETTINGS, "the default look")
 	assert_eq(stage.grade, region.grade, "in the region's grade")
@@ -97,7 +97,7 @@ func test_f4_toggles_the_look_off_and_on() -> void:
 	var stage := _stage(main)
 	var on := load(DEFAULT_SETTINGS) as RenderSettings
 	_press_key(KEY_F4)
-	assert_ne(stage.settings, null)
+	assert_true(stage.settings != null, "the look is set")
 	for strength in [&"outline", &"dof_strength", &"bloom_strength", &"fog_strength", &"grade_strength", &"vignette_strength"]:
 		assert_eq(stage.settings.get(strength), 0.0, "F4 turns %s off" % strength)
 	assert_eq(stage.grade, _region(main).grade, "the grade stays the region's")
@@ -123,37 +123,8 @@ func test_menu_pauses_and_resumes() -> void:
 
 
 func test_escape_is_the_menu_button() -> void:
-	var main := _main()
+	_main()
 	_press_key(KEY_ESCAPE)
 	assert_eq(Game.state, Game.State.PAUSE, "Esc pauses")
 	_press_key(KEY_ESCAPE)
 	assert_eq(Game.state, Game.State.PLAY, "Esc again plays")
-	assert_ne(main, null)
-
-
-# The self-test's circuit, here in this process: in 600 frames Abarax walks to the fountain, rolls, jabs and
-# climbs the stairs, ending at StairsTop.
-func test_selftest_circuit_walks_rolls_jabs_and_climbs() -> void:
-	var main := _main()
-	var player := _player(main)
-	var started: Array[StringName] = []
-	player.runner.move_started.connect(func(move: MoveData) -> void: started.append(move.id))
-	player.set_brain(ScriptBrain.new(main.selftest_circuit()))
-	var closest_to_fountain := INF
-	for i in Main.SELFTEST_FRAMES:
-		await frames(1)
-		closest_to_fountain = minf(closest_to_fountain, Vector2(player.global_position.x, player.global_position.z).length())
-	var top := (_region(main).get_node("StairsTop") as Marker3D).global_position
-	assert_true(closest_to_fountain < 5.0, "he comes to the fountain (%.2f m from its centre at the closest)" % closest_to_fountain)
-	assert_eq(started, [&"dodge_roll", &"palm_jab"] as Array[StringName], "he rolls, then jabs")
-	assert_true(player.global_position.distance_to(top) < 1.0, "he ends at StairsTop (%.2f m off, at %s)" % [player.global_position.distance_to(top), player.global_position])
-
-
-# `godot -- --selftest` on the real project: the main scene runs its circuit for 600 frames and quits 0.
-func test_selftest_exits_zero() -> void:
-	var argv := PackedStringArray(["--headless", "--path", ProjectSettings.globalize_path("res://"), "--fixed-fps", "60", "--", "--selftest"])
-	var output := []
-	var code := OS.execute(OS.get_executable_path(), argv, output, true)
-	var text := str(output[0])
-	assert_eq(code, 0, text)
-	assert_true(text.contains("selftest: 600 frames, 0 errors"), text)

@@ -11,10 +11,9 @@ extends Node
 ## pauses and resumes. This node runs while the game is paused (to hear the menu button); the stage, and so
 ## the world in it, stops.
 ##
-## --selftest (a user argument: godot -- --selftest) hands Abarax to a scripted circuit of the courtyard
-## instead (selftest_circuit) for SELFTEST_FRAMES physics frames, then quits: 0 if no engine error was logged
-## meanwhile, else 1. Physics ticks are fixed, so the circuit is the same at any frame rate; with
-## --fixed-fps 60, as the tests run, it runs as fast as the machine can, and without it in about 10 s.
+## With --selftest (a user argument: godot -- --selftest) Abarax runs a scripted circuit of the courtyard instead
+## (selftest_circuit) for SELFTEST_FRAMES physics frames; the SelfTest autoload (core/self_test.gd), listening
+## for errors since before this scene loaded, then quits: 0 if none was logged, else 1.
 
 const DEFAULT_SETTINGS := preload("res://data/render/default_settings.tres")
 const SELFTEST_FRAMES := 600
@@ -39,8 +38,6 @@ const SELFTEST_MOVE_FRAMES := 40
 ## Whether the screen look is on (F4).
 var look_on := true
 
-var _selftest_left := 0  # physics frames the self-test still has to run; 0 when there is none
-
 
 func _ready() -> void:
 	if Game.state != Game.State.PLAY:
@@ -54,7 +51,7 @@ func _ready() -> void:
 	camera_rig.snap_now()
 	overlay.actor = player
 	_apply_look()
-	if OS.get_cmdline_user_args().has("--selftest"):
+	if SelfTest.active:
 		start_selftest()
 
 
@@ -79,12 +76,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-## Starts the self-test: errors are collected from now on (a TestLogger context), and Abarax runs
-## selftest_circuit for SELFTEST_FRAMES physics frames; then the game quits (see the class doc).
+## Starts the self-test's circuit: Abarax runs selftest_circuit, and the SelfTest autoload ends the game
+## SELFTEST_FRAMES physics frames from now, saying how far from StairsTop he ended.
 func start_selftest() -> void:
-	TestLogger.shared().push_context()
 	player.set_brain(ScriptBrain.new(selftest_circuit()))
-	_selftest_left = SELFTEST_FRAMES
+	var top := (region.get_node(^"StairsTop") as Node3D).global_position
+	SelfTest.begin(SELFTEST_FRAMES, func() -> String:
+		return "Abarax ended %.2f m from StairsTop" % player.global_position.distance_to(top))
 
 
 ## The self-test's circuit, as ScriptBrain steps from the spawn: walk, then jog, to the fountain; roll back the
@@ -110,20 +108,6 @@ func selftest_circuit() -> Array:
 		{frames = SELFTEST_MOVE_FRAMES},
 		_leg((top - rolled_to).normalized(), 1.0, rolled_to.distance_to(top), tuning),
 	]
-
-
-func _physics_process(_delta: float) -> void:
-	if _selftest_left <= 0:
-		return
-	_selftest_left -= 1
-	if _selftest_left == 0:
-		var errors := TestLogger.shared().pop_context()
-		for error in errors:
-			printerr("selftest: " + error)
-		var top := (region.get_node(^"StairsTop") as Node3D).global_position
-		print("selftest: %d frames, %d errors (Abarax ended %.2f m from StairsTop)" % [
-				SELFTEST_FRAMES, errors.size(), player.global_position.distance_to(top)])
-		get_tree().quit(0 if errors.is_empty() else 1)
 
 
 # The look on (default_settings) or off (RenderSettings.off()), in the region's grade.
