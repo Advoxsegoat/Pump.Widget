@@ -1,0 +1,120 @@
+# The courtyard, as tools/world/build_courtyard.gd reads it:
+#   tools/godot.sh -s res://tools/world/build_courtyard.gd
+# writes world/courtyard/courtyard.tscn. That scene is the source from then on: change the scene in the editor,
+# not this file (building again would overwrite the scene and lose the changes).
+#
+# Metres: x runs east, z south (toward the camera, which looks north), y up. Yaw is in degrees about +Y; a Kenney
+# piece at yaw 0 is as modelled. Kenney pieces are 2.5 times their size (a 2.5 m tile, a wall 2.5 m tall). A
+# piece, lantern or marker stands on the ground under it (the floor, or the terrace's top) unless y= says.
+#
+#            north (-z): a terrace 1.25 m high along the north wall, with banners on the wall behind it
+#    x=-15 +---------------------------------------------------------------+ x=15   z=-12.5
+#          | T hh            L     |b|   |b|   |b|   |b|     L          hh T |
+#          | hh  ^StairsTop                                    RampTop/  hh  |
+#          |=====[  stairs (6 steps)  ]=================[  ramp 18.4 deg  ]=|  z=-7.5 (the terrace's front)
+#          |     [                    ]                 [                 ]  |
+#          |                        L  bench  L          [                 ]  |  z=-3.75
+#          |                         ( fountain )                             |  z=0
+#          |                        L          L                             |
+#          | hh                         @ Spawn                     stall hh |
+#          | T hh                                       cart          hh  T |
+#          +--------------------------- half wall ---------------------------+  z=12.5
+#
+# Commands, one a line. A # at the start of a line, or followed by a space, starts a comment (a colour's # does not).
+#   floor W D                       the floor: a toon_world box W x D with its top at y = 0, in the flagstones
+#                                   (larger than the courtyard, so the ground goes on past the walls)
+#   terrace X0 Z0 X1 Z1 H           a raised floor H high over that rectangle, its top in the flagstones
+#   stairs X0 Z0 X1 Z1 N UP         N steps over that rectangle, climbing toward UP (n, e, s or w) to the ground
+#                                   past it: steps in the flagstones on ik_surface, a walk ramp through the middle
+#                                   of every tread on world
+#   ramp X0 Z0 X1 Z1 UP             a wedge over that rectangle from the floor up to the ground past its UP end
+#   edge PIECE X0 Z0 X1 Z1 FACING [solid]
+#                                   PIECE (a wall-like Kenney piece: a slab along one side of its tile) every 2.5 m
+#                                   along the line, its face on the line and toward FACING, the slab behind it;
+#                                   solid: a collision box behind the face, at least 1 m deep
+#   piece PIECE X Z [YAW] [y=Y]     a Kenney piece; it collides as models/<PIECE> says in build_courtyard.gd
+#   lantern X Z [shadow]            a lantern with its lamp (see lamps); shadow: the lamp casts shadows
+#   lamps COLOUR RANGE ENERGY UP    every lantern's lamp: an OmniLight3D UP metres above the lantern's foot
+#   marker NAME X Z [YAW]           a Marker3D (the way it faces is its +Z, as an actor's)
+#   poi NAME X Z UP                 a Marker3D UP metres above the ground, in the group poi: a thing to glance at
+#   sun PITCH YAW COLOUR ENERGY     the DirectionalLight3D, with shadows
+#   sky COLOUR                      the background
+#   ambient COLOUR ENERGY           the ambient light
+#   grade PATH                      the region's GradeProfile
+
+# The walls' inner faces enclose 30 x 25 m, centred on the origin.
+floor 52 46
+sky #2e2236
+ambient #d8a3ad 0.3
+sun -50 35 #ffd9b0 1.0
+grade res://data/render/grades/courtyard_dusk.tres
+
+# The terrace along the north wall, the stairs up to it on the west and the ramp on the east.
+terrace -15 -12.5 15 -7.5 1.25
+stairs -12.5 -7.5 -6.25 -5 6 n
+ramp 6.25 -7.5 12.5 -3.75 n
+
+# The walls. The south one, on the camera's side, is half height, so the camera sees over it.
+edge wall -15 -12.5 15 -12.5 s solid
+edge wall 15 -12.5 15 12.5 w solid
+edge wall -15 -12.5 -15 12.5 e solid
+edge wall-half -15 12.5 15 12.5 n solid
+piece pillar-stone -15.125 -12.625 0 y=1.25
+piece pillar-stone 15.125 -12.625 0 y=1.25
+piece pillar-stone -15.125 12.625 0 y=0
+piece pillar-stone 15.125 12.625 0 y=0
+
+# The terrace's front, faced in half walls where the stairs and the ramp are not (standing just in front of it,
+# so their faces do not fight the terrace's own), and pillars at the feet of the stairs and the ramp.
+edge wall-half -15 -7.25 -12.5 -7.25 s solid
+edge wall-half -6.25 -7.25 6.25 -7.25 s solid
+edge wall-half 12.5 -7.25 15 -7.25 s solid
+piece pillar-stone -12.7 -5
+piece pillar-stone -6.05 -5
+piece pillar-stone 6.05 -3.75
+piece pillar-stone 12.7 -3.75
+
+# The fountain at the centre, a bench by it, and the lanterns round it and on the terrace.
+piece fountain-round 0 0
+piece stall-bench 0 -3.75 90
+lamps #ffb060 6 1.0 3.45
+lantern -3.75 3.75
+lantern 3.75 3.75
+lantern -3.75 -3.75 shadow
+lantern 3.75 -3.75 shadow
+lantern -5 -10
+lantern 5 -10
+
+# Banners on the north wall, above the terrace (a banner hangs on the face of a wall piece placed as it is).
+piece banner-red -7.5 -11.5 90
+piece banner-green -2.5 -11.5 90
+piece banner-green 2.5 -11.5 90
+piece banner-red 7.5 -11.5 90
+
+# Trees and hedges in the corners: on the terrace in the north, on the floor in the south.
+piece tree-high-round -13.125 -10.625
+piece tree 13.125 -10.625
+piece tree -13.125 10.625
+piece tree-high-round 13.125 10.625
+edge hedge-large -12.5 -11.5 -10 -11.5 s solid
+edge hedge-large -14 -10 -14 -7.5 e solid
+edge hedge-large 10 -11.5 12.5 -11.5 s solid
+edge hedge-large 14 -10 14 -7.5 w solid
+edge hedge-large -12.5 11.5 -10 11.5 n solid
+edge hedge-large -14 7.5 -14 10 e solid
+edge hedge-large 10 11.5 12.5 11.5 n solid
+edge hedge-large 14 7.5 14 10 w solid
+
+# The market stall in the south-east, its stools and a cart.
+piece stall-red 8.75 8.75 -90
+piece stall-stool 6.75 8.0
+piece stall-stool 6.75 9.5
+piece cart 4.5 10.75 90
+
+# Where the player starts (facing the camera, turned a little east), the tops of the stairs and the ramp, and
+# the things to glance at.
+marker Spawn 0 6.25 20
+marker StairsTop -12.5 -9.375
+marker RampTop 12.5 -9.375
+poi Fountain 0 0 1.0
+poi Stall 7.25 8.75 1.4

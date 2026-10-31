@@ -55,6 +55,25 @@ func test_a_dim_warm_light_follows_the_forward_plus_maths() -> void:
 	assert_true((found["seen"] as Dictionary).size() >= 3, "lit tones that show: %s" % [(found["seen"] as Dictionary).keys()])
 
 
+# A lamp (an omni light) near enough that its range touches the body, but too weak where it reaches to lift any
+# pixel above the deep tone, changes nothing: every pixel is still one of slot 3's tones under the sun. (In
+# Compatibility every light in reach of an object runs for all its pixels, in the pass that also draws the
+# ambient and the other lamps; a lamp that gave the deep tone there would add it under the sun's own pass.)
+func test_a_lamp_that_lifts_nothing_changes_nothing() -> void:
+	var palette := load(PALETTE) as Palette
+	var view := _stage(Vector2i(128, 128))
+	_sphere_scene(view, palette)
+	var lamp := OmniLight3D.new()
+	lamp.omni_range = 2.6
+	lamp.position = Vector3(0, 0, -3)  # behind the sphere, its range reaching 0.4 m into it
+	view.add_child(lamp)
+	var img: Image = await _capture(view)
+
+	var found := _match_pixels(img, _tones(palette, [3]))
+	assert_true(found["drawn"] > img.get_width() * img.get_height() / 2, "the sphere fills the view (%d pixels)" % found["drawn"])
+	assert_eq(found["off"], 0, "pixels that are not a tone of slot 3: %s" % [found["examples"]])
+
+
 func test_abarax_pixels_are_his_palette() -> void:
 	var palette := load(PALETTE) as Palette
 	var view := _stage(Vector2i(200, 200))

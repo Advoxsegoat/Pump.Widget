@@ -16,8 +16,10 @@
 // comes back as much as 7/255 off. And a light that casts shadows is drawn in a pass of its own, encoded
 // alone and added to the rest in sRGB, so a step on top of the emission comes out too bright. So in
 // Compatibility there is no emission and each light carries the whole colour: what Forward+ shows for it,
-// handed over as the linear value that Compatibility's encoder turns into exactly that. Lit pixels match
-// Forward+ for any one light; only where no light reaches at all is Compatibility black, not deep.
+// handed over as the linear value that Compatibility's encoder turns into exactly that, except that a lamp (an
+// omni or spot light) that picks the deep tone gives nothing. Lit pixels match Forward+ for any one light; only
+// where no light reaches at all, the sun included, or only lamps too weak to lift the deep tone, is
+// Compatibility black, not deep.
 shader_type spatial;
 render_mode ambient_light_disabled, specular_disabled;
 
@@ -68,10 +70,15 @@ void light() {
 	float i = clamp(dot(NORMAL, LIGHT), 0.0, 1.0) * ATTENUATION;
 	int t = ramp_tone(i);
 #if CURRENT_RENDERER == RENDERER_COMPATIBILITY
-	// What Forward+ shows for this light, in linear: the deep tone plus the light's step up to tone t.
-	vec3 deep = srgb_to_linear(tone(slot, 3));
-	vec3 lit = deep + max((srgb_to_linear(tone(slot, t)) - deep) * LIGHT_COLOR / PI, vec3(0.0));
-	DIFFUSE_LIGHT = max(DIFFUSE_LIGHT, compatibility_linear(linear_to_srgb(lit)) / max(ALBEDO, vec3(0.001)));
+	// What Forward+ shows for this light, in linear: the deep tone plus the light's step up to tone t. A lamp
+	// that lifts nothing above the deep tone gives nothing: its pass is the one with the ambient and the other
+	// lamps, which runs for every pixel of a body its range touches, and a deep tone there would be added
+	// under the sun's own pass.
+	if (LIGHT_IS_DIRECTIONAL || t != 3) {
+		vec3 deep = srgb_to_linear(tone(slot, 3));
+		vec3 lit = deep + max((srgb_to_linear(tone(slot, t)) - deep) * LIGHT_COLOR / PI, vec3(0.0));
+		DIFFUSE_LIGHT = max(DIFFUSE_LIGHT, compatibility_linear(linear_to_srgb(lit)) / max(ALBEDO, vec3(0.001)));
+	}
 #else
 	DIFFUSE_LIGHT = max(DIFFUSE_LIGHT, (tone(slot, t) - tone(slot, 3)) / max(ALBEDO, vec3(0.001)) * LIGHT_COLOR / PI);
 #endif

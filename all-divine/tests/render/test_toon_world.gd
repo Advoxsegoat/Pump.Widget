@@ -52,6 +52,88 @@ func test_world_uv_lays_one_texel_per_thirty_second_of_a_metre() -> void:
 	assert_eq(off, 0, "pixels that are not the texel under them: %s" % [examples])
 
 
+# A wall's face is laid by its own plane: a face toward +Z shows the texture by world x and y (y down the
+# texture), texel by texel, rather than the ground's x and z, which would smear each column of texels into
+# a stripe down the face.
+func test_world_uv_lays_a_wall_by_its_own_plane() -> void:
+	var view := _stage(Vector2i(64, 64), false)
+	var bytes := PackedByteArray()
+	for y in 4:
+		for x in 4:
+			bytes.append_array([120 + 40 * x, 110 + 45 * y, 200 - 30 * x + 10 * y])
+	var texture := Image.create_from_data(4, 4, false, Image.FORMAT_RGB8, bytes)
+	var wall_mesh := QuadMesh.new()  # faces +Z
+	wall_mesh.size = Vector2(8, 8)
+	var wall := MeshInstance3D.new()
+	wall.mesh = wall_mesh
+	wall.material_override = _toon(ImageTexture.create_from_image(texture), true)
+	view.add_child(wall)
+	var camera := _camera(view, 2.0)
+	# A quarter texel off the grid, as in the ground's test; looking along -Z at the wall.
+	camera.position = Vector3(0.25 / 32.0, 0.25 / 32.0, 5)
+	var sun := view.get_node("Sun") as DirectionalLight3D
+	sun.rotation_degrees = Vector3.ZERO  # shining along -Z, straight at the wall: the full step
+	var img: Image = await _capture(view)
+
+	var off := 0
+	var examples := []
+	for j in 64:
+		for i in 64:
+			# Pixel i's centre is at x = 0.25/32 - 1 + (i + 0.5) / 32 m, in texel i - 32 along x; pixel j's at
+			# y = 0.25/32 + 1 - (j + 0.5) / 32 m, so -y x 32 = j - 31.75, in texel j - 32 down the texture.
+			var expected := texture.get_pixel(posmod(i - 32, 4), posmod(j - 32, 4))
+			var got := img.get_pixel(i, j)
+			if not _near(got, expected):
+				off += 1
+				if examples.size() < 5:
+					examples.append("(%d,%d) %s, expected %s" % [i, j, got.to_html(false), expected.to_html(false)])
+	assert_eq(off, 0, "pixels that are not the texel under them: %s" % [examples])
+
+
+# A lamp (an omni light) lights a pool: only what it reaches, in its steps. Past its range, where its
+# attenuation is 0, it gives nothing, not the 0.35 step the sun gives what it does not reach (Compatibility
+# runs a light's code for every pixel of an object its range touches). The sun is off and there is no ambient
+# light, so what the lamp does not light is black.
+func test_a_lamp_lights_only_what_it_reaches() -> void:
+	var view := _stage(Vector2i(64, 64), false)
+	(view.get_node("Sun") as DirectionalLight3D).visible = false
+	var white := Image.create(1, 1, false, Image.FORMAT_RGB8)
+	white.fill(Color.WHITE)
+	var floor_mesh := PlaneMesh.new()
+	floor_mesh.size = Vector2(20, 20)
+	var ground := MeshInstance3D.new()
+	ground.mesh = floor_mesh
+	ground.material_override = _toon(ImageTexture.create_from_image(white), false)
+	view.add_child(ground)
+	var lamp := OmniLight3D.new()
+	lamp.omni_range = 3.0
+	lamp.position = Vector3(0, 1, 0)
+	view.add_child(lamp)
+	var camera := _camera(view, 20.0)
+	camera.rotation_degrees = Vector3(-90, 0, 0)
+	camera.position = Vector3(0, 10, 0)
+	var img: Image = await _capture(view)
+
+	var lit_under := 0
+	var lit_beyond := 0
+	var beyond := 0
+	for y in 64:
+		for x in 64:
+			# The pixel's centre on the ground, in metres from the lamp's foot (20 m across 64 pixels).
+			var p := (Vector2(x, y) + Vector2(0.5, 0.5) - Vector2(32, 32)) / 64.0 * 20.0
+			var c := img.get_pixel(x, y)
+			var lit := c.r > 0.0 or c.g > 0.0 or c.b > 0.0
+			if p.length() < 1.0 and lit:
+				lit_under += 1
+			elif p.length() > 3.2:
+				beyond += 1
+				if lit:
+					lit_beyond += 1
+	assert_true(lit_under > 20, "the ground under the lamp is lit (%d pixels)" % lit_under)
+	assert_true(beyond > 3000, "pixels beyond the lamp's range: %d" % beyond)
+	assert_eq(lit_beyond, 0, "pixels lit beyond the lamp's range")
+
+
 # Lit by one white sun of energy 1, a white sphere shows the light's three steps, each as Forward+ shows
 # it (the linear step, encoded to sRGB), each where N.L puts it: below 0.15 the 0.35 step, below 0.55 the
 # 0.7 step, else the full light. The camera looks straight at the sphere, so the normal under each pixel is
