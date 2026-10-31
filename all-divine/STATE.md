@@ -4,6 +4,8 @@ What is done, what is next, and where the decisions live. Every task's final com
 
 ## Done
 
+F0 (Foundation) is built: a lit courtyard to walk in, with Abarax moving, rolling and chaining a jab and a cross. What is left for F0 is the owner's checklist below.
+
 - F0 Task 1: toolchain, project skeleton and the headless test runner (`tools/test.sh`: 4 passed, 0 failed).
 - F0 Task 2: Core autoloads: Game, Inputs (§4.1 bindings, rebinding, deadzone), Registry, audio buses (`tools/test.sh`: 93 passed, 0 failed).
 - F0 Task 3: Pixel stage: 640×360 → integer upscale, texel-snapped ortho camera, sub-pixel offset (`tools/test.sh`: 108 passed, 0 failed; with `--render`: 111 passed, 0 failed).
@@ -19,15 +21,36 @@ What is done, what is next, and where the decisions live. Every task's final com
 - F0 Task 13: Liveliness II: foot IK on slopes and stairs, head and neck look-at, spring-bone scarf (`tools/test.sh`: 383 passed, 0 failed; with `--render`: 409 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 - F0 Task 14: The courtyard (Kenney town kit, flagstones at 32 texels/m, lanterns) and the main scene; --selftest (`tools/test.sh`: 409 passed, 0 failed; with `--render`: 439 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK; `tools/godot.sh -- --selftest`: exit 0). `world/courtyard/courtyard.tscn` is the source now: `tools/world/build_courtyard.gd` made it once from `layout.txt`; edit the scene, and do not build it again (that would overwrite the edits).
 - F0 Task 15: Retargeting tool: BVH (CMU names) → our skeleton via bpy; ready for CMU strafes (`tools/bpy_test.sh`: 44 passed; `tools/test.sh`: 409 passed, 0 failed). No CMU clip is in the project yet; the first one brings its `ASSETS.md` row and its `clips.cfg` source.
+- F0 Task 16: CI and exports. `.github/workflows/all-divine.yml` has four jobs (test, render, render-forward-plus, export); export presets for Linux, Windows Desktop and Web (single-threaded); the exported Linux build passes `--selftest` (exit 0) and starts and quits cleanly. Found and fixed on the way: the export dropped the nodes under `PixelStage/World` in `main.tscn` (it lacked `[editable path="PixelStage"]`), and `tests/tools/test_export_presets.gd` now checks every scene for that (`tools/test.sh`: 417 passed, 0 failed; with `--render`: 447 passed, 0 failed; the same suite under `--forward-plus` on lavapipe: 447 passed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 
 ## Next
 
-F0 Task 16
+F1 Combat core (spec §9): write its plan.
+
+## Owner checklist for F0
+
+1. Download the Windows build from the latest CI run: GitHub, Actions, "The All-Divine (Godot)", the newest run, Artifacts, `all-divine-windows`. Unzip it and run `all-divine.exe`. Windows may warn that the file is unsigned: More info, then Run anyway.
+2. Walk the courtyard with a gamepad, then with the keyboard and mouse (WASD or the left stick to move, Space or A to roll and hold to sprint, left mouse or RB to jab).
+3. Check the roll, the jab then cross chain, the stairs and the ramp, and the scarf.
+4. Press F4 to compare with the post effects off (F3 shows the debug overlay, Esc pauses).
+5. Write what you see, good and bad, in `all-divine/notes/f0.md`.
+
+## Known limits / notes for later
+
+- **Forward+ parity.** Forward+ is the reference look, but the container has no GPU, so the shaders' Forward+ branches had never been rendered before this task. The `render-forward-plus` job installs lavapipe (a software Vulkan driver) and runs `test_screen_post` (which includes the Forward+ against Compatibility check), `test_toon_palette` and `test_toon_world` in the real Forward+ renderer. They pass, and so does the whole suite under `tools/test.sh --forward-plus` with lavapipe (447 passed). So the branches work and agree with Compatibility. That says nothing about speed or about how it looks on a real GPU, so your F4 comparison on the PC is still the last check.
+- **Compatibility is washed out.** The container and a web build use Compatibility, which draws the world pastel and washed out: the engine adds shadowed light passes in sRGB. Forward+ on the PC is the reference look. A `toon_world` Compatibility branch is a follow-up before any web build. The web build is made by CI but has never been opened in a browser.
+- **No strafe clips.** Orientation warping covers 8-way movement. `tools/anim/retarget.py` is ready for CMU clips; check the legs on the first one (the CMU rest splay).
+- **Liveliness uses engine internals.** It is applied once per tick through Godot 4.7.2 internals: the skeleton's manual callback plus `NOTIFICATION_UPDATE_SKELETON`. Re-check it on any engine upgrade.
+- **For F1:** apply hit-stop on contact, not on the mark. Give a hitbox that turns on and off within one tick at least one query.
+- **`courtyard.tscn` is the source** after generation. Do not run `build_courtyard.gd` again; edit the scene.
+- **Nodes under an instance need `[editable path="..."]`.** A scene that hangs nodes under a child of an instanced scene (as `main.tscn` does under `PixelStage/World`) must list that instance as editable, or the export drops those nodes and the build fails at startup. In the editor this is "Editable Children". The test `test_every_scene_keeps_all_its_nodes_through_the_exports_repack` catches it.
+- **Exports.** Godot does not create the output folder: `mkdir -p out/linux out/windows out/web` first. The builds ship `tools/` because the game starts with `TestLogger` from `tools/test/test_logger.gd` (only `tests/` is left out). A zip from CI loses the Linux build's executable bit: `chmod +x`. No icon and no code signing yet.
 
 ## Decisions
 
 - Spec: [`docs/superpowers/specs/2026-10-25-all-divine-rpg-foundation-design.md`](../docs/superpowers/specs/2026-10-25-all-divine-rpg-foundation-design.md)
 - Plan: [`docs/superpowers/plans/2026-10-25-all-divine-rpg-f0-foundation.md`](../docs/superpowers/plans/2026-10-25-all-divine-rpg-f0-foundation.md)
+- CI: [`.github/workflows/all-divine.yml`](../.github/workflows/all-divine.yml) (jobs: `test`, `render`, `render-forward-plus`, `export`)
 - Rulings made while building: [`.superpowers/sdd/2026-10-25-all-divine-rpg-f0-foundation/progress.md`](../.superpowers/sdd/2026-10-25-all-divine-rpg-f0-foundation/progress.md)
 
 ## How to run
@@ -69,6 +92,12 @@ all-divine/tools/godot.sh -s res://tools/world/build_courtyard.gd
 all-divine/tools/godot.sh -- --selftest        # the game (main/main.tscn) runs a scripted circuit of the courtyard for 600 physics
                                                # frames and exits 0, or 1 if anything logged an error from startup on, or if the
                                                # circuit never began (core/self_test.gd); add --fixed-fps 60 for full speed
+bash all-divine/tools/setup.sh --templates     # once, for exports: the export templates (1.3 GB download, cached in .cache/)
+mkdir -p all-divine/out/linux all-divine/out/windows all-divine/out/web
+all-divine/tools/godot.sh --export-release "Linux" out/linux/all-divine.x86_64   # likewise "Windows Desktop" out/windows/all-divine.exe
+                                               # and "Web" out/web/index.html (presets in export_presets.cfg; paths are relative to all-divine/)
+all-divine/out/linux/all-divine.x86_64 --headless -- --selftest   # the built game's own self-test: exit 0
+all-divine/tools/test.sh --forward-plus --filter=test_screen_post # the real Forward+ renderer; needs Vulkan (a GPU, or lavapipe: apt install mesa-vulkan-drivers)
 all-divine/.tools/godot/Godot_v4.7.2-stable_linux.x86_64 --path all-divine
                                                # play: WASD or the left stick to move, Space/Shift (A) to roll and hold to
                                                # sprint, left mouse (RB) to jab; F3 the debug overlay, F4 the screen look

@@ -26,3 +26,5 @@ script = ExtResource("6_camera_rig")
 [node name="DebugOverlay" type="CanvasLayer" parent="."]
 visible = false
 script = ExtResource("7_overlay")
+
+[editable path="PixelStage"]
