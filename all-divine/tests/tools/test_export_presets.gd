@@ -3,8 +3,8 @@ extends TestCase
 ## where it should be, and no preset filters out what the game boots with. And every scene comes through the
 ## export with all its nodes.
 ##
-## The game's first autoload (core/self_test.gd) and the main scene use TestLogger, which lives in
-## tools/test/. A preset that dropped tools/ would ship a game that cannot start, so the presets must keep it.
+## The game's first autoload (core/self_test.gd) uses TestLogger, which lives in tools/test/. A preset that
+## dropped tools/ would ship a game that cannot start, so the presets must keep it.
 ##
 ## The export turns each scene into a binary one, and what comes out is what instantiating the scene and
 ## packing it again gives. Packing leaves out every node that hangs under a node of an instanced scene unless
@@ -70,6 +70,16 @@ func test_no_preset_filters_out_the_scripts_the_game_boots_with() -> void:
 		var exclude: String = cfg.get_value(section, "exclude_filter", "")
 		assert_false(Presets.excludes(exclude, BOOT_FILE),
 			"%s: exclude_filter '%s' removes %s, and the game cannot start without it" % [preset_name, exclude, BOOT_FILE])
+
+
+# What the comments here and in export_presets.cfg say: of the game's own scripts (outside tools/ and tests/),
+# only the self-test autoload uses TestLogger.
+func test_only_the_self_test_boots_with_test_logger() -> void:
+	var users := PackedStringArray()
+	for path in Presets.game_scripts("res://"):
+		if FileAccess.get_file_as_string(path).contains("TestLogger"):
+			users.append(path)
+	assert_eq(users, PackedStringArray(["res://core/self_test.gd"]))
 
 
 func test_every_scene_keeps_all_its_nodes_through_the_exports_repack() -> void:
@@ -151,6 +161,20 @@ class Presets:
 				found.append_array(scenes(dir.path_join(sub)))
 		for file in DirAccess.get_files_at(dir):
 			if file.ends_with(".tscn"):
+				found.append(dir.path_join(file))
+		found.sort()
+		return found
+
+	## Every .gd file the game is made of: under `dir`, outside tools/, tests/ and folders with a .gdignore.
+	static func game_scripts(dir: String) -> PackedStringArray:
+		var found := PackedStringArray()
+		for sub in DirAccess.get_directories_at(dir):
+			if dir == "res://" and (sub == "tests" or sub == "tools" or sub.begins_with(".")):
+				continue
+			if not FileAccess.file_exists(dir.path_join(sub).path_join(".gdignore")):
+				found.append_array(game_scripts(dir.path_join(sub)))
+		for file in DirAccess.get_files_at(dir):
+			if file.ends_with(".gd"):
 				found.append(dir.path_join(file))
 		found.sort()
 		return found
