@@ -4,10 +4,63 @@ extends TestCase
 ## case-sensitive, Windows and macOS are not, so a wrong-case path works here
 ## and breaks in a player's export.
 
+const FIXTURE := "user://path_fixture"
+## The paths below are joined at run time, so the scan of res:// does not find them in this file.
+const RES := "res://"
+
+
+func after_each() -> void:
+	_wipe(FIXTURE)
+
+
 func test_every_res_path_matches_case_exactly() -> void:
 	var bad := PathCheck.mismatches("res://")
 	assert_eq(bad, PackedStringArray(), "\n".join(bad))
 	assert_true(PathCheck.checked > 0, "the scan found no res:// paths at all")
+
+
+# The check itself: a scan that cannot fail would prove nothing. Files under user:// (outside res://, so the
+# real scan never sees them) that point into the project, with right and wrong spellings.
+func test_a_wrong_case_path_is_caught() -> void:
+	var scene := FIXTURE.path_join("scene.tscn")
+	_write(scene, "\n".join([
+		'[ext_resource type="Script" path="%s" id="1"]' % (RES + "core/inputs.gd"),       # right
+		'[ext_resource type="Script" path="%s" id="2"]' % (RES + "Core/inputs.gd"),       # a folder in the wrong case
+		'[ext_resource type="Script" path="%s" id="3"]' % (RES + "core/Inputs.gd"),       # a file in the wrong case
+		'[ext_resource type="Script" path="%s" id="4"]' % (RES + "core/no_such_file.gd"), # missing
+	]))
+	var script := FIXTURE.path_join("sub/tool.gd")
+	_write(script, "\n".join([
+		"# %s is in a comment, which is not checked" % (RES + "CORE/inputs.gd"),
+		'const A := preload("%s")' % (RES + "main/Main.tscn"),                             # a file in the wrong case
+		'const B := "%s"' % (RES + "main/main.tscn"),                                       # right
+	]))
+	_write(FIXTURE.path_join("notes.txt"), RES + "NOT/scanned.gd")  # not a kind of file that is scanned
+	var bad := PathCheck.mismatches(FIXTURE)
+	assert_eq(bad, PackedStringArray([
+		"%s: %s" % [script, RES + "main/Main.tscn"],
+		"%s: %s" % [scene, RES + "Core/inputs.gd"],
+		"%s: %s" % [scene, RES + "core/Inputs.gd"],
+		"%s: %s" % [scene, RES + "core/no_such_file.gd"],
+	]), "\n".join(bad))
+	assert_eq(PathCheck.checked, 6, "six paths: four in the scene, two in the script outside its comment")
+
+
+func _write(path: String, text: String) -> void:
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(text)
+	file.close()
+
+
+func _wipe(dir: String) -> void:
+	if not DirAccess.dir_exists_absolute(dir):
+		return
+	for sub in DirAccess.get_directories_at(dir):
+		_wipe(dir.path_join(sub))
+	for file in DirAccess.get_files_at(dir):
+		DirAccess.remove_absolute(dir.path_join(file))
+	DirAccess.remove_absolute(dir)
 
 
 class PathCheck:
