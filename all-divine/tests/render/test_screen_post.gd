@@ -446,8 +446,8 @@ func test_forward_plus_matches_compatibility() -> void:
 		assert_eq(post.save_png(ProjectSettings.globalize_path(GOLDEN)), OK, "wrote the golden picture")
 		return
 	var golden := Image.load_from_file(ProjectSettings.globalize_path(GOLDEN))
-	assert_ne(golden, null, "the golden picture loads; write it with tools/test.sh --render --update-golden")
 	if golden == null:
+		fail("the golden picture loads; write it with tools/test.sh --render --update-golden")
 		return
 	golden.convert(Image.FORMAT_RGB8)
 	assert_eq(golden.get_size(), post.get_size())

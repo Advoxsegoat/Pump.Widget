@@ -141,11 +141,19 @@ func _where() -> String:
 
 # == raises an engine error on some mixed types (an Array against a PackedInt32Array),
 # so only values of the same kind are compared; ints and floats, and Strings and StringNames, count as one kind.
+# Against null, an Object-typed null (what get_node_or_null, Image.load_from_file or an unset mesh gives,
+# TYPE_OBJECT rather than TYPE_NIL) and a freed object count as null.
 func _same(a: Variant, b: Variant) -> bool:
+	if typeof(a) == TYPE_NIL or typeof(b) == TYPE_NIL:
+		return _is_null(a) and _is_null(b)
 	var kind_a := _kind(typeof(a))
 	if kind_a != _kind(typeof(b)):
 		return false
 	return a == b
+
+
+func _is_null(value: Variant) -> bool:
+	return typeof(value) == TYPE_NIL or (typeof(value) == TYPE_OBJECT and not is_instance_valid(value))
 
 
 func _kind(type: int) -> int:

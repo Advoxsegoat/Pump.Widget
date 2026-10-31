@@ -18,8 +18,8 @@ const MIN_DRAWN := 200
 
 func test_sheet_has_a_cell_per_frame_and_content() -> void:
 	var img: Image = await ContactSheet.render(load(RIG), ["idle", "palm_jab"])
-	assert_ne(img, null, "the sheet rendered")
 	if img == null:
+		fail("the sheet rendered")
 		return
 	# Six cells for idle, plus one per unique palm_jab mark frame (or six when it has no marks yet). Width is 6 x 320.
 	var jab := (load(LIB) as AnimationLibrary).get_animation(&"palm_jab")
@@ -56,9 +56,8 @@ func test_a_def_draws_the_actor_in_its_palette() -> void:
 	dyed.palette = def.palette.with_dye(7, Color("#40c040"))
 	var plain_img: Image = await ContactSheet.render(def, ["idle"])
 	var dyed_img: Image = await ContactSheet.render(dyed, ["idle"])
-	assert_ne(plain_img, null, "the sheet rendered")
-	assert_ne(dyed_img, null, "the dyed sheet rendered")
 	if plain_img == null or dyed_img == null:
+		fail("the sheets rendered (plain: %s, dyed: %s)" % [plain_img != null, dyed_img != null])
 		return
 	var plain := _palette_pixels(plain_img, def.palette)
 	assert_true(plain["count"] >= MIN_DRAWN / 2, "%d game pixels of the first cell are his tones" % plain["count"])
@@ -76,8 +75,8 @@ func test_a_bare_rig_keeps_its_own_materials() -> void:
 	var def := load(DEF) as ActorDef
 	var dressed: Image = await ContactSheet.render(def, ["idle"])
 	var bare: Image = await ContactSheet.render(load(RIG), ["idle"])
-	assert_ne(bare, null, "the sheet rendered")
 	if dressed == null or bare == null:
+		fail("the sheets rendered (dressed: %s, bare: %s)" % [dressed != null, bare != null])
 		return
 	assert_false(bare.get_data() == dressed.get_data(), "the bare rig's sheet is not the dressed one")
 	var found := _palette_pixels(bare, def.palette)

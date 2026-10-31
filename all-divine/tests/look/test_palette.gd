@@ -148,8 +148,9 @@ func test_rig_wears_one_shared_toon_material() -> void:
 	if shared is ShaderMaterial:
 		assert_eq((shared as ShaderMaterial).shader.resource_path, TOON)
 		var tex := (shared as ShaderMaterial).get_shader_parameter(&"palette") as Texture2D
-		assert_ne(tex, null, "the palette texture is set")
-		if tex != null:
+		if tex == null:
+			fail("the palette texture is set")
+		else:
 			assert_eq(tex.get_image().get_data(), p.to_texture().get_image().get_data())
 	# Dyeing re-dresses the same rig in the new colours.
 	rig.apply_palette(p.with_dye(7, Color.RED))

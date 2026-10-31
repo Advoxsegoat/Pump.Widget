@@ -61,8 +61,8 @@ func test_render_settings_defaults_are_the_look() -> void:
 
 func test_default_settings_file_holds_the_defaults() -> void:
 	var file := load(DEFAULT_SETTINGS) as RenderSettings
-	assert_ne(file, null, "default_settings.tres is a RenderSettings")
 	if file == null:
+		fail("default_settings.tres is a RenderSettings")
 		return
 	var defaults := RenderSettings.new()
 	for name: String in _float_properties(defaults):
@@ -83,8 +83,8 @@ func test_grade_profile_defaults_are_neutral_with_rose_fog() -> void:
 
 func test_courtyard_dusk_is_warm_and_rose() -> void:
 	var g := load(DUSK) as GradeProfile
-	assert_ne(g, null, "courtyard_dusk.tres is a GradeProfile")
 	if g == null:
+		fail("courtyard_dusk.tres is a GradeProfile")
 		return
 	assert_eq(g.gain.to_html(false), "fff0e0")
 	assert_eq(g.lift.to_html(false), "0a0612")
@@ -96,8 +96,9 @@ func test_courtyard_dusk_is_warm_and_rose() -> void:
 # A stage and a rig nobody has given settings to pass the picture through: every strength is 0.
 func test_stage_and_rig_start_with_every_effect_off() -> void:
 	var final := stage.material as ShaderMaterial
-	assert_ne(final, null, "the stage draws with a ShaderMaterial")
-	if final != null:
+	if final == null:
+		fail("the stage draws with a ShaderMaterial")
+	else:
 		assert_eq(final.shader.resource_path, FINAL)
 		for name in ["bloom_strength", "grade_strength", "vignette_strength"]:
 			assert_eq(_param(final, name), 0.0, "final %s" % name)
@@ -164,8 +165,9 @@ func test_apply_settings_stays_inside_its_stage_and_reaches_late_rigs() -> void:
 	other.world.add_child(other_rig)
 	stage.apply_settings(RenderSettings.new(), null)
 	assert_eq(_param(other_rig.post_quad.material_override, "outline"), 0.0, "the other stage's rig is untouched")
-	assert_ne(stage.grade, null, "a null grade is a neutral one")
-	if stage.grade != null:
+	if stage.grade == null:
+		fail("a null grade is a neutral one")
+	else:
 		assert_eq(stage.grade.gain, Color(1, 1, 1))
 		assert_eq(stage.grade.lift, Color(0, 0, 0))
 	var late := CameraRig.new()
@@ -182,21 +184,23 @@ func test_apply_settings_stays_inside_its_stage_and_reaches_late_rigs() -> void:
 
 func test_rig_builds_the_post_quad() -> void:
 	var quad := rig.get_node_or_null("PostQuad") as MeshInstance3D
-	assert_ne(quad, null, "the rig has a child PostQuad")
 	if quad == null:
+		fail("the rig has a child PostQuad")
 		return
 	assert_eq(quad, rig.post_quad)
 	assert_true(quad.is_in_group(&"post_quad"))
 	var mesh := quad.mesh as QuadMesh
-	assert_ne(mesh, null, "a QuadMesh")
-	if mesh != null:
+	if mesh == null:
+		fail("a QuadMesh")
+	else:
 		assert_eq(mesh.size, Vector2(2, 2))
 		assert_true(mesh.flip_faces, "flip_faces")
 	assert_eq(quad.extra_cull_margin, 16384.0)
 	assert_eq(quad.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
 	var post := quad.material_override as ShaderMaterial
-	assert_ne(post, null, "a ShaderMaterial")
-	if post != null:
+	if post == null:
+		fail("a ShaderMaterial")
+	else:
 		assert_eq(post.shader.resource_path, POST)
 		# Drawn first among the transparent things, right after the opaque pass the screen copy is taken
 		# from, so anything transparent is drawn over the look rather than wiped by it.

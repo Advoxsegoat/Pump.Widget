@@ -34,15 +34,17 @@ func test_actor_scene_is_a_capsule_on_the_actor_layer() -> void:
 	# Looked at outside the tree: an actor needs its def before it is ready.
 	var scene_root: Node = load(ACTOR).instantiate()
 	var actor := scene_root as Actor
-	assert_ne(actor, null, "the scene's root is an Actor")
-	if actor != null:
+	if actor == null:
+		fail("the scene's root is an Actor")
+	else:
 		assert_eq(actor.collision_layer, TestArena.layer_bit("actor"))
 		assert_eq(actor.collision_mask, TestArena.layer_bit("world"))
 		var shapes := actor.find_children("*", "CollisionShape3D", false, false)
 		assert_eq(shapes.size(), 1)
 		var capsule := (shapes[0] as CollisionShape3D).shape as CapsuleShape3D
-		assert_ne(capsule, null, "a capsule")
-		if capsule != null:
+		if capsule == null:
+			fail("a capsule")
+		else:
 			assert_near(capsule.radius, 0.35, 1e-6)
 			assert_near(capsule.height, 1.8, 1e-6)
 		assert_vec_near((shapes[0] as Node3D).position, Vector3(0, 0.9, 0), 1e-6, "standing on the actor's origin")

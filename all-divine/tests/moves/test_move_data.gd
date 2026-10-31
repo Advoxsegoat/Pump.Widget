@@ -50,8 +50,8 @@ func test_moves_are_registered_with_their_kinds_and_clips() -> void:
 	var want := {&"palm_jab": MoveData.Kind.ATTACK, &"palm_cross": MoveData.Kind.ATTACK, &"dodge_roll": MoveData.Kind.DODGE}
 	for id: StringName in want:
 		var move := Registry.fetch(&"moves", id) as MoveData
-		assert_ne(move, null, str(id))
 		if move == null:
+			fail("%s is a registered MoveData" % id)
 			continue
 		assert_eq(move.id, id)
 		assert_eq(move.kind, want[id], str(id))
@@ -128,8 +128,8 @@ func test_locomotion_tuning_defaults_are_the_measured_ground_speeds_to_a_tenth()
 
 func test_abarax_is_defined_by_data() -> void:
 	var def := Registry.fetch(&"actors", &"abarax") as ActorDef
-	assert_ne(def, null)
 	if def == null:
+		fail("abarax is a registered ActorDef")
 		return
 	assert_eq(def.id, &"abarax")
 	assert_eq(def.moveset, {&"palm": &"palm_jab", &"dodge": &"dodge_roll"})

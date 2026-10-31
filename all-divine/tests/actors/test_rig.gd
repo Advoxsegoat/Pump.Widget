@@ -208,8 +208,9 @@ func test_hitboxes_ride_the_hands() -> void:
 		var shapes := zone.find_children("*", "CollisionShape3D", false, false)
 		assert_eq(shapes.size(), 1, pair[0])
 		var sphere := (shapes[0] as CollisionShape3D).shape as SphereShape3D
-		assert_ne(sphere, null, "%s is a sphere" % pair[0])
-		if sphere != null:
+		if sphere == null:
+			fail("%s is a sphere" % pair[0])
+		else:
 			assert_near(sphere.radius, 0.18, 1e-6, pair[0])
 	# BoneAttachment3D follows the skeleton when it updates, which is once a frame.
 	r.play_move(&"palm_jab", 0.0); r.set_move_time(0.25); r.tick(0.0)
@@ -227,8 +228,9 @@ func test_hurtbox_is_a_body_capsule() -> void:
 	assert_eq(shapes.size(), 1)
 	var holder := shapes[0] as CollisionShape3D
 	var capsule := holder.shape as CapsuleShape3D
-	assert_ne(capsule, null, "a capsule")
-	if capsule != null:
+	if capsule == null:
+		fail("a capsule")
+	else:
 		assert_near(capsule.radius, 0.35, 1e-6)
 		assert_near(capsule.height, 1.7, 1e-6)
 	assert_vec_near(holder.position, Vector3(0, 0.9, 0), 1e-6)
