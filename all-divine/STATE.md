@@ -16,7 +16,7 @@ What is done, what is next, and where the decisions live. Every task's final com
 - F0 Task 10: Character look: palette resource (ramps, dyes), toon shader held to the palette (`tools/test.sh`: 317 passed, 0 failed; with `--render`: 328 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 - F0 Task 11: Screen look: depth outlines, tilt-shift DOF, depth+height fog, bloom, grading, vignette; renderer-agnostic (`tools/test.sh`: 328 passed, 0 failed; with `--render`: 354 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 - F0 Task 12: Liveliness I: 8-way locomotion by orientation warping, breathing, procedural hit reactions (`tools/test.sh`: 351 passed, 0 failed; with `--render`: 377 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
-- F0 Task 13: Liveliness II: foot IK on slopes and stairs, head and neck look-at, spring-bone scarf (`tools/test.sh`: 382 passed, 0 failed; with `--render`: 408 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
+- F0 Task 13: Liveliness II: foot IK on slopes and stairs, head and neck look-at, spring-bone scarf (`tools/test.sh`: 383 passed, 0 failed; with `--render`: 409 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 
 ## Next
 

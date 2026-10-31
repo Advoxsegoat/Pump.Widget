@@ -165,6 +165,40 @@ func test_scarf_stays_out_of_the_torso() -> void:
 	assert_true(back >= CLEARANCE, "a joint of the scarf came within %.3f m of the torso's centre line" % back)
 
 
+func test_scarf_stays_out_of_the_torso_in_every_clip() -> void:
+	# Each of the rig's clips, played through at its own pace in the physics step on a rig standing in
+	# place: after half a second idle for the scarf to settle, the clip crossfades in, and every frame of
+	# it, every joint of the scarf clears the torso's centre line (and the tip the chest).
+	var worst := {}
+	for clip in _clip_names():
+		var r: Rig = track(load(RIG).instantiate())
+		for i in 30:
+			await frames(1)
+			r.tick(1.0 / 60)
+		r.play_move(clip, 0.15)
+		var back := INF
+		var chest := INF
+		for f in int(r.tree.get_animation(clip).length * 60) + 1:
+			await frames(1)
+			r.set_move_time(f / 60.0)
+			r.tick(1.0 / 60)
+			back = minf(back, _torso_clearance(r))
+			chest = minf(chest, _clearance(r))
+		worst[clip] = "%.3f/%.3f" % [back, chest]
+		assert_true(back >= CLEARANCE, "%s: a joint of the scarf came within %.3f m of the torso's centre line" % [clip, back])
+		assert_true(chest >= CLEARANCE, "%s: the tip came within %.3f m of the spine_02-spine_03 segment" % [clip, chest])
+		r.free()
+	assert_eq(worst.size(), 8, "every clip of the library was played (%s)" % [worst])
+
+
+# The names of the rig's clips (the actor's library).
+func _clip_names() -> PackedStringArray:
+	var r: Rig = track(load(RIG).instantiate())
+	var names := PackedStringArray(r.tree.get_animation_list())
+	r.free()
+	return names
+
+
 func test_scarf_clears_the_body_in_a_roll() -> void:
 	# The roll tumbles the body over: the capsules keep the scarf out of it all the way.
 	var arena := TestArena.make(self)
