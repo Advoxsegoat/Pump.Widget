@@ -11,6 +11,14 @@ const FEET: Array[StringName] = [&"foot_l", &"foot_r"]
 const DT := 1.0 / 60
 ## How near the ground an ankle must stand (see the class doc).
 const TOLERANCE := 0.04
+## The most the hips may move in one tick going up stairs, in metres. The hips are smoothed twice with
+## blend_speed 12 at 60 ticks a second (a = 1 - e^-0.2 = 0.181 a tick): a step of G in their goal moves them
+## at most a^2 * max_n n(1 - a)^(n - 1) * G = 0.0738 G in a tick. Their largest swing on these stairs is a
+## back foot that lifts beyond its probe's reach (0.5 m) and fades from about -0.30 m to 0 (0.022 m a tick);
+## this allows a swing of 0.34 m.
+const MAX_HIPS_STEP := 0.025
+## Where TestTerrain.stairs(0.2, 0.35, 6) has its landing well under way (it runs from 2.1 to 4.1 m).
+const STAIRS_END := 3.6
 
 
 func _def() -> ActorDef:
@@ -125,9 +133,12 @@ func test_offsets_follow_the_ground_given() -> void:
 	assert_near(r.bone_global(&"pelvis").y - r.animated_pose(&"pelvis").origin.y, -0.1, 0.005, "the pelvis is shown lower")
 	# Ground far below is reached only as far as max_drop lets the hips go.
 	r.set_foot_ground(&"foot_r", {position = Vector3(start[&"foot_r"].x, -1.0, start[&"foot_r"].z), normal = Vector3.UP})
-	for i in 60:
+	var deepest := 0.0
+	for i in 90:
 		r.tick(DT)
-	assert_near(planter.pelvis_offset, -0.45, 1e-6, "the drop stops at max_drop")
+		deepest = minf(deepest, planter.pelvis_offset)
+	assert_true(deepest >= -0.45, "the hips never drop past max_drop (%.6f)" % deepest)
+	assert_near(planter.pelvis_offset, -0.45, 1e-3, "they settle there")
 
 
 func test_lifted_feet_keep_their_lift() -> void:
@@ -186,30 +197,45 @@ func test_feet_on_stairs() -> void:
 
 
 func test_walking_up_stairs_keeps_feet_out_of_the_steps() -> void:
-	# A stepping foot keeps the clip's lift over the ground below it. Where it crosses onto a higher step
-	# it is lifted onto it at once (the smoothing would sink it into the step for a few frames); the probe
-	# under it is a tick behind, so for that one frame it may still be inside.
-	var arena := TestArena.make(self)
-	TestTerrain.stairs(arena, 0.2, 0.35, 6)
-	var actor := _stand(arena, Vector3(-1.0, 0.02, 0), PI / 2)
-	await frames(30)
-	actor.set_brain(ScriptBrain.new([{"frames": 150, "move": Vector2(0.45, 0)}]))
-	var inside_before := {&"foot_l": false, &"foot_r": false}
-	var longest := 0
-	var deepest := 0.0
-	for i in 150:
-		await frames(1)
-		for foot in FEET:
-			var gap := _gap(actor, actor.rig.bone_global(foot))
-			var inside := gap < -TOLERANCE
-			if inside and inside_before[foot]:
-				longest = 2
-			elif inside:
-				longest = maxi(longest, 1)
-			inside_before[foot] = inside
-			deepest = minf(deepest, gap)
-	assert_true(actor.global_position.y > 0.5, "he climbed (%.2f m)" % actor.global_position.y)
-	assert_true(longest < 2, "no ankle stays inside a step for two frames running (deepest %.3f m)" % deepest)
+	# Up the stairs at a walk (0.45) and a jog (0.7, 1.0). A stepping foot keeps the clip's lift over the
+	# ground below it. Where it crosses onto a higher step it is lifted onto it at once (the smoothing would
+	# sink it into the step for a few frames); the probe under it is a tick behind, so for that one frame
+	# it may still be inside. The hips do not jump with it: they follow the smoothed offsets, so they move
+	# at most MAX_HIPS_STEP in a tick.
+	for stick: float in [0.45, 0.7, 1.0]:
+		var arena := TestArena.make(self)
+		TestTerrain.stairs(arena, 0.2, 0.35, 6)
+		var actor := _stand(arena, Vector3(-1.0, 0.02, 0), PI / 2)
+		await frames(30)
+		actor.set_brain(ScriptBrain.new([{"frames": 150, "move": Vector2(stick, 0)}]))
+		var planter: FootPlanter = actor.rig.foot_planter
+		var inside_before := {&"foot_l": false, &"foot_r": false}
+		var longest := 0
+		var deepest := 0.0
+		var hips_before := planter.pelvis_offset
+		var hips_step := 0.0
+		var climbed := 0.0
+		for i in 150:
+			await frames(1)
+			if actor.global_position.x > STAIRS_END:
+				break  # on the landing, short of its edge
+			hips_step = maxf(hips_step, absf(planter.pelvis_offset - hips_before))
+			hips_before = planter.pelvis_offset
+			climbed = maxf(climbed, actor.global_position.y)
+			for foot in FEET:
+				var gap := _gap(actor, actor.rig.bone_global(foot))
+				var inside := gap < -TOLERANCE
+				if inside and inside_before[foot]:
+					longest = 2
+				elif inside:
+					longest = maxi(longest, 1)
+				inside_before[foot] = inside
+				deepest = minf(deepest, gap)
+		var at := "at %.2f stick" % stick
+		assert_true(climbed > 0.5, "%s, he climbed (%.2f m)" % [at, climbed])
+		assert_true(longest < 2, "%s, no ankle stays inside a step for two frames running (deepest %.3f m)" % [at, deepest])
+		assert_true(hips_step <= MAX_HIPS_STEP, "%s, the hips move at most %.3f m in a tick (%.3f m)" % [at, MAX_HIPS_STEP, hips_step])
+		arena.free()
 
 
 func test_bad_ground_changes_nothing() -> void:
@@ -243,8 +269,11 @@ func test_foot_ik_ray_miss_fades_without_nan() -> void:
 		await frames(1)
 		bad += _bad_bones(actor.rig)
 	assert_near(planter.offsets[&"foot_l"], 0.0, 0.01, "with nothing below it, its offset is gone within 0.3 s")
-	assert_near(planter.pelvis_offset, 0.0, 0.01, "and so is the hips' drop")
-	for i in 30:
+	for i in 12:
+		await frames(1)
+		bad += _bad_bones(actor.rig)
+	assert_near(planter.pelvis_offset, 0.0, 0.01, "and the hips, smoothed after it, within 0.5 s")
+	for i in 18:
 		await frames(1)
 		bad += _bad_bones(actor.rig)
 	assert_eq(bad, 0, "no bone pose has a NaN at any frame")

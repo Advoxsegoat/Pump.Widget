@@ -18,6 +18,10 @@ extends SkeletonModifier3D
 ## Every offset is smoothed: each tick it closes 1 - e^(-blend_speed * delta) of its gap. But no foot is
 ## shown below the ground under it: an offset never falls below ground.y + ankle_height - its animated y,
 ## so a stepping foot that crosses onto a higher step goes up onto it at once instead of sinking into it.
+## The hips take their drop from the smoothed offsets, before that floor (the floor only ever raises a
+## foot, so they drop no less for it), and smooth it again with blend_speed: the hips are the body's
+## weight, so where a foot's offset swings (a stepping foot lifts out of its probe's reach and fades to 0,
+## a step-up), they ease after it rather than jump.
 ##
 ## The IK bends a leg at the hip and knee and carries the foot with the calf, which would tip the toes
 ## down on a step. So each foot is turned back by the turn the IK gave its calf on the tick before, which
@@ -50,15 +54,17 @@ var ground := {&"foot_l": null, &"foot_r": null}
 
 ## False while the body is in the air: the offsets fade to 0, as for a foot with no ground.
 var planting := true
-## Each foot's offset, in metres up (smoothed).
+## Each foot's offset, in metres up, as shown: smoothed, and kept out of the ground.
 var offsets := {&"foot_l": 0.0, &"foot_r": 0.0}
-## How far the hips are dropped, in metres up (0 or less).
+## How far the hips are dropped, in metres up (0 or less): min(offsets, 0) before the floor, no further than
+## max_drop, smoothed once more.
 var pelvis_offset := 0.0
 ## Where each foot was in the pose this modifier was given on its last run (the clips' and the modifiers'
 ## before it), in the skeleton's space: the actor's probes look below it.
 var animated := {}
 
 var _skeleton: Skeleton3D  # the skeleton the bones below were found in
+var _smoothed := {&"foot_l": 0.0, &"foot_r": 0.0}  # each foot's offset smoothed, before the floor
 var _feet := PackedInt32Array()
 var _calves := PackedInt32Array()
 var _hips := -1
@@ -93,9 +99,11 @@ func _process_modification_with_delta(delta: float) -> void:
 			lowest = under.y + ankle_height - pose.origin.y
 			goal = under.y + ankle_height - minf(pose.origin.y, ankle_height)
 			normal_goal = (to_skeleton.basis * (hit.normal as Vector3)).normalized()
-		offsets[foot] = maxf(goal + (float(offsets[foot]) - goal) * keep, lowest)
+		_smoothed[foot] = goal + (float(_smoothed[foot]) - goal) * keep
+		offsets[foot] = maxf(_smoothed[foot], lowest)
 		_normals[i] = normal_goal.lerp(_normals[i], keep).normalized()
-	pelvis_offset = clampf(minf(minf(offsets[FEET[0]], offsets[FEET[1]]), 0.0), -max_drop, 0.0)
+	var drop := clampf(minf(minf(_smoothed[FEET[0]], _smoothed[FEET[1]]), 0.0), -max_drop, 0.0)
+	pelvis_offset = drop + (pelvis_offset - drop) * keep
 	_drop_hips(skeleton)
 	var targets: Array[Node3D] = [target_l, target_r]
 	var poles: Array[Node3D] = [pole_l, pole_r]
