@@ -26,7 +26,7 @@ class Writer:
         data = struct.pack("<" + fmt * len(values), *values)
         self.views.append({"buffer": 0, "byteOffset": len(self.blob), "byteLength": len(data)})
         self.blob += data
-        per = {"SCALAR": 1, "VEC2": 2, "VEC3": 3}[kind]
+        per = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}[kind]
         accessor = {"bufferView": len(self.views) - 1, "componentType": component, "count": len(values) // per, "type": kind}
         if normalized:
             accessor["normalized"] = True
@@ -88,6 +88,42 @@ def glb_bytes(j, blob):
     return struct.pack("<4sII", b"glTF", 2, 12 + len(body)) + body
 
 
+def animated():
+    """Three joints like `sample`'s (root; `arm` one metre up, turned 90° about Z; `hand` one metre along
+    arm's +X) and an animation `swing` of three keys at 0, 0.5 and 1 s: root's translation goes
+    (0,0,0), (0,0,1), (0,0,2) and arm's rotation about Z goes 90°, 0° and -90°. `hand` has no channel."""
+    w = Writer()
+    times = w.accessor("f", [0.0, 0.5, 1.0], FLOAT, "SCALAR")
+    moves = w.accessor("f", [0, 0, 0, 0, 0, 1, 0, 0, 2], FLOAT, "VEC3")
+    turns = w.accessor("f", [0, 0, math.sin(math.pi / 4), math.cos(math.pi / 4), 0, 0, 0, 1,
+                             0, 0, -math.sin(math.pi / 4), math.cos(math.pi / 4)], FLOAT, "VEC4")
+    s = math.sqrt(0.5)
+    j = {
+        "asset": {"version": "2.0"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [
+            {"name": "Armature", "children": [1]},
+            {"name": "root", "children": [2]},
+            {"name": "arm", "translation": [0, 1, 0], "rotation": [0, 0, s, s], "children": [3]},
+            {"name": "hand", "translation": [1, 0, 0]},
+        ],
+        "skins": [{"joints": [1, 2, 3]}],
+        "animations": [
+            {"name": "idle", "channels": [], "samplers": []},
+            {"name": "swing",
+             "channels": [{"sampler": 0, "target": {"node": 1, "path": "translation"}},
+                          {"sampler": 1, "target": {"node": 2, "path": "rotation"}}],
+             "samplers": [{"input": times, "output": moves, "interpolation": "LINEAR"},
+                          {"input": times, "output": turns, "interpolation": "LINEAR"}]},
+        ],
+        "accessors": w.accessors,
+        "bufferViews": w.views,
+        "buffers": [{"byteLength": len(w.blob)}],
+    }
+    return j, bytes(w.blob)
+
+
 class GltfInspect(unittest.TestCase):
     def setUp(self):
         holder = tempfile.TemporaryDirectory()
@@ -133,6 +169,46 @@ class GltfInspect(unittest.TestCase):
         self.assertEqual(gltf_inspect.uv2_slots(j, self.glb, mesh="bare"), {-1})
         self.assertEqual(gltf_inspect.uv2_slots(j, self.glb), {0, 1, 3, 5, 8, -1})
         self.assertFalse(gltf_inspect.uv2_slots(j, self.glb) <= set(range(9)))
+
+    def test_animation_names_and_tracks(self):
+        j, blob = animated()
+        glb = self.dir / "animated.glb"
+        glb.write_bytes(glb_bytes(j, blob))
+        loaded = gltf_inspect.load(glb)
+        self.assertEqual(gltf_inspect.animation_names(loaded), ["idle", "swing"])
+        self.assertEqual(gltf_inspect.animation_names(gltf_inspect.load(self.glb)), [])
+        self.assertEqual(gltf_inspect.animation_tracks(loaded, glb, "idle"), {})
+        tracks = gltf_inspect.animation_tracks(loaded, glb, "swing")
+        self.assertEqual(sorted(tracks), ["arm", "root"])
+        times, values = tracks["root"]["translation"]
+        self.assertEqual(times, [0.0, 0.5, 1.0])
+        self.assertEqual(values, [(0, 0, 0), (0, 0, 1), (0, 0, 2)])
+        self.assertEqual(sorted(tracks["arm"]), ["rotation"])
+        self.assertAlmostEqual(tracks["arm"]["rotation"][1][2][2], -math.sin(math.pi / 4), places=6)
+        with self.assertRaises(KeyError):
+            gltf_inspect.animation_tracks(loaded, glb, "missing")
+
+    def test_world_matrices_at_rest_and_at_a_key(self):
+        j, blob = animated()
+        glb = self.dir / "animated.glb"
+        glb.write_bytes(glb_bytes(j, blob))
+        loaded = gltf_inspect.load(glb)
+        tracks = gltf_inspect.animation_tracks(loaded, glb, "swing")
+
+        def origin(matrices, name):
+            return tuple(round(matrices[name][r][3], 6) for r in range(3))
+
+        rest = gltf_inspect.joint_world_matrices(loaded)
+        self.assertEqual(sorted(rest), ["arm", "hand", "root"])
+        self.assertEqual(origin(rest, "hand"), (0.0, 2.0, 0.0))  # up the turned arm: its +X is world +Y
+        first = gltf_inspect.joint_world_matrices(loaded, tracks, 0)
+        self.assertEqual(origin(first, "hand"), (0.0, 2.0, 0.0), "key 0 is the rest pose")
+        middle = gltf_inspect.joint_world_matrices(loaded, tracks, 1)
+        self.assertEqual(origin(middle, "hand"), (1.0, 1.0, 1.0), "root one metre along z, arm unturned")
+        last = gltf_inspect.joint_world_matrices(loaded, tracks, -1)
+        self.assertEqual(origin(last, "hand"), (0.0, 0.0, 2.0), "arm turned -90°: its +X is world -Y")
+        self.assertEqual(origin(last, "root"), (0.0, 0.0, 2.0))
+        self.assertEqual(last["hand"], gltf_inspect.joint_world_matrices(loaded, tracks, 2)["hand"])
 
 
 if __name__ == "__main__":

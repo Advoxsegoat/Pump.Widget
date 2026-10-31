@@ -5,6 +5,12 @@
     joint_names(j) -> list[str]            the joints of every skin, in skin order, each once
     joint_parents(j) -> dict[str, str|None]  each joint's parent joint (None for a skin's root)
     joint_positions(j) -> dict[str, tuple] each joint's rest position in glTF space (Y up, +Z front)
+    animation_names(j) -> list[str]        the animations, in file order
+    animation_tracks(j, path, name) -> dict  the channels of one animation: {node: {"translation" |
+                                           "rotation" | "scale": (times, values)}}; values are tuples
+                                           (rotations are quaternions x, y, z, w)
+    joint_world_matrices(j, tracks=None, key=None) -> dict[str, 4x4]  each joint's world matrix: at rest,
+                                           or with the animated values of key number `key` (-1 is the last)
     triangle_count(j) -> int               triangles drawn by the mesh nodes
     uv2_slots(j, path, mesh=None) -> set[int]  the palette slots in TEXCOORD_1 (UV2)
 
@@ -137,13 +143,15 @@ def joint_parents(j):
     return found
 
 
-def _local_matrix(node):
+def _local_matrix(node, animated=None):
+    """The node's 4x4 matrix; `animated` maps "translation", "rotation" and "scale" to values that replace its own."""
     if "matrix" in node:
         m = node["matrix"]  # column-major
         return [[m[c * 4 + r] for c in range(4)] for r in range(4)]
-    x, y, z, w = node.get("rotation", [0.0, 0.0, 0.0, 1.0])
-    sx, sy, sz = node.get("scale", [1.0, 1.0, 1.0])
-    tx, ty, tz = node.get("translation", [0.0, 0.0, 0.0])
+    animated = animated or {}
+    x, y, z, w = animated.get("rotation", node.get("rotation", [0.0, 0.0, 0.0, 1.0]))
+    sx, sy, sz = animated.get("scale", node.get("scale", [1.0, 1.0, 1.0]))
+    tx, ty, tz = animated.get("translation", node.get("translation", [0.0, 0.0, 0.0]))
     rot = [
         [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
         [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
@@ -157,13 +165,15 @@ def _multiply(a, b):
     return [[sum(a[r][k] * b[k][c] for k in range(4)) for c in range(4)] for r in range(4)]
 
 
-def _global_matrices(j):
+def _global_matrices(j, animated=None):
+    """A function node index -> world matrix; `animated` maps a node index to the values (see _local_matrix) it has."""
     parents = _parents(j)
     cache = {}
+    animated = animated or {}
 
     def matrix(index):
         if index not in cache:
-            local = _local_matrix(j["nodes"][index])
+            local = _local_matrix(j["nodes"][index], animated.get(index))
             cache[index] = _multiply(matrix(parents[index]), local) if index in parents else local
         return cache[index]
 
@@ -178,6 +188,48 @@ def joint_positions(j):
             m = matrix(index)
             found[_name(j, index)] = (m[0][3], m[1][3], m[2][3])
     return found
+
+
+def animation_names(j):
+    return [a.get("name", f"animation{i}") for i, a in enumerate(j.get("animations", []))]
+
+
+def animation_tracks(j, path, name):
+    """The translation, rotation and scale channels of the animation called `name` (KeyError if there is
+    none), as {node name: {"translation" | "rotation" | "scale": (times, values)}}. Morph weight channels
+    are left out; a cubic spline channel is refused."""
+    names = animation_names(j)
+    if name not in names:
+        raise KeyError(name)
+    animation = j["animations"][names.index(name)]
+    buffers = _buffers(j, path)
+    tracks = {}
+    for channel in animation["channels"]:
+        target = channel["target"]
+        if "node" not in target or target["path"] not in ("translation", "rotation", "scale"):
+            continue
+        sampler = animation["samplers"][channel["sampler"]]
+        if sampler.get("interpolation", "LINEAR") == "CUBICSPLINE":
+            raise ValueError(f"{name}: cubic spline channels are not supported")
+        times = [t[0] for t in _read_accessor(j, buffers, sampler["input"])]
+        values = _read_accessor(j, buffers, sampler["output"])
+        tracks.setdefault(_name(j, target["node"]), {})[target["path"]] = (times, values)
+    return tracks
+
+
+def joint_world_matrices(j, tracks=None, key=None):
+    """The world matrix (4x4 nested lists) of every joint, by name. With `tracks` (from animation_tracks) and
+    a `key`, each animated property takes its value at that key of its track (a negative key counts from the
+    end; a track shorter than the key holds its last value) and the others stay at rest."""
+    animated = {}
+    if tracks is not None and key is not None:
+        by_name = {_name(j, i): i for i in range(len(j["nodes"]))}
+        for name, properties in tracks.items():
+            animated[by_name[name]] = {
+                prop: values[min(key, len(values) - 1) if key >= 0 else key]
+                for prop, (_, values) in properties.items()}
+    matrix = _global_matrices(j, animated)
+    return {_name(j, index): matrix(index) for skin in j.get("skins", []) for index in skin["joints"]}
 
 
 def _primitive_triangles(j, primitive):
