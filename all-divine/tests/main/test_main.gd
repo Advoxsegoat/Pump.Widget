@@ -1,6 +1,7 @@
 extends TestCase
 ## The main scene (main/main.tscn): it boots into PLAY with Abarax at the courtyard's spawn, the camera on him
-## and the screen look on; F3 shows the debug overlay, F4 turns the look off, the menu button (Esc) pauses.
+## and the screen look on; F3 shows the debug overlay, F4 turns the look off, the menu button (Esc) pauses and
+## "Paused" shows while it is paused. F11 and Alt+Enter are tests/main/test_window_toggle.gd's.
 ## The self-test (--selftest) is tests/main/test_selftest.gd's.
 
 const MAIN := "res://main/main.tscn"
@@ -120,6 +121,35 @@ func test_menu_pauses_and_resumes() -> void:
 	assert_false(get_tree().paused, "the tree runs")
 	await frames(3)
 	assert_true(player.frame > frame, "the player ticks again")
+
+
+func test_paused_shows_while_the_game_is_paused() -> void:
+	var main := _main()
+	var paused := main.get_node_or_null("PauseLabel") as CanvasLayer
+	if paused == null:
+		fail("main has a PauseLabel CanvasLayer")
+		return
+	var label := paused.get_node_or_null("Label") as Label
+	if label == null:
+		fail("the PauseLabel has a Label")
+		return
+	assert_eq(label.text, "Paused")
+	assert_false(paused.visible, "hidden while playing")
+	_press_action(&"menu")
+	assert_eq(Game.state, Game.State.PAUSE)
+	assert_true(paused.visible, "shown as soon as the menu button pauses")
+	assert_true(label.is_visible_in_tree(), "the label shows")
+	assert_true(paused.can_process(), "it runs while the tree is paused")
+	await frames(2)
+	assert_true(paused.visible, "and stays up while paused")
+	_press_key(KEY_ESCAPE)
+	assert_eq(Game.state, Game.State.PLAY)
+	assert_false(paused.visible, "hidden again when the game plays")
+	# Whatever else pauses the game (not the menu button) shows it too.
+	Game.change(Game.State.PAUSE)
+	assert_true(paused.visible, "any move into PAUSE shows it")
+	Game.change(Game.State.PLAY)
+	assert_false(paused.visible)
 
 
 func test_escape_is_the_menu_button() -> void:

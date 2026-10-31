@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://main/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://render/pixel_stage.tscn" id="2_stage"]
@@ -7,6 +7,7 @@
 [ext_resource type="Resource" path="res://data/actors/abarax.tres" id="5_abarax"]
 [ext_resource type="Script" path="res://render/camera_rig.gd" id="6_camera_rig"]
 [ext_resource type="Script" path="res://main/debug_overlay.gd" id="7_overlay"]
+[ext_resource type="Script" path="res://main/pause_label.gd" id="8_pause"]
 
 [node name="Main" type="Node"]
 process_mode = 3
@@ -26,5 +27,9 @@ script = ExtResource("6_camera_rig")
 [node name="DebugOverlay" type="CanvasLayer" parent="."]
 visible = false
 script = ExtResource("7_overlay")
+
+[node name="PauseLabel" type="CanvasLayer" parent="."]
+visible = false
+script = ExtResource("8_pause")
 
 [editable path="PixelStage"]

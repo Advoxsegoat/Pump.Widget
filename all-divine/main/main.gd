@@ -9,8 +9,8 @@ extends Node
 ##
 ## F3 shows or hides the debug overlay; F4 turns the screen look off and on; F11 or Alt+Enter switches between
 ## borderless fullscreen, where the game starts, and a 1280x720 window (WindowToggle); the menu button (Esc,
-## Start) pauses and resumes. This node runs while the game is paused (to hear the menu button); the stage, and
-## so the world in it, stops.
+## Start) pauses and resumes, and "Paused" shows while it is paused (PauseLabel). This node runs while the game
+## is paused (to hear the menu button); the stage, and so the world in it, stops.
 ##
 ## With --selftest (a user argument: godot -- --selftest) Abarax runs a scripted circuit of the courtyard instead
 ## (selftest_circuit) for SELFTEST_FRAMES physics frames; the SelfTest autoload (core/self_test.gd), listening
