@@ -25,6 +25,32 @@ func test_ledger_rows_name_existing_paths_and_allowed_licences() -> void:
 	assert_true(Ledger.rows(LEDGER).size() > 0, "ASSETS.md has no rows")
 
 
+# Files of ours that sit among downloaded ones. Every row that covers one must say "ours": a folder row
+# for the pack around it would claim the pack's licence for it.
+const OURS_AMONG_DOWNLOADS: PackedStringArray = ["assets/anim/clips.cfg"]
+
+
+func test_our_files_among_downloaded_ones_are_ledgered_as_ours() -> void:
+	var rows := Ledger.rows(LEDGER)
+	for file in OURS_AMONG_DOWNLOADS:
+		var covering := rows.filter(func(row: Dictionary) -> bool: return Ledger.covers(row.path, file))
+		assert_false(covering.is_empty(), "%s has a row" % file)
+		for row: Dictionary in covering:
+			assert_eq(row.licence, "ours", "%s is covered by the row for %s (line %d)" % [file, row.path, row.line])
+
+
+# The clips' row says what was done to them (tools/anim/clip_builder.gd, set_marks.gd).
+func test_the_clips_row_says_what_was_done_to_them() -> void:
+	var clips := Ledger.rows(LEDGER).filter(func(row: Dictionary) -> bool: return row.path == "assets/anim/abarax/")
+	assert_eq(clips.size(), 1, "one row for assets/anim/abarax/")
+	if clips.size() != 1:
+		return
+	var changes: String = clips[0].changes
+	for part in ["rotation tracks kept", "position tracks only for root and pelvis", "scale tracks", "hip height",
+			"retimed", "marks", "palm_jab", "palm_cross", "dodge_roll"]:
+		assert_true(changes.contains(part), "the Changes cell mentions \"%s\": %s" % [part, changes])
+
+
 # --- the helper itself: a check that cannot fail would prove nothing ---
 
 func test_unlisted_reports_files_no_row_covers_and_skips_import_files() -> void:
@@ -203,11 +229,14 @@ class Ledger:
 				return false
 		return true
 
-	# A row path ending in "/" covers everything under it; any other row covers exactly that file.
-	# Comparison is case-sensitive.
+	## True when a row for `path` covers the file `relative`: a path ending in "/" covers everything
+	## under it; any other path covers exactly that file. Comparison is case-sensitive.
+	static func covers(path: String, relative: String) -> bool:
+		return relative == path or (path.ends_with("/") and relative.begins_with(path))
+
 	static func _covered(relative: String, covering: PackedStringArray) -> bool:
 		for path in covering:
-			if relative == path or (path.ends_with("/") and relative.begins_with(path)):
+			if covers(path, relative):
 				return true
 		return false
 
