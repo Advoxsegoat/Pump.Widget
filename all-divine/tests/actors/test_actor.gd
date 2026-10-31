@@ -8,10 +8,16 @@ const ACTOR := "res://actors/actor.tscn"
 const DT := 1.0 / 60
 
 
-## A PlayerBrain whose pad drifts: the stick rests a little off centre (0.15, inside the deadzone).
+## A PlayerBrain whose stick reads `raw`, with the deadzone taken out as Inputs takes it out. A pad
+## that drifts rests a little off centre, up to 0.19 on both axes at once.
 class DriftBrain extends PlayerBrain:
+	var raw := Vector2.ZERO
+
+	func _init(reading: Vector2) -> void:
+		raw = reading
+
 	func screen_move() -> Vector2:
-		return Inputs.shape_stick(Vector2(0.15, 0))
+		return Inputs.shape_stick(raw)
 
 
 ## A PlayerBrain whose stick is held at `screen`.
@@ -116,14 +122,35 @@ func test_place_stands_the_actor_there_at_rest_facing_its_way() -> void:
 	assert_near(actor.rotation.y, deg_to_rad(-120), 1e-4, "still facing that way")
 
 
+# Ten seconds on a pad resting at each reading, one actor per reading, 6 m apart.
 func test_drift_does_not_move_actor() -> void:
+	var drifts: Array[Vector2] = [Vector2(0.15, 0), Vector2(0.15, 0.15), Vector2(0.19, 0.19), Vector2(0.12, 0.17), Vector2(-0.19, 0.19)]
 	var arena := TestArena.make(self)
-	var actor := TestArena.spawn(arena, _def(), DriftBrain.new())
-	await frames(60)
-	assert_true(actor.frame >= 60)
-	assert_true(actor.global_position.length() < 0.01, "moved to %s" % actor.global_position)
-	assert_eq(actor.locomotion.facing_yaw, 0.0)
-	assert_vec_near(actor.facing(), Vector3(0, 0, 1), 1e-6)
+	var actors: Array[Actor] = []
+	for i in drifts.size():
+		actors.append(TestArena.spawn(arena, _def(), DriftBrain.new(drifts[i]), Vector3(6.0 * i - 12.0, 0, 0)))
+	await frames(600)
+	for i in drifts.size():
+		var actor := actors[i]
+		var start := Vector3(6.0 * i - 12.0, 0, 0)
+		assert_true(actor.frame >= 600, str(drifts[i]))
+		assert_true(actor.global_position.distance_to(start) < 0.01, "at %s he moved %.3f m, to %s" % [drifts[i], actor.global_position.distance_to(start), actor.global_position])
+		assert_eq(actor.locomotion.facing_yaw, 0.0, "at %s he still faces the way he started" % drifts[i])
+		assert_vec_near(actor.facing(), Vector3(0, 0, 1), 1e-6, str(drifts[i]))
+
+
+# A light push just past the drift, and a full one, do move him, the way the stick points (right is +X).
+func test_a_real_push_moves_actor() -> void:
+	var arena := TestArena.make(self)
+	var light := TestArena.spawn(arena, _def(), DriftBrain.new(Vector2(0.35, 0)), Vector3(-10, 0, -6))
+	var full := TestArena.spawn(arena, _def(), DriftBrain.new(Vector2(1, 0)), Vector3(-10, 0, 6))
+	await frames(120)
+	var light_moved := light.global_position - Vector3(-10, 0, -6)
+	var full_moved := full.global_position - Vector3(-10, 0, 6)
+	assert_true(light_moved.x > 0.2, "a 0.35 push moved him %s in 2 s" % light_moved)
+	assert_true(full_moved.x > 4.0 * light_moved.x, "a full push moved him %s, far more" % full_moved)
+	assert_vec_near(light.facing(), Vector3(1, 0, 0), 1e-3, "he turned to face +X")
+	assert_vec_near(full.facing(), Vector3(1, 0, 0), 1e-3, "he turned to face +X")
 
 
 func test_player_brain_turns_the_stick_by_the_view_yaw() -> void:

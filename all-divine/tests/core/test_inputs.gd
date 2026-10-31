@@ -85,21 +85,38 @@ func _write(text: String) -> void:
 
 # --- the stick ---
 
+## Stick readings of a pad at rest that drifts, up to 0.19 on both axes at once (0.269 long).
+const DRIFT: Array[Vector2] = [Vector2(0.15, 0.15), Vector2(0.19, 0.19), Vector2(0.12, 0.17), Vector2(-0.19, 0.19),
+		Vector2(0.19, -0.19), Vector2(-0.19, -0.19), Vector2(0.19, 0), Vector2(0, -0.19)]
+
+func test_the_deadzone_is_028() -> void:
+	assert_eq(Inputs.DEADZONE, 0.28)
+
 func test_stick_drift_below_deadzone_is_still() -> void:
 	for v in [Vector2(0.1, 0), Vector2(0.12, -0.1), Vector2(0, 0.19), Vector2(-0.14, 0.14), Vector2.ZERO]:
 		assert_eq(Inputs.shape_stick(v), Vector2.ZERO, str(v))
+
+func test_diagonal_drift_is_still() -> void:
+	for v in DRIFT:
+		assert_eq(Inputs.shape_stick(v), Vector2.ZERO, str(v))
+
+func test_a_light_push_past_the_drift_moves() -> void:
+	var shaped := Inputs.shape_stick(Vector2(0.35, 0))   # (0.35 - 0.28) / 0.72 = 0.0972
+	assert_near(shaped.length(), 0.07 / 0.72, 1e-5)
+	assert_near(shaped.angle_to(Vector2(1, 0)), 0.0, 1e-5)
+	assert_true(Inputs.shape_stick(Vector2(0.21, 0.21)).length() > 0.0, "0.297 long, just past the deadzone")
 
 func test_stick_exactly_at_the_deadzone_is_still() -> void:
 	assert_eq(Inputs.shape_stick(Vector2(Inputs.DEADZONE, 0)), Vector2.ZERO)
 
 func test_stick_remaps_past_deadzone() -> void:
-	assert_vec_near(Vector3(Inputs.shape_stick(Vector2(0.6, 0)).x, 0, 0), Vector3(0.5, 0, 0), 1e-4)
+	assert_vec_near(Vector3(Inputs.shape_stick(Vector2(0.64, 0)).x, 0, 0), Vector3(0.5, 0, 0), 1e-4)   # (0.64 - 0.28) / 0.72
 	assert_eq(Inputs.shape_stick(Vector2(1, 0)), Vector2(1, 0))
 
 func test_stick_remap_is_radial_and_keeps_direction() -> void:
-	var shaped := Inputs.shape_stick(Vector2(-0.3, 0.4))   # length 0.5 -> (0.5 - 0.2) / 0.8 = 0.375
-	assert_near(shaped.length(), 0.375, 1e-5)
-	assert_near(shaped.angle_to(Vector2(-0.3, 0.4)), 0.0, 1e-5)
+	var shaped := Inputs.shape_stick(Vector2(-0.384, 0.512))   # length 0.64 -> (0.64 - 0.28) / 0.72 = 0.5
+	assert_near(shaped.length(), 0.5, 1e-5)
+	assert_near(shaped.angle_to(Vector2(-0.384, 0.512)), 0.0, 1e-5)
 
 func test_stick_is_clamped_to_one() -> void:
 	assert_near(Inputs.shape_stick(Vector2(0.9, 0.9)).length(), 1.0, 1e-5)
@@ -156,10 +173,17 @@ func test_move_vector_follows_rebound_keys() -> void:
 func test_move_vector_reads_a_stick_through_the_deadzone() -> void:
 	_stick(0, 0.1, -0.1)
 	assert_eq(Inputs.move_vector([0] as Array[int]), Vector2.ZERO, "drift is ignored")
-	_stick(0, 0.6, 0.0)
+	_stick(0, 0.64, 0.0)
 	assert_vec_near(Vector3(Inputs.move_vector([0] as Array[int]).x, 0, 0), Vector3(0.5, 0, 0), 1e-4)
 	_stick(0, 0.0, -1.0)
 	assert_eq(Inputs.move_vector([0] as Array[int]), Vector2(0, -1), "stick up is negative y")
+
+func test_move_vector_ignores_diagonal_drift() -> void:
+	for v in DRIFT:
+		_stick(0, v.x, v.y)
+		assert_eq(Inputs.move_vector([0] as Array[int]), Vector2.ZERO, "stick resting at %s" % v)
+	_stick(0, 0.35, 0.0)
+	assert_true(Inputs.move_vector([0] as Array[int]).x > 0.0, "a real push still moves")
 
 func test_move_vector_takes_the_key_over_a_weaker_stick() -> void:
 	_stick(0, 0.5, 0.0)
@@ -209,7 +233,7 @@ func test_a_stick_no_longer_moves_once_its_direction_is_rebound_to_a_button() ->
 func test_move_vector_follows_axes_bound_to_the_move_actions() -> void:
 	Inputs.rebind(&"move_left", _motion(JOY_AXIS_RIGHT_X, -1.0))
 	Inputs.rebind(&"move_right", _motion(JOY_AXIS_RIGHT_X, 1.0))
-	_axis(0, JOY_AXIS_RIGHT_X, 0.6)
+	_axis(0, JOY_AXIS_RIGHT_X, 0.64)
 	assert_vec_near(Vector3(Inputs.move_vector([0] as Array[int]).x, 0, 0), Vector3(0.5, 0, 0), 1e-4)
 	_axis(0, JOY_AXIS_RIGHT_X, -1.0)
 	assert_eq(Inputs.move_vector([0] as Array[int]), Vector2(-1, 0), "the right stick's other direction")
@@ -225,24 +249,24 @@ func test_stick_drift_is_still_ignored_on_rebound_axes_and_across_sticks() -> vo
 	for drift in [0.1, 0.15, 0.19, -0.19]:
 		_axis(0, JOY_AXIS_RIGHT_X, drift)
 		assert_eq(Inputs.move_vector([0] as Array[int]), Vector2.ZERO, "right X at %s" % drift)
-	# x from the right stick and y from the left stick make one vector: 0.14 and 0.14 are 0.198 long.
-	_axis(0, JOY_AXIS_RIGHT_X, 0.14)
-	_stick(0, 0.0, 0.14)
+	# x from the right stick and y from the left stick make one vector: 0.19 and 0.19 are 0.269 long.
+	_axis(0, JOY_AXIS_RIGHT_X, 0.19)
+	_stick(0, 0.0, 0.19)
 	assert_eq(Inputs.move_vector([0] as Array[int]), Vector2.ZERO)
 
 func test_a_trigger_bound_to_a_move_action_moves_through_the_deadzone() -> void:
 	Inputs.rebind(&"move_down", _motion(JOY_AXIS_TRIGGER_RIGHT, 1.0))
-	_axis(0, JOY_AXIS_TRIGGER_RIGHT, 0.6)
+	_axis(0, JOY_AXIS_TRIGGER_RIGHT, 0.64)
 	assert_vec_near(Vector3(0, Inputs.move_vector([0] as Array[int]).y, 0), Vector3(0, 0.5, 0), 1e-4)
 	_axis(0, JOY_AXIS_TRIGGER_RIGHT, 0.0)
 
 func test_the_larger_of_a_bound_button_and_a_bound_stick_wins() -> void:
 	Inputs.rebind(&"move_up", _button(JOY_BUTTON_DPAD_UP))
 	_pad_button(0, JOY_BUTTON_DPAD_UP, true)
-	_stick(0, 0.7, 0.0)
+	_stick(0, 0.73, 0.0)
 	assert_eq(Inputs.move_vector([0] as Array[int]), Vector2(0, -1), "the button is a full push")
 	_pad_button(0, JOY_BUTTON_DPAD_UP, false)
-	assert_vec_near(Vector3(Inputs.move_vector([0] as Array[int]).x, 0, 0), Vector3(0.625, 0, 0), 1e-4)
+	assert_vec_near(Vector3(Inputs.move_vector([0] as Array[int]).x, 0, 0), Vector3(0.625, 0, 0), 1e-4)   # (0.73 - 0.28) / 0.72
 
 # --- buttons ---
 

@@ -6,8 +6,9 @@ extends Node
 ## rebinds one, and saves and loads the player's table.
 
 ## Below this much stick deflection the stick is at rest. Past it, the deflection is rescaled to
-## run from 0 at the edge of the deadzone to 1 at full.
-const DEADZONE := 0.2
+## run from 0 at the edge of the deadzone to 1 at full. The deadzone is round (on the stick's length),
+## and 0.28 holds a worn pad that rests up to 0.19 off centre on both axes at once (0.269 long).
+const DEADZONE := 0.28
 ## Where the player's bindings are kept.
 const BINDINGS_PATH := "user://input.cfg"
 ## The actions that are pressed and let go, as opposed to movement, which is read as a vector.
@@ -33,7 +34,7 @@ func _ready() -> void:
 ## up to 1, in the direction of `raw`.
 static func shape_stick(raw: Vector2) -> Vector2:
 	var length := raw.length()
-	# A Vector2 holds 32-bit floats, so a stick at exactly 0.2 is a hair above the 64-bit 0.2.
+	# A Vector2 holds 32-bit floats, so a stick at exactly 0.28 is a hair above the 64-bit 0.28.
 	if length <= DEADZONE or is_equal_approx(length, DEADZONE):
 		return Vector2.ZERO
 	return raw / length * minf((length - DEADZONE) / (1.0 - DEADZONE), 1.0)

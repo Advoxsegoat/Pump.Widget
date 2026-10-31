@@ -53,8 +53,8 @@ func test_stops_in_about_ten_frames() -> void:
 
 func test_light_tilt_walks() -> void:
 	var loco := _loco()
-	var tilt := Inputs.shape_stick(Vector2(0.4, 0))
-	assert_near(tilt.length(), 0.25, 1e-6, "a 0.4 push is 0.25 once the deadzone is out")
+	var tilt := Inputs.shape_stick(Vector2(0.46, 0))
+	assert_near(tilt.length(), 0.25, 1e-6, "a 0.46 push is 0.25 once the deadzone is out")
 	assert_near(loco.target_speed(tilt.length(), false), 0.8, 1e-6)
 	for f in 60:
 		loco.tick(tilt, false, DT)
