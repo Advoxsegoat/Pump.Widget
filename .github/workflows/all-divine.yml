@@ -3,8 +3,9 @@
 #   render              the suite again with the tests that need a display (xvfb, Compatibility renderer)
 #   render-forward-plus the render tests whose shaders have a Forward+ branch, on a software Vulkan device
 #                       (lavapipe), so Forward+ is checked here and not only on the owner's PC
-#   export              the Linux, Windows and Web builds, a self-test of the Linux one, and the three as artifacts
-# The jobs do not wait for each other. See all-divine/STATE.md.
+#   export              the Linux, Windows and Web builds, uploaded as artifacts, then a self-test of the Linux one
+# The export job waits for the test job (a failing test or clip check fails the build); the others run side by side.
+# See all-divine/STATE.md.
 name: The All-Divine (Godot)
 
 on:
@@ -22,6 +23,10 @@ on:
 concurrency:
   group: all-divine-${{ github.ref }}
   cancel-in-progress: true
+
+# The jobs only read the repository.
+permissions:
+  contents: read
 
 env:
   # Must be the VERSION in all-divine/tools/setup.sh (the first step of each job checks it). It names the caches.
@@ -124,6 +129,8 @@ jobs:
 
   export:
     name: Builds (Linux, Windows, Web)
+    # The spec: the build fails when the clip checker (or any headless test) fails.
+    needs: [test]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -171,19 +178,8 @@ jobs:
           tools/godot.sh --export-release "Web" out/web/index.html
           ls -l out/linux out/windows out/web
 
-      # The shipped game boots and walks its scripted circuit without an engine error (exit 0). This is what proves
-      # the build has every script and scene the game needs.
-      - name: Self-test of the Linux build
-        run: out/linux/all-divine.x86_64 --headless -- --selftest
-
-      - name: The Linux build starts and quits cleanly
-        run: |
-          out/linux/all-divine.x86_64 --headless --quit-after 120 2>&1 | tee "$RUNNER_TEMP/boot.log"
-          if grep -E 'ERROR|SCRIPT' "$RUNNER_TEMP/boot.log"; then
-            echo 'the build logged an error while starting' >&2
-            exit 1
-          fi
-
+      # Uploaded before the Linux build is run, so a failing run check (below) still fails the job but cannot
+      # withhold the Windows and Web builds.
       - uses: actions/upload-artifact@v4
         with:
           name: all-divine-windows
@@ -201,3 +197,16 @@ jobs:
           name: all-divine-web
           path: all-divine/out/web/
           if-no-files-found: error
+
+      # The shipped game boots and walks its scripted circuit without an engine error (exit 0). This is what proves
+      # the build has every script and scene the game needs.
+      - name: Self-test of the Linux build
+        run: out/linux/all-divine.x86_64 --headless -- --selftest
+
+      - name: The Linux build starts and quits cleanly
+        run: |
+          out/linux/all-divine.x86_64 --headless --quit-after 120 2>&1 | tee "$RUNNER_TEMP/boot.log"
+          if grep -E 'ERROR|SCRIPT' "$RUNNER_TEMP/boot.log"; then
+            echo 'the build logged an error while starting' >&2
+            exit 1
+          fi
