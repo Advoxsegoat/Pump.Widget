@@ -18,10 +18,11 @@ What is done, what is next, and where the decisions live. Every task's final com
 - F0 Task 12: Liveliness I: 8-way locomotion by orientation warping, breathing, procedural hit reactions (`tools/test.sh`: 351 passed, 0 failed; with `--render`: 377 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 - F0 Task 13: Liveliness II: foot IK on slopes and stairs, head and neck look-at, spring-bone scarf (`tools/test.sh`: 383 passed, 0 failed; with `--render`: 409 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK).
 - F0 Task 14: The courtyard (Kenney town kit, flagstones at 32 texels/m, lanterns) and the main scene; --selftest (`tools/test.sh`: 409 passed, 0 failed; with `--render`: 439 passed, 0 failed; `tools/clip_check.gd`: 3 moves, 1 actors OK; `tools/godot.sh -- --selftest`: exit 0). `world/courtyard/courtyard.tscn` is the source now: `tools/world/build_courtyard.gd` made it once from `layout.txt`; edit the scene, and do not build it again (that would overwrite the edits).
+- F0 Task 15: Retargeting tool: BVH (CMU names) → our skeleton via bpy; ready for CMU strafes (`tools/bpy_test.sh`: 44 passed; `tools/test.sh`: 409 passed, 0 failed). No CMU clip is in the project yet; the first one brings its `ASSETS.md` row and its `clips.cfg` source.
 
 ## Next
 
-F0 Task 15
+F0 Task 16
 
 ## Decisions
 
@@ -44,10 +45,15 @@ all-divine/tools/godot.sh --render <args...>   # any Godot call with a display; 
 python3 -I all-divine/tools/assets/fetch.py fetch all   # download, hash-check and extract the asset packs into .cache/ (--accept-new records a changed hash)
 python3 -I all-divine/tools/assets/import_kenney.py     # copy the listed Kenney town pieces into assets/env/kenney_town/
 python3 -I -m unittest discover -s all-divine/tools/assets/tests   # the Python tools' tests
-all-divine/tools/bpy_test.sh                   # the bpy tools' tests (tools/anim/tests; builds Abarax into a temp file)
+all-divine/tools/bpy_test.sh                   # the bpy tools' tests (tools/anim/tests; builds Abarax and retargets synthetic BVHs into temp files)
 all-divine/tools/.venv/bin/python -I all-divine/tools/anim/build_abarax.py \
     --ubc "$(python3 -I all-divine/tools/assets/fetch.py path ubc)" --outfits "$(python3 -I all-divine/tools/assets/fetch.py path outfits)" \
     --out all-divine/assets/characters/abarax/abarax.glb   # rebuild Abarax's model (same bytes every time), then tools/test.sh reimports it
+all-divine/tools/.venv/bin/python -I all-divine/tools/anim/retarget.py --bvh clip.bvh --map all-divine/tools/anim/bonemap_cmu.json \
+    --target all-divine/assets/characters/abarax/abarax.glb --tpose-clip A_TPose --name clip --out all-divine/out/retarget/clip.glb \
+    --tpose "$(python3 -I all-divine/tools/assets/fetch.py path ual1)/Universal Animation Library[Standard]/Unreal-Godot/UAL1_Standard.glb"
+                                               # a CMU BVH (cgspeed joint names) onto Abarax's skeleton, by world-space rotation change from rest on top
+                                               # of the T-pose reference; the hips travel is scaled by hip height. Writes Abarax's model with the one clip
 all-divine/tools/godot.sh -s res://tools/anim/build_library.gd -- --ual1 "$(python3 -I all-divine/tools/assets/fetch.py path ual1)"
                                                # rebuild assets/anim/abarax/ from assets/anim/clips.cfg (marks on existing clips are kept), then godot.sh --import
 all-divine/tools/godot.sh -s res://tools/clip_check.gd   # every move's marks and every actor's required clips against the rules; prints "clip_check: N moves, M actors OK" or each problem, exit 1
