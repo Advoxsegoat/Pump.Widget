@@ -1,7 +1,7 @@
 extends TestCase
-## HitScanner on its own (combat/hit_scanner.gd), in an arena: an attacker whose processing is off, so that only
-## the test moves its palm_l hitbox (by hand) and scans, and a target standing 3 m in front of it that does
-## nothing. A scan sweeps each live hitbox from where it was at the last scan to where it is now, so a hand that
+## HitScanner on its own (combat/hit_scanner.gd), in an arena: an attacker (Abarax, team PLAYER) whose processing
+## is off, so that only the test moves its palm_l hitbox (by hand) and scans, and a target of team ENEMY standing
+## 3 m in front of it that does nothing. A scan sweeps each live hitbox from where it was at the last scan to where it is now, so a hand that
 ## passes through a body between two ticks still finds it; a hitbox turned on and off between two scans is
 ## looked for once, where it is; the attacker's own hurtbox is never found; and each body is hit once per
 ## activation of a hitbox, and again only after a new begin.
@@ -19,9 +19,11 @@ func _setup() -> Dictionary:
 	var arena := TestArena.make(self)
 	var attacker := TestArena.spawn(arena, load(ABARAX), ScriptBrain.new([]), Vector3(0, 0, -3), "Attacker")
 	attacker.set_physics_process(false)
-	var target := TestArena.spawn(arena, load(ABARAX), ScriptBrain.new([]), Vector3.ZERO, "Target")
+	var foe := (load(ABARAX) as ActorDef).duplicate() as ActorDef
+	foe.team = ActorDef.Team.ENEMY
+	var target := TestArena.spawn(arena, foe, ScriptBrain.new([]), Vector3.ZERO, "Target")
 	await frames(2)
-	return {"attacker": attacker, "target": target, "scanner": attacker.scanner,
+	return {"arena": arena, "attacker": attacker, "target": target, "scanner": attacker.scanner,
 			"shape": attacker.rig.hitbox_shape(&"palm_l"), "jab": Registry.fetch(&"moves", &"palm_jab")}
 
 
@@ -82,6 +84,16 @@ func test_own_hurtbox_is_never_hit() -> void:
 	assert_eq(_scan_at(s, 0.0, -3.0), [], "in the attacker's own chest")
 	assert_eq(_scan_at(s, 0.0, -2.9), [], "still there")
 	assert_eq(_scan_at(s, 0.0, 0.0), [s["target"]], "swept out of its own body into the target: only the target")
+
+
+func test_an_ally_is_never_hit() -> void:
+	var s: Dictionary = await _setup()
+	var ally := TestArena.spawn(s["arena"], load(ABARAX), ScriptBrain.new([]), Vector3(3, 0, 0), "Ally")
+	await frames(1)
+	(s["scanner"] as HitScanner).begin(&"palm_l", &"palm", s["jab"])
+	assert_eq(_scan_at(s, 3.0), [], "in the body of one of its own team")
+	assert_eq(_scan_at(s, 0.0), [s["target"]], "swept from there into the foe: only the foe")
+	assert_eq(ally.def.team, (s["attacker"] as Actor).def.team)
 
 
 func test_each_target_once_per_activation_and_again_after_a_new_begin() -> void:

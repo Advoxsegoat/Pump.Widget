@@ -3,7 +3,8 @@ extends TestCase
 ## judging every hit of a frame against the defenders as they stood when the frame began and then handing
 ## each side its result. The attacker stands at the origin facing +Z; the target 1.0 m in front of it, facing
 ## back. The target's def is a copy of Abarax's of team ENEMY with its own poise: Abarax's own poise (10) is
-## more than the jab's poise damage (6), so a copy of poise 5 is one the jab flinches.
+## more than the jab's poise damage (6), so a copy of poise 5 is one the jab flinches. Blows land only on the
+## other team, so where both sides must be hit, one is a PLAYER copy and the other an ENEMY one.
 ##
 ## A frame is the actor's: the first it lives is 1. A palm pressed on frame 1 starts the jab there (its f0);
 ## its hitbox palm_l is on from f10 to f14 (frames 11 to 15), and its profile `palm` does 8 HP and 6 poise.
@@ -29,8 +30,13 @@ class MidFrame extends Node:
 
 ## A copy of Abarax's def of team ENEMY, with `poise`.
 func _foe(poise: float) -> ActorDef:
+	return _copy(ActorDef.Team.ENEMY, poise)
+
+
+## A copy of Abarax's def of `team`, with `poise`.
+func _copy(team: ActorDef.Team, poise: float) -> ActorDef:
 	var def := (load(ABARAX) as ActorDef).duplicate() as ActorDef
-	def.team = ActorDef.Team.ENEMY
+	def.team = team
 	def.poise = poise
 	return def
 
@@ -125,9 +131,10 @@ func test_roll_iframes_whiff() -> void:
 func test_trade_lands_both_ways_in_either_order() -> void:
 	# Both press palm on frame 1, so both hands come on and reach on frame 11. Each is judged against the
 	# other as it stood when the frame began (both mid-jab), so both land and both flinch, whichever runs first.
+	# Both are poise 5, on opposite teams.
 	for b_first in [false, true]:
 		var both := [{"frames": 1, "press": [&"palm"]}, {"frames": 30}]
-		var run := _duel(both, both, _foe(5.0), _foe(5.0), b_first)
+		var run := _duel(both, both, _foe(5.0), _copy(ActorDef.Team.PLAYER, 5.0), b_first)
 		var a: Actor = run["a"]
 		var b: Actor = run["b"]
 		await _play_to(a, 14)
@@ -136,6 +143,16 @@ func test_trade_lands_both_ways_in_either_order() -> void:
 		assert_eq([a.stats.hp, b.stats.hp], [92.0, 92.0], order)
 		assert_eq([_current(a), _current(b)], [&"flinch", &"flinch"], order)
 		(run["arena"] as Node).free()
+
+
+func test_allies_do_not_hit_each_other() -> void:
+	# Two of team ENEMY, the one jabbing the other: the hand passes through the body, and nothing comes of it.
+	var run := _duel([{"frames": 1, "press": [&"palm"]}, {"frames": 30}], [], _foe(5.0), _foe(5.0))
+	await _play_to(run["a"], 30)
+	assert_eq(run["a_started"], [[&"palm_jab", 1]], "the jab is swung")
+	assert_eq([run["a_landed"], run["b_got"]], [[], []], "but no blow is found, not even a whiff")
+	assert_eq((run["b"] as Actor).stats.hp, 100.0)
+	assert_eq(run["b_started"], [], "and no reaction")
 
 
 func test_a_blow_is_judged_as_the_target_stood_when_the_frame_began() -> void:

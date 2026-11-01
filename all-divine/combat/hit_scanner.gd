@@ -13,8 +13,9 @@ extends RefCounted
 ## still looked for once, where the hitbox is, so no blow falls between ticks.
 ##
 ## Each body is hit at most once per activation: the same blow does not land again on the way back, and a new
-## begin is a new blow. The actor's own hurtbox is left out of the queries (its hands pass through its body).
-## A hurtbox is mapped to its actor by its meta `actor`, which Actor._ready sets.
+## begin is a new blow. The actor's own hurtbox is left out of the queries (its hands pass through its body),
+## and so is every body of its own team (ActorDef.team): blows land only on the other side. A hurtbox is mapped
+## to its actor by its meta `actor`, which Actor._ready sets.
 ##
 ## The hurtboxes are where the physics space has them, which is where they stood when the frame began: the
 ## engine hands a moved node's transform to the physics server once every node has run its frame. So every
@@ -107,7 +108,7 @@ func _sweep(actor: Actor, activation: Activation, space: PhysicsDirectSpaceState
 		for found in space.intersect_shape(query, MAX_RESULTS):
 			var area := found.get("collider") as Area3D
 			var target: Actor = (area.get_meta(&"actor", null) as Actor) if area != null else null
-			if target == null or target == actor or activation.hit.has(target):
+			if target == null or target == actor or target.def.team == actor.def.team or activation.hit.has(target):
 				continue
 			activation.hit[target] = true
 			events.append(_event(actor, target, activation, query.transform.origin))
