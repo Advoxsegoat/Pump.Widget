@@ -4,8 +4,8 @@ extends Brain
 ## buttons pressed this frame and held, and where he aims.
 ##
 ## The aim is two things (see _aim). On the keyboard and mouse, with no foe locked on to, he faces the cursor
-## (face_target is the point of the ground under it), the way a stick has no need to say. And his attacks turn
-## him toward a foe (aim_target): the lock-on target when there is one; otherwise the nearest live foe (the
+## (face_target is the point of the ground under it), since there is no stick to say where he looks. And his
+## attacks turn him toward a foe (aim_target): the lock-on target when there is one; otherwise the nearest live foe (the
 ## group `lockable`) within the tuning's aim_assist_range and aim_assist_deg of the direction he means (the
 ## stick, or the way he faces when it rests, or the cursor on the keyboard and mouse); otherwise nothing.
 

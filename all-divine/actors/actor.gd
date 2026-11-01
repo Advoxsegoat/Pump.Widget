@@ -22,8 +22,9 @@ extends CharacterBody3D
 ##      the brain went on thinking and its presses wait in the buffer. They last 9 frames of the buffer's clock,
 ##      which stands still while frozen, so a freeze never uses up a press: one made just before a cancel window
 ##      opens still comes out on its first frame, however long the hit-stop in between
-##   4. the runner ticks: the current move advances (its marks, a cancel window, its end), or a buffered
-##      press starts one; this is how a press shows on the frame it is made
+##   4. the runner ticks: the current move advances (its marks, a cancel window, its end; an attack that aims
+##      first turns the body toward the intent's aim_target while it winds up, and a charge_hold mark held
+##      stops the clock), or a buffered press starts one; this is how a press shows on the frame it is made
 ##   5. on a frame with no move, locomotion turns the stick into a velocity, sprinting while dodge is held
 ##      (and the actor can act: an exhausted actor jogs instead), and with the intent's face_target set the
 ##      body turns toward the target (at the turn rate) rather than toward the way it goes, unless it sprints

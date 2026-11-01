@@ -4,9 +4,9 @@ extends Node
 ## move's gameplay time, and as that time passes a mark it acts on it, so hitboxes, invulnerability,
 ## hyper-armour and cancel windows follow the clip to the frame, at any frame rate and any delta.
 ## Presses come through the actor's InputBuffer, so one made up to 9 frames early (not counting frames of hit-stop)
-## comes out on the first frame it can: when a cancel window that takes it opens, or when the actor is free again. An attack or a
-## dodge also needs stamina (Stats.can_act): a press it cannot pay for is used up and nothing starts, and
-## a move that starts spends its stamina_cost on that frame.
+## comes out on the first frame it can: when a cancel window that takes it opens, or when the actor is free again.
+## An attack or a dodge also needs stamina (Stats.can_act): a press it cannot pay for is used up and nothing starts,
+## and a move that starts spends its stamina_cost on that frame.
 ##
 ## A move can be charged. At a charge_hold mark, if the player is holding the mark's action, the clip stops at the
 ## mark (its time stands still, so the pose holds) until the action is let go, or the mark's `frames` have passed:
@@ -72,10 +72,11 @@ func start(move: MoveData) -> void:
 	_start(move, null)
 
 
-## One physics frame: advances the current move by `delta` and acts on the marks it passes, starts the
-## move a buffered press asks for (into an open cancel window, or from rest), and ends the move at its
-## clip's end. Returns the root-motion velocity: the clip's root travel over this frame (horizontal,
-## times the move's root_motion_scale, turned with the body) divided by `delta`.
+## One physics frame: turns an attacking body toward the intent's aim_target (see _aim), advances the current
+## move by `delta` (not while a charge is held) and acts on the marks it passes, starts the move a buffered press
+## asks for (into an open cancel window, or from rest), and ends the move at its clip's end. Returns the
+## root-motion velocity: the clip's root travel over this frame (horizontal, times the move's root_motion_scale,
+## turned with the body) divided by `delta`.
 func tick(intent: Intent, delta: float) -> Vector3:
 	var velocity := Vector3.ZERO
 	if current != null:
@@ -174,7 +175,8 @@ func _end(cancelled: bool) -> void:
 # Aim assist and lock-on: while an attack that aims winds up (its time is before its first hitbox_on, or, when the
 # intent tracks, before its last hitbox_off), the body turns toward the intent's aim_target at the tuning's
 # aim_turn_rate_deg. Only the ground plane counts. Run before the clip's root motion is read, so a lunge goes where
-# the body now faces. It does not run on the frame a move starts (the move has no time yet) but on the next.
+# the body now faces. It does not run on the frame a move starts (the move has no time yet) but on the next, and
+# it runs on every tick of a charge's hold, since the clip's time stands before the hitbox.
 func _aim(intent: Intent, delta: float) -> void:
 	if current.kind != MoveData.Kind.ATTACK or not current.aim or not intent.aim_target is Vector3:
 		return
