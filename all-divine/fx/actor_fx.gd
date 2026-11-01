@@ -11,6 +11,7 @@ extends Node
 ##   shake {strength}   shakes the camera
 ##   tell {kind}        `glint`: the glint FxDef and the cue tell_glint; `perilous`: the FxDef perilous_rose, the
 ##                      cue perilous_sting and a rose flash of the body
+## A charge that fills (MoveRunner.charged): the FxDef charge_glow on the chest and the cue charge_hum, once, as it fills.
 ## A hit (Actor.got_hit), whatever the actor does about it: a blow that came to nothing (a WHIFF: a body held in
 ## reach while invulnerable reports one every tick) shows and sounds nothing, and any other shows the hit_spark
 ## where the blow met the body, flashes the body white, shakes the camera by the profile's `shake`, and plays
@@ -46,6 +47,7 @@ func _ready() -> void:
 
 func _listen() -> void:
 	_actor.runner.mark.connect(_on_mark)
+	_actor.runner.charged.connect(_on_charged)
 	_actor.got_hit.connect(_on_got_hit)
 
 
@@ -59,6 +61,11 @@ func _on_mark(kind: StringName, args: Dictionary) -> void:
 			shake_camera(float(args.get("strength", 0.0)))
 		&"tell":
 			_tell(StringName(args.get("kind", &"")))
+
+
+func _on_charged(_move: MoveData) -> void:
+	show_fx(&"charge_glow")
+	Sfx.play(&"charge_hum", _actor.global_position)
 
 
 func _tell(kind: StringName) -> void:

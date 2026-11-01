@@ -100,6 +100,32 @@ func test_the_cross_trail_rides_the_right_hand() -> void:
 	assert_true(trails[0].get_parent() is BoneAttachment3D and trails[0].get_parent().bone_name == &"hand_r", "the cross is thrown with the right")
 
 
+func test_a_full_charge_glows_and_hums() -> void:
+	# The heavy palm held from frame 1 is at its mark from frame 11 and full 40 frames later, on frame 51: the glow is
+	# shown on the spine and the hum sounds then, and not before (the whoosh of the blow comes later, at f15).
+	var steps := [{"frames": 1, "press": [&"heavy"], "hold": [&"heavy"]}, {"frames": 70, "hold": [&"heavy"]}]
+	var run := Duel.make(self, steps, [], 6.0)
+	var a: Actor = run["a"]
+	var sounds := await _sounds(a, 50)
+	assert_eq(_live(&"charge_glow").size(), 0, "nothing glows while the charge builds")
+	for f in sounds:
+		assert_false(sounds[f].has(&"charge_hum"), "no hum on frame %d" % f)
+	sounds = await _sounds(a, 51)
+	assert_eq(sounds[51], [&"charge_hum"] as Array, "the hum, as it fills")
+	var glows := _live(&"charge_glow")
+	assert_eq(glows.size(), 1, "and the glow")
+	assert_true(glows[0].get_parent() is BoneAttachment3D and glows[0].get_parent().bone_name == &"spine_03", "on his chest")
+
+
+func test_a_charge_let_go_early_shows_nothing() -> void:
+	var steps := [{"frames": 1, "press": [&"heavy"], "hold": [&"heavy"]}, {"frames": 19, "hold": [&"heavy"]}, {"frames": 60}]
+	var run := Duel.make(self, steps, [], 6.0)
+	var sounds := await _sounds(run["a"], 70)
+	for f in sounds:
+		assert_false(sounds[f].has(&"charge_hum"), "no hum on frame %d" % f)
+	assert_eq(_live(&"charge_glow").size(), 0)
+
+
 func test_a_roll_sounds_its_cloth_and_landing_and_kicks_up_dust_at_the_feet() -> void:
 	var run := Duel.make(self, [{"frames": 1, "press": [&"dodge"]}, {"frames": 60}], [], 6.0)
 	var a: Actor = run["a"]
