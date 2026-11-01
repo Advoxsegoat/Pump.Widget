@@ -415,9 +415,12 @@ func test_real_data_passes() -> void:
 	assert_eq(ClipChecker.new().check_all(), PackedStringArray())
 
 
-func test_real_data_has_three_moves_and_one_actor() -> void:
-	assert_eq(Array(Registry.ids(&"moves")), ["dodge_roll", "palm_cross", "palm_jab"])
-	assert_eq(Array(Registry.ids(&"actors")), ["abarax"])
+func test_real_data_has_the_f0_moves_and_abarax() -> void:
+	# Later work adds moves and actors, so this names what must be there and not how many there are.
+	var moves := Array(Registry.ids(&"moves"))
+	for id in ["dodge_roll", "palm_cross", "palm_jab"]:
+		assert_true(moves.has(id), "the move %s" % id)
+	assert_true(Array(Registry.ids(&"actors")).has("abarax"), "the actor abarax")
 
 
 func test_check_all_reports_what_is_wrong_and_the_moves_nobody_can_use() -> void:
@@ -437,7 +440,8 @@ func test_check_all_reports_what_is_wrong_and_the_moves_nobody_can_use() -> void
 func test_the_command_line_says_ok_and_exits_zero() -> void:
 	var run := _run_cli([])
 	assert_eq(run["code"], 0, "\n".join(run["lines"]))
-	assert_true(Array(run["lines"]).has("clip_check: 3 moves, 1 actors OK"), "\n".join(run["lines"]))
+	var ok := "clip_check: %d moves, %d actors OK" % [Registry.ids(&"moves").size(), Registry.ids(&"actors").size()]
+	assert_true(Array(run["lines"]).has(ok), "wanted '%s' in:\n%s" % [ok, "\n".join(run["lines"])])
 
 
 func test_the_command_line_prints_each_problem_and_exits_one() -> void:
