@@ -9,8 +9,9 @@ extends CharacterBody3D
 ## a frame once all actors have moved and hands each target its blow (apply_hit) and each attacker the result
 ## (hit_landed); all the blows a frame lands on it are taken together (apply_hits). A blow that lands has weight:
 ## Melee freezes both fighters for its hit-stop (freeze) and shoves the target (push). The actor joins the group
-## `actors` when ready, which is how Melee finds every defender, and
-## marks its rig's hurtbox with the meta `actor`, which is how a scanner knows whose body it reached.
+## `actors` when ready, which is how Melee finds every defender, and marks its rig's hurtbox with the meta `actor`,
+## which is how a scanner knows whose body it reached. An enemy also joins the group `lockable` until it dies: the
+## foes the player aims at.
 ##
 ## Each physics frame, in this order:
 ##   1. frame += 1
@@ -73,6 +74,9 @@ const LOOK_RANGE := 6.0
 const LOOK_FIELD_DEG := 100.0
 ## Every actor is in this group from when it is ready: Melee takes a Defense of each before any of them moves.
 const GROUP := &"actors"
+## The foes the player can aim at: actors of team ENEMY, from when they are ready until they die. Aim assist picks
+## its target from them, and lock-on will.
+const LOCKABLE_GROUP := &"lockable"
 ## How hard a blow kicks the upper body (Rig.hit_react): HIT_REACT_BASE plus its poise damage over
 ## HIT_REACT_POISE, so a jab (6) is 0.8 and a blow of 10 poise damage is 1.
 const HIT_REACT_BASE := 0.5
@@ -127,6 +131,8 @@ func _ready() -> void:
 	runner.move_ended.connect(_on_move_ended)
 	rig.hurtbox.set_meta(&"actor", self)
 	add_to_group(GROUP)
+	if def.team == ActorDef.Team.ENEMY:
+		add_to_group(LOCKABLE_GROUP)
 	# Where in its breath each actor starts comes from its name, so that actors standing together do not
 	# breathe in step. The hash is stirred (rand_from_seed) first: names that end in different characters,
 	# like Knuckle2 and Knuckle3, hash to neighbours, which alone would put them a thousandth of a radian apart.
@@ -232,6 +238,7 @@ func die() -> void:
 	if dead:
 		return
 	dead = true
+	remove_from_group(LOCKABLE_GROUP)
 	buffer.clear()
 	rig.hurtbox.collision_layer = 0
 	_death = _reaction_move(&"death")

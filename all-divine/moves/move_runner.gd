@@ -42,6 +42,8 @@ var _anim: Animation  # the current move's clip
 var _marks: Array[Dictionary] = []  # its marks (Marks.read)
 var _root_track := -1  # its root position track, or -1 when the move has no root motion
 var _hitboxes_on: Array[StringName] = []  # the hitboxes the current move has turned on
+var _aim_until := -1.0  # the time of the current move's first hitbox_on, where aim assist stops turning the body; -1 if it has none
+var _track_until := -1.0  # the time of its last hitbox_off, where a lock-on's tracking stops
 
 
 ## True while a move plays.
@@ -61,6 +63,7 @@ func start(move: MoveData) -> void:
 func tick(intent: Intent, delta: float) -> Vector3:
 	var velocity := Vector3.ZERO
 	if current != null:
+		_aim(intent, delta)
 		var before := time
 		time += delta
 		velocity = _root_velocity(before, time, delta)
@@ -101,6 +104,13 @@ func _start(move: MoveData, intent: Intent) -> void:
 	_anim = rig.tree.get_animation(move.clip)
 	_marks = Marks.read(_anim)
 	_root_track = _anim.find_track(rig.tree.root_motion_track, Animation.TYPE_POSITION_3D) if move.root_motion else -1
+	_aim_until = -1.0
+	_track_until = -1.0
+	for m in _marks:
+		if m["kind"] == &"hitbox_on" and _aim_until < 0.0:
+			_aim_until = m["time"]
+		elif m["kind"] == &"hitbox_off":
+			_track_until = m["time"]
 	rig.play_move(move.clip, move.blend_in)
 	if move.kind == MoveData.Kind.DODGE and intent != null and intent.move.length() > 0.0:
 		actor.snap_facing(Locomotion.yaw_of(intent.move))
@@ -126,9 +136,29 @@ func _end(cancelled: bool) -> void:
 	_anim = null
 	_marks = []
 	_root_track = -1
+	_aim_until = -1.0
+	_track_until = -1.0
 	if not cancelled:
 		actor.rig.stop_move(ended.blend_out)
 	move_ended.emit(ended, cancelled)
+
+
+# Aim assist and lock-on: while an attack that aims winds up (its time is before its first hitbox_on, or, when the
+# intent tracks, before its last hitbox_off), the body turns toward the intent's aim_target at the tuning's
+# aim_turn_rate_deg. Only the ground plane counts. Run before the clip's root motion is read, so a lunge goes where
+# the body now faces. It does not run on the frame a move starts (the move has no time yet) but on the next.
+func _aim(intent: Intent, delta: float) -> void:
+	if current.kind != MoveData.Kind.ATTACK or not current.aim or not intent.aim_target is Vector3:
+		return
+	var until := _track_until if intent.track else _aim_until
+	if time >= until - Marks.EPSILON:
+		return
+	var point: Vector3 = intent.aim_target
+	var to := Vector2(point.x - actor.global_position.x, point.z - actor.global_position.z)
+	if to.is_zero_approx():
+		return
+	var step := deg_to_rad(actor.stats.tuning.aim_turn_rate_deg) * delta
+	actor.snap_facing(Locomotion.turn_toward(actor.locomotion.facing_yaw, Locomotion.yaw_of(to), step))
 
 
 # Acts on the current move's marks with t0 < time <= t1, in order. Stops if a listener of `mark` started
