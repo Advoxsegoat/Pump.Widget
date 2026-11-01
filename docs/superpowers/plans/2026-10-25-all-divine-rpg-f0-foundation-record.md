@@ -109,15 +109,15 @@ It was copied word for word from the build ledger before the scratch workspace w
 - Task 8: minor (deferred): clip_checker skips the T-pose rule silently when the rig has no Skeleton3D — report it.
 - Task 8: minor (deferred): hitstop frames 3.5 passes via int(frames) — require whole numbers.
 - Task 8: minor (deferred): _check_actor does four jobs + `reached` out-param — extract the BFS; _angle duplicated from test_rig.gd; reads Rig Hitboxes children by name (add Rig.hitbox_ids()).
-- Task 8: minor (deferred): clip_check tests pin "3 moves, 1 actors" (will break in F1).
+- Task 8: minor (deferred): clip_check tests pin "3 moves, 1 actors" (will break in F1). **Since then:** F1 Task 1 took the counts from the Registry.
 - Task 8: minor (deferred): InputBuffer same-frame tie rule (later push wins) untested.
 - Task 8: minor (deferred): contact_sheet.gd keeps FRAME_RATE := 60 beside Marks.RATE.
 - Task 8: minor (deferred): suite time 12 s → 24 s from 8 child-Godot tests; watch it.
 - Task 9: minor (deferred): runner error paths (missing move id / missing clip) untested under quietly.
 - Task 9: minor (deferred): drift test covers only 0.15 on +x; sweep 0.10/0.15/0.19 and a diagonal (0.13, 0.13).
 - Task 9: minor (deferred): "vertical ignored" not asserted (root-motion test zeroes moved.y).
-- Task 9: minor (deferred): carry puts the roll's ~10 m/s into locomotion.speed → rig.set_locomotion shows a run/sprint blend under the move layer during blend-in; pass 0 while runner.busy().
-- Task 9: minor (deferred): runner writes actor.locomotion.facing_yaw / rotation.y directly (dodge snap) — add Actor.snap_facing(yaw).
+- Task 9: minor (deferred): carry puts the roll's ~10 m/s into locomotion.speed → rig.set_locomotion shows a run/sprint blend under the move layer during blend-in; pass 0 while runner.busy(). **Since then:** F1 Task 1 does that.
+- Task 9: minor (deferred): runner writes actor.locomotion.facing_yaw / rotation.y directly (dodge snap) — add Actor.snap_facing(yaw). **Since then:** F1 Task 1 added it.
 - Task 9: minor (deferred): re-entrancy guard compares by identity (same-move restart from a mark listener; start() from a move_ended listener overwritten).
 - Task 9: minor (deferred): press-to-motion test's before-press equality loop skips missing frames silently.
 - Task 10: minor (deferred): test_contact_sheet.gd:56 returns silently when from_rig is null. **Since then:** fixed in 2e88b43 (null guards now fail loudly).
@@ -131,10 +131,10 @@ It was copied word for word from the build ledger before the scratch workspace w
 - Task 11: minor (deferred): post_uniforms map lives in pixel_stage.gd and CameraRig calls PixelStage statics for its material (coupling).
 - Task 11: minor (deferred): PostQuad on the default visual layer — another camera/probe would draw screen_post over its view; give it a dedicated layer later.
 - Task 11: minor (deferred): outline strength < 1.0 untested (dropping the outline factor in weight survives); diagonal creases have no render test.
-- Task 12: minor (deferred): no hysteresis at the 110° forward/backward boundary (legs could flip on a held path); all actors breathe in sync (randomise phase per actor later). **Since then:** the hysteresis came in Task 12's fix round (115°/105°); the breathing-phase half is still open.
+- Task 12: minor (deferred): no hysteresis at the 110° forward/backward boundary (legs could flip on a held path); all actors breathe in sync (randomise phase per actor later). **Since then:** the hysteresis came in Task 12's fix round (115°/105°); the breathing-phase half came in F1 Task 1.
 - Task 12: minor (deferred): strafe computed during moves (no runner.busy() guard) — a future backstep could show loco_scale −1 under the move layer during blends.
 - Task 12: minor (deferred): breathing/hit react run smooth at 60 Hz over stepped moves (an 11° lean glides across held frames) — rule in F1 if it reads wrong.
-- Task 12: minor (deferred): hit lean unbounded (kicks accumulate, no clamp); dir_world not normalised (length scales the kick) — normalise or document.
+- Task 12: minor (deferred): hit lean unbounded (kicks accumulate, no clamp); dir_world not normalised (length scales the kick) — normalise or document. **Since then:** F1 Task 1 capped the lean (HitReact.MAX_TILT) and normalised the direction.
 - Task 12: minor (deferred): rig.gd:214-218 comment should name the 4.7.2 update-flag dependency.
 - Task 12: minor (deferred): shown-pose copy every skeleton update even without modifiers; no test that breathing/hit react stay on over a move.
 - Task 12: minor (deferred): orientation_warp.gd:5-6 class doc says "past 110°" (rig switches at 115°/105°); each band crossing swaps hips ±70° eased over 0.05 s (deliberate).
@@ -142,11 +142,11 @@ It was copied word for word from the build ledger before the scratch workspace w
 - Task 13: minor (deferred): the scarf shows its old sunk pose for one frame right after spawn.
 - Task 13: minor (deferred): look logic (7 fields, 3 functions) lives in Rig — extract a liveliness helper.
 - Task 13: minor (deferred): foot-angle correction uses last tick's calf turn (one tick wrong after a pose jump).
-- Task 13: minor (deferred): a POI's look point is its node origin (feet for actors) — add a look-point offset/head bone before speakers exist.
+- Task 13: minor (deferred): a POI's look point is its node origin (feet for actors) — add a look-point offset/head bone before speakers exist. **Since then:** F1 Task 1 added Actor.head_point() (ActorDef.look_height), which an actor POI is looked at by.
 - Task 13: minor (deferred): structure test doesn't assert pole_node → IKPole_*; report miscounted new tests (31, not 34).
 - Task 13: minor (deferred): a stepping foot that leaves the 0.5 m probe reach still fades its own offset at up to ~0.054 m/tick (foot in the air; only the hips are eased) — see the probe-reach ruling; no descending-stairs test.
 - Task 14: minor (deferred): self-test circuit's last leg steers from the assumed roll end, not Abarax's real position (fragile to roll/locomotion tuning).
-- Task 14: minor (deferred): layer_bit duplicated (Builder vs TestArena) — shared helper in core/.
+- Task 14: minor (deferred): layer_bit duplicated (Builder vs TestArena) — shared helper in core/. **Since then:** F1 Task 1 added core/layers.gd.
 - Task 14: minor (deferred): test_courtyard.gd:145 exempts meshes named "(_ignore)" (Kenney's (%ignore) water) without a comment.
 - Task 14: minor (deferred): builder parser error paths untested; lenient parsing (`solidd` builds a wall without collision; fractional step counts truncated); Region.spawn() with no marker untested.
 - Task 14: minor (deferred): toon_world uses mat3(MODEL_MATRIX)*NORMAL (not the normal matrix) — wrong plane choice under non-uniform scale near 45°.
