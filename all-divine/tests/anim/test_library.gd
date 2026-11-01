@@ -3,23 +3,32 @@ extends TestCase
 ## tools/anim/build_library.gd). These check the files as they are in the repository.
 
 const LIB := "res://assets/anim/abarax/library.tres"
+const CONFIG := "res://assets/anim/clips.cfg"
 const MODEL := "res://assets/characters/abarax/abarax.glb"
 const CLIPS: PackedStringArray = ["idle", "walk", "jog", "sprint", "dodge_roll", "palm_jab", "palm_cross", "t_pose"]
 const LOCOMOTION: PackedStringArray = ["walk", "jog", "sprint"]
 const MAX_CLIP_BYTES := 2 * 1024 * 1024
 
 
-func test_has_all_clips() -> void:
+func test_library_holds_every_clips_cfg_section() -> void:
 	var lib := load(LIB) as AnimationLibrary
 	assert_ne(lib, null, "library.tres loads")
+	var sections := _sections()
+	assert_true(sections.size() >= CLIPS.size(), "clips.cfg has sections")
+	for n in sections:
+		assert_true(lib.has_animation(n), "%s is in the library" % n)
+	var held := PackedStringArray(lib.get_animation_list())
+	held.sort()
+	var wanted := sections.duplicate()
+	wanted.sort()
+	assert_eq(held, wanted, "and nothing else")
 	for n in CLIPS:
-		assert_true(lib.has_animation(n), n)
-	assert_eq(lib.get_animation_list().size(), CLIPS.size(), "and nothing else")
+		assert_true(sections.has(n), "%s, a clip F0 made, is still in clips.cfg" % n)
 
 
 func test_every_clip_is_its_own_text_file_of_sane_size() -> void:
 	var lib := load(LIB) as AnimationLibrary
-	for n in CLIPS:
+	for n in _sections():
 		var path := "res://assets/anim/abarax/%s.tres" % n
 		assert_eq(lib.get_animation(n).resource_path, path, n)
 		assert_true(FileAccess.file_exists(path), path)
@@ -40,7 +49,7 @@ func test_loops_and_lengths_and_steps() -> void:
 	assert_eq(lib.get_animation("palm_jab").get_meta("step_fps"), 12)
 	assert_eq(lib.get_animation("palm_cross").get_meta("step_fps"), 12)
 	assert_eq(lib.get_animation("dodge_roll").get_meta("step_fps"), 0)
-	for n in CLIPS:
+	for n in _sections():
 		assert_true(lib.get_animation(n).has_meta("step_fps"), "%s carries step_fps" % n)
 		assert_eq(typeof(lib.get_animation(n).get_meta("step_fps")), TYPE_INT, "%s: step_fps is an int" % n)
 
@@ -92,7 +101,7 @@ func test_every_track_targets_a_real_bone() -> void:
 	var skel_path := ClipBuilder.skeleton_path(scene)
 	var skeleton := model.get_node(skel_path) as Skeleton3D
 	var tracks := 0
-	for n in CLIPS:
+	for n in _sections():
 		var a := lib.get_animation(n)
 		for i in a.get_track_count():
 			var path := a.track_get_path(i)
@@ -109,7 +118,7 @@ func test_every_track_targets_a_real_bone() -> void:
 func test_position_tracks_are_only_for_root_and_pelvis_and_no_scale_track_is_idle() -> void:
 	# Ruling R4.
 	var lib := load(LIB) as AnimationLibrary
-	for n in CLIPS:
+	for n in _sections():
 		var a := lib.get_animation(n)
 		for i in a.get_track_count():
 			var bone := str(a.track_get_path(i).get_concatenated_subnames())
@@ -133,6 +142,13 @@ func test_locomotion_clips_stay_in_place_and_the_roll_carries_root_motion() -> v
 
 
 # --- helpers ---
+
+# The clips clips.cfg lists: one per section, in the file's order.
+func _sections() -> PackedStringArray:
+	var cfg := ConfigFile.new()
+	assert_eq(cfg.load(CONFIG), OK, "clips.cfg loads")
+	return cfg.get_sections()
+
 
 # Poses the skeleton as `anim` does at `time` and returns the lower global y of the two toe bones.
 func _lowest_toe(skeleton: Skeleton3D, anim: Animation, time: float) -> float:

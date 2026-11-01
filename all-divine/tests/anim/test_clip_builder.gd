@@ -7,6 +7,10 @@ const MODEL := "res://assets/characters/abarax/abarax.glb"
 const SKEL := NodePath("Armature/Skeleton3D")
 const BONES: PackedStringArray = ["root", "pelvis", "hand_l"]
 const DIR := "user://clip_builder_fixture"
+# Tracks as the builder writes them, under Model.
+const ROOT_PATH := NodePath("Model/Armature/Skeleton3D:root")
+const PELVIS_PATH := NodePath("Model/Armature/Skeleton3D:pelvis")
+const HAND_PATH := NodePath("Model/Armature/Skeleton3D:hand_l")
 
 # The hip height of the mannequin the fixture clips were authored on.
 const SOURCE_HIP := 0.9
@@ -253,6 +257,196 @@ func test_merge_copies_non_bone_tracks_marks_first_and_never_bone_tracks() -> vo
 	assert_eq(fresh.track_get_key_value(2, 0), true)
 
 
+# --- time warps ---
+
+func test_warp_time_is_piecewise_linear() -> void:
+	assert_near(ClipBuilder.warp_time(PackedFloat32Array([0, 0, 1, 2]), 0.5), 1.0, 1e-6)
+	var bent := PackedFloat32Array([0, 0, 1, 2, 3, 3])
+	assert_near(ClipBuilder.warp_time(bent, 0.0), 0.0, 1e-6, "the first point")
+	assert_near(ClipBuilder.warp_time(bent, 1.0), 2.0, 1e-6, "a corner")
+	assert_near(ClipBuilder.warp_time(bent, 2.0), 2.5, 1e-6, "halfway along the slower second segment")
+	assert_near(ClipBuilder.warp_time(bent, 3.0), 3.0, 1e-6, "the last point")
+	assert_near(ClipBuilder.warp_time(bent, 9.0), 3.0, 1e-6, "past the end it stays at the last source time")
+	assert_near(ClipBuilder.warp_time(bent, -1.0), 0.0, 1e-6, "before the start it stays at the first")
+	assert_near(ClipBuilder.warp_time(PackedFloat32Array([0, 0, 0.1, 0.1, 0.3, 0.1]), 0.2), 0.1, 1e-6, "a hold")
+	assert_near(ClipBuilder.warp_time(PackedFloat32Array([0, 0, 0.2, 0.2, 0.4, 0.0]), 0.3), 0.1, 1e-6, "a reverse")
+	assert_eq(ClipBuilder.warp_time(PackedFloat32Array(), 0.3), 0.0, "no warp, no map")
+
+
+func test_warp_hold_keeps_the_pose() -> void:
+	var source := _moving(0.5)
+	var out := ClipBuilder.apply_warp(source, PackedFloat32Array([0, 0, 0.1, 0.1, 0.3, 0.1]))
+	assert_near(out.length, 0.3, 1e-6, "the clip is as long as the last output time")
+	_assert_same_pose(out, 0.2, source, 0.1, 1e-4, "held")
+	_assert_same_pose(out, 0.3, source, 0.1, 1e-4, "still held at the end")
+	_assert_same_pose(out, 0.05, source, 0.05, 1e-4, "before the hold the clip plays at its own speed")
+
+
+func test_warp_can_play_backward() -> void:
+	var source := _moving(0.5)
+	var out := ClipBuilder.apply_warp(source, PackedFloat32Array([0, 0, 0.2, 0.2, 0.4, 0.0]))
+	assert_near(out.length, 0.4, 1e-6)
+	_assert_same_pose(out, 0.3, source, 0.1, 1e-4, "backward")
+	_assert_same_pose(out, 0.2, source, 0.2, 1e-4, "where it turns")
+	_assert_same_pose(out, 0.4, source, 0.0, 1e-4, "back at the start")
+
+
+func test_warp_resamples_every_track_at_60_hz() -> void:
+	var source := _moving(1.0)  # keys every 1/30 s
+	var out := ClipBuilder.apply_warp(source, PackedFloat32Array([0, 0, 0.5, 1.0]))  # twice as fast
+	assert_eq(out.get_track_count(), source.get_track_count())
+	for i in out.get_track_count():
+		var name := str(out.track_get_path(i))
+		assert_eq(out.track_get_key_count(i), 31, name)
+		assert_near(out.track_get_key_time(i, 1), 1.0 / 60.0, 1e-6, name)
+		assert_near(out.track_get_key_time(i, 30), 0.5, 1e-6, name)
+	_assert_same_pose(out, 0.25, source, 0.5, 1e-4, "twice as fast")
+
+
+func test_warp_ends_with_a_key_at_the_length_even_between_frames() -> void:
+	var source := _moving(1.0)
+	var out := ClipBuilder.apply_warp(source, PackedFloat32Array([0, 0, 0.26, 0.52]))
+	assert_near(out.length, 0.26, 1e-6)
+	for i in out.get_track_count():
+		var last := out.track_get_key_count(i) - 1
+		assert_eq(last, 16, "keys at 0 to 15/60 and one at the length")
+		assert_near(out.track_get_key_time(i, last), 0.26, 1e-6)
+	_assert_same_pose(out, 0.26, source, 0.52, 1e-4, "the last pose")
+
+
+func test_warp_leaves_the_input_alone_and_keeps_track_settings() -> void:
+	var source := _moving(0.5)
+	source.track_set_interpolation_type(0, Animation.INTERPOLATION_NEAREST)
+	var keys := source.track_get_key_count(0)
+	var out := ClipBuilder.apply_warp(source, PackedFloat32Array([0, 0, 0.25, 0.5]))
+	assert_eq(source.track_get_key_count(0), keys, "the input keeps its keys")
+	assert_near(source.length, 0.5, 1e-6)
+	assert_eq(out.track_get_path(0), source.track_get_path(0))
+	assert_eq(out.track_get_interpolation_type(0), Animation.INTERPOLATION_NEAREST)
+
+
+# --- joins ---
+
+func test_join_continues_root_motion_without_a_jump() -> void:
+	var a := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.0, 1.0))
+	var b := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.0, 1.0))
+	var joined := ClipBuilder.join([a, b])
+	var root := joined.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
+	assert_near(joined.length, 2.0, 1e-6, "the lengths add up")
+	assert_vec_near(joined.position_track_interpolate(root, 1.0), Vector3(0.0, 0.0, 1.0), 1e-5, "at A's end")
+	assert_vec_near(joined.position_track_interpolate(root, 2.0), Vector3(0.0, 0.0, 2.0), 1e-5, "at the end")
+	assert_vec_near(joined.position_track_interpolate(root, 1.5), Vector3(0.0, 0.0, 1.5), 1e-5, "B's travel goes on from there")
+	var step := joined.position_track_interpolate(root, 1.0 + 1.0 / 30.0) - joined.position_track_interpolate(root, 1.0 - 1.0 / 30.0)
+	assert_vec_near(step, Vector3(0.0, 0.0, 2.0 / 30.0), 1e-5, "two frames across the join move two frames' worth")
+
+
+func test_join_keeps_the_travel_of_a_clip_that_starts_away_from_zero() -> void:
+	# A slide ends 4 m along; the clip after it starts its root at the origin again.
+	var slide := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.0, 4.0))
+	var exit := _moving(0.5, Vector3(0.3, 0.0, 0.2), Vector3(0.3, 0.0, 0.7))
+	var third := _moving(1.0, Vector3.ZERO, Vector3(1.0, 0.0, 0.0))
+	var joined := ClipBuilder.join([slide, exit, third])
+	var root := joined.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
+	assert_near(joined.length, 2.5, 1e-6)
+	assert_vec_near(joined.position_track_interpolate(root, 1.0), Vector3(0.0, 0.0, 4.0), 1e-5, "the exit starts where the slide stopped")
+	assert_vec_near(joined.position_track_interpolate(root, 1.5), Vector3(0.0, 0.0, 4.5), 1e-5, "and keeps its own half metre")
+	assert_vec_near(joined.position_track_interpolate(root, 2.5), Vector3(1.0, 0.0, 4.5), 1e-5, "a third clip carries on from the second")
+
+
+func test_join_plays_each_clip_as_it_was_one_after_another() -> void:
+	var a := _moving(1.0)
+	var b := _moving(0.5)
+	var joined := ClipBuilder.join([a, b])
+	assert_eq(joined.get_track_count(), a.get_track_count(), "one track for each bone track, not two")
+	for i in a.get_track_count():
+		var path := a.track_get_path(i)
+		var type := a.track_get_type(i)
+		var j := joined.find_track(path, type)
+		var k := b.find_track(path, type)
+		assert_true(j >= 0 and k >= 0, "%s is in the join and in B" % path)
+		for t in [0.0, 0.3, 0.9]:
+			assert_true(_values_near(_value(joined, j, t), _value(a, i, t), 1e-5), "A at %s, %s" % [t, path])
+		for t in [0.1, 0.3, 0.5]:
+			assert_true(_values_near(_value(joined, j, 1.0 + t), _value(b, k, t), 1e-5), "B at %s, %s: starts when A ends" % [t, path])
+
+
+func test_join_holds_the_root_through_a_clip_that_has_none() -> void:
+	var a := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.0, 1.0))
+	var b := _moving(0.5)
+	b.remove_track(b.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D))
+	var c := _moving(0.5, Vector3(5.0, 0.0, 5.0), Vector3(5.0, 0.0, 5.5))
+	var joined := ClipBuilder.join([a, b, c])
+	var root := joined.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
+	assert_vec_near(joined.position_track_interpolate(root, 1.25), Vector3(0.0, 0.0, 1.0), 1e-5, "it stays where A stopped while B plays")
+	assert_vec_near(joined.position_track_interpolate(root, 1.5), Vector3(0.0, 0.0, 1.0), 1e-5, "and C starts from there")
+	assert_vec_near(joined.position_track_interpolate(root, 2.0), Vector3(0.0, 0.0, 1.5), 1e-5)
+
+
+func test_join_of_one_clip_is_that_clip() -> void:
+	var a := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.0, 1.0))
+	var joined := ClipBuilder.join([a])
+	assert_near(joined.length, 1.0, 1e-6)
+	_assert_same_pose(joined, 0.4, a, 0.4, 1e-6, "alone")
+
+
+# --- layers ---
+
+func test_layer_adds_its_rotation_between_keys_only() -> void:
+	var clip := _moving(1.0)
+	var out := ClipBuilder.apply_layer(clip, {"hand_l": [[10, 0, 0, 0], [20, 0, 30, 0], [30, 0, 0, 0]]})
+	_assert_quat_near(_hand(out, 20), _hand(clip, 20) * _about(Vector3.UP, 30.0), 1e-4, "f20: the clip's rotation times 30 degrees about local Y")
+	_assert_quat_near(_hand(out, 15), _hand(clip, 15) * _about(Vector3.UP, 15.0), 1e-4, "f15: halfway up")
+	_assert_quat_near(_hand(out, 25), _hand(clip, 25) * _about(Vector3.UP, 15.0), 1e-4, "f25: halfway down")
+	for frame in [0, 5, 9, 31, 35, 59]:
+		_assert_quat_near(_hand(out, frame), _hand(clip, frame), 1e-4, "f%d: no layer there, so the clip's own" % frame)
+	assert_eq(out.get_track_count(), clip.get_track_count())
+	assert_near(out.length, clip.length, 1e-6)
+
+
+func test_layer_is_zero_outside_its_keys_even_when_the_end_keys_are_not() -> void:
+	# The first and last keys are turned out, so a layer that held them would show.
+	var clip := _moving(1.0)
+	var out := ClipBuilder.apply_layer(clip, {"hand_l": [[10, 0, 20, 0], [20, 0, 40, 0]]})
+	for frame in [0, 5, 9]:
+		_assert_quat_near(_hand(out, frame), _hand(clip, frame), 1e-4, "f%d is before the first key" % frame)
+	for frame in [21, 30, 60]:
+		_assert_quat_near(_hand(out, frame), _hand(clip, frame), 1e-4, "f%d is after the last key" % frame)
+	for pair in [[10, 20.0], [15, 30.0], [20, 40.0]]:
+		_assert_quat_near(_hand(out, pair[0]), _hand(clip, pair[0]) * _about(Vector3.UP, pair[1]), 1e-4, "f%d is on the layer" % pair[0])
+
+
+func test_layer_leaves_other_bones_alone_and_the_input_unchanged() -> void:
+	var clip := _moving(1.0)
+	var hand_keys := clip.track_get_key_count(clip.find_track(HAND_PATH, Animation.TYPE_ROTATION_3D))
+	var out := ClipBuilder.apply_layer(clip, {"hand_l": [[0, 90, 0, 0], [60, 90, 0, 0]]})
+	var before := clip.find_track(PELVIS_PATH, Animation.TYPE_ROTATION_3D)
+	var after := out.find_track(PELVIS_PATH, Animation.TYPE_ROTATION_3D)
+	assert_eq(out.track_get_key_count(after), clip.track_get_key_count(before), "the pelvis is copied as it was")
+	for t in [0.0, 0.4, 1.0]:
+		_assert_quat_near(out.rotation_track_interpolate(after, t), clip.rotation_track_interpolate(before, t), 1e-6, "pelvis at %s" % t)
+	assert_eq(clip.track_get_key_count(clip.find_track(HAND_PATH, Animation.TYPE_ROTATION_3D)), hand_keys, "the input keeps its keys")
+
+
+func test_layer_is_euler_degrees_in_yxz_order_x_first_and_post_multiplies() -> void:
+	var clip := _moving(1.0)
+	var base := _hand(clip, 30)
+	_assert_quat_near(_hand(ClipBuilder.apply_layer(clip, {"hand_l": [[30, 30, 0, 0]]}), 30), base * _about(Vector3.RIGHT, 30.0), 1e-4, "the first number is about X")
+	_assert_quat_near(_hand(ClipBuilder.apply_layer(clip, {"hand_l": [[30, 0, 0, 30]]}), 30), base * _about(Vector3.BACK, 30.0), 1e-4, "the third is about Z")
+	var angles := Vector3(deg_to_rad(10.0), deg_to_rad(20.0), deg_to_rad(30.0))
+	var yxz := Basis.from_euler(angles, EULER_ORDER_YXZ).get_rotation_quaternion()
+	var xyz := Basis.from_euler(angles, EULER_ORDER_XYZ).get_rotation_quaternion()
+	var got := _hand(ClipBuilder.apply_layer(clip, {"hand_l": [[30, 10, 20, 30]]}), 30)
+	_assert_quat_near(got, base * yxz, 1e-4, "YXZ order, laid after the clip's own rotation")
+	assert_true(_quat_distance(got, base * xyz) > 1e-3, "a different Euler order would give a different pose")
+	assert_true(_quat_distance(got, yxz * base) > 1e-3, "and so would laying it before the clip's rotation")
+
+
+func test_layer_with_no_keys_in_range_changes_nothing() -> void:
+	var clip := _moving(0.5)  # 30 frames long
+	var out := ClipBuilder.apply_layer(clip, {"hand_l": [[300, 45, 0, 0], [330, 0, 0, 0]]})
+	_assert_same_pose(out, 0.3, clip, 0.3, 1e-4, "untouched")
+
+
 # --- skeleton_path ---
 
 func test_skeleton_path_leads_from_the_model_root_to_its_skeleton() -> void:
@@ -434,6 +628,166 @@ func test_build_fails_when_ground_speed_cannot_be_measured() -> void:
 	assert_ne(err, OK)
 
 
+func test_build_joins_the_then_clips_and_continues_the_root() -> void:
+	var run := _build_setup()
+	# Run is 3 m in 1 s, Roll 5 m in 2 s: joined, 8 m in 3 s.
+	_write_text(run["cfg"], "[twice]\nsource=\"pack_rm\"\nclip=\"Run\"\nthen=[\"Roll\"]\n")
+	assert_eq(ClipBuilder.build(run["cfg"], run["sources"], run["out"], MODEL), OK)
+	var twice := _load(run["out"] + "/twice.tres") as Animation
+	var root := twice.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
+	var ratio := _hip_ratio()
+	assert_near(twice.length, 3.0, 1e-3)
+	assert_vec_near(twice.position_track_interpolate(root, 1.0), Vector3(0.0, 0.0, 3.0 * ratio), 2e-3, "where Run stopped")
+	assert_vec_near(twice.position_track_interpolate(root, 3.0), Vector3(0.0, 0.0, 8.0 * ratio), 2e-3, "where Roll stops")
+
+
+func test_build_reads_then_as_a_string_a_list_or_a_packed_array() -> void:
+	for spelling in ["\"Roll\"", "[\"Roll\"]", "[\"pack_rm:Roll\"]", "PackedStringArray(\"Roll\")"]:
+		var run := _build_setup()
+		_write_text(run["cfg"], "[twice]\nsource=\"pack_rm\"\nclip=\"Run\"\nthen=%s\n" % spelling)
+		assert_eq(ClipBuilder.build(run["cfg"], run["sources"], run["out"], MODEL), OK, spelling)
+		assert_near((_load(run["out"] + "/twice.tres") as Animation).length, 3.0, 1e-3, spelling)
+
+
+func test_build_appends_a_clip_from_another_source() -> void:
+	var run := _build_setup()
+	# "pack" has no root motion: the root stays where Run left it.
+	_write_text(run["cfg"], "[mixed]\nsource=\"pack_rm\"\nclip=\"Run\"\nthen=[\"pack:Idle\"]\nlength=1.0\n")
+	assert_eq(ClipBuilder.build(run["cfg"], run["sources"], run["out"], MODEL), OK)
+	var mixed := _load(run["out"] + "/mixed.tres") as Animation
+	var root := mixed.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
+	assert_near(mixed.length, 1.0, 1e-3, "length retimes the joined clip (2 s) as a whole")
+	assert_vec_near(mixed.position_track_interpolate(root, 0.75), Vector3(0.0, 0.0, 3.0 * _hip_ratio()), 2e-3)
+	assert_true(mixed.find_track(HAND_PATH, Animation.TYPE_ROTATION_3D) >= 0)
+
+
+func test_build_warps_the_joined_clip() -> void:
+	var run := _build_setup()
+	# Roll: 5 m in 2 s. Twice as fast to its middle, then held for a second.
+	_write_text(run["cfg"], "[late]\nsource=\"pack_rm\"\nclip=\"Roll\"\nwarp=[0, 0, 0.5, 1.0, 1.5, 1.0]\n")
+	assert_eq(ClipBuilder.build(run["cfg"], run["sources"], run["out"], MODEL), OK)
+	var late := _load(run["out"] + "/late.tres") as Animation
+	var root := late.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
+	assert_near(late.length, 1.5, 1e-3)
+	assert_vec_near(late.position_track_interpolate(root, 0.25), Vector3(0.0, 0.0, 1.25 * _hip_ratio()), 2e-3, "a quarter of the way in, a quarter of the roll's way ahead")
+	assert_vec_near(late.position_track_interpolate(root, 1.0), Vector3(0.0, 0.0, 2.5 * _hip_ratio()), 2e-3, "held at the middle")
+	assert_eq(late.track_get_key_count(root), 91, "a key every 1/60 s over 1.5 s")
+
+
+func test_build_warps_after_joining() -> void:
+	var run := _build_setup()
+	# Run + Roll is 3 s; the warp plays its first half in a second and drops the rest.
+	_write_text(run["cfg"], "[cut]\nsource=\"pack_rm\"\nclip=\"Run\"\nthen=[\"Roll\"]\nwarp=PackedFloat32Array(0, 0, 1, 1.5)\n")
+	assert_eq(ClipBuilder.build(run["cfg"], run["sources"], run["out"], MODEL), OK)
+	var cut := _load(run["out"] + "/cut.tres") as Animation
+	var root := cut.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
+	assert_near(cut.length, 1.0, 1e-3)
+	assert_vec_near(cut.position_track_interpolate(root, 1.0), Vector3(0.0, 0.0, (3.0 + 2.5 * 0.5) * _hip_ratio()), 2e-3, "source time 1.5 is Roll's 0.5 s")
+
+
+func test_build_lays_the_layer_on_after_the_warp() -> void:
+	var run := _build_setup()
+	var layer: String = DIR + "/layers/arm.json"
+	_write_text(layer, JSON.stringify({"hand_l": [[0, 0, 0, 0], [15, 0, 45, 0], [30, 0, 0, 0]]}))
+	_write_text(run["cfg"], "\n".join([
+		"[plain]", "source=\"pack\"", "clip=\"Idle\"", "warp=[0, 0, 1, 1]",
+		"[arm]", "source=\"pack\"", "clip=\"Idle\"", "warp=[0, 0, 1, 1]", "layer=\"%s\"" % layer,
+	]))
+	assert_eq(ClipBuilder.build(run["cfg"], run["sources"], run["out"], MODEL), OK)
+	var plain := _load(run["out"] + "/plain.tres") as Animation
+	var arm := _load(run["out"] + "/arm.tres") as Animation
+	var p := plain.find_track(HAND_PATH, Animation.TYPE_ROTATION_3D)
+	var a := arm.find_track(HAND_PATH, Animation.TYPE_ROTATION_3D)
+	_assert_quat_near(arm.rotation_track_interpolate(a, 0.25), plain.rotation_track_interpolate(p, 0.25) * Quaternion(Vector3.UP, deg_to_rad(45.0)), 1e-4, "f15 is 45 degrees on")
+	_assert_quat_near(arm.rotation_track_interpolate(a, 0.8), plain.rotation_track_interpolate(p, 0.8), 1e-4, "f48 is past the layer")
+	assert_eq(arm.get_track_count(), plain.get_track_count())
+	assert_eq(arm.get_meta("step_fps"), 0, "the layered clip still gets its metadata")
+
+
+func test_build_measures_the_ground_speed_of_the_clip_it_plays() -> void:
+	var run := _build_setup()
+	# Run's 3 m in 1 s, warped to last 2 s.
+	_write_text(run["cfg"], "[slow]\nsource=\"pack\"\nclip=\"Run\"\nwarp=[0, 0, 2, 1]\nground_speed_from=\"pack_rm\"\n")
+	assert_eq(ClipBuilder.build(run["cfg"], run["sources"], run["out"], MODEL), OK)
+	assert_near((_load(run["out"] + "/slow.tres") as Animation).get_meta("ground_speed"), 1.5 * _hip_ratio(), 2e-3)
+
+
+func test_a_clip_list_with_no_problems_has_no_problem_lines() -> void:
+	var run := _build_setup()
+	assert_eq(ClipBuilder.check(run["cfg"], run["sources"], MODEL), PackedStringArray())
+	for rate in [0, 12, 24]:
+		_write_text(run["cfg"], "[idle]\nsource=\"pack\"\nclip=\"Idle\"\nstep_fps=%d\nlength=0.0\n" % rate)
+		assert_eq(ClipBuilder.check(run["cfg"], run["sources"], MODEL), PackedStringArray(), "step_fps %d" % rate)
+
+
+func test_config_problems_are_reported_not_written() -> void:
+	var layer: String = DIR + "/layers/nope.json"
+	_write_text(layer, JSON.stringify({"nope": [[0, 0, 0, 0], [10, 5, 0, 0]]}))
+	# Each section body has exactly one thing wrong, and the line says what.
+	var cases := {
+		"length and warp together": ["length=1.0\nwarp=[0, 0, 1, 1]", "both length and warp"],
+		"an odd-sized warp": ["warp=[0, 0, 0.5]", "pairs"],
+		"a warp that does not increase": ["warp=[0, 0, 0.5, 0.5, 0.5, 0.7]", "increase"],
+		"a warp that does not start at 0": ["warp=[0.1, 0, 0.5, 0.5]", "start at 0"],
+		"a warp with one point": ["warp=[0, 0]", "two points"],
+		"a warp of words": ["warp=\"fast\"", "numbers"],
+		"a then clip that is not there": ["then=\"Nope\"", "Nope"],
+		"a then clip from an unknown source": ["then=[\"nowhere:Run\"]", "nowhere"],
+		"a layer bone that is not a bone": ["layer=\"%s\"" % layer, "nope"],
+		"a negative length": ["length=-1", "negative"],
+		"a step_fps of 10": ["step_fps=10", "step_fps"],
+		"a layer file that is not there": ["layer=\"%s/missing.json\"" % DIR, "missing.json"],
+	}
+	for what: String in cases:
+		var run := _build_setup()
+		var body: String = cases[what][0]
+		_write_text(run["cfg"], "[bad]\nsource=\"pack\"\nclip=\"Idle\"\n%s\n" % body)
+		var lines := ClipBuilder.check(run["cfg"], run["sources"], MODEL)
+		assert_eq(lines.size(), 1, "%s: one problem, not %s" % [what, lines])
+		if lines.size() == 1:
+			assert_true(lines[0].begins_with("[bad] "), "%s: the line names the section: %s" % [what, lines[0]])
+			assert_true(lines[0].contains(cases[what][1]), "%s: '%s' is in: %s" % [what, cases[what][1], lines[0]])
+		var err: int = quietly(func() -> int: return ClipBuilder.build(run["cfg"], run["sources"], run["out"], MODEL))
+		assert_ne(err, OK, what)
+		assert_false(FileAccess.file_exists(run["out"] + "/library.tres"), "%s: nothing is written" % what)
+		assert_false(FileAccess.file_exists(run["out"] + "/bad.tres"), "%s: nothing is written" % what)
+
+
+func test_every_problem_in_the_clip_list_is_reported_at_once() -> void:
+	var run := _build_setup()
+	_write_text(run["cfg"], "\n".join([
+		"[idle]", "source=\"pack\"", "clip=\"Idle\"",
+		"[one]", "source=\"pack\"", "clip=\"Idle\"", "length=-2",
+		"[two]", "source=\"pack\"", "clip=\"Run\"", "then=[\"Nope\"]",
+		"[three]", "source=\"pack\"", "clip=\"Run\"", "step_fps=7",
+	]))
+	var lines := ClipBuilder.check(run["cfg"], run["sources"], MODEL)
+	assert_eq(lines.size(), 3, str(lines))
+	if lines.size() == 3:
+		assert_true(lines[0].begins_with("[one] ") and lines[1].begins_with("[two] ") and lines[2].begins_with("[three] "), str(lines))
+
+
+func test_layer_files_that_are_not_layers_are_problems() -> void:
+	var run := _build_setup()
+	var cases := {
+		"not JSON": ["{\"hand_l\": [", "JSON"],
+		"not an object": ["[1, 2]", "object"],
+		"a bone with no keys": ["{\"hand_l\": []}", "hand_l"],
+		"a key with three numbers": ["{\"hand_l\": [[0, 1, 2]]}", "hand_l"],
+		"a key with a word in it": ["{\"hand_l\": [[0, 1, \"x\", 3]]}", "hand_l"],
+		"frames that go back": ["{\"hand_l\": [[10, 0, 0, 0], [5, 0, 0, 0]]}", "increase"],
+		"a bone the clip does not move": ["{\"spine_01\": [[0, 5, 0, 0]]}", "spine_01"],
+	}
+	for what: String in cases:
+		var layer: String = DIR + "/layers/bad.json"
+		_write_text(layer, cases[what][0])
+		_write_text(run["cfg"], "[bad]\nsource=\"pack\"\nclip=\"Idle\"\nlayer=\"%s\"\n" % layer)
+		var lines := ClipBuilder.check(run["cfg"], run["sources"], MODEL)
+		assert_eq(lines.size(), 1, "%s: %s" % [what, lines])
+		if lines.size() == 1:
+			assert_true(lines[0].contains(cases[what][1]), "%s: '%s' is in: %s" % [what, cases[what][1], lines[0]])
+
+
 # --- helpers ---
 
 # A 1 s animation with no tracks.
@@ -528,6 +882,84 @@ func _texts(dir: String) -> Dictionary:
 
 func _load(path: String) -> Resource:
 	return ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
+
+
+# A moving clip as the builder has it after rewrite_paths: `seconds` long, a key every 1/30 s (what a glTF
+# gives), on the bones root, pelvis and hand_l. The root travels in a line from `from` to `to`; the other
+# tracks bend, so that a wrong sample time shows.
+func _moving(seconds: float, from := Vector3.ZERO, to := Vector3.ZERO) -> Animation:
+	var a := Animation.new()
+	a.length = seconds
+	var root := a.add_track(Animation.TYPE_POSITION_3D)
+	a.track_set_path(root, ROOT_PATH)
+	var pelvis_move := a.add_track(Animation.TYPE_POSITION_3D)
+	a.track_set_path(pelvis_move, PELVIS_PATH)
+	var pelvis_turn := a.add_track(Animation.TYPE_ROTATION_3D)
+	a.track_set_path(pelvis_turn, PELVIS_PATH)
+	var hand_turn := a.add_track(Animation.TYPE_ROTATION_3D)
+	a.track_set_path(hand_turn, HAND_PATH)
+	var hand_scale := a.add_track(Animation.TYPE_SCALE_3D)
+	a.track_set_path(hand_scale, HAND_PATH)
+	for k in roundi(seconds * 30.0) + 1:
+		var t := minf(k / 30.0, seconds)
+		a.position_track_insert_key(root, t, from.lerp(to, t / seconds))
+		a.position_track_insert_key(pelvis_move, t, Vector3(0.05 * sin(3.0 * t), 0.9 + 0.1 * cos(2.0 * t), 0.02 * t))
+		a.rotation_track_insert_key(pelvis_turn, t, Quaternion(Vector3.UP, 1.5 * t))
+		a.rotation_track_insert_key(hand_turn, t, Quaternion(Vector3.RIGHT, sin(4.0 * t)))
+		a.scale_track_insert_key(hand_scale, t, Vector3(1.0, 1.0 + 0.3 * t, 1.0))
+	return a
+
+
+# Frame `frame` of a 60 Hz grid, in seconds.
+func _at(frame: int) -> float:
+	return frame / 60.0
+
+
+# The rotation of hand_l in `anim` at frame `frame` of a 60 Hz grid.
+func _hand(anim: Animation, frame: int) -> Quaternion:
+	return anim.rotation_track_interpolate(anim.find_track(HAND_PATH, Animation.TYPE_ROTATION_3D), _at(frame))
+
+
+func _about(axis: Vector3, degrees: float) -> Quaternion:
+	return Quaternion(axis, deg_to_rad(degrees))
+
+
+# What track `track` of `anim` holds at `time`.
+func _value(anim: Animation, track: int, time: float) -> Variant:
+	match anim.track_get_type(track):
+		Animation.TYPE_POSITION_3D:
+			return anim.position_track_interpolate(track, time)
+		Animation.TYPE_ROTATION_3D:
+			return anim.rotation_track_interpolate(track, time)
+	return anim.scale_track_interpolate(track, time)
+
+
+func _values_near(a: Variant, b: Variant, eps: float) -> bool:
+	if a is Quaternion:
+		return _quat_distance(a, b) < eps
+	return (a - b).length() < eps
+
+
+# How far apart two rotations are, as the shorter of |a - b| and |a + b| (q and -q are the same turn).
+func _quat_distance(a: Quaternion, b: Quaternion) -> float:
+	return minf((a - b).length(), (a + b).length())
+
+
+func _assert_quat_near(a: Quaternion, b: Quaternion, eps: float, msg := "") -> void:
+	assert_true(_quat_distance(a, b) < eps, "%s: %s is not %s" % [msg, a, b])
+
+
+# Asserts that `a` at `time_a` and `b` at `time_b` are the same pose: every track of `a`, with the track of
+# the same path and kind in `b`.
+func _assert_same_pose(a: Animation, time_a: float, b: Animation, time_b: float, eps: float, msg: String) -> void:
+	assert_true(a.get_track_count() > 0, "%s: there are tracks to compare" % msg)
+	for i in a.get_track_count():
+		var j := b.find_track(a.track_get_path(i), a.track_get_type(i))
+		assert_true(j >= 0, "%s: %s is in both" % [msg, a.track_get_path(i)])
+		if j >= 0:
+			var x: Variant = _value(a, i, time_a)
+			var y: Variant = _value(b, j, time_b)
+			assert_true(_values_near(x, y, eps), "%s: %s is %s, not %s" % [msg, a.track_get_path(i), x, y])
 
 
 # Two packs ("pack", and "pack_rm" with root motion), a config over them, and an output folder.
