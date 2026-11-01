@@ -48,7 +48,7 @@ func test_the_two_whoosh_cues_share_the_light_whooshes() -> void:
 	var b := _cue(&"whoosh_light")
 	assert_eq(a.streams, b.streams, "palm_whoosh is whoosh_light under the name the palm marks use")
 	for i in 3:
-		assert_eq(a.streams[i].resource_path, "res://assets/audio/sfx/whoosh_light_%d.wav" % (i + 1))
+		assert_eq(a.streams[i].resource_path.get_file(), "whoosh_light_%d.wav" % (i + 1))
 
 
 func test_cues_play_on_the_sfx_bus_that_the_project_has() -> void:

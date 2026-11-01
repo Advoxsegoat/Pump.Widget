@@ -22,9 +22,18 @@ extends Node
 ## its HP, or else the strongest reaction among them, a STAGGER over a FLINCH. Two blows that would each kill it
 ## are one death that both dealt, and each attacker hears its blow landed. A body that died since the frame
 ## began (by something other than this frame's blows) takes nothing: its blows come to a WHIFF, on both sides.
+##
+## A blow that landed also has weight (_weigh): both fighters freeze for the profile's `hitstop_frames` and the
+## target is pushed along the blow by its `knockback`. A trade freezes both for the longer of the two blows'
+## frames, not their sum, since a freeze that is on is only ever lengthened (Actor.freeze).
 
 ## Melee's place in each physics frame: after every actor (which run at the default, 0).
 const PRIORITY := 100
+## The outcomes that stop both fighters for the blow's hit-stop (Actor.freeze) and shove the target
+## (Actor.push): a blow that landed, was guarded, was turned back or was caught. A WHIFF touched nothing, so it
+## has no weight; a broken guard and a grab are other things (a grab is a paired move, not a blow).
+const FREEZES: Array[HitResult.Outcome] = [HitResult.Outcome.HIT, HitResult.Outcome.GUARDED, HitResult.Outcome.PARRIED,
+		HitResult.Outcome.CAUGHT]
 ## The snapshot's: before any actor moves.
 const SNAPSHOT_PRIORITY := -100
 
@@ -83,7 +92,19 @@ func _physics_process(_delta: float) -> void:
 			came_to.append(results[i])
 		target.apply_hits(taken, came_to)
 		for i: int in blows[target]:
+			_weigh(events[i], results[i])
 			events[i].attacker.hit_landed.emit(results[i], events[i])
+
+
+# Gives the blow `e`, which came to `r`, its weight: both fighters freeze for the profile's hit-stop frames
+# (each keeps the longer of this and any other freeze it has: in a trade the longer of the two, not the sum),
+# and the target is pushed along the blow by the profile's knockback.
+func _weigh(e: HitEvent, r: HitResult) -> void:
+	if not FREEZES.has(r.outcome):
+		return
+	e.attacker.freeze(e.profile.hitstop_frames)
+	e.target.freeze(e.profile.hitstop_frames)
+	e.target.push(e.direction * e.profile.knockback)
 
 
 # What `e` comes to against its target as it stood when the frame began (as it stands now, for one that was

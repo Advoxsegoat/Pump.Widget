@@ -361,7 +361,8 @@ func test_the_dead_fall_and_leave_the_actor_layer() -> void:
 	await _play_to(run["a"], 12)
 	assert_eq(b.rig.hurtbox.collision_layer, 0, "the hurtbox is off at once")
 	assert_true(b.collision_layer & Layers.ACTOR != 0, "the body is an actor's while it falls")
-	await _play_to(run["a"], 11 + 144 + 2)
+	# The killing blow's 3 frames of hit-stop come first: the death clip starts on frame 15, not 12.
+	await _play_to(run["a"], 11 + 3 + 144 + 2)
 	assert_eq(b.collision_layer & Layers.ACTOR, 0, "and leaves the actor layer when the clip ends")
 	assert_eq(b.collision_mask & Layers.WORLD, Layers.WORLD, "still lying on the world")
 	var head := b.rig.bone_global(&"Head").y
@@ -384,5 +385,8 @@ func test_dead_do_not_attack() -> void:
 	await _play_to(run["a"], 205)
 	assert_eq(run["b_started"], [[&"death", 11]], "nothing starts after the death")
 	assert_eq(b.buffer.size(), 0, "no press is even remembered")
-	assert_vec_near(b.global_position, lay, 0.05, "nor does the stick move the body")
+	# The body does slide the 0.1 m of the killing blow's knockback along +Z (the jab's 1.0 m/s at a decay of 10),
+	# which is not the stick, east.
+	assert_near(b.global_position.x, lay.x, 0.05, "nor does the stick move the body")
+	assert_near(b.global_position.z, lay.z + 0.1, 0.05, "which only slides on the blow's knockback")
 	assert_eq(run["a"].stats.hp, 100.0)

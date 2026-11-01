@@ -7,7 +7,8 @@ extends CharacterBody3D
 ##
 ## It fights through its HitScanner, which finds what its hitboxes strike, and Melee, which judges every hit of
 ## a frame once all actors have moved and hands each target its blow (apply_hit) and each attacker the result
-## (hit_landed); all the blows a frame lands on it are taken together (apply_hits). The actor joins the group
+## (hit_landed); all the blows a frame lands on it are taken together (apply_hits). A blow that lands has weight:
+## Melee freezes both fighters for its hit-stop (freeze) and shoves the target (push). The actor joins the group
 ## `actors` when ready, which is how Melee finds every defender, and
 ## marks its rig's hurtbox with the meta `actor`, which is how a scanner knows whose body it reached.
 ##
@@ -15,6 +16,9 @@ extends CharacterBody3D
 ##   1. frame += 1
 ##   2. the brain thinks, giving an Intent (not once the actor is dead: the dead want nothing)
 ##   3. the intent's presses go into the input buffer, stamped with this frame
+##      Then, if the actor is frozen (hit-stop, see freeze), the frame is over: one frozen frame is counted off and
+##      steps 4 to 13 do not happen, so its move, locomotion, velocity, stats, rig and scanner all stand still, while
+##      the brain went on thinking and its presses wait in the buffer (they last 9 frames, more than any freeze)
 ##   4. the runner ticks: the current move advances (its marks, a cancel window, its end), or a buffered
 ##      press starts one; this is how a press shows on the frame it is made
 ##   5. on a frame with no move, locomotion turns the stick into a velocity, sprinting while dodge is held
@@ -24,7 +28,8 @@ extends CharacterBody3D
 ##      velocity is the move's root motion, and locomotion takes it over, so it carries on from the move's
 ##      speed when the move is done
 ##   6. a sprint spends sprint_stamina a second, and the stats are ticked: stamina and posture come back
-##   7. move_and_slide, with gravity when off the floor
+##   7. move_and_slide, with gravity when off the floor, and with the knockback added (see push), which the
+##      move and locomotion know nothing of
 ##   8. the body turns to locomotion's facing
 ##   9. the rig is given the strafe (the way the body goes against the way it faces, when it keeps facing a
 ##      target), which says whether locomotion plays backward, then the speed (see _rig_speed: while a move
@@ -86,6 +91,8 @@ var look_target: Variant = null
 var dead := false
 ## Finds what the hitboxes strike; the runner says when each comes on and goes off.
 var scanner := HitScanner.new()
+## Physics frames of hit-stop still to go (freeze).
+var frozen := 0
 
 # The speed the rig's locomotion layer is given. With no move it is locomotion's. A move that starts is laid over
 # that layer in its blend_in, so the layer keeps the speed it had until the move is fully in (dropping it to
@@ -93,6 +100,7 @@ var scanner := HitScanner.new()
 # speed a roll carries on from (locomotion.speed, root motion) never shows as a run under the move.
 var _rig_speed := 0.0
 var _death: MoveData  # the death move once die() has started it
+var _push := Vector3.ZERO  # the knockback still to travel, in m/s on the ground plane (see push)
 
 @onready var runner: MoveRunner = $MoveRunner
 
@@ -131,6 +139,8 @@ func set_brain(b: Brain) -> void:
 func place(at: Transform3D) -> void:
 	global_transform = at.orthonormalized()
 	velocity = Vector3.ZERO
+	_push = Vector3.ZERO
+	frozen = 0
 	locomotion.speed = 0.0
 	locomotion.facing_yaw = rotation.y
 	reset_physics_interpolation()
@@ -151,6 +161,23 @@ func snap_facing(yaw: float) -> void:
 ## Where others look at this actor: its head, def.look_height above its feet.
 func head_point() -> Vector3:
 	return global_position + Vector3.UP * def.look_height
+
+
+## Hit-stop: the actor stands still for `frames` physics frames (a blow that lands freezes both fighters; Melee
+## does it). Frozen, its move runner, locomotion, velocity and rig do not tick, so everything holds the pose of
+## the frame the blow landed on; its brain still thinks and its presses are buffered, so one made while frozen
+## comes out as soon as the move can take it. A freeze that is on already is kept if it is the longer, never
+## added to: two blows on one frame, or a trade, freeze for the longest of them. A knockback waits out the freeze.
+func freeze(frames: int) -> void:
+	frozen = maxi(frozen, frames)
+
+
+## Knockback: shoves the actor along the ground by `velocity` (m/s; only its horizontal part counts), added to
+## whatever else moves it, and dying away by the tuning's knockback_decay a second, so it travels about
+## `velocity` over the decay in all (1.5 m/s at a decay of 10 is 0.15 m). It goes through move_and_slide, so a
+## wall stops it, and pushes add up. It does not run while the actor is frozen.
+func push(velocity: Vector3) -> void:
+	_push += Vector3(velocity.x, 0.0, velocity.z)
 
 
 ## True while a move's marks make the actor invulnerable (a roll's iframes).
@@ -217,6 +244,9 @@ func _physics_process(delta: float) -> void:
 		intent = Intent.new()
 	for action in intent.pressed:
 		buffer.push(action, frame)
+	if frozen > 0:
+		frozen -= 1
+		return
 	var moved_by_move := runner.busy()
 	var facing_before := locomotion.facing_yaw
 	var planar := runner.tick(intent, delta)
@@ -236,7 +266,8 @@ func _physics_process(delta: float) -> void:
 	var fall := velocity.y
 	if not is_on_floor():
 		fall += get_gravity().y * delta
-	velocity = Vector3(planar.x, fall, planar.z)
+	var shove := _next_push(delta)
+	velocity = Vector3(planar.x + shove.x, fall, planar.z + shove.z)
 	move_and_slide()
 	rotation.y = locomotion.facing_yaw
 	var back := rig.set_strafe(_strafe_angle(intent, planar))
@@ -260,6 +291,20 @@ func _take(e: HitEvent, r: HitResult) -> bool:
 	if r.posture_damage > 0.0:
 		stats.damage_posture(r.posture_damage)
 	return stats.take_damage(r.hp_damage)
+
+
+# The knockback's velocity for this frame, and the push left after it: _push is the velocity at the start of the
+# frame and decays exponentially, so the frame moves by its average over the frame, (1 - e^(-k delta)) / (k delta)
+# of it. That way the whole push travels _push / k however long the frames are.
+func _next_push(delta: float) -> Vector3:
+	if _push.is_zero_approx():
+		_push = Vector3.ZERO
+		return Vector3.ZERO
+	var k := maxf(stats.tuning.knockback_decay, 0.001)
+	var keep := exp(-k * delta)
+	var shove := _push * ((1.0 - keep) / (k * delta))
+	_push *= keep
+	return shove
 
 
 # Plays the def's reaction move `reaction`, if it has one.
