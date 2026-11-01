@@ -8,6 +8,10 @@ extends Node3D
 ## Physics interpolation is off here: the rig moves in _process and follows the target's
 ## interpolated transform, so the picture is smooth at any frame rate.
 ##
+## A hit shakes it (shake): the offset goes into the place the camera wants to be before that is snapped, so the
+## picture shakes in whole texels like everything else it does. The rig joins the group `camera_rig`, where whoever
+## shakes it, and Sfx, find it.
+##
 ## Its PostQuad child draws the 3D half of the screen look over everything the camera sees
 ## (render/shaders/screen_post.gdshader), focused on the target; the PixelStage sets its strengths.
 
@@ -28,6 +32,15 @@ const POST_SHADER := preload("res://render/shaders/screen_post.gdshader")
 ## The group the rig joins when it is ready: the one game camera, which hit feel (shake) and sound (Sfx, to find the
 ## world to play in) look for there.
 const GROUP := &"camera_rig"
+## The most the picture shakes, in metres along the camera's right and up: the offset at full trauma.
+const MAX_SHAKE := 0.25
+## Trauma lost a second: a full shake is over in 0.4 s.
+const TRAUMA_DECAY := 2.5
+## How fast the shake moves through its noise, in noise cells a second: about this many changes of direction a
+## second.
+const SHAKE_RATE := 16.0
+## The noise's seed: the same shake every time.
+const SHAKE_SEED := 7
 
 @export var target: Node3D
 ## Seconds the follow takes to settle, roughly.
@@ -35,6 +48,9 @@ const GROUP := &"camera_rig"
 ## Metres the camera leans along the target's velocity at full speed.
 @export var look_ahead := 0.8
 
+## How much the camera is shaking, 0 to 1 (see shake). The offset is trauma squared times MAX_SHAKE, so a light
+## hit is a tremor and a heavy one a lurch.
+var trauma := 0.0
 ## Receives the sub-pixel offset each frame.
 var stage: PixelStage
 var camera: Camera3D
@@ -43,6 +59,8 @@ var post_quad: MeshInstance3D
 
 var _follow := Vector3.ZERO
 var _has_follow := false
+var _shake_time := 0.0  # seconds of shaking so far: where the noise is
+static var _noise: FastNoiseLite
 
 
 func _init() -> void:
@@ -93,7 +111,43 @@ func snap_now() -> void:
 	_apply()
 
 
+## Shakes the picture: adds `strength` (a hit's `shake`, 0 to 1) to the trauma, up to 1. The trauma falls by
+## TRAUMA_DECAY a second, and while it is above 0 the camera is moved by shake_offset before it is snapped to the
+## texel grid, so the picture still moves in whole texels.
+func shake(strength: float) -> void:
+	trauma = clampf(trauma + maxf(strength, 0.0), 0.0, 1.0)
+
+
+## How far the shake has the camera from where it would be, in metres along its right and up: shake_at for this
+## rig's trauma and moment.
+func shake_offset() -> Vector2:
+	return shake_at(trauma, _shake_time)
+
+
+## The shake of `trauma` at `seconds` into a shaking: up to trauma squared times MAX_SHAKE (in length) along smooth
+## noise, one noise for the way along the camera's right and another for up.
+static func shake_at(trauma_now: float, seconds: float) -> Vector2:
+	if trauma_now <= 0.0:
+		return Vector2.ZERO
+	if _noise == null:
+		_noise = FastNoiseLite.new()
+		_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+		_noise.seed = SHAKE_SEED
+		_noise.frequency = 1.0
+		_noise.fractal_type = FastNoiseLite.FRACTAL_NONE  # the default adds finer and finer noise: not smooth
+	var at := seconds * SHAKE_RATE
+	var direction := Vector2(_noise.get_noise_2d(at, 0.0), _noise.get_noise_2d(at, 37.0))
+	if direction.length() > 1.0:
+		direction = direction.normalized()
+	return direction * trauma_now * trauma_now * MAX_SHAKE
+
+
 func _process(delta: float) -> void:
+	if trauma > 0.0:
+		trauma = maxf(trauma - TRAUMA_DECAY * delta, 0.0)
+		_shake_time += delta
+	else:
+		_shake_time = 0.0
 	if target == null or not target.is_inside_tree():
 		return
 	var goal := _goal()
@@ -125,7 +179,8 @@ func _goal() -> Vector3:
 func _apply() -> void:
 	global_position = _follow
 	var b := global_basis
-	var wanted := _follow + b.z * DISTANCE
+	var shaken := shake_offset()
+	var wanted := _follow + b.z * DISTANCE + b.x * shaken.x + b.y * shaken.y
 	camera.global_position = PixelSnap.snap(wanted, b)
 	if is_instance_valid(stage):
 		stage.subpixel = PixelSnap.subpixel(wanted, b)
