@@ -14,6 +14,12 @@ const SUN_ROTATION := Vector3(-40.0, -35.0, 0.0)
 ## Abarax's slots with a part big enough to show from the game's angle: skin, hair, main, sec, pants,
 ## boots, rose.
 const ABARAX_SHOWN := [0, 1, 3, 4, 5, 6, 7]
+## The tell of a perilous attack, in the flash.
+const ROSE := Color("e8607e")
+## How far a full flash may be from its colour, per channel. Forward+ lands on it; in Compatibility the flash goes
+## through the engine's emission, which decodes with a cubic and encodes with the exact curve (see the shader): a
+## few steps off for a colour that is not white or black.
+const FLASH_TOLERANCE := 5.0 / 255.0
 
 
 func test_sphere_pixels_are_palette_tones() -> void:
@@ -69,6 +75,67 @@ func test_a_lamp_that_lifts_nothing_changes_nothing() -> void:
 	view.add_child(lamp)
 	var img: Image = await _capture(view)
 
+	var found := _match_pixels(img, _tones(palette, [3]))
+	assert_true(found["drawn"] > img.get_width() * img.get_height() / 2, "the sphere fills the view (%d pixels)" % found["drawn"])
+	assert_eq(found["off"], 0, "pixels that are not a tone of slot 3: %s" % [found["examples"]])
+
+
+# The flash (Rig.flash) mixes its colour over the tone by flash_amount: at 1 the body is the colour, whatever the
+# light does, shadow included.
+func test_a_full_flash_draws_the_body_in_the_flash_colour() -> void:
+	var palette := load(PALETTE) as Palette
+	for flash: Color in [Color.WHITE, ROSE]:
+		var view := _stage(Vector2i(128, 128))
+		var material := _sphere_scene(view, palette)
+		material.set_shader_parameter(&"flash_color", flash)
+		material.set_shader_parameter(&"flash_amount", 1.0)
+		var img: Image = await _capture(view)
+		var found := _match_pixels(img, PackedColorArray([flash]), FLASH_TOLERANCE)
+		assert_true(found["drawn"] > img.get_width() * img.get_height() / 2, "the sphere fills the view (%d pixels)" % found["drawn"])
+		assert_eq(found["off"], 0, "pixels that are not %s: %s" % [flash.to_html(false), found["examples"]])
+
+
+# Half a flash is half way from the tone to the colour, lit or in shadow: in linear light in Forward+, and in sRGB in
+# Compatibility, where the light's pass and the emission's are added in sRGB.
+func test_a_half_flash_is_half_way_between_the_tone_and_the_colour() -> void:
+	var palette := load(PALETTE) as Palette
+	var view := _stage(Vector2i(128, 128))
+	var material := _sphere_scene(view, palette)
+	var before: Image = await _capture(view)
+	material.set_shader_parameter(&"flash_color", Color.WHITE)
+	material.set_shader_parameter(&"flash_amount", 0.5)
+	var after: Image = await _capture(view)
+	var linear := RenderingServer.get_current_rendering_method() != "gl_compatibility"
+	var drawn := 0
+	var changed := 0
+	var misses := []
+	for y in before.get_height():
+		for x in before.get_width():
+			var was := before.get_pixel(x, y)
+			if was.r == 0.0 and was.g == 0.0 and was.b == 0.0:
+				continue
+			drawn += 1
+			var now := after.get_pixel(x, y)
+			var half := was.srgb_to_linear().lerp(Color.WHITE, 0.5).linear_to_srgb() if linear else was.lerp(Color.WHITE, 0.5)
+			var off := maxf(maxf(absf(now.r - half.r), absf(now.g - half.g)), absf(now.b - half.b))
+			if off > TOLERANCE and misses.size() < 5:
+				misses.append("(%d,%d) was %s, is %s, not half way %s" % [x, y, was.to_html(false), now.to_html(false), half.to_html(false)])
+			if maxf(maxf(absf(now.r - was.r), absf(now.g - was.g)), absf(now.b - was.b)) > TOLERANCE:
+				changed += 1
+	assert_true(drawn > 3000, "the sphere is drawn (%d pixels)" % drawn)
+	assert_eq(misses, [], "pixels that are not half way to white")
+	assert_true(changed > drawn / 2, "and the flash changed most of them (%d of %d)" % [changed, drawn])
+
+
+# At flash 0 the flash is not there: the pixels are the palette's, as every other test in this file takes for granted
+# (this one says so, and drives the shader's uniforms by hand to be sure of it).
+func test_no_flash_leaves_the_tones_alone() -> void:
+	var palette := load(PALETTE) as Palette
+	var view := _stage(Vector2i(128, 128))
+	var material := _sphere_scene(view, palette)
+	material.set_shader_parameter(&"flash_color", ROSE)
+	material.set_shader_parameter(&"flash_amount", 0.0)
+	var img: Image = await _capture(view)
 	var found := _match_pixels(img, _tones(palette, [3]))
 	assert_true(found["drawn"] > img.get_width() * img.get_height() / 2, "the sphere fills the view (%d pixels)" % found["drawn"])
 	assert_eq(found["off"], 0, "pixels that are not a tone of slot 3: %s" % [found["examples"]])
@@ -145,13 +212,14 @@ func _camera(view: SubViewport, ortho_size: float) -> Camera3D:
 
 
 # A sphere in slot 3, filling a camera 2.2 m high, and a box out of the camera's view between the sun and
-# part of the sphere's lit side, so some of the lit side is in shadow.
-func _sphere_scene(view: SubViewport, palette: Palette) -> void:
+# part of the sphere's lit side, so some of the lit side is in shadow. Returns the sphere's material.
+func _sphere_scene(view: SubViewport, palette: Palette) -> ShaderMaterial:
 	var camera := _camera(view, 2.2)
 	camera.position = Vector3(0, 0, 5)
 	var sphere := MeshInstance3D.new()
 	sphere.mesh = _sphere_in_slot(3)
-	sphere.material_override = Rig.toon_material(palette)
+	var material := Rig.toon_material(palette)
+	sphere.material_override = material
 	view.add_child(sphere)
 	var sun := view.get_node("Sun") as DirectionalLight3D
 	var blocker := MeshInstance3D.new()
@@ -160,6 +228,7 @@ func _sphere_scene(view: SubViewport, palette: Palette) -> void:
 	blocker.mesh = box
 	view.add_child(blocker)
 	blocker.global_position = sun.global_basis.z * 3.0 + sun.global_basis.x * 0.7
+	return material
 
 
 # A sphere of radius 1 whose every corner is in palette slot `slot` (UV2.x = (slot + 0.5) / 16).
@@ -196,9 +265,9 @@ func _tones(palette: Palette, slots: Array) -> PackedColorArray:
 
 
 # Looks at every pixel that is not the black background: {drawn: how many, off: how many are not within
-# TOLERANCE of any of `tones`, examples: the first few of those with the nearest tone, seen: the indices
+# `tolerance` of any of `tones`, examples: the first few of those with the nearest tone, seen: the indices
 # into `tones` of those that matched}.
-func _match_pixels(img: Image, tones: PackedColorArray) -> Dictionary:
+func _match_pixels(img: Image, tones: PackedColorArray, tolerance := TOLERANCE) -> Dictionary:
 	var drawn := 0
 	var off := 0
 	var examples := []
@@ -216,7 +285,7 @@ func _match_pixels(img: Image, tones: PackedColorArray) -> Dictionary:
 				if d < best_d:
 					best_d = d
 					best = i
-			if best_d <= TOLERANCE:
+			if best_d <= tolerance:
 				seen[best] = true
 			else:
 				off += 1

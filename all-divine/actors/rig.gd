@@ -122,6 +122,9 @@ var _look_influence: Array[float] = []  # each look modifier's influence when fu
 var _look_weight := 0.0  # how much the look shows, 0 to 1 (each modifier's influence is its own times this)
 var _look_from := 0.0  # the weight when the look last started to fade in or out
 var _look_time := 0.0  # seconds since then
+var _material: ShaderMaterial  # the toon material of apply_palette, or null before it
+var _flash_seconds := 0.0  # how long the flash in progress was to last, and how long it has left
+var _flash_left := 0.0
 
 
 func _ready() -> void:
@@ -167,6 +170,8 @@ static func toon_material(p: Palette) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = TOON_SHADER
 	material.set_shader_parameter(&"palette", p.to_texture())
+	material.set_shader_parameter(&"flash_color", Color.WHITE)
+	material.set_shader_parameter(&"flash_amount", 0.0)
 	return material
 
 
@@ -174,9 +179,24 @@ static func toon_material(p: Palette) -> ShaderMaterial:
 ## MeshInstance3D under Model. Calling it again (a dye, say) replaces it.
 func apply_palette(p: Palette) -> void:
 	palette = p
-	var material := toon_material(p)
+	_material = toon_material(p)
+	_flash_left = 0.0
 	for mesh in $Model.find_children("*", "MeshInstance3D", true, false):
-		(mesh as MeshInstance3D).material_override = material
+		(mesh as MeshInstance3D).material_override = _material
+
+
+## Flashes the body `color` for `seconds`: the toon shader mixes `color` over the palette tone, all of it as the
+## flash starts and less and less (linearly) until it is gone. A hit flashes white for 2 frames and a perilous
+## attack's tell flashes rose for 0.25 s. The fade runs in tick, so a rig that is not ticked (frozen by hit-stop)
+## holds the flash. A new flash replaces the one in progress. A body drawn in the materials it was imported with
+## (no palette yet) has nothing to flash.
+func flash(color: Color, seconds: float) -> void:
+	if _material == null or seconds <= 0.0:
+		return
+	_flash_seconds = seconds
+	_flash_left = seconds
+	_material.set_shader_parameter(&"flash_color", color)
+	_material.set_shader_parameter(&"flash_amount", 1.0)
 
 
 ## Where the clip of a stepped move is shown at gameplay time `t`: on a grid of `fps` steps per second,
@@ -357,6 +377,9 @@ func stop_move(blend_out: float) -> void:
 ## the markers this places; with physics interpolation on, outside the physics step they read where the
 ## markers were at the start of the frame, so the legs and head would aim a frame late.
 func tick(delta: float) -> void:
+	if _flash_left > 0.0:
+		_flash_left = maxf(_flash_left - delta, 0.0)
+		_material.set_shader_parameter(&"flash_amount", _flash_left / _flash_seconds if _flash_left > 1e-6 else 0.0)
 	for slot in 2:
 		# The slot that is fading out keeps playing on its own clock while it still shows.
 		if slot != _slot and _slot != -1 and _layer > 0.0 and _slot_weight(slot) > 0.0:

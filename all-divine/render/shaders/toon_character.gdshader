@@ -20,11 +20,22 @@
 // omni or spot light) that picks the deep tone gives nothing. Lit pixels match Forward+ for any one light; only
 // where no light reaches at all, the sun included, or only lamps too weak to lift the deep tone, is
 // Compatibility black, not deep.
+//
+// The flash is a mix of the pixel's colour toward flash_color. In Forward+ the light's step up from the deep tone is
+// scaled by 1 - flash_amount and the emission, the deep tone, is mixed toward the flash colour: a mix in linear
+// light. In Compatibility the light's pass and the emission's are added in sRGB, so the light carries the colour
+// it would have scaled by 1 - flash_amount, and the emission, which is nothing otherwise, is the flash colour scaled
+// by flash_amount: a mix in sRGB. (Emission goes through the cubic and the exact curve, so a colour other than white
+// or black lands a few steps off, which a flash can afford.)
 shader_type spatial;
 render_mode ambient_light_disabled, specular_disabled;
 
 uniform sampler2D palette : source_color, filter_nearest;
 uniform vec3 ramp = vec3(0.1, 0.4, 0.85);
+// The flash (Rig.flash): flash_color mixed over the palette tone by flash_amount, 0 to 1. At 1 the body is the colour
+// whatever the light does (in shadow too); at 0 nothing is changed and the pixels are the palette's own, exactly.
+uniform vec3 flash_color : source_color = vec3(1.0);
+uniform float flash_amount : hint_range(0.0, 1.0) = 0.0;
 
 // Tone t of palette slot `slot` as the texture gives it: linear in Forward+ and Mobile (source_color
 // decodes it there), and the stored sRGB in Compatibility (which decodes ALBEDO and EMISSION instead).
@@ -60,8 +71,11 @@ vec3 compatibility_linear(vec3 c) {
 void fragment() {
 	int slot = slot_of(UV2);
 	ALBEDO = tone(slot, 1);
-#if CURRENT_RENDERER != RENDERER_COMPATIBILITY
-	EMISSION = tone(slot, 3);
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+	// Compatibility hands a source_color uniform over as it was set (sRGB), and reads emission as sRGB.
+	EMISSION = flash_color * flash_amount;
+#else
+	EMISSION = mix(tone(slot, 3), flash_color, flash_amount);
 #endif
 }
 
@@ -77,9 +91,9 @@ void light() {
 	if (LIGHT_IS_DIRECTIONAL || t != 3) {
 		vec3 deep = srgb_to_linear(tone(slot, 3));
 		vec3 lit = deep + max((srgb_to_linear(tone(slot, t)) - deep) * LIGHT_COLOR / PI, vec3(0.0));
-		DIFFUSE_LIGHT = max(DIFFUSE_LIGHT, compatibility_linear(linear_to_srgb(lit)) / max(ALBEDO, vec3(0.001)));
+		DIFFUSE_LIGHT = max(DIFFUSE_LIGHT, compatibility_linear(linear_to_srgb(lit) * (1.0 - flash_amount)) / max(ALBEDO, vec3(0.001)));
 	}
 #else
-	DIFFUSE_LIGHT = max(DIFFUSE_LIGHT, (tone(slot, t) - tone(slot, 3)) / max(ALBEDO, vec3(0.001)) * LIGHT_COLOR / PI);
+	DIFFUSE_LIGHT = max(DIFFUSE_LIGHT, (tone(slot, t) - tone(slot, 3)) / max(ALBEDO, vec3(0.001)) * LIGHT_COLOR / PI * (1.0 - flash_amount));
 #endif
 }

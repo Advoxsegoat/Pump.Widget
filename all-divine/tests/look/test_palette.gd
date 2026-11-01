@@ -131,7 +131,7 @@ func test_the_toon_shader_compiles_for_this_renderer() -> void:
 	var shader := Shader.new()
 	shader.code = (load(TOON) as Shader).code
 	var names := shader.get_shader_uniform_list().map(func(u: Dictionary) -> String: return u["name"])
-	assert_eq(names, ["palette", "ramp"], "compiled for %s" % RenderingServer.get_current_rendering_method())
+	assert_eq(names, ["palette", "ramp", "flash_color", "flash_amount"], "compiled for %s" % RenderingServer.get_current_rendering_method())
 
 
 func test_rig_wears_one_shared_toon_material() -> void:
