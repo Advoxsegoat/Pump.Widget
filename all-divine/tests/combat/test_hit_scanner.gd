@@ -110,3 +110,26 @@ func test_each_hitbox_is_its_own_activation() -> void:
 	assert_eq(events.map(func(e: HitEvent) -> StringName: return e.hitbox), [&"palm_l", &"palm_r"], "both hands land")
 	scanner.end(&"palm_l")
 	assert_eq(scanner.scan(attacker), [] as Array[HitEvent], "palm_r is still on, and has hit already")
+
+
+func test_a_profile_the_move_lacks_turns_nothing_on() -> void:
+	var s: Dictionary = await _setup()
+	quietly(func() -> void: (s["scanner"] as HitScanner).begin(&"palm_l", &"no_such_profile", s["jab"]))
+	assert_eq(_scan_at(s, 0.0), [], "no blow without a profile to land with")
+
+
+func test_bodies_are_found_where_they_stood_when_the_frame_began() -> void:
+	# The engine hands a moved node's transform to the physics server once every node has run its frame, so
+	# within a frame a hurtbox is found where it stood when the frame began, whichever actor moved first. Every
+	# scan relies on it (see HitScanner); this pins it, for the next engine upgrade.
+	var s: Dictionary = await _setup()
+	var scanner: HitScanner = s["scanner"]
+	var target: Actor = s["target"]
+	target.global_position = Vector3(5, 0, 0)
+	scanner.begin(&"palm_l", &"palm", s["jab"])
+	assert_eq(_scan_at(s, 0.0), [target], "moved this frame: still found where it stood")
+	scanner.begin(&"palm_l", &"palm", s["jab"])
+	assert_eq(_scan_at(s, 5.0), [], "and not yet where it went")
+	await frames(1)
+	scanner.begin(&"palm_l", &"palm", s["jab"])
+	assert_eq(_scan_at(s, 5.0), [target], "found there once the frame is over")

@@ -68,8 +68,9 @@ func end(hitbox: StringName) -> void:
 		_unscanned_ended.append(activation)
 
 
-## The blows `actor`'s hitboxes strike this tick, one HitEvent per body per activation, in the order the
-## activations began. Call it once per physics frame, after the rig has posed the body.
+## The blows `actor`'s hitboxes strike this tick, one HitEvent per body per activation: those of activations
+## that ended before any scan first, then those of the live ones, in the order they began. Call it once per
+## physics frame, after the rig has posed the body.
 func scan(actor: Actor) -> Array[HitEvent]:
 	var events: Array[HitEvent] = []
 	var space := actor.get_world_3d().direct_space_state
