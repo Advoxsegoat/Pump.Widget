@@ -73,7 +73,9 @@ func test_root_motion_track_set() -> void:
 	assert_eq(r.tree.root_motion_track, NodePath("Model/%s:root" % skel))
 	assert_eq(r.tree.root_node, NodePath(".."))
 	assert_eq(r.tree.callback_mode_process, AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL)
-	assert_eq(r.tree.get_animation_library(&""), load(LIB), "the Abarax library, under the default name")
+	var library := r.tree.get_animation_library(&"")
+	assert_eq(library.get_animation_list(), (load(LIB) as AnimationLibrary).get_animation_list(), "the Abarax clips, in the library under the default name")
+	assert_eq(library.get_animation(&"palm_jab"), (load(LIB) as AnimationLibrary).get_animation(&"palm_jab"), "the clips themselves are the library's, not copies")
 	assert_eq(r.skeleton, r.get_node(NodePath("Model/%s" % skel)))
 
 
@@ -121,6 +123,92 @@ func test_crossfade_between_moves() -> void:
 	assert_near(float(r.tree.get(&"parameters/move_ab/blend_amount")), 1.0, 1e-6, "done after 0.1 s")
 	r.play_move(&"palm_jab", 0.0); r.tick(0.0)
 	assert_near(float(r.tree.get(&"parameters/move_ab/blend_amount")), 0.0, 1e-6, "the third move goes back to move_a")
+
+
+func test_cancel_inside_blend_in_does_not_jump_the_pose() -> void:
+	# A cancel two ticks into a move's blend_in: the shown pose changes over the cancel tick no more than it
+	# did over the tick before (within 1.5 times, per bone).
+	var r := rig()
+	_play(r, &"palm_jab", 0.1)
+	_tick(r)
+	var before := _positions(r)
+	_tick(r)
+	var cancel_from := _positions(r)
+	_play(r, &"palm_cross", 0.1)
+	_tick(r)
+	assert_eq(_worst_jump(before, cancel_from, _positions(r)), "")
+
+
+func test_cancel_inside_a_move_to_move_crossfade_does_not_jump_the_pose() -> void:
+	# The jab, then the cross fading in over it, then a roll while the cross is still fading in: the roll
+	# would take the jab's slot, which still shows a share of the pose. With no time passing, the cancel must
+	# change nothing that is shown: a rig that was cancelled and one with the same history that was not are
+	# alike, bone for bone, modifiers included (so none is applied twice to the held pose).
+	for blend_in: float in [0.1, 0.05]:
+		var r := rig(); var control := rig()
+		_jab_then_cross(r, blend_in); _jab_then_cross(control, blend_in)
+		var ab := float(r.tree.get(Rig.MOVE_AB))
+		assert_true(ab > 0.0 and ab < 1.0, "the first two moves are still crossfading (%s)" % ab)
+		_play(r, &"dodge_roll", blend_in)
+		r.tick(0.0); control.tick(0.0)
+		assert_eq(_worst_difference(r, control, true), "", "blend_in %s" % blend_in)
+
+
+func test_cancelled_into_move_fades_in_over_the_held_pose_and_takes_over() -> void:
+	# Then time passes: the roll fades in over the held pose in blend_in seconds, and after that the clips
+	# show the roll and nothing else, as on a rig that played it alone.
+	var r := rig(); var alone := rig()
+	_jab_then_cross(r, 0.1)
+	_play(r, &"dodge_roll", 0.1)
+	for i in 7:
+		_tick(r)
+	assert_near(float(r.tree.get(Rig.MOVE_AB)), 0.0, 1e-6, "the fade is done, onto the slot the jab left")
+	_play(alone, &"dodge_roll", 0.0)
+	for i in 7:
+		_tick(alone)
+	assert_eq(_worst_difference(r, alone, false), "", "only the roll shows")
+
+
+func test_cancel_holds_the_pose_in_a_one_key_clip_of_the_rigs_own() -> void:
+	# The slot the fading move was in is loaded with SNAPSHOT_CLIP: one key on each rotation track (and on the
+	# pelvis's position), holding the pose the tree showed. The clip is in this rig's library, not the actor's.
+	var r := rig(); var other := rig()
+	_play(r, &"palm_jab", 0.1)
+	_tick(r); _tick(r)
+	_play(r, &"palm_cross", 0.1)
+	_tick(r)
+	assert_false(r.tree.has_animation(Rig.SNAPSHOT_CLIP), "none until a move is cancelled mid-fade")
+	var shown := r.skeleton.get_bone_pose_rotation(r.skeleton.find_bone(&"hand_l"))
+	var pelvis := r.skeleton.get_bone_pose_position(r.skeleton.find_bone(&"pelvis"))
+	_play(r, &"palm_jab", 0.1)
+	assert_true(r.tree.has_animation(Rig.SNAPSHOT_CLIP))
+	var held := r.tree.get_animation(Rig.SNAPSHOT_CLIP)
+	var path := "Model/%s:" % ClipBuilder.skeleton_path(load(MODEL))
+	var rotation := held.find_track(NodePath(path + "hand_l"), Animation.TYPE_ROTATION_3D)
+	var position := held.find_track(NodePath(path + "pelvis"), Animation.TYPE_POSITION_3D)
+	assert_true(rotation >= 0 and position >= 0, "a key track for the hand's turn and the pelvis's place")
+	for t in held.get_track_count():
+		assert_eq(held.track_get_key_count(t), 1, "track %d (%s)" % [t, held.track_get_path(t)])
+	assert_true(_angle((held.track_get_key_value(rotation, 0) as Quaternion), shown) < 1e-4, "the hand as it was shown")
+	assert_vec_near((held.track_get_key_value(position, 0) as Vector3), pelvis, 1e-5, "and the pelvis")
+	var slots := [(r.tree.tree_root as AnimationNodeBlendTree).get_node(&"move_a") as AnimationNodeAnimation,
+			(r.tree.tree_root as AnimationNodeBlendTree).get_node(&"move_b") as AnimationNodeAnimation]
+	assert_eq([slots[0].animation, slots[1].animation].count(Rig.SNAPSHOT_CLIP), 1, "in one slot; the new move is in the other")
+	assert_eq([slots[0].animation, slots[1].animation].count(&"palm_jab"), 1)
+	assert_false(other.tree.has_animation(Rig.SNAPSHOT_CLIP), "another rig of the actor does not have it")
+	assert_false((load(LIB) as AnimationLibrary).has_animation(Rig.SNAPSHOT_CLIP), "nor does the actor's library")
+
+
+func test_cancel_after_the_fade_is_done_needs_no_snapshot() -> void:
+	var r := rig()
+	_play(r, &"palm_jab", 0.1)
+	for i in 8:
+		_tick(r)
+	_play(r, &"palm_cross", 0.1)
+	for i in 8:
+		_tick(r)
+	_play(r, &"palm_jab", 0.1)
+	assert_false(r.tree.has_animation(Rig.SNAPSHOT_CLIP), "the fade is over: the other slot shows nothing, and the move takes it")
 
 
 func test_move_layer_fades_in_and_out() -> void:
@@ -258,6 +346,67 @@ func test_marks_node_takes_every_mark_kind() -> void:
 		sink.call(kind, {})
 
 
+# The gameplay time of the move the helpers below are playing, as the move runner keeps it.
+var _move_time := 0.0
+
+
+# Starts `clip` as a move.
+func _play(r: Rig, clip: StringName, blend_in: float) -> void:
+	r.play_move(clip, blend_in)
+	_move_time = 0.0
+
+
+# One physics tick of the move: its time moves on by DT and the rig is ticked.
+func _tick(r: Rig) -> void:
+	_move_time += 1.0 / 60
+	r.set_move_time(_move_time)
+	r.tick(1.0 / 60)
+
+
+# The jab, two ticks, and the cross, one tick: the cross is fading in over the jab.
+func _jab_then_cross(r: Rig, blend_in: float) -> void:
+	_play(r, &"palm_jab", blend_in)
+	_tick(r); _tick(r)
+	_play(r, &"palm_cross", blend_in)
+	_tick(r)
+
+
+# The first bone that is not where it is on `other`, to a millimetre, in the pose shown (`shown`) or in the clips'
+# pose, without the modifiers; "" if there is none, else a line saying which and how far.
+func _worst_difference(r: Rig, other: Rig, shown: bool) -> String:
+	for b in r.skeleton.get_bone_count():
+		var bone := StringName(r.skeleton.get_bone_name(b))
+		var here := r.bone_global(bone) if shown else r.animated_pose(bone).origin
+		var there := other.bone_global(bone) if shown else other.animated_pose(bone).origin
+		if here.distance_to(there) > 0.001:
+			return "%s is %.4f m from where it is on the other rig" % [bone, here.distance_to(there)]
+	return ""
+
+
+# Where every bone is in the pose the last tick showed: bone name -> world position.
+func _positions(r: Rig) -> Dictionary:
+	var out := {}
+	for b in r.skeleton.get_bone_count():
+		var bone := StringName(r.skeleton.get_bone_name(b))
+		out[bone] = r.bone_global(bone)
+	return out
+
+
+# The worst bone for a pose that jumps: the one whose move over the last tick (`before` to `after`) is most
+# beyond 1.5 times its move over the tick before (`earlier` to `before`), and 2 mm more for a bone that was
+# still. "" when there is none; else a line saying which bone and how far it went.
+func _worst_jump(earlier: Dictionary, before: Dictionary, after: Dictionary) -> String:
+	var worst := ""
+	var excess := 0.0
+	for bone: StringName in earlier:
+		var last := (before[bone] as Vector3).distance_to(after[bone])
+		var prior := (earlier[bone] as Vector3).distance_to(before[bone])
+		if last - 1.5 * prior - 0.002 > excess:
+			excess = last - 1.5 * prior - 0.002
+			worst = "%s moved %.3f m over the cancel tick and %.3f m over the tick before" % [bone, last, prior]
+	return worst
+
+
 # The angle between two rotations. Quaternion.angle_to goes through acos, which turns the length error
 # of a sampled (not quite unit) key into milliradians; this does not.
 func _angle(a: Quaternion, b: Quaternion) -> float:
@@ -267,8 +416,7 @@ func _angle(a: Quaternion, b: Quaternion) -> float:
 
 # The collision_layer bit of the 3D physics layer called `layer_name` in project.godot.
 func _layer_bit(layer_name: String) -> int:
-	for i in range(1, 33):
-		if ProjectSettings.get_setting("layer_names/3d_physics/layer_%d" % i, "") == layer_name:
-			return 1 << (i - 1)
-	fail("no physics layer called %s" % layer_name)
-	return 0
+	var bit := Layers.bit(layer_name)
+	if bit == 0:
+		fail("no physics layer called %s" % layer_name)
+	return bit

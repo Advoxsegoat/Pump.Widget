@@ -21,6 +21,9 @@ extends Node3D
 ## takes the other slot and move_ab crossfades to it, so one move can cancel into the next smoothly.
 ## move_blend lays the move layer over locomotion. The slots are always placed with a seek, never left to
 ## run, so a move shows exactly the time the gameplay says, stepped if its clip asks for that.
+## A move cancelled while the move before it is still fading out would have to take that move's slot, and
+## drop what is left of it from the pose. So the pose the tree showed goes into the cancelled move's slot, as
+## a clip of one key (SNAPSHOT_CLIP), and the new move fades in over that instead.
 ##
 ## Over the clips, skeleton modifiers (children of the Skeleton3D, run in their order) bring the body to
 ## life. Abarax's are an OrientationWarp (eight-way locomotion from forward clips: set_strafe), Breathing
@@ -40,6 +43,12 @@ extends Node3D
 
 ## The shader every body is drawn with: the toon light ramp held to the palette.
 const TOON_SHADER := preload("res://render/shaders/toon_character.gdshader")
+
+## The clip a slot is loaded with to hold the pose the tree showed (see play_move). It is added to the rig's
+## own copy of the actor's library, and holds one key per bone the cancelled move's clip poses.
+const SNAPSHOT_CLIP := &"__snapshot"
+## The snapshot's length, in seconds: its one key sits at 0 and the slot can be seeked past the end.
+const SNAPSHOT_LENGTH := 0.01
 
 ## The tree's parameters.
 const LOCO_SPEED := &"parameters/loco/blend_position"
@@ -114,6 +123,11 @@ func _ready() -> void:
 	# The scene's tree resource is shared by every instance of the scene, and play_move changes which
 	# clip a slot plays, so each rig works on its own copy.
 	tree.tree_root = tree.tree_root.duplicate(true)
+	# So is the library, and the snapshot clip added to it is this rig's own. The clips in the copy are the
+	# library's: only the list is new.
+	var library := tree.get_animation_library(&"")
+	tree.remove_animation_library(&"")
+	tree.add_animation_library(&"", library.duplicate())
 	var found := $Model.find_children("*", "Skeleton3D", true, false)
 	skeleton = found[0] if not found.is_empty() else null
 	if skeleton != null:
@@ -278,11 +292,19 @@ func looking_at() -> Variant:
 ## `blend_in` seconds the tree crossfades to that slot and brings the move layer fully over locomotion.
 ## A blend_in of 0 or less shows the move at once. A clip the rig does not have is an error, and
 ## changes nothing.
+## If that slot is still showing the move before the current one (the current move is cancelled while it is
+## fading in), loading a clip into it would snap that part of the pose to the new clip's first frame. So the
+## pose the tree showed last tick goes into the current move's slot as a SNAPSHOT_CLIP, and the crossfade
+## starts from it, fully over locomotion (the snapshot has locomotion in it already).
 func play_move(clip: StringName, blend_in: float) -> void:
 	if not tree.has_animation(clip):
 		push_error("Rig: '%s' has no clip '%s'" % [name, clip])
 		return
 	var slot := 1 if _slot == 0 else 0
+	if blend_in > 0.0 and _slot >= 0 and _layer > 0.0 and _slot_weight(slot) > 0.0:
+		_hold_pose(_slot)
+		_ab = float(_slot)
+		_layer = 1.0
 	_slot = slot
 	(tree.tree_root.get_node(SLOT_NODES[slot]) as AnimationNodeAnimation).animation = clip
 	_slot_times[slot] = 0.0
@@ -385,6 +407,38 @@ func active_hitboxes() -> Array[StringName]:
 		if (_hitboxes[id] as Area3D).monitoring:
 			on.append(id)
 	return on
+
+
+# Loads `slot` with a clip of one key that holds the pose the tree gave the skeleton last tick: a rotation key
+# for each bone the clip the slot plays poses, and a position key for those it moves (the pelvis, the root).
+# It is the pose before the skeleton's modifiers, which go over the crossfade from it as they went over the
+# pose it holds, so none is applied twice (the foot planter, which turns each foot back by what the leg's IK
+# did on the tick before, would turn them back twice). The bones come from the slot's clip and not from the
+# skeleton, so the ones no clip poses (the scarf's, which a simulation moves) are left to their modifier.
+func _hold_pose(slot: int) -> void:
+	var node := tree.tree_root.get_node(SLOT_NODES[slot]) as AnimationNodeAnimation
+	var posed := tree.get_animation(node.animation)
+	var snapshot := Animation.new()
+	snapshot.length = SNAPSHOT_LENGTH
+	for t in posed.get_track_count():
+		var type := posed.track_get_type(t)
+		var path := posed.track_get_path(t)
+		var bone := skeleton.find_bone(path.get_subname(0)) if path.get_subname_count() > 0 else -1
+		if bone < 0 or (type != Animation.TYPE_ROTATION_3D and type != Animation.TYPE_POSITION_3D):
+			continue
+		var track := snapshot.add_track(type)
+		snapshot.track_set_path(track, path)
+		if type == Animation.TYPE_ROTATION_3D:
+			snapshot.rotation_track_insert_key(track, 0.0, skeleton.get_bone_pose_rotation(bone))
+		else:
+			snapshot.position_track_insert_key(track, 0.0, skeleton.get_bone_pose_position(bone))
+	var library := tree.get_animation_library(&"")
+	if library.has_animation(SNAPSHOT_CLIP):
+		library.remove_animation(SNAPSHOT_CLIP)
+	library.add_animation(SNAPSHOT_CLIP, snapshot)
+	node.animation = SNAPSHOT_CLIP
+	_slot_times[slot] = 0.0
+	_slot_steps[slot] = 0
 
 
 # Keeps each bone's pose as the skeleton shows it: called while it updates, with the modifiers applied.
