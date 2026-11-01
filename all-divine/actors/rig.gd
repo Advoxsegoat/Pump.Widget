@@ -10,8 +10,10 @@ extends Node3D
 ##                  on the root bone, so the root's travel stays out of the pose (the move runner samples
 ##                  the clip's root track itself)
 ##   Marks          a MarkSink, where the clips' mark keys land
-##   Hitboxes       one BoneAttachment3D per hitbox, named by its id, each holding an Area3D `zone`
-##   Hurtbox        an Area3D around the body
+##   Hitboxes       one BoneAttachment3D per hitbox, named by its id, each holding an Area3D `zone` with a
+##                  CollisionShape3D `shape`. The zone does not monitor: it only holds the shape, which the
+##                  actor's HitScanner sweeps from tick to tick while the hitbox is on (hitbox_shape)
+##   Hurtbox        an Area3D around the body (`hurtbox`), where blows land
 ##
 ## The tree is an AnimationNodeBlendTree:
 ##   loco (BlendSpace1D on speed) -> loco_scale (TimeScale) -> move_blend.in
@@ -91,10 +93,14 @@ var foot_planter: FootPlanter
 var looks: Array[LookAtModifier3D] = []
 ## True while a move carries the body through the air (none does in F0): the feet are not planted then.
 var airborne := false
+## The Area3D around the body, on the `hurtbox` layer, that hitboxes find. Its actor marks it with the meta
+## `actor`, which is how a HitScanner knows whose body it reached.
+var hurtbox: Area3D
 ## The palette the body is drawn in, or null before apply_palette.
 var palette: Palette
 
-var _hitboxes := {}  # id (StringName) -> its Area3D
+var _hitboxes := {}  # id (StringName) -> the CollisionShape3D under its zone, in the order of Hitboxes' children
+var _active := {}  # the ids of the hitboxes that are on -> true
 var _slot := -1  # the slot of the current move: 0 is move_a, 1 is move_b, -1 before the first move
 var _slot_times := PackedFloat64Array([0.0, 0.0])  # each slot's gameplay time, in seconds
 var _slot_steps := PackedInt32Array([0, 0])  # each slot's clip's step_fps
@@ -146,7 +152,8 @@ func _ready() -> void:
 		skeleton.skeleton_updated.connect(_keep_shown_pose)
 		_keep_shown_pose()
 	for attachment in $Hitboxes.get_children():
-		_hitboxes[StringName(attachment.name)] = attachment.get_node("zone") as Area3D
+		_hitboxes[StringName(attachment.name)] = attachment.get_node("zone/shape") as CollisionShape3D
+	hurtbox = $Hurtbox
 	_look_target = get_node_or_null(^"LookTarget") as Marker3D
 	for look in looks:
 		_look_influence.append(look.influence)
@@ -398,22 +405,35 @@ func shown_pose(bone: StringName) -> Transform3D:
 	return skeleton.global_transform * _shown[index]
 
 
-## Turns the hitbox `id` (a child of Hitboxes) on or off: an active hitbox looks for hurtboxes.
+## Marks the hitbox `id` (a child of Hitboxes) on or off, as the move runner turns it on and off with its
+## marks. What looks for hurtboxes is the actor's HitScanner, which the runner tells too; this is what the rig
+## shows of it (active_hitboxes).
 func set_hitbox_active(id: StringName, on: bool) -> void:
-	var zone: Area3D = _hitboxes.get(id)
-	if zone == null:
+	if not _hitboxes.has(id):
 		push_error("Rig: '%s' has no hitbox '%s'" % [name, id])
 		return
-	zone.monitoring = on
+	if on:
+		_active[id] = true
+	else:
+		_active.erase(id)
 
 
 ## The ids of the hitboxes that are on, in the order of Hitboxes' children.
 func active_hitboxes() -> Array[StringName]:
 	var on: Array[StringName] = []
 	for id: StringName in _hitboxes:
-		if (_hitboxes[id] as Area3D).monitoring:
+		if _active.has(id):
 			on.append(id)
 	return on
+
+
+## The CollisionShape3D under the hitbox `id`'s zone: the shape a HitScanner sweeps, riding the hand bone. Null,
+## with an error, for an id the rig does not have.
+func hitbox_shape(id: StringName) -> CollisionShape3D:
+	var shape: CollisionShape3D = _hitboxes.get(id)
+	if shape == null:
+		push_error("Rig: '%s' has no hitbox '%s'" % [name, id])
+	return shape
 
 
 # Loads `slot` with a clip of one key that holds the pose the tree gave the skeleton last tick: a rotation key

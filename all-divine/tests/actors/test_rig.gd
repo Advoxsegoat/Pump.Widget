@@ -273,12 +273,21 @@ func test_bone_global_is_current_after_a_tick() -> void:
 
 func test_hitbox_toggle() -> void:
 	var r := rig(); r.set_hitbox_active(&"palm_r", true)
-	assert_eq(r.active_hitboxes(), [&"palm_r"]); assert_true((r.get_node("Hitboxes/palm_r/zone") as Area3D).monitoring)
-	assert_false((r.get_node("Hitboxes/palm_l/zone") as Area3D).monitoring)
+	assert_eq(r.active_hitboxes(), [&"palm_r"])
 	r.set_hitbox_active(&"palm_l", true)
 	assert_eq(r.active_hitboxes(), [&"palm_l", &"palm_r"])
+	for id in [&"palm_l", &"palm_r"]:
+		assert_false((r.get_node("Hitboxes/%s/zone" % id) as Area3D).monitoring, "%s only holds its shape: the scanner looks" % id)
 	r.set_hitbox_active(&"palm_r", false); r.set_hitbox_active(&"palm_l", false)
 	assert_eq(r.active_hitboxes(), [])
+
+
+func test_hitbox_shape_and_hurtbox() -> void:
+	var r := rig()
+	assert_eq(r.hitbox_shape(&"palm_l"), r.get_node("Hitboxes/palm_l/zone/shape"))
+	assert_eq(r.hitbox_shape(&"palm_r"), r.get_node("Hitboxes/palm_r/zone/shape"))
+	assert_eq(r.hurtbox, r.get_node("Hurtbox"))
+	assert_eq(quietly(func() -> Variant: return r.hitbox_shape(&"no_such_hitbox")), null)
 
 
 func test_hitboxes_ride_the_hands() -> void:
