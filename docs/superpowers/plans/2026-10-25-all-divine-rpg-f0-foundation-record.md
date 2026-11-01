@@ -95,7 +95,7 @@ It was copied word for word from the build ledger before the scratch workspace w
 - Task 5: minor (deferred): nits — unused k in build_scarf; build_scarf ~80 lines; test_abarax_model.gd:20 indexes skeletons[0] after a size assert; build error/main paths untested.
 - Task 6: minor (deferred): ASSETS.md assets/anim/ row's Changes text omits R4/R5 modifications, says "marks added" before Task 8, and the CC0 row also covers our own clips.cfg. **Since then:** fixed in f1fa8c5.
 - Task 6: minor (deferred): clip_builder.gd:30 points to moves/marks.gd (Task 8) — "Marks" track name will be defined twice; make Marks.TRACK the owner in Task 8.
-- Task 6: minor (deferred): clips.cfg values unvalidated (negative length silently ignored; step_fps unchecked).
+- Task 6: minor (deferred): clips.cfg values unvalidated (negative length silently ignored; step_fps unchecked). **Since then:** F1 Task 2 reports a negative or non-numeric `length` and a `step_fps` that is not 0, 12 or 24, with every other problem in the list, through `ClipBuilder.check`.
 - Task 6: minor (deferred): build() doc comment run-on line (clip_builder.gd:179); stale clip files not removed when a section leaves clips.cfg.
 - Task 6: minor (deferred): Abarax skeleton loading repeated 6× in tests; hard-coded 0.9491 should say "rebuild the library" on failure.
 - Task 7: minor (deferred): play_move during an unfinished crossfade reuses the fading slot (pop ≤ leftover blend; plan-mandated two slots) — doc + test; stop_move with nothing playing / set_move_time before play_move untested.
