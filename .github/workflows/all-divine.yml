@@ -63,7 +63,9 @@ jobs:
         run: tools/godot.sh -s res://tools/clip_check.gd
 
       - name: Python tools' tests
-        run: python3 -I -m unittest discover -s tools/assets/tests
+        run: |
+          python3 -I -m unittest discover -s tools/assets/tests
+          python3 -I -m unittest discover -s tools/audio/tests
 
   render:
     name: Tests (render, Compatibility)
