@@ -5,9 +5,14 @@ extends CharacterBody3D
 ## the def's palette, is how it looks; its Brain says what it wants (player, script, later an AI), and
 ## can be swapped at any time; its MoveRunner plays its moves, and Locomotion moves it when no move does.
 ##
+## It fights through its HitScanner, which finds what its hitboxes strike, and Melee, which judges every hit of
+## a frame once all actors have moved and hands each target its blow (apply_hit) and each attacker the result
+## (hit_landed). The actor joins the group `actors` when ready, which is how Melee finds every defender, and
+## marks its rig's hurtbox with the meta `actor`, which is how a scanner knows whose body it reached.
+##
 ## Each physics frame, in this order:
 ##   1. frame += 1
-##   2. the brain thinks, giving an Intent
+##   2. the brain thinks, giving an Intent (not once the actor is dead: the dead want nothing)
 ##   3. the intent's presses go into the input buffer, stamped with this frame
 ##   4. the runner ticks: the current move advances (its marks, a cancel window, its end), or a buffered
 ##      press starts one; this is how a press shows on the frame it is made
@@ -27,12 +32,22 @@ extends CharacterBody3D
 ##  10. each foot is probed: a ray on `ik_surface` from 0.5 m above where the foot is in the clip's pose to
 ##      0.5 m below it, whose hit (or miss) the rig stands the foot on
 ##  11. the actor picks what to look at (the intent's look_target; else the nearest node in the group `poi`
-##      within 6 m and 100° of its facing, an actor at its head; else nothing) and the rig turns its head to it
+##      within 6 m and 100° of its facing, an actor at its head; else nothing; the dead look at nothing) and the
+##      rig turns its head to it
 ##  12. the rig is ticked: the only place it animates
+##  13. the scanner sweeps the hitboxes that are on over this tick's pose, and what they struck is posted to
+##      Melee, which applies it after every actor has run
 ## Holding dodge sprints only after the roll its press started is over, since locomotion does not run
 ## while a move does (Bloodborne-style: tap to roll, hold to run).
 
 signal brain_changed(brain: Brain)
+## A blow reached this actor and Melee judged it: `result` is what came of it. Emitted for every outcome, a
+## WHIFF too, once the actor has taken the blow (apply_hit).
+signal got_hit(result: HitResult, event: HitEvent)
+## A blow this actor struck has been judged and `event.target` has taken it: `result` is what it came to.
+signal hit_landed(result: HitResult, event: HitEvent)
+## The actor died (die). Emitted once.
+signal died
 
 ## The action that, held, sprints.
 const SPRINT_ACTION := &"dodge"
@@ -48,6 +63,12 @@ const PROBE_LENGTH := 1.0
 const POI_GROUP := &"poi"
 const LOOK_RANGE := 6.0
 const LOOK_FIELD_DEG := 100.0
+## Every actor is in this group from when it is ready: Melee takes a Defense of each before any of them moves.
+const GROUP := &"actors"
+## How hard a blow kicks the upper body (Rig.hit_react): HIT_REACT_BASE plus its poise damage over
+## HIT_REACT_POISE, so a jab (6) is 0.8 and a blow of 10 poise damage is 1.
+const HIT_REACT_BASE := 0.5
+const HIT_REACT_POISE := 20.0
 
 @export var def: ActorDef
 
@@ -62,12 +83,15 @@ var rig: Rig
 var look_target: Variant = null
 ## Set for good by die().
 var dead := false
+## Finds what the hitboxes strike; the runner says when each comes on and goes off.
+var scanner := HitScanner.new()
 
 # The speed the rig's locomotion layer is given. With no move it is locomotion's. A move that starts is laid over
 # that layer in its blend_in, so the layer keeps the speed it had until the move is fully in (dropping it to
 # idle at once would pop the legs under a third of the move); then it eases down to 0 over the blend_in, so the
 # speed a roll carries on from (locomotion.speed, root motion) never shows as a run under the move.
 var _rig_speed := 0.0
+var _death: MoveData  # the death move once die() has started it
 
 @onready var runner: MoveRunner = $MoveRunner
 
@@ -86,6 +110,9 @@ func _ready() -> void:
 	locomotion = Locomotion.new(def.locomotion)
 	locomotion.facing_yaw = rotation.y
 	runner.actor = self
+	runner.move_ended.connect(_on_move_ended)
+	rig.hurtbox.set_meta(&"actor", self)
+	add_to_group(GROUP)
 	# Where in its breath each actor starts comes from its name, so that actors standing together do not
 	# breathe in step. The hash is stirred (rand_from_seed) first: names that end in different characters,
 	# like Knuckle2 and Knuckle3, hash to neighbours, which alone would put them a thousandth of a radian apart.
@@ -130,9 +157,39 @@ func is_invulnerable() -> bool:
 	return runner.iframes
 
 
+## Takes the blow `e`, which Melee judged to come to `r`: what `r` takes off comes off its HP, posture and
+## stamina. A HIT or a GUARDED blow (and a GRABBED one, a HIT for now) kicks the upper body away from it
+## (Rig.hit_react, harder the more poise damage it carries): the additive flinch every blow gets, whether or
+## not it interrupts what the actor is doing. A blow that empties the HP kills the actor (die); otherwise a
+## FLINCH or a STAGGER plays the def's `flinch` or `stagger` reaction move, cutting off the move that was
+## playing. A WHIFF changes nothing, nor does a blow on the dead (one that died to an earlier blow of the same
+## frame). got_hit is emitted after, whatever the outcome.
+func apply_hit(e: HitEvent, r: HitResult) -> void:
+	if not dead and r.outcome != HitResult.Outcome.WHIFF:
+		_take(e, r)
+	got_hit.emit(r, e)
+
+
+## Kills the actor, once: it plays its def's `death` reaction, its hurtbox goes off (no blow finds it again),
+## what it had pressed is forgotten and its brain is ignored from then on, and `died` is emitted. When the death
+## clip ends, the body leaves the `actor` layer and lies as the clip left it (at once, with no death clip).
+func die() -> void:
+	if dead:
+		return
+	dead = true
+	buffer.clear()
+	rig.hurtbox.collision_layer = 0
+	_death = _reaction_move(&"death")
+	if _death != null:
+		runner.start(_death)
+	else:
+		collision_layer &= ~Layers.ACTOR
+	died.emit()
+
+
 func _physics_process(delta: float) -> void:
 	frame += 1
-	var intent: Intent = brain.think(self, delta) if brain != null else null
+	var intent: Intent = brain.think(self, delta) if brain != null and not dead else null
 	if intent == null:
 		intent = Intent.new()
 	for action in intent.pressed:
@@ -164,9 +221,53 @@ func _physics_process(delta: float) -> void:
 	if locomotion.sprinting:
 		rig.set_exertion(1.0)
 	_probe_feet()
-	look_target = _choose_look_target(intent)
+	look_target = null if dead else _choose_look_target(intent)
 	rig.look_at_point(look_target)
 	rig.tick(delta)
+	for e in scanner.scan(self):
+		Melee.post(e)
+
+
+# The numbers of apply_hit, the kick, then the death or the reaction.
+func _take(e: HitEvent, r: HitResult) -> void:
+	if r.outcome in [HitResult.Outcome.HIT, HitResult.Outcome.GUARDED, HitResult.Outcome.GRABBED]:
+		rig.hit_react(e.direction, HIT_REACT_BASE + e.profile.poise_damage / HIT_REACT_POISE)
+	if r.stamina_cost > 0.0:
+		stats.spend_stamina(r.stamina_cost)
+	if r.posture_damage > 0.0:
+		stats.damage_posture(r.posture_damage)
+	if stats.take_damage(r.hp_damage):
+		die()
+		return
+	match r.reaction:
+		HitResult.Reaction.FLINCH:
+			_react(&"flinch")
+		HitResult.Reaction.STAGGER:
+			_react(&"stagger")
+
+
+# Plays the def's reaction move `reaction`, if it has one.
+func _react(reaction: StringName) -> void:
+	var move := _reaction_move(reaction)
+	if move != null:
+		runner.start(move)
+
+
+# The move the def's reactions name for `reaction`, or null if it names none.
+func _reaction_move(reaction: StringName) -> MoveData:
+	if not def.reactions.has(reaction):
+		return null
+	return Registry.fetch(&"moves", StringName(def.reactions[reaction])) as MoveData
+
+
+# A death clip that has played out: the body leaves the `actor` layer, and the rig is held on the clip's last
+# pose (the runner fades a move that ends back to locomotion, which would stand the body up again).
+func _on_move_ended(move: MoveData, cancelled: bool) -> void:
+	if not dead or move != _death or cancelled:
+		return
+	collision_layer &= ~Layers.ACTOR
+	rig.play_move(move.clip, 0.0)
+	rig.set_move_time(rig.tree.get_animation(move.clip).length)
 
 
 # _rig_speed for this frame (see there).

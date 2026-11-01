@@ -10,7 +10,9 @@ extends Node
 ##
 ## The actor's child MoveRunner; Actor._ready sets `actor`, and the actor calls tick() once per physics
 ## frame (nothing here runs by itself). Moves are looked up by id in the Registry. The runner tells the
-## actor's rig what to show and returns the move's root motion as a velocity for the actor to move by.
+## actor's rig what to show, and the actor's HitScanner when a hitbox comes on (with the profile its mark
+## names) and goes off; every activation ends when its move does. It returns the move's root motion as a
+## velocity for the actor to move by.
 
 signal move_started(move: MoveData)
 ## `cancelled` is true when another move took over before the clip's end.
@@ -106,12 +108,14 @@ func _start(move: MoveData, intent: Intent) -> void:
 	_pass_marks(BEFORE_START, 0.0)
 
 
-# Ends the current move: what its marks turned on is turned off, the window closes, and the rig fades
-# back to locomotion unless another move is taking over (`cancelled`), which crossfades by itself.
+# Ends the current move: what its marks turned on is turned off (its hitboxes' activations end with it), the
+# window closes, and the rig fades back to locomotion unless another move is taking over (`cancelled`), which
+# crossfades by itself.
 func _end(cancelled: bool) -> void:
 	var ended := current
 	for id in _hitboxes_on:
 		actor.rig.set_hitbox_active(id, false)
+		actor.scanner.end(id)
 	_hitboxes_on.clear()
 	iframes = false
 	hyperarmour = false
@@ -142,11 +146,13 @@ func _act(kind: StringName, args: Dictionary) -> void:
 		&"hitbox_on":
 			var id := StringName(args.get("id", &""))
 			actor.rig.set_hitbox_active(id, true)
+			actor.scanner.begin(id, StringName(args.get("profile", &"")), current)
 			if not _hitboxes_on.has(id):
 				_hitboxes_on.append(id)
 		&"hitbox_off":
 			var id := StringName(args.get("id", &""))
 			actor.rig.set_hitbox_active(id, false)
+			actor.scanner.end(id)
 			_hitboxes_on.erase(id)
 		&"iframes_on":
 			iframes = true
