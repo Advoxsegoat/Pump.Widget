@@ -29,6 +29,7 @@ color_initial_ramp = SubResource("GradientTexture1D_82lmh")
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ogwr4"]
 transparency = 1
 cull_mode = 2
+no_depth_test = true
 shading_mode = 0
 vertex_color_use_as_albedo = true
 billboard_mode = 3
