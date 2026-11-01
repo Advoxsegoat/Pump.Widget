@@ -7,6 +7,9 @@ const RIG := "res://actors/abarax/abarax_rig.tscn"
 const MODEL := "res://assets/characters/abarax/abarax.glb"
 const LIB := "res://assets/anim/abarax/library.tres"
 
+# The gameplay time of the move that _play and _tick are playing, as the move runner keeps it.
+var _move_time := 0.0
+
 
 func rig() -> Rig: return track(load(RIG).instantiate())
 
@@ -127,7 +130,8 @@ func test_crossfade_between_moves() -> void:
 
 func test_cancel_inside_blend_in_does_not_jump_the_pose() -> void:
 	# A cancel two ticks into a move's blend_in: the shown pose changes over the cancel tick no more than it
-	# did over the tick before (within 1.5 times, per bone).
+	# did over the tick before (within 1.5 times, per bone). Here the move before is locomotion, not a move
+	# in the other slot, so this holds without a snapshot; the next test is the one that needs it.
 	var r := rig()
 	_play(r, &"palm_jab", 0.1)
 	_tick(r)
@@ -178,7 +182,7 @@ func test_cancel_holds_the_pose_in_a_one_key_clip_of_the_rigs_own() -> void:
 	_play(r, &"palm_cross", 0.1)
 	_tick(r)
 	assert_false(r.tree.has_animation(Rig.SNAPSHOT_CLIP), "none until a move is cancelled mid-fade")
-	var shown := r.skeleton.get_bone_pose_rotation(r.skeleton.find_bone(&"hand_l"))
+	var hand := r.skeleton.get_bone_pose_rotation(r.skeleton.find_bone(&"hand_l"))
 	var pelvis := r.skeleton.get_bone_pose_position(r.skeleton.find_bone(&"pelvis"))
 	_play(r, &"palm_jab", 0.1)
 	assert_true(r.tree.has_animation(Rig.SNAPSHOT_CLIP))
@@ -189,8 +193,8 @@ func test_cancel_holds_the_pose_in_a_one_key_clip_of_the_rigs_own() -> void:
 	assert_true(rotation >= 0 and position >= 0, "a key track for the hand's turn and the pelvis's place")
 	for t in held.get_track_count():
 		assert_eq(held.track_get_key_count(t), 1, "track %d (%s)" % [t, held.track_get_path(t)])
-	assert_true(_angle((held.track_get_key_value(rotation, 0) as Quaternion), shown) < 1e-4, "the hand as it was shown")
-	assert_vec_near((held.track_get_key_value(position, 0) as Vector3), pelvis, 1e-5, "and the pelvis")
+	assert_true(_angle(held.track_get_key_value(rotation, 0) as Quaternion, hand) < 1e-4, "the hand as the clips had it")
+	assert_vec_near(held.track_get_key_value(position, 0) as Vector3, pelvis, 1e-5, "and the pelvis")
 	var slots := [(r.tree.tree_root as AnimationNodeBlendTree).get_node(&"move_a") as AnimationNodeAnimation,
 			(r.tree.tree_root as AnimationNodeBlendTree).get_node(&"move_b") as AnimationNodeAnimation]
 	assert_eq([slots[0].animation, slots[1].animation].count(Rig.SNAPSHOT_CLIP), 1, "in one slot; the new move is in the other")
@@ -344,10 +348,6 @@ func test_marks_node_takes_every_mark_kind() -> void:
 			"cancel_open", "cancel_close", "recovery", "fx", "sfx", "shake", "hitstop"]:
 		assert_true(sink.has_method(kind), kind)
 		sink.call(kind, {})
-
-
-# The gameplay time of the move the helpers below are playing, as the move runner keeps it.
-var _move_time := 0.0
 
 
 # Starts `clip` as a move.
