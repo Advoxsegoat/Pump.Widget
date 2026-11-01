@@ -1,10 +1,10 @@
 extends TestCase
 ## The exports. export_presets.cfg has the three builds CI makes (Linux, Windows Desktop, Web), each written
-## where it should be, and no preset filters out what the game boots with. And every scene comes through the
-## export with all its nodes.
+## where it should be, each leaving out tests/ and tools/, and no preset filters out what the game boots with.
+## And every scene comes through the export with all its nodes.
 ##
-## The game's first autoload (core/self_test.gd) uses TestLogger, which lives in tools/test/. A preset that
-## dropped tools/ would ship a game that cannot start, so the presets must keep it.
+## The game's first autoload (core/self_test.gd) uses TestLogger, which lives in core/ for that reason: the
+## builds have no tools/, so nothing the game loads may be there (no path into it, no class declared in it).
 ##
 ## The export turns each scene into a binary one, and what comes out is what instantiating the scene and
 ## packing it again gives. Packing leaves out every node that hangs under a node of an instanced scene unless
@@ -13,8 +13,8 @@ extends TestCase
 ## startup (main.tscn once did: its Region, Player and CameraRig hang under PixelStage/World).
 
 const PRESETS := "res://export_presets.cfg"
-## A file the shipped game loads at startup, though it sits in tools/.
-const BOOT_FILE := "tools/test/test_logger.gd"
+## A file the shipped game loads at startup (the self-test autoload's logger).
+const BOOT_FILE := "core/test_logger.gd"
 
 const FIXTURE := "user://export_fixture"
 
@@ -72,14 +72,44 @@ func test_no_preset_filters_out_the_scripts_the_game_boots_with() -> void:
 			"%s: exclude_filter '%s' removes %s, and the game cannot start without it" % [preset_name, exclude, BOOT_FILE])
 
 
+func test_every_preset_leaves_out_tests_and_tools() -> void:
+	var cfg := ConfigFile.new()
+	assert_eq(cfg.load(PRESETS), OK)
+	var sections := Presets.sections_by_name(cfg)
+	assert_false(sections.is_empty(), "no presets to check")
+	for preset_name in sections:
+		var exclude: String = cfg.get_value(sections[preset_name], "exclude_filter", "")
+		for file in ["tests/core/test_layers.gd", "tools/test/run.gd", "tools/clip_checker.gd"]:
+			assert_true(Presets.excludes(exclude, file), "%s: exclude_filter '%s' keeps %s in the build" % [preset_name, exclude, file])
+
+
 # What the comments here and in export_presets.cfg say: of the game's own scripts (outside tools/ and tests/),
-# only the self-test autoload uses TestLogger.
+# only the self-test autoload uses TestLogger, and the file that declares it is where the self-test expects.
 func test_only_the_self_test_boots_with_test_logger() -> void:
 	var users := PackedStringArray()
-	for path in Presets.game_scripts("res://"):
-		if FileAccess.get_file_as_string(path).contains("TestLogger"):
+	for path in Presets.game_files("res://", [".gd"]):
+		if path != "res://" + BOOT_FILE and FileAccess.get_file_as_string(path).contains("TestLogger"):
 			users.append(path)
 	assert_eq(users, PackedStringArray(["res://core/self_test.gd"]))
+	assert_true(FileAccess.get_file_as_string("res://" + BOOT_FILE).contains("class_name TestLogger"), "%s declares TestLogger" % BOOT_FILE)
+
+
+# The builds have no tools/, so the game must not reach into it: no path to a file there, in a script, a scene,
+# a resource or the project; and no use of a class declared there (the name is found outside comments).
+func test_nothing_the_game_loads_lives_in_tools() -> void:
+	var tool_classes := Presets.class_names("res://tools")
+	assert_true(tool_classes.has("TestCase") and tool_classes.has("ClipChecker"), "the scan finds the classes in tools/ (found %s)" % ", ".join(tool_classes))
+	var reaches := PackedStringArray()
+	for path in Presets.game_files("res://", [".gd", ".tscn", ".tres", ".godot"]):
+		var text := FileAccess.get_file_as_string(path)
+		if text.contains("res://tools/"):
+			reaches.append("%s: a path into tools/" % path)
+		if path.ends_with(".gd"):
+			var code := Presets.without_comments(text)
+			for tool_class in tool_classes:
+				if code.contains(tool_class):
+					reaches.append("%s: uses %s, declared in tools/" % [path, tool_class])
+	assert_eq(reaches, PackedStringArray(), "\n".join(reaches))
 
 
 func test_every_scene_keeps_all_its_nodes_through_the_exports_repack() -> void:
@@ -96,11 +126,11 @@ func test_every_scene_keeps_all_its_nodes_through_the_exports_repack() -> void:
 # --- the helpers themselves: a check that cannot fail would prove nothing ---
 
 func test_excludes_follows_the_engines_filter_rules() -> void:
-	assert_true(Presets.excludes("tools/*", BOOT_FILE), "a folder glob matches below it")
-	assert_true(Presets.excludes("tests/*, tools/test/*", BOOT_FILE), "patterns are comma-separated and trimmed")
-	assert_true(Presets.excludes("res://tools/test/test_logger.gd", BOOT_FILE), "a res:// pattern is the same path")
+	assert_true(Presets.excludes("core/*", BOOT_FILE), "a folder glob matches below it")
+	assert_true(Presets.excludes("tests/*, core/*", BOOT_FILE), "patterns are comma-separated and trimmed")
+	assert_true(Presets.excludes("res://core/test_logger.gd", BOOT_FILE), "a res:// pattern is the same path")
 	assert_true(Presets.excludes("*/TEST_LOGGER.GD", BOOT_FILE), "matching ignores case, as the engine's matchn does")
-	assert_false(Presets.excludes("tests/*, tools/sheets/*", BOOT_FILE), "other folders do not match")
+	assert_false(Presets.excludes("tests/*, tools/*", BOOT_FILE), "other folders do not match")
 	assert_false(Presets.excludes("", BOOT_FILE), "an empty filter excludes nothing")
 	assert_false(Presets.excludes(" , ", BOOT_FILE), "blank patterns exclude nothing")
 
@@ -165,19 +195,40 @@ class Presets:
 		found.sort()
 		return found
 
-	## Every .gd file the game is made of: under `dir`, outside tools/, tests/ and folders with a .gdignore.
-	static func game_scripts(dir: String) -> PackedStringArray:
+	## Every file the game is made of with one of the `endings` (".gd", ".tscn", ...): under `dir`, outside
+	## tools/, tests/, folders that start with a dot and folders with a .gdignore.
+	static func game_files(dir: String, endings: Array) -> PackedStringArray:
 		var found := PackedStringArray()
 		for sub in DirAccess.get_directories_at(dir):
 			if dir == "res://" and (sub == "tests" or sub == "tools" or sub.begins_with(".")):
 				continue
 			if not FileAccess.file_exists(dir.path_join(sub).path_join(".gdignore")):
-				found.append_array(game_scripts(dir.path_join(sub)))
+				found.append_array(game_files(dir.path_join(sub), endings))
 		for file in DirAccess.get_files_at(dir):
-			if file.ends_with(".gd"):
+			if endings.any(func(ending: String) -> bool: return file.ends_with(ending)):
 				found.append(dir.path_join(file))
 		found.sort()
 		return found
+
+	## The class_names declared by the .gd files under `dir`.
+	static func class_names(dir: String) -> PackedStringArray:
+		var found := PackedStringArray()
+		for sub in DirAccess.get_directories_at(dir):
+			if not sub.begins_with(".") and not FileAccess.file_exists(dir.path_join(sub).path_join(".gdignore")):
+				found.append_array(class_names(dir.path_join(sub)))
+		for file in DirAccess.get_files_at(dir):
+			if file.ends_with(".gd"):
+				for line in FileAccess.get_file_as_string(dir.path_join(file)).split("\n"):
+					if line.begins_with("class_name "):
+						found.append(line.trim_prefix("class_name ").strip_edges())
+		return found
+
+	## `text` of a script without what follows a # on each line: a comment, for the purpose of finding names.
+	static func without_comments(text: String) -> String:
+		var lines := PackedStringArray()
+		for line in text.split("\n"):
+			lines.append(line.get_slice("#", 0))
+		return "\n".join(lines)
 
 	## The paths (relative to the root) of the nodes `scene` has that the export would not keep. The export
 	## instances the scene with its editable instances restored and packs it again; the node paths are compared

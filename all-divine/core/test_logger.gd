@@ -1,6 +1,7 @@
 class_name TestLogger
 extends Logger
-## Collects the engine errors raised while a test runs.
+## Collects the engine errors raised while a test runs. It is in core/ and not with the test runner because
+## the game's own self-test (core/self_test.gd, the first autoload) uses it, and the exports leave tools/ out.
 ##
 ## One shared instance is registered with OS.add_logger the first time it is
 ## asked for. Contexts nest: an error is recorded in the innermost (top)
