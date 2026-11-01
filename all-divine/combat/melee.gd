@@ -9,7 +9,9 @@ extends Node
 ##     Defense.of every actor in the group `actors` (Actor.GROUP; actors join it when ready)
 ##   - Melee itself runs after every actor (process_physics_priority PRIORITY): it judges every posted hit
 ##     against those snapshots (Combat.resolve, with the target's CombatTuning), then applies them all, each
-##     through target.apply_hit and the attacker's hit_landed, in the order they were posted
+##     through target.apply_hit and the attacker's hit_landed, in the order they were posted. A hit that came to
+##     nothing (a WHIFF) is handed back to the attacker's scanner (HitScanner.forget), so the same swing may
+##     still strike that body on a later tick: a roll's iframes ending inside a long swing do not spare it
 ## So every hit of a frame is judged against the defenders as they stood when the frame began, and in a trade
 ## each side gets the result of the other's blow: both land. (The hurtboxes the hits were found on stood there
 ## too: see HitScanner.)
@@ -61,6 +63,8 @@ func _physics_process(_delta: float) -> void:
 		var e := events[i]
 		if results[i] == null:
 			continue
+		if results[i].outcome == HitResult.Outcome.WHIFF:
+			e.attacker.scanner.forget(e)
 		e.target.apply_hit(e, results[i])
 		e.attacker.hit_landed.emit(results[i], e)
 

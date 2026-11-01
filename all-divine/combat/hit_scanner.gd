@@ -12,8 +12,9 @@ extends RefCounted
 ## while it was off; and an activation that ends before it was ever scanned (on and off between two ticks) is
 ## still looked for once, where the hitbox is, so no blow falls between ticks.
 ##
-## Each body is hit at most once per activation: the same blow does not land again on the way back, and a new
-## begin is a new blow. The actor's own hurtbox is left out of the queries (its hands pass through its body),
+## Each body is struck at most once per activation: the same blow does not land again on the way back, and a new
+## begin is a new blow. A blow that came to nothing does not count: Melee hands a WHIFF's target back (forget),
+## so a swing still live when a roll's iframes end can land on the body it passed through. The actor's own hurtbox is left out of the queries (its hands pass through its body),
 ## and so is every body of its own team (ActorDef.team): blows land only on the other side. A hurtbox is mapped
 ## to its actor by its meta `actor`, which Actor._ready sets.
 ##
@@ -39,6 +40,7 @@ class Activation:
 
 var _active := {}  # hitbox id -> its Activation, while it is on
 var _unscanned_ended: Array[Activation] = []  # activations that ended before any scan, for the next scan
+var _found := {}  # each HitEvent of the last scan -> the Activation that made it (see forget)
 
 
 ## Starts a new activation of `hitbox` (a hitbox of the actor's rig) carrying `profile`, one of the `hits` of
@@ -69,11 +71,22 @@ func end(hitbox: StringName) -> void:
 		_unscanned_ended.append(activation)
 
 
+## Hands the target of `e`, an event of the last scan, back to the activation that struck it, which may then
+## strike it again on a later tick. Melee does this with every blow that came to nothing (a WHIFF: the target
+## was invulnerable, or in the air under a LOW blow). An event of an earlier scan, or not of this scanner, is
+## left alone.
+func forget(e: HitEvent) -> void:
+	var activation: Activation = _found.get(e)
+	if activation != null:
+		activation.hit.erase(e.target)
+
+
 ## The blows `actor`'s hitboxes strike this tick, one HitEvent per body per activation: those of activations
 ## that ended before any scan first, then those of the live ones, in the order they began. Call it once per
 ## physics frame, after the rig has posed the body.
 func scan(actor: Actor) -> Array[HitEvent]:
 	var events: Array[HitEvent] = []
+	_found.clear()
 	var space := actor.get_world_3d().direct_space_state
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.collide_with_areas = true
@@ -111,7 +124,9 @@ func _sweep(actor: Actor, activation: Activation, space: PhysicsDirectSpaceState
 			if target == null or target == actor or target.def.team == actor.def.team or activation.hit.has(target):
 				continue
 			activation.hit[target] = true
-			events.append(_event(actor, target, activation, query.transform.origin))
+			var e := _event(actor, target, activation, query.transform.origin)
+			_found[e] = activation
+			events.append(e)
 
 
 func _event(actor: Actor, target: Actor, activation: Activation, point: Vector3) -> HitEvent:

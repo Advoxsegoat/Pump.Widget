@@ -86,6 +86,21 @@ func test_own_hurtbox_is_never_hit() -> void:
 	assert_eq(_scan_at(s, 0.0, 0.0), [s["target"]], "swept out of its own body into the target: only the target")
 
 
+func test_a_target_handed_back_can_be_struck_again() -> void:
+	# What Melee does with a blow that came to nothing (a WHIFF): the same activation may strike the body again.
+	var s: Dictionary = await _setup()
+	var scanner: HitScanner = s["scanner"]
+	scanner.begin(&"palm_l", &"palm", s["jab"])
+	(s["shape"] as CollisionShape3D).global_position = Vector3(0.0, HAND_Y, 0.0)
+	var events: Array[HitEvent] = scanner.scan(s["attacker"])
+	assert_eq(events.size(), 1)
+	scanner.forget(events[0])
+	assert_eq(_scan_at(s, 0.1), [s["target"]], "handed back: struck again")
+	assert_eq(_scan_at(s, 0.2), [], "and, not handed back this time, done with")
+	scanner.forget(events[0])
+	assert_eq(_scan_at(s, 0.3), [], "an event of an earlier scan is not handed back")
+
+
 func test_an_ally_is_never_hit() -> void:
 	var s: Dictionary = await _setup()
 	var ally := TestArena.spawn(s["arena"], load(ABARAX), ScriptBrain.new([]), Vector3(3, 0, 0), "Ally")
