@@ -7,11 +7,11 @@ extends CharacterBody3D
 ##
 ## It fights through its HitScanner, which finds what its hitboxes strike, and Melee, which judges every hit of
 ## a frame once all actors have moved and hands each target its blow (apply_hit) and each attacker the result
-## (hit_landed); all the blows a frame lands on it are taken together (apply_hits). A blow that lands has weight:
-## Melee freezes both fighters for its hit-stop (freeze) and shoves the target (push). The actor joins the group
-## `actors` when ready, which is how Melee finds every defender, and marks its rig's hurtbox with the meta `actor`,
-## which is how a scanner knows whose body it reached. An enemy also joins the group `lockable` until it dies: the
-## foes the player aims at.
+## (hit_landed); all the blows a frame lands on it are taken together (apply_hits). Its HitIntake is what they do
+## to it, and how it dies. A blow that lands has weight: Melee freezes both fighters for its hit-stop (freeze)
+## and shoves the target (push). The actor joins the group `actors` when ready, which is how Melee finds every
+## defender, and marks its rig's hurtbox with the meta `actor`, which is how a scanner knows whose body it
+## reached. An enemy also joins the group `lockable` until it dies: the foes the player aims at.
 ##
 ## Each physics frame, in this order:
 ##   1. frame += 1
@@ -78,10 +78,6 @@ const GROUP := &"actors"
 ## The foes the player can aim at: actors of team ENEMY, from when they are ready until they die. Aim assist picks
 ## its target from them, and lock-on will.
 const LOCKABLE_GROUP := &"lockable"
-## How hard a blow kicks the upper body (Rig.hit_react): HIT_REACT_BASE plus its poise damage over
-## HIT_REACT_POISE, so a jab (6) is 0.8 and a blow of 10 poise damage is 1.
-const HIT_REACT_BASE := 0.5
-const HIT_REACT_POISE := 20.0
 
 @export var def: ActorDef
 
@@ -94,6 +90,8 @@ var frame := 0
 ## and age by it), so that hit-stop does not count toward the 9 frames a press is good for.
 var buffer_frame := 0
 var locomotion: Locomotion
+## How it takes the blows Melee hands it, and dies (apply_hits and die are its front).
+var intake: HitIntake
 var rig: Rig
 ## The world point (Vector3) the actor chose to look at this frame, or null (see _physics_process, step 11).
 var look_target: Variant = null
@@ -109,7 +107,6 @@ var frozen := 0
 # idle at once would pop the legs under a third of the move); then it eases down to 0 over the blend_in, so the
 # speed a roll carries on from (locomotion.speed, root motion) never shows as a run under the move.
 var _rig_speed := 0.0
-var _death: MoveData  # the death move once die() has started it
 var _push := Vector3.ZERO  # the knockback still to travel, in m/s on the ground plane (see push)
 
 @onready var runner: MoveRunner = $MoveRunner
@@ -129,7 +126,7 @@ func _ready() -> void:
 	locomotion = Locomotion.new(def.locomotion)
 	locomotion.facing_yaw = rotation.y
 	runner.actor = self
-	runner.move_ended.connect(_on_move_ended)
+	intake = HitIntake.new(self)
 	rig.hurtbox.set_meta(&"actor", self)
 	add_to_group(GROUP)
 	if def.team == ActorDef.Team.ENEMY:
@@ -205,49 +202,17 @@ func apply_hit(e: HitEvent, r: HitResult) -> void:
 
 
 ## Takes every blow that landed on the actor in one frame (`events`, and what Melee judged each to come to,
-## `results`) together, so that what comes of them does not depend on the order they are taken in. Each blow's
-## HP, posture and stamina come off, and each HIT or GUARDED blow (and a GRABBED one, a HIT for now) kicks the
-## upper body away from it (Rig.hit_react, harder the more poise damage it carries): the additive flinch every
-## blow gets, whether or not it interrupts what the actor is doing. Then one thing comes of them all: if
-## together they emptied the HP the actor dies (die), and otherwise the strongest reaction among them plays,
-## once: a STAGGER over a FLINCH (the def's `stagger` or `flinch` reaction move, cutting off the move that was
-## playing). A WHIFF changes nothing, nor does any blow on the dead. got_hit is emitted for each blow after,
-## whatever its outcome.
+## `results`) together, so that what comes of them does not depend on the order they are taken in: their
+## numbers, their kicks, then one reaction or the death (HitIntake.take). got_hit is emitted for each blow after.
 func apply_hits(events: Array[HitEvent], results: Array[HitResult]) -> void:
-	if not dead:
-		var killed := false
-		var reaction := HitResult.Reaction.NONE
-		for i in events.size():
-			if results[i].outcome == HitResult.Outcome.WHIFF:
-				continue
-			killed = _take(events[i], results[i]) or killed
-			reaction = maxi(reaction, results[i].reaction) as HitResult.Reaction
-		if killed:
-			die()
-		elif reaction == HitResult.Reaction.STAGGER:
-			_react(&"stagger")
-		elif reaction == HitResult.Reaction.FLINCH:
-			_react(&"flinch")
-	for i in events.size():
-		got_hit.emit(results[i], events[i])
+	intake.take(events, results)
 
 
-## Kills the actor, once: it plays its def's `death` reaction, its hurtbox goes off (no blow finds it again),
-## what it had pressed is forgotten and its brain is ignored from then on, and `died` is emitted. When the death
-## clip ends, the body leaves the `actor` layer and lies as the clip left it (at once, with no death clip).
+## Kills the actor, once (HitIntake.die): it plays its def's `death` reaction, its hurtbox goes off, what it had
+## pressed is forgotten and its brain is ignored from then on, and `died` is emitted. When the death clip ends,
+## the body leaves the `actor` layer and lies as the clip left it.
 func die() -> void:
-	if dead:
-		return
-	dead = true
-	remove_from_group(LOCKABLE_GROUP)
-	buffer.clear()
-	rig.hurtbox.collision_layer = 0
-	_death = _reaction_move(&"death")
-	if _death != null:
-		runner.start(_death)
-	else:
-		collision_layer &= ~Layers.ACTOR
-	died.emit()
+	intake.die()
 
 
 func _physics_process(delta: float) -> void:
@@ -297,17 +262,6 @@ func _physics_process(delta: float) -> void:
 		Melee.post(e)
 
 
-# One blow of apply_hits: its kick and its numbers. True if it emptied the HP.
-func _take(e: HitEvent, r: HitResult) -> bool:
-	if r.outcome in [HitResult.Outcome.HIT, HitResult.Outcome.GUARDED, HitResult.Outcome.GRABBED]:
-		rig.hit_react(e.direction, HIT_REACT_BASE + e.profile.poise_damage / HIT_REACT_POISE)
-	if r.stamina_cost > 0.0:
-		stats.spend_stamina(r.stamina_cost)
-	if r.posture_damage > 0.0:
-		stats.damage_posture(r.posture_damage)
-	return stats.take_damage(r.hp_damage)
-
-
 # The knockback's velocity for this frame, and the push left after it: _push is the velocity at the start of the
 # frame and decays exponentially, so the frame moves by its average over the frame, (1 - e^(-k delta)) / (k delta)
 # of it. That way the whole push travels _push / k however long the frames are.
@@ -320,30 +274,6 @@ func _next_push(delta: float) -> Vector3:
 	var shove := _push * ((1.0 - keep) / (k * delta))
 	_push *= keep
 	return shove
-
-
-# Plays the def's reaction move `reaction`, if it has one.
-func _react(reaction: StringName) -> void:
-	var move := _reaction_move(reaction)
-	if move != null:
-		runner.start(move)
-
-
-# The move the def's reactions name for `reaction`, or null if it names none.
-func _reaction_move(reaction: StringName) -> MoveData:
-	if not def.reactions.has(reaction):
-		return null
-	return Registry.fetch(&"moves", StringName(def.reactions[reaction])) as MoveData
-
-
-# A death clip that has played out: the body leaves the `actor` layer, and the rig is held on the clip's last
-# pose (the runner fades a move that ends back to locomotion, which would stand the body up again).
-func _on_move_ended(move: MoveData, cancelled: bool) -> void:
-	if not dead or move != _death or cancelled:
-		return
-	collision_layer &= ~Layers.ACTOR
-	rig.play_move(move.clip, 0.0)
-	rig.set_move_time(rig.tree.get_animation(move.clip).length)
 
 
 # _rig_speed for this frame (see there).
