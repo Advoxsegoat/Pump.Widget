@@ -435,6 +435,7 @@ tracks/57/keys = {
 "transitions": PackedFloat32Array(1, 1, 1),
 "values": [{
 "args": [{
+&"bone": &"hand_r",
 &"name": &"palm_trail"
 }],
 "method": &"fx"

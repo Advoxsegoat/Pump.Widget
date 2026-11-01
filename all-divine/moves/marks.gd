@@ -11,7 +11,8 @@ extends RefCounted
 ##   hitbox_off              {id}
 ##   cancel_open             {into: {action: move_id}}; a new cancel_open replaces the open window
 ##                           (windows do not stack), and a window closes at cancel_close or the clip's end
-##   fx, sfx                 {name}
+##   fx                      {name, bone?}: the FxDef shown (data/fx/); `bone` is the bone it rides, if not the def's
+##   sfx                     {name}: the SoundCue played (data/sounds/)
 ##   shake                   {strength}
 ##   tell                    {kind}: `glint` or `perilous`, the warning an enemy attack gives before it lands
 ##   charge_hold             {action, frames, profile}: while `action` is held, the clip waits at this mark

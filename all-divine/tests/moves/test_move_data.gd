@@ -21,7 +21,7 @@ const TABLE := {
 	&"palm_cross": [
 		[5, &"sfx", {"name": &"palm_whoosh"}],
 		[15, &"hitbox_on", {"id": &"palm_r", "profile": &"palm"}],
-		[15, &"fx", {"name": &"palm_trail"}],
+		[15, &"fx", {"name": &"palm_trail", "bone": &"hand_r"}],
 		[20, &"hitbox_off", {"id": &"palm_r"}],
 		[20, &"cancel_open", {"into": {&"palm": &"palm_jab"}}],
 		[25, &"recovery", {}],

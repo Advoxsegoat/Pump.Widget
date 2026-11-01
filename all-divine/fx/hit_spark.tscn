@@ -1,0 +1,43 @@
+[gd_scene format=3]
+
+[sub_resource type="Gradient" id="Gradient_l57ta"]
+interpolation_mode = 1
+offsets = PackedFloat32Array(0, 0.5)
+colors = PackedColorArray(1, 1, 1, 1, 0.9098039, 0.75686276, 0.4392157, 1)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_vekd4"]
+gradient = SubResource("Gradient_l57ta")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_wv104"]
+direction = Vector3(0, 1, 0)
+spread = 180.0
+initial_velocity_min = 1.5
+initial_velocity_max = 3.5
+gravity = Vector3(0, -5, 0)
+damping_min = 3.0
+damping_max = 6.0
+color_initial_ramp = SubResource("GradientTexture1D_vekd4")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5henw"]
+transparency = 1
+cull_mode = 2
+no_depth_test = true
+shading_mode = 0
+vertex_color_use_as_albedo = true
+billboard_mode = 3
+particles_anim_h_frames = 1
+particles_anim_v_frames = 1
+particles_anim_loop = false
+
+[sub_resource type="QuadMesh" id="QuadMesh_xkmae"]
+material = SubResource("StandardMaterial3D_5henw")
+size = Vector2(0.03125, 0.03125)
+
+[node name="HitSpark" type="GPUParticles3D" unique_id=615271406]
+cast_shadow = 0
+amount = 12
+lifetime = 0.2
+one_shot = true
+explosiveness = 1.0
+process_material = SubResource("ParticleProcessMaterial_wv104")
+draw_pass_1 = SubResource("QuadMesh_xkmae")

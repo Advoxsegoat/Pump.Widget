@@ -22,6 +22,10 @@ const VOICES := 16
 const LISTENER_GROUP := &"camera_rig"
 ## Sfx forgets what it played this frame before anything else runs.
 const PRIORITY := -1000
+## Milliseconds the audio thread is given at shutdown to let go of the sounds that were cut off, and how long a
+## sound can have been playing (no file is longer than 1.5 s).
+const SHUTDOWN_WAIT_MSEC := 100
+const LONGEST_SOUND_MSEC := 1500
 
 # A pair of players, one of which a sound uses.
 class Voice:
@@ -31,6 +35,7 @@ class Voice:
 
 var _voices: Array[Voice] = []
 var _plays := 0
+var _last_play_msec := -1  # when a sound last started, by Time.get_ticks_msec
 var _played: Array[StringName] = []
 var _unknown: Array[StringName] = []
 var _last_variant := {}  # cue id -> the index of the file it played last
@@ -56,6 +61,19 @@ func _physics_process(_delta: float) -> void:
 	_unknown.clear()
 
 
+# A sound that is still playing when the game ends is stopped, and the audio thread given a moment to let go of it:
+# the audio server holds on to a stopped sound until its own thread has faded it out, and one it still holds when
+# the engine shuts down is reported as leaked. (Whichever of the world and this node leaves the tree first, the
+# players are stopped here, with the wait after.)
+func _exit_tree() -> void:
+	for voice in _voices:
+		voice.flat.stop()
+		if is_instance_valid(voice.spatial):
+			voice.spatial.stop()
+	if _last_play_msec >= 0 and Time.get_ticks_msec() - _last_play_msec < LONGEST_SOUND_MSEC:
+		OS.delay_msec(SHUTDOWN_WAIT_MSEC)
+
+
 ## Plays the cue `id` (an id in the Registry kind `sounds`): at the point `at` if it is a Vector3, flat otherwise.
 func play(id: StringName, at: Variant = null) -> void:
 	if id == &"":
@@ -79,6 +97,7 @@ func play(id: StringName, at: Variant = null) -> void:
 	else:
 		player = voice.flat
 	_plays += 1
+	_last_play_msec = Time.get_ticks_msec()
 	voice.started = _plays
 	player.stream = cue.streams[_pick(id, cue.streams.size())]
 	player.bus = cue.bus

@@ -1,0 +1,37 @@
+[gd_scene format=3]
+
+[sub_resource type="Gradient" id="Gradient_i0w8g"]
+offsets = PackedFloat32Array(0, 0.4, 1)
+colors = PackedColorArray(1, 1, 1, 0.9, 0.9098039, 0.75686276, 0.4392157, 0.8, 0.9098039, 0.75686276, 0.4392157, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_7fepy"]
+gradient = SubResource("Gradient_i0w8g")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_6gkhg"]
+direction = Vector3(0, 1, 0)
+spread = 180.0
+initial_velocity_max = 0.15
+gravity = Vector3(0, 0, 0)
+color_ramp = SubResource("GradientTexture1D_7fepy")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ln1s5"]
+transparency = 1
+cull_mode = 2
+no_depth_test = true
+shading_mode = 0
+vertex_color_use_as_albedo = true
+billboard_mode = 3
+particles_anim_h_frames = 1
+particles_anim_v_frames = 1
+particles_anim_loop = false
+
+[sub_resource type="QuadMesh" id="QuadMesh_qomjc"]
+material = SubResource("StandardMaterial3D_ln1s5")
+size = Vector2(0.0625, 0.0625)
+
+[node name="PalmTrail" type="GPUParticles3D" unique_id=1962935990]
+cast_shadow = 0
+amount = 30
+lifetime = 0.25
+process_material = SubResource("ParticleProcessMaterial_6gkhg")
+draw_pass_1 = SubResource("QuadMesh_qomjc")

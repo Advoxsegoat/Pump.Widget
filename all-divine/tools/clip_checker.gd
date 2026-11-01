@@ -11,6 +11,8 @@ extends RefCounted
 ##   a DODGE has iframes_on before iframes_off
 ##   a REACTION other than the death has exactly one recovery
 ##   every move has at least one sfx and one fx
+##   every fx names an FxDef in the Registry kind `fx` and every sfx a SoundCue in the kind `sounds` (a mark with
+##       no name, or one the data does not have, is reported), and an fx's optional `bone` is a bone of the rig
 ##   every hit profile of a move is a HitProfile with hitstop_frames 3 to 6
 ##   parry_on/parry_off, guard_on/guard_off and airborne_on/airborne_off come as on-then-off pairs
 ##   every mark is a known kind and lies within [0, the clip's length]
@@ -27,6 +29,11 @@ extends RefCounted
 ## check_all runs every actor in the Registry, and reports the moves no actor can reach, since those
 ## have no rig to be checked against.
 
+## The mark kinds that name something in the data: kind -> [the Registry kind it is looked up in, what to call it].
+const NAMED := {
+	&"fx": [&"fx", "effect"],
+	&"sfx": [&"sounds", "sound cue"],
+}
 ## A mark may be this far (seconds) outside the clip or off its step grid.
 const TOLERANCE := 1e-3
 const HITSTOP_MIN := 3
@@ -50,15 +57,16 @@ const STEP_FPS_META := &"step_fps"
 
 
 ## What is wrong with `move` and its clip `anim`, given the ids of the rig's hitboxes and of every move,
-## when the actor that plays it is on `team`.
+## when the actor that plays it is on `team`. `bone_names` are the bones of the rig's skeleton, for the bones fx
+## marks name; none means they are not checked. The effects and sounds the marks name are looked up in the Registry.
 func check_move(move: MoveData, anim: Animation, hitbox_ids: PackedStringArray, move_ids: PackedStringArray,
-		team := ActorDef.Team.PLAYER) -> PackedStringArray:
+		team := ActorDef.Team.PLAYER, bone_names := PackedStringArray()) -> PackedStringArray:
 	var out := PackedStringArray()
 	var id := String(move.id)
 	var marks := Marks.read(anim)
 	var step_fps := int(anim.get_meta(STEP_FPS_META, 0))
 	for mark in marks:
-		_check_mark(id, mark, anim, step_fps, hitbox_ids, move_ids, out)
+		_check_mark(id, mark, anim, step_fps, hitbox_ids, move_ids, bone_names, out)
 	_check_hits(id, move, out)
 	if move.kind == MoveData.Kind.ATTACK:
 		_check_attack(id, move, marks, out)
@@ -133,7 +141,7 @@ static func is_t_pose(anim: Animation, skeleton: Skeleton3D) -> bool:
 # --- a move ---
 
 func _check_mark(id: String, mark: Dictionary, anim: Animation, step_fps: int, hitbox_ids: PackedStringArray,
-		move_ids: PackedStringArray, out: PackedStringArray) -> void:
+		move_ids: PackedStringArray, bone_names: PackedStringArray, out: PackedStringArray) -> void:
 	var kind: StringName = mark["kind"]
 	var time: float = mark["time"]
 	var args: Dictionary = mark["args"]
@@ -152,6 +160,15 @@ func _check_mark(id: String, mark: Dictionary, anim: Animation, step_fps: int, h
 				out.append("%s: %s has no id" % [id, where])
 			elif not hitbox_ids.has(hitbox):
 				out.append("%s: hitbox '%s' (%s) is not in the rig (it has %s)" % [id, hitbox, where, ", ".join(hitbox_ids)])
+		&"fx", &"sfx":
+			var named := String(args.get("name", ""))
+			var looked_up: Array = NAMED[kind]
+			if named.is_empty():
+				out.append("%s: %s has no name (an %s)" % [id, where, looked_up[1]])
+			elif not Registry.ids(looked_up[0]).has(named):
+				out.append("%s: %s names the unknown %s '%s' (data/%s/ has %s)" % [id, where, looked_up[1], named, looked_up[0], ", ".join(Registry.ids(looked_up[0]))])
+			if kind == &"fx" and args.has("bone") and not bone_names.is_empty() and not bone_names.has(String(args["bone"])):
+				out.append("%s: %s rides the bone '%s', which the rig does not have" % [id, where, args["bone"]])
 		&"tell":
 			if not args.has("kind"):
 				out.append("%s: %s has no kind (glint or perilous)" % [id, where])
@@ -331,6 +348,10 @@ func _check_actor(def: ActorDef, reached: Dictionary) -> PackedStringArray:
 		out.append("%s: the rig has no AnimationTree" % id)
 		rig.free()
 		return out
+	var bone_names := PackedStringArray()
+	if skeleton != null:
+		for bone in skeleton.get_bone_count():
+			bone_names.append(skeleton.get_bone_name(bone))
 	var hitbox_ids := PackedStringArray()
 	var hitboxes := rig.get_node_or_null("Hitboxes")
 	if hitboxes != null:
@@ -359,7 +380,7 @@ func _check_actor(def: ActorDef, reached: Dictionary) -> PackedStringArray:
 			out.append("%s: clip '%s' is not in the rig of %s" % [move_id, move.clip, id])
 		else:
 			var anim := tree.get_animation(move.clip)
-			out.append_array(check_move(move, anim, hitbox_ids, move_ids, def.team))
+			out.append_array(check_move(move, anim, hitbox_ids, move_ids, def.team, bone_names))
 			queue.append_array(_moves_after(move, anim, move_ids))
 	rig.free()
 	return out

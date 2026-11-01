@@ -7,6 +7,11 @@ const BAD_DATA := "res://tests/fixtures/moves/bad_data"
 const REACH_DATA := "res://tests/fixtures/moves/reach_data"
 const HITBOXES: PackedStringArray = ["palm_l", "palm_r"]
 const MOVES: PackedStringArray = ["palm_jab", "palm_cross", "dodge_roll"]
+## The bones of Abarax's rig that an `fx` mark may name (a few of them).
+const BONES: PackedStringArray = ["hand_l", "hand_r", "Head"]
+## The args of an sfx and an fx mark that name a cue and an effect the data has.
+const SFX := {"name": &"palm_whoosh"}
+const FX := {"name": &"palm_trail"}
 
 
 func after_each() -> void:
@@ -275,28 +280,56 @@ func test_move_without_fx_is_reported() -> void:
 	assert_true(_has_problem(problems, ["fx"]), "\n".join(problems))
 
 
+func test_unknown_fx_or_sfx_name_is_reported() -> void:
+	# Every fx names an FxDef in data/fx/ (the Registry kind fx) and every sfx a SoundCue in data/sounds/ (sounds).
+	var problems := _jab(_jab_marks([], [_m(25, &"fx", {"name": &"no_such_fx"}), _m(30, &"sfx", {"name": &"no_such_cue"})]))
+	assert_true(_has_problem(problems, ["fx", "f25", "no_such_fx"]), "\n".join(problems))
+	assert_true(_has_problem(problems, ["sfx", "f30", "no_such_cue"]), "\n".join(problems))
+	assert_eq(problems.size(), 2, "only those two: \n" + "\n".join(problems))
+	# The two kinds are separate: a sound is not an effect, nor an effect a sound.
+	problems = _jab(_jab_marks([], [_m(25, &"fx", {"name": &"impact_palm"}), _m(30, &"sfx", {"name": &"palm_trail"})]))
+	assert_true(_has_problem(problems, ["fx", "impact_palm"]), "\n".join(problems))
+	assert_true(_has_problem(problems, ["sfx", "palm_trail"]), "\n".join(problems))
+	# A mark that names nothing is as wrong.
+	problems = _jab(_jab_marks([], [_m(25, &"fx"), _m(30, &"sfx", {"name": &""})]))
+	assert_true(_has_problem(problems, ["fx", "f25", "no name"]), "\n".join(problems))
+	assert_true(_has_problem(problems, ["sfx", "f30", "no name"]), "\n".join(problems))
+	assert_eq(_jab(_jab_marks([], [_m(25, &"fx", {"name": &"hit_spark"}), _m(30, &"sfx", {"name": &"impact_heavy"})])), PackedStringArray(), "real names pass")
+
+
+func test_an_fx_mark_that_names_a_bone_the_rig_does_not_have_is_reported() -> void:
+	var move := _move(&"palm_jab", MoveData.Kind.ATTACK)
+	var checker := ClipChecker.new()
+	var good := _jab_marks([], [_m(25, &"fx", {"name": &"palm_trail", "bone": &"hand_r"})])
+	assert_eq(checker.check_move(move, _anim(35, 12, good), HITBOXES, MOVES, ActorDef.Team.PLAYER, BONES), PackedStringArray())
+	var bad := _jab_marks([], [_m(25, &"fx", {"name": &"palm_trail", "bone": &"hand_x"})])
+	var problems := checker.check_move(move, _anim(35, 12, bad), HITBOXES, MOVES, ActorDef.Team.PLAYER, BONES)
+	assert_true(_has_problem(problems, ["fx", "f25", "hand_x", "bone"]), "\n".join(problems))
+	assert_eq(checker.check_move(move, _anim(35, 12, bad), HITBOXES, MOVES), PackedStringArray(), "with no bones to go by, none is checked")
+
+
 func test_other_moves_need_sfx_and_fx_too() -> void:
 	var move := _move(&"gesture", MoveData.Kind.OTHER)
 	var checker := ClipChecker.new()
 	assert_true(_has_problem(checker.check_move(move, _anim(30, 0, []), HITBOXES, MOVES), ["sfx"]))
-	assert_eq(checker.check_move(move, _anim(30, 0, [_m(0, &"sfx"), _m(0, &"fx")]), HITBOXES, MOVES), PackedStringArray())
+	assert_eq(checker.check_move(move, _anim(30, 0, [_m(0, &"sfx", SFX), _m(0, &"fx", FX)]), HITBOXES, MOVES), PackedStringArray())
 
 
 func test_mark_off_the_step_grid_is_reported() -> void:
 	# Stepped at 12 fps the clip shows a new pose every 5 frames; a mark at frame 12 would fire between poses.
-	var problems := _jab(_jab_marks([], [_m(12, &"fx", {"name": &"extra"})]))
+	var problems := _jab(_jab_marks([], [_m(12, &"fx", FX)]))
 	assert_true(_has_problem(problems, ["12 fps step grid", "f12"]), "\n".join(problems))
-	problems = _jab(_jab_marks([], [_m(25, &"fx", {"name": &"extra"}), _m(30, &"fx", {"name": &"extra"})]))
+	problems = _jab(_jab_marks([], [_m(25, &"fx", FX), _m(30, &"fx", FX)]))
 	assert_eq(problems, PackedStringArray(), "frames 25 and 30 are on the grid")
 
 
 func test_a_smooth_clip_has_no_grid() -> void:
-	assert_eq(_roll(_roll_marks([], [_m(7, &"fx", {"name": &"extra"})])), PackedStringArray())
+	assert_eq(_roll(_roll_marks([], [_m(7, &"fx", FX)])), PackedStringArray())
 
 
 func test_the_grid_is_the_clips_own_step_rate() -> void:
 	var move := _move(&"palm_jab", MoveData.Kind.ATTACK)
-	var marks := _jab_marks([], [_m(2, &"fx", {"name": &"extra"})])
+	var marks := _jab_marks([], [_m(2, &"fx", FX)])
 	var checker := ClipChecker.new()
 	assert_true(_has_problem(checker.check_move(move, _anim(35, 12, marks), HITBOXES, MOVES), ["12 fps step grid"]))
 	assert_true(_has_problem(checker.check_move(move, _anim(35, 24, marks), HITBOXES, MOVES), ["24 fps step grid"]), "f2 is on neither grid, f5 is on both")
@@ -304,16 +337,16 @@ func test_the_grid_is_the_clips_own_step_rate() -> void:
 
 
 func test_a_mark_outside_the_clip_is_reported() -> void:
-	var problems := _jab(_jab_marks([], [_m(40, &"fx", {"name": &"extra"})]))
+	var problems := _jab(_jab_marks([], [_m(40, &"fx", FX)]))
 	assert_true(_has_problem(problems, ["f40", "outside"]), "\n".join(problems))
-	var early := _anim(35, 0, _jab_marks([], [{"time": -0.05, "kind": &"fx", "args": {"name": &"extra"}}]))
+	var early := _anim(35, 0, _jab_marks([], [{"time": -0.05, "kind": &"fx", "args": FX}]))
 	problems = ClipChecker.new().check_move(_move(&"palm_jab", MoveData.Kind.ATTACK), early, HITBOXES, MOVES)
 	assert_true(_has_problem(problems, ["outside"]), "\n".join(problems))
 
 
 func test_a_mark_on_the_last_frame_is_inside() -> void:
 	# The clip stores 0.583333 for 35 frames; the mark at frame 35 is 3e-7 s later and still counts as inside.
-	var a := _anim(35, 12, _jab_marks([], [_m(35, &"fx", {"name": &"extra"})]))
+	var a := _anim(35, 12, _jab_marks([], [_m(35, &"fx", FX)]))
 	a.length = 0.583333
 	assert_eq(ClipChecker.new().check_move(_move(&"palm_jab", MoveData.Kind.ATTACK), a, HITBOXES, MOVES), PackedStringArray())
 
@@ -435,7 +468,7 @@ func test_each_window_kind_is_judged_on_its_own() -> void:
 
 func test_reaction_without_recovery_is_reported() -> void:
 	var move := _move(&"flinch", MoveData.Kind.REACTION)
-	var marks := [_m(0, &"sfx"), _m(0, &"fx")]
+	var marks := [_m(0, &"sfx", SFX), _m(0, &"fx", FX)]
 	var problems := _check(move, marks)
 	assert_true(_has_problem(problems, ["flinch", "recovery"]), "\n".join(problems))
 	assert_eq(_check(move, marks + [_m(12, &"recovery")]), PackedStringArray())
@@ -445,12 +478,12 @@ func test_reaction_without_recovery_is_reported() -> void:
 
 func test_a_death_needs_no_recovery() -> void:
 	var death := _move(&"death", MoveData.Kind.REACTION)
-	assert_eq(_check(death, [_m(0, &"sfx"), _m(0, &"fx")]), PackedStringArray())
+	assert_eq(_check(death, [_m(0, &"sfx", SFX), _m(0, &"fx", FX)]), PackedStringArray())
 
 
 func test_a_reaction_needs_no_hits_or_hitbox() -> void:
 	var move := _move(&"stagger", MoveData.Kind.REACTION)
-	assert_eq(_check(move, [_m(0, &"sfx"), _m(0, &"fx"), _m(20, &"recovery")]), PackedStringArray())
+	assert_eq(_check(move, [_m(0, &"sfx", SFX), _m(0, &"fx", FX), _m(20, &"recovery")]), PackedStringArray())
 
 
 func test_tell_kind_must_be_glint_or_perilous() -> void:
@@ -490,7 +523,7 @@ func test_the_player_needs_no_tell() -> void:
 
 func test_only_attacks_of_enemies_need_a_tell() -> void:
 	var feint := _move(&"knuckle_feint", MoveData.Kind.OTHER)
-	assert_eq(_check(feint, [_m(0, &"sfx"), _m(0, &"fx")], ActorDef.Team.ENEMY), PackedStringArray())
+	assert_eq(_check(feint, [_m(0, &"sfx", SFX), _m(0, &"fx", FX)], ActorDef.Team.ENEMY), PackedStringArray())
 
 
 func test_perilous_hit_needs_a_perilous_tell() -> void:
@@ -520,7 +553,7 @@ func test_charge_hold_is_only_in_an_attack_and_names_a_profile_it_has() -> void:
 	assert_true(_has_problem(problems, ["charge_hold", "no profile", "f10"]), "\n".join(problems))
 	for kind in [MoveData.Kind.DODGE, MoveData.Kind.OTHER, MoveData.Kind.REACTION]:
 		var other := _move(&"gesture", kind)
-		problems = _check(other, [_m(0, &"sfx"), _m(0, &"fx"), _m(10, &"charge_hold", hold)])
+		problems = _check(other, [_m(0, &"sfx", SFX), _m(0, &"fx", FX), _m(10, &"charge_hold", hold)])
 		assert_true(_has_problem(problems, ["gesture", "charge_hold", "attack", "f10"]), "kind %d: %s" % [kind, "\n".join(problems)])
 
 
