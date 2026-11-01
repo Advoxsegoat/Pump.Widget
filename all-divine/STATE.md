@@ -26,7 +26,7 @@ F0 (Foundation) is built: a lit courtyard to walk in, with Abarax moving, rollin
 
 ## Next
 
-F1 Combat core (spec §9): write its plan.
+F1 Combat core (spec §9). Its plan is written, awaiting the owner's review: [`docs/superpowers/plans/2026-11-01-all-divine-rpg-f1-combat-core.md`](../docs/superpowers/plans/2026-11-01-all-divine-rpg-f1-combat-core.md).
 
 ## Owner checklist for F0
 
