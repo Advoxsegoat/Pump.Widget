@@ -4,7 +4,8 @@ extends Resource
 ## cancel windows, effects) is not here but in the clip's marks (see marks.gd); the clip checker
 ## (tools/clip_checker.gd) keeps the two consistent.
 
-enum Kind { ATTACK, DODGE, OTHER }
+## A REACTION is what an actor plays when something is done to it (a flinch, a stagger, a death).
+enum Kind { ATTACK, DODGE, OTHER, REACTION }
 
 @export var id: StringName
 @export var kind: Kind = Kind.ATTACK
@@ -16,8 +17,14 @@ enum Kind { ATTACK, DODGE, OTHER }
 ## Keeps a move's distance tunable without re-authoring its clip.
 @export var root_motion_scale := 1.0
 @export var stamina_cost := 0.0
-@export var posture_damage := 0.0
-@export var poise_damage := 0.0
+## The ways this move hits: profile name -> HitProfile, written inline in the move's .tres. A hitbox_on
+## mark names the profile its hitbox carries, so every hit of the move is one of these.
+@export var hits: Dictionary = {}
+## Whether the body turns toward the intent's aim target during the wind-up (aim assist and lock-on).
+@export var aim := true
+## The move started instead of this one when the stick is at rest (a standing jab, say, in place of a
+## stepping one). None means this move is started either way.
+@export var neutral_variant: StringName
 ## Seconds over which the move fades in over what the actor was doing, and out to locomotion.
 @export var blend_in := 0.05
 @export var blend_out := 0.15

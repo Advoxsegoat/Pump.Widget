@@ -63,10 +63,41 @@ func test_move_data_defaults() -> void:
 	var m := MoveData.new()
 	assert_true(m.root_motion)
 	assert_eq(m.root_motion_scale, 1.0)
-	assert_eq(m.stamina_cost, 0.0); assert_eq(m.posture_damage, 0.0); assert_eq(m.poise_damage, 0.0)
+	assert_eq(m.stamina_cost, 0.0)
 	assert_eq(m.blend_in, 0.05); assert_eq(m.blend_out, 0.15)
 	assert_eq(m.kind, MoveData.Kind.ATTACK, "ATTACK is the first kind")
-	assert_eq(MoveData.Kind.DODGE, 1); assert_eq(MoveData.Kind.OTHER, 2)
+	assert_eq(MoveData.Kind.DODGE, 1); assert_eq(MoveData.Kind.OTHER, 2); assert_eq(MoveData.Kind.REACTION, 3)
+	assert_eq(m.hits, {})
+	assert_true(m.aim, "a move turns toward its target during wind-up unless told not to")
+	assert_eq(m.neutral_variant, &"")
+
+
+func test_move_data_has_hits_and_no_old_fields() -> void:
+	# What a blow does is its HitProfile now (MoveData.hits), not two numbers on the move.
+	assert_false("posture_damage" in MoveData.new())
+	assert_false("poise_damage" in MoveData.new())
+	assert_true("hits" in MoveData.new())
+
+
+func test_abarax_jab_and_cross_have_a_palm_profile() -> void:
+	# [damage, poise, posture, guard_stamina, hitstop_frames, knockback]
+	var want := {&"palm_jab": [8.0, 6.0, 4.0, 8.0, 3, 1.0], &"palm_cross": [10.0, 8.0, 6.0, 10.0, 4, 1.5]}
+	for id: StringName in want:
+		var move := Registry.fetch(&"moves", id) as MoveData
+		assert_eq(move.hits.keys(), [&"palm"], "%s has the one profile, palm" % id)
+		var p := move.hits[&"palm"] as HitProfile
+		if p == null:
+			fail("%s: hits[palm] is a HitProfile" % id)
+			continue
+		assert_eq([p.damage, p.poise_damage, p.posture_damage, p.guard_stamina, p.hitstop_frames, p.knockback], want[id], str(id))
+		assert_eq([p.shake, p.staggers, p.height, p.perilous, p.impact_sound],
+				[0.0, false, HitProfile.Height.MID, HitProfile.Perilous.NONE, &"impact_palm"], "%s: the rest is the default" % id)
+	assert_eq((Registry.fetch(&"moves", &"palm_jab") as MoveData).hits[&"palm"].hitstop_frames, 3)
+	assert_eq((Registry.fetch(&"moves", &"palm_cross") as MoveData).hits[&"palm"].hitstop_frames, 4)
+
+
+func test_the_roll_hits_nothing() -> void:
+	assert_eq((Registry.fetch(&"moves", &"dodge_roll") as MoveData).hits, {})
 
 
 func test_the_clips_have_the_lengths_and_steps_the_marks_were_placed_for() -> void:
@@ -155,6 +186,11 @@ func test_abarax_is_defined_by_data() -> void:
 	assert_eq(def.max_hp, 100.0); assert_eq(def.max_stamina, 100.0); assert_eq(def.max_posture, 100.0); assert_eq(def.poise, 10.0)
 	assert_eq(def.required_clips, PackedStringArray(["idle", "walk", "jog", "sprint"]))
 	assert_eq(def.locomotion, load("res://data/tuning/abarax_locomotion.tres"))
+	assert_eq(def.team, ActorDef.Team.PLAYER)
+	assert_eq(def.combat, load("res://data/tuning/combat_abarax.tres"))
+	assert_eq(def.reactions, {}, "the reaction clips come with the tasks that add them")
+	assert_eq(def.surface_sound, &"surface_cloth")
+	assert_eq(def.hurt_voice, &"")
 	var rig := def.rig_scene.instantiate()
 	assert_true(rig is Rig)
 	rig.free()
@@ -166,6 +202,12 @@ func test_actor_def_defaults() -> void:
 	assert_eq([def.max_hp, def.max_stamina, def.max_posture, def.poise], [100.0, 100.0, 100.0, 10.0])
 	assert_eq(def.required_clips, PackedStringArray(["idle", "walk", "jog", "sprint"]))
 	assert_eq(def.moveset, {})
+	assert_eq(ActorDef.Team.PLAYER, 0); assert_eq(ActorDef.Team.ENEMY, 1)
+	assert_eq(def.team, ActorDef.Team.PLAYER)
+	assert_eq(def.combat, null)
+	assert_eq(def.reactions, {})
+	assert_eq(def.surface_sound, &"surface_cloth")
+	assert_eq(def.hurt_voice, &"")
 
 
 func test_every_moveset_move_of_abarax_is_a_registered_move() -> void:
