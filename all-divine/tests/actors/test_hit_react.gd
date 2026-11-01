@@ -58,12 +58,38 @@ func test_lean_is_shared_up_the_spine() -> void:
 
 
 func test_strength_scales_the_kick() -> void:
+	# Below the cap: a blow of strength 2 would lean past MAX_TILT, where the scaling stops.
 	var soft := rig(); var hard := rig(); var calm := rig()
-	soft.hit_react(-soft.global_basis.z, 1.0)
-	hard.hit_react(-hard.global_basis.z, 2.0)
+	soft.hit_react(-soft.global_basis.z, 0.5)
+	hard.hit_react(-hard.global_basis.z, 1.0)
 	for i in 5:
 		soft.tick(DT); hard.tick(DT); calm.tick(DT)
 	assert_near(_lean(hard, calm, &"spine_02").y / _lean(soft, calm, &"spine_02").y, 2.0, 0.1)
+
+
+func test_lean_is_capped_and_direction_length_does_not_matter() -> void:
+	# A flurry of ten blows, one a tick, piles up lean speed far past what the spring could hold; the lean
+	# never goes past MAX_TILT, and then settles.
+	var r := rig()
+	var dir := -r.global_basis.z
+	var peak := 0.0
+	for i in 70:
+		if i < 10:
+			r.hit_react(dir, 1.0)
+		r.tick(DT)
+		var lean := r.hit_reaction.tilt.length()
+		peak = maxf(peak, lean)
+		assert_true(lean <= HitReact.MAX_TILT + 1e-6, "lean %.4f rad at tick %d is past the cap" % [lean, i])
+	assert_near(HitReact.MAX_TILT, 0.35, 1e-9)
+	assert_near(peak, HitReact.MAX_TILT, 1e-6, "the flurry does reach the cap")
+	assert_true(r.hit_reaction.tilt.length() < 0.01, "and it settles: %.4f rad after a second" % r.hit_reaction.tilt.length())
+	# How long the direction is says nothing about how hard the blow is: that is the strength.
+	var near := rig(); var far := rig()
+	near.hit_react(dir, 1.0)
+	far.hit_react(dir * 5.0, 1.0)
+	assert_vec_near(Vector3(far.hit_reaction.tilt_velocity.x, 0, far.hit_reaction.tilt_velocity.y),
+			Vector3(near.hit_reaction.tilt_velocity.x, 0, near.hit_reaction.tilt_velocity.y), 1e-6)
+	assert_true(near.hit_reaction.tilt_velocity.length() > 1.0, "and the blow did kick him")
 
 
 func test_zero_direction_is_safe() -> void:

@@ -5,7 +5,7 @@ extends SkeletonModifier3D
 ## damping 14, for a unit mass) brings it back: it peaks about 0.08 s after the kick, sways a little past
 ## upright, and has settled by 0.6 s. The lean is shared up the spine (spine_01 0.3, spine_02 0.3, spine_03 0.2, neck_01 0.1,
 ## Head 0.1), each bone turning about the same axis across the lean, so the head carries all of it and the
-## hips none. Kicks add up, so a flurry stacks.
+## hips none. Kicks add up, so a flurry stacks, but the lean stops at MAX_TILT: a body only bends so far.
 ##
 ## It runs as part of the rig's tick (Rig.hit_react starts one).
 
@@ -17,6 +17,9 @@ const BONES: Array[StringName] = [&"spine_01", &"spine_02", &"spine_03", &"neck_
 const SHARES: Array[float] = [0.3, 0.3, 0.2, 0.1, 0.1]
 ## The spring's longest integration step, in seconds: a longer tick is cut into steps no longer than this.
 const MAX_STEP := 1.0 / 60.0
+## The furthest the upper body leans, in radians (20°), however many blows land: a little more than one
+## ordinary blow gives.
+const MAX_TILT := 0.35
 ## A lean and lean speed both below this (radians, radians per second) are at rest.
 const REST := 1e-5
 
@@ -30,16 +33,16 @@ var _skeleton: Skeleton3D  # the skeleton the bones below were found in
 var _bones := PackedInt32Array()
 
 
-## A blow travelling along `dir_world` (a world direction: from the striker through the body) with
-## `strength` (1 is an ordinary hit): adds a lean speed of KICK × strength along the direction's part across
-## the ground, in the body's own space. A direction with nothing across the ground (none, or straight
-## down) does nothing.
+## A blow travelling along `dir_world` (a world direction: from the striker through the body, of any length:
+## only which way it points counts) with `strength` (1 is an ordinary hit): adds a lean speed of
+## KICK × strength along the direction's part across the ground, in the body's own space. A direction with
+## nothing across the ground (none, or straight down) does nothing.
 func react(dir_world: Vector3, strength: float) -> void:
 	var skeleton := get_skeleton()
 	var to_body := Quaternion.IDENTITY
 	if skeleton != null and skeleton.is_inside_tree():
 		to_body = skeleton.global_basis.get_rotation_quaternion().inverse()
-	var dir_local := to_body * dir_world
+	var dir_local := to_body * dir_world.normalized()
 	var kick := Vector2(dir_local.x, dir_local.z) * strength * KICK
 	if kick.is_finite():
 		tilt_velocity += kick
@@ -62,7 +65,9 @@ func _process_modification_with_delta(delta: float) -> void:
 		BoneTurn.about_skeleton_axis(skeleton, _bones[i], axis, lean * SHARES[i])
 
 
-# Moves the spring on by `delta` seconds (semi-implicit Euler, in steps of at most MAX_STEP).
+# Moves the spring on by `delta` seconds (semi-implicit Euler, in steps of at most MAX_STEP). The lean is
+# held to MAX_TILT as a wall: it stops there, and the speed it still has outward goes, so the spring brings
+# it back at once instead of leaving it pinned until that speed is spent.
 func _spring(delta: float) -> void:
 	if delta <= 0.0:
 		return
@@ -71,6 +76,10 @@ func _spring(delta: float) -> void:
 	for i in steps:
 		tilt_velocity += (-STIFFNESS * tilt - DAMPING * tilt_velocity) * h
 		tilt += tilt_velocity * h
+		if tilt.length() > MAX_TILT:
+			tilt = tilt.limit_length(MAX_TILT)
+			var out := tilt.normalized()
+			tilt_velocity -= out * maxf(tilt_velocity.dot(out), 0.0)
 	if tilt.length() < REST and tilt_velocity.length() < REST:
 		tilt = Vector2.ZERO
 		tilt_velocity = Vector2.ZERO
