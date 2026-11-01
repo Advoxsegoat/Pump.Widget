@@ -10,7 +10,7 @@ extends RefCounted
 ##   a DODGE has iframes_on before iframes_off
 ##   every move has at least one sfx and one fx
 ##   every mark is a known kind and lies within [0, the clip's length]
-##   cancel_open's `into` names existing moves; hitbox ids are hitboxes of the rig; hitstop is 3 to 6 frames
+##   cancel_open's `into` names existing moves; hitbox ids are hitboxes of the rig
 ##   on a stepped clip (metadata step_fps above 0) every mark is on the 1/step_fps grid
 ## and per actor (check_actor): each required clip exists and is not a T-pose, the moveset names existing
 ## moves, and each move the actor can start or cancel into is checked against the actor's rig.
@@ -19,8 +19,6 @@ extends RefCounted
 
 ## A mark may be this far (seconds) outside the clip or off its step grid.
 const TOLERANCE := 1e-3
-const HITSTOP_MIN := 3
-const HITSTOP_MAX := 6
 ## A bone within this many degrees of its rest rotation counts as not moved.
 const REST_DEGREES := 1.0
 ## Metadata on a clip: the rate at which it is shown stepped; 0 or none means smooth.
@@ -121,12 +119,6 @@ func _check_mark(id: String, mark: Dictionary, anim: Animation, step_fps: int, h
 				for action in into:
 					if not move_ids.has(String(into[action])):
 						out.append("%s: %s goes into unknown move '%s' (on %s)" % [id, where, into[action], action])
-		&"hitstop":
-			var frames: Variant = args.get("frames")
-			if not (frames is int or frames is float):
-				out.append("%s: %s has no frames" % [id, where])
-			elif int(frames) < HITSTOP_MIN or int(frames) > HITSTOP_MAX:
-				out.append("%s: %s has %d frames, outside %d to %d" % [id, where, int(frames), HITSTOP_MIN, HITSTOP_MAX])
 
 
 func _check_attack(id: String, marks: Array[Dictionary], out: PackedStringArray) -> void:

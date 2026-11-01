@@ -344,8 +344,7 @@ func test_marks_node_takes_every_mark_kind() -> void:
 	var r := rig()
 	var sink := r.get_node("Marks")
 	assert_true(sink is MarkSink)
-	for kind in ["hitbox_on", "hitbox_off", "iframes_on", "iframes_off", "hyperarmour_on", "hyperarmour_off",
-			"cancel_open", "cancel_close", "recovery", "fx", "sfx", "shake", "hitstop"]:
+	for kind in Marks.KINDS:
 		assert_true(sink.has_method(kind), kind)
 		sink.call(kind, {})
 

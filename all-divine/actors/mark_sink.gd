@@ -21,4 +21,12 @@ func recovery(_args: Dictionary) -> void: pass
 func fx(_args: Dictionary) -> void: pass
 func sfx(_args: Dictionary) -> void: pass
 func shake(_args: Dictionary) -> void: pass
-func hitstop(_args: Dictionary) -> void: pass
+func parry_on(_args: Dictionary) -> void: pass
+func parry_off(_args: Dictionary) -> void: pass
+func guard_on(_args: Dictionary) -> void: pass
+func guard_off(_args: Dictionary) -> void: pass
+func airborne_on(_args: Dictionary) -> void: pass
+func airborne_off(_args: Dictionary) -> void: pass
+func tell(_args: Dictionary) -> void: pass
+func charge_hold(_args: Dictionary) -> void: pass
+func pair_hit(_args: Dictionary) -> void: pass

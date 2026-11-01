@@ -28,17 +28,22 @@ func test_the_track_is_called_marks() -> void:
 	assert_eq(Marks.TRACK, NodePath("Marks"))
 
 
-func test_kinds() -> void:
-	assert_eq(Marks.KINDS.size(), 13)
+func test_kinds_drop_hitstop_and_add_the_combat_kinds() -> void:
+	# Hit-stop comes from the HitProfile, on contact, so there is no mark for it.
+	assert_eq(Marks.KINDS.size(), 21)
 	for kind in [&"hitbox_on", &"hitbox_off", &"iframes_on", &"iframes_off", &"hyperarmour_on", &"hyperarmour_off",
-			&"cancel_open", &"cancel_close", &"recovery", &"fx", &"sfx", &"shake", &"hitstop"]:
+			&"cancel_open", &"cancel_close", &"recovery", &"fx", &"sfx", &"shake",
+			&"parry_on", &"parry_off", &"guard_on", &"guard_off", &"airborne_on", &"airborne_off",
+			&"tell", &"charge_hold", &"pair_hit"]:
 		assert_true(Marks.KINDS.has(kind), kind)
+	assert_false(Marks.KINDS.has(&"hitstop"))
 
 
 func test_the_rigs_mark_sink_has_a_method_for_every_kind() -> void:
 	var sink := MarkSink.new()
 	for kind in Marks.KINDS:
 		assert_true(sink.has_method(kind), "MarkSink.%s" % kind)
+	assert_false(sink.has_method(&"hitstop"), "hit-stop is the profile's, not a mark")
 	sink.free()
 
 
@@ -83,13 +88,13 @@ func test_marks_on_the_same_frame_all_survive_in_the_order_given() -> void:
 	Marks.write(a, [
 		_mark(10, &"hitbox_on", {"id": &"palm_l"}),
 		_mark(10, &"fx", {"name": &"palm_trail"}),
-		_mark(10, &"hitstop", {"frames": 3}),
+		_mark(10, &"tell", {"kind": &"glint"}),
 		_mark(15, &"hitbox_off", {"id": &"palm_l"}),
 		_mark(15, &"cancel_open", {"into": {&"palm": &"palm_cross"}}),
 	])
 	var read := Marks.read(a)
 	assert_eq(read.map(func(m: Dictionary) -> StringName: return m["kind"]),
-			[&"hitbox_on", &"fx", &"hitstop", &"hitbox_off", &"cancel_open"])
+			[&"hitbox_on", &"fx", &"tell", &"hitbox_off", &"cancel_open"])
 	assert_eq(read.map(func(m: Dictionary) -> int: return Marks.frame_of(m["time"])), [10, 10, 10, 15, 15])
 	assert_near(read[0]["time"], read[2]["time"], 0.0, "same frame, same time to the bit: no nudging")
 
@@ -104,8 +109,8 @@ func test_marks_a_hair_apart_both_survive() -> void:
 func test_marks_written_survive_a_save_and_load() -> void:
 	var a := _clip(0.5833)
 	var written := [
-		_mark(10, &"hitbox_on", {"id": &"palm_l"}),
-		_mark(10, &"hitstop", {"frames": 3}),
+		_mark(10, &"hitbox_on", {"id": &"palm_l", "profile": &"palm"}),
+		_mark(10, &"charge_hold", {"action": &"palm", "frames": 12, "profile": &"heavy"}),
 		_mark(20, &"cancel_open", {"into": {&"palm": &"palm_cross", &"dodge": &"dodge_roll"}}),
 	]
 	Marks.write(a, written)
@@ -196,9 +201,9 @@ func test_between_excludes_its_start_and_includes_its_end() -> void:
 
 
 func test_between_keeps_the_order_of_the_marks() -> void:
-	var m := [_mark(5, &"sfx"), _mark(10, &"fx"), _mark(10, &"hitstop", {"frames": 3}), _mark(15, &"recovery")]
+	var m := [_mark(5, &"sfx"), _mark(10, &"fx"), _mark(10, &"tell", {"kind": &"glint"}), _mark(15, &"recovery")]
 	var found := Marks.between(m, 4 / 60.0, 12 / 60.0)
-	assert_eq(found.map(func(x: Dictionary) -> StringName: return x["kind"]), [&"sfx", &"fx", &"hitstop"])
+	assert_eq(found.map(func(x: Dictionary) -> StringName: return x["kind"]), [&"sfx", &"fx", &"tell"])
 
 
 func test_every_mark_of_a_saved_clip_is_met_exactly_once_frame_by_frame() -> void:

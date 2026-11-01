@@ -6,13 +6,13 @@ extends TestCase
 const LIB := "res://assets/anim/abarax/library.tres"
 const MODEL := "res://assets/characters/abarax/abarax.glb"
 
-# Marks as [frame, kind, args], in the order they are meant to read.
+# Marks as [frame, kind, args], in the order they are meant to read. (F0's table, less the hit-stop marks,
+# which are the hit profiles' hitstop_frames now, and with the profile each hitbox carries.)
 const TABLE := {
 	&"palm_jab": [
 		[5, &"sfx", {"name": &"palm_whoosh"}],
-		[10, &"hitbox_on", {"id": &"palm_l"}],
+		[10, &"hitbox_on", {"id": &"palm_l", "profile": &"palm"}],
 		[10, &"fx", {"name": &"palm_trail"}],
-		[10, &"hitstop", {"frames": 3}],
 		[15, &"hitbox_off", {"id": &"palm_l"}],
 		[15, &"cancel_open", {"into": {&"palm": &"palm_cross"}}],
 		[20, &"recovery", {}],
@@ -20,9 +20,8 @@ const TABLE := {
 	],
 	&"palm_cross": [
 		[5, &"sfx", {"name": &"palm_whoosh"}],
-		[15, &"hitbox_on", {"id": &"palm_r"}],
+		[15, &"hitbox_on", {"id": &"palm_r", "profile": &"palm"}],
 		[15, &"fx", {"name": &"palm_trail"}],
-		[15, &"hitstop", {"frames": 4}],
 		[20, &"hitbox_off", {"id": &"palm_r"}],
 		[20, &"cancel_open", {"into": {&"palm": &"palm_jab"}}],
 		[25, &"recovery", {}],

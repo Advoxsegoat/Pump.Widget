@@ -43,15 +43,15 @@ func _run(args: Array[String]) -> Dictionary:
 func test_it_replaces_the_marks_from_the_json() -> void:
 	_make_clip()
 	_write_json('[{"frame": 15, "kind": "hitbox_off", "args": {"id": "palm_l"}}, {"frame": 10, "kind": "hitbox_on", "args": {"id": "palm_l"}},'
-			+ ' {"frame": 10, "kind": "hitstop", "args": {"frames": 3}}, {"frame": 20, "kind": "recovery"},'
+			+ ' {"frame": 10, "kind": "charge_hold", "args": {"action": "palm", "frames": 12}}, {"frame": 20, "kind": "recovery"},'
 			+ ' {"frame": 15, "kind": "cancel_open", "args": {"into": {"palm": "palm_cross"}}}]')
 	var run := _run([CLIP, JSON_FILE])
 	assert_eq(run["code"], 0, "\n".join(run["lines"]))
 	var marks := _marks()
-	assert_eq(marks.map(func(m: Dictionary) -> StringName: return m["kind"]), [&"hitbox_on", &"hitstop", &"hitbox_off", &"cancel_open", &"recovery"])
+	assert_eq(marks.map(func(m: Dictionary) -> StringName: return m["kind"]), [&"hitbox_on", &"charge_hold", &"hitbox_off", &"cancel_open", &"recovery"])
 	assert_eq(marks.map(func(m: Dictionary) -> int: return Marks.frame_of(m["time"])), [10, 10, 15, 15, 20])
 	assert_eq(marks[0]["args"], {&"id": &"palm_l"}, "strings become StringNames")
-	assert_eq(marks[1]["args"], {&"frames": 3})
+	assert_eq(marks[1]["args"], {&"action": &"palm", &"frames": 12})
 	assert_eq(typeof(marks[1]["args"][&"frames"]), TYPE_INT, "a whole number is an int")
 	assert_eq(marks[3]["args"], {&"into": {&"palm": &"palm_cross"}})
 	assert_eq(marks[4]["args"], {})

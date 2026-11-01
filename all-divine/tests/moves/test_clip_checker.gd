@@ -35,13 +35,13 @@ func _move(id: StringName, kind: MoveData.Kind) -> MoveData:
 	return move
 
 
-# The jab of the F0 table, with `without` kinds left out and `extra` marks added.
+# The jab of the F0 table (the hit-stop is the profile's now), with `without` kinds left out and `extra`
+# marks added.
 func _jab_marks(without: Array = [], extra: Array = []) -> Array:
 	var marks := [
 		_m(5, &"sfx", {"name": &"palm_whoosh"}),
-		_m(10, &"hitbox_on", {"id": &"palm_l"}),
+		_m(10, &"hitbox_on", {"id": &"palm_l", "profile": &"palm"}),
 		_m(10, &"fx", {"name": &"palm_trail"}),
-		_m(10, &"hitstop", {"frames": 3}),
 		_m(15, &"hitbox_off", {"id": &"palm_l"}),
 		_m(15, &"cancel_open", {"into": {&"palm": &"palm_cross"}}),
 		_m(20, &"recovery"),
@@ -296,22 +296,15 @@ func test_cancel_open_without_a_target_is_reported() -> void:
 	assert_true(_has_problem(problems, ["cancel_open", "into"]), "\n".join(problems))
 
 
-func test_hitstop_out_of_range_is_reported() -> void:
-	for frames in [8, 2, 0]:
-		var problems := _jab(_jab_marks([&"hitstop"], [_m(10, &"hitstop", {"frames": frames})]))
-		assert_true(_has_problem(problems, ["hitstop", str(frames)]), "frames %d: %s" % [frames, "\n".join(problems)])
-	for frames in [3, 4, 5, 6]:
-		assert_eq(_jab(_jab_marks([&"hitstop"], [_m(10, &"hitstop", {"frames": frames})])), PackedStringArray(), "frames %d" % frames)
-
-
-func test_hitstop_without_frames_is_reported() -> void:
-	var problems := _jab(_jab_marks([&"hitstop"], [_m(10, &"hitstop")]))
-	assert_true(_has_problem(problems, ["hitstop"]), "\n".join(problems))
-
-
 func test_an_unknown_mark_kind_is_reported() -> void:
 	var problems := _jab(_jab_marks([], [_m(10, &"hitbox_onn", {"id": &"palm_l"})]))
 	assert_true(_has_problem(problems, ["hitbox_onn", "kind"]), "\n".join(problems))
+
+
+func test_a_hitstop_mark_is_an_unknown_kind_now() -> void:
+	# F0 had a hitstop mark. Hit-stop is the HitProfile's now, so an old clip that still has one is wrong.
+	var problems := _jab(_jab_marks([], [_m(10, &"hitstop", {"frames": 3})]))
+	assert_true(_has_problem(problems, ["hitstop", "kind", "f10"]), "\n".join(problems))
 
 
 func test_every_problem_starts_with_the_move_id() -> void:
@@ -322,8 +315,8 @@ func test_every_problem_starts_with_the_move_id() -> void:
 
 
 func test_the_problems_name_the_frame() -> void:
-	var problems := _jab(_jab_marks([&"hitstop"], [_m(10, &"hitstop", {"frames": 8})]))
-	assert_true(_has_problem(problems, ["f10"]), "\n".join(problems))
+	var problems := _jab(_jab_marks([], [_m(10, &"hitbox_on")]))
+	assert_true(_has_problem(problems, ["hitbox_on", "no id", "f10"]), "\n".join(problems))
 
 
 # --- the T-pose rule, on clips and on an actor ---

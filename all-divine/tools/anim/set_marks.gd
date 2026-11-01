@@ -68,7 +68,7 @@ func _entry_problem(entry: Variant) -> String:
 
 
 # `value` with every String, in a Dictionary's keys and values and in arrays, made a StringName. JSON
-# numbers come in as floats; a whole one that is a count (hitstop frames) is made an int.
+# numbers come in as floats; a whole one that is a count (charge_hold frames) is made an int.
 func _names(value: Variant) -> Variant:
 	if value is String:
 		return StringName(value)

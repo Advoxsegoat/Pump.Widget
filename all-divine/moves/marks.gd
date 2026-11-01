@@ -7,12 +7,20 @@ extends RefCounted
 ##
 ## A mark is a Dictionary {time, kind, args}: seconds into the clip, a StringName from KINDS, and the
 ## kind's arguments:
-##   hitbox_on, hitbox_off   {id}  (and `profile`, from F1)
+##   hitbox_on               {id, profile}: the hitbox, and which of the move's `hits` it carries
+##   hitbox_off              {id}
 ##   cancel_open             {into: {action: move_id}}; a new cancel_open replaces the open window
 ##                           (windows do not stack), and a window closes at cancel_close or the clip's end
 ##   fx, sfx                 {name}
 ##   shake                   {strength}
-##   hitstop                 {frames}, 3 to 6
+##   tell                    {kind}: `glint` or `perilous`, the warning an enemy attack gives before it lands
+##   charge_hold             {action, frames, profile}: while `action` is held, the clip waits at this mark
+##                           for up to `frames`; held to the end, the move's later hits use `profile`
+##   pair_hit                {profile}: a blow of a paired move
+##   iframes_on/off, hyperarmour_on/off, parry_on/off, guard_on/off, airborne_on/off, cancel_close, recovery
+##                           (no arguments) open and close the windows of those names, or mark the moment
+## There is no hit-stop mark: how long a hit freezes both sides is the profile's `hitstop_frames`, applied
+## on contact.
 ##
 ## Marks are placed on the 60 Hz frame grid: frame_of and time_of convert. A method track keeps one key
 ## per time, so marks that share a frame are written on parallel tracks at that same path (see write);
@@ -22,7 +30,9 @@ extends RefCounted
 ## contact sheet use it from here.
 const TRACK := NodePath("Marks")
 const KINDS: Array[StringName] = [&"hitbox_on", &"hitbox_off", &"iframes_on", &"iframes_off", &"hyperarmour_on",
-		&"hyperarmour_off", &"cancel_open", &"cancel_close", &"recovery", &"fx", &"sfx", &"shake", &"hitstop"]
+		&"hyperarmour_off", &"cancel_open", &"cancel_close", &"recovery", &"fx", &"sfx", &"shake",
+		&"parry_on", &"parry_off", &"guard_on", &"guard_off", &"airborne_on", &"airborne_off",
+		&"tell", &"charge_hold", &"pair_hit"]
 ## Marks are counted in frames at this rate (the physics rate).
 const RATE := 60
 ## between() treats times this close as the same time. A clip saved to disk keeps its times as 32-bit
