@@ -4,7 +4,9 @@ extends Node
 ## move's gameplay time, and as that time passes a mark it acts on it, so hitboxes, invulnerability,
 ## hyper-armour and cancel windows follow the clip to the frame, at any frame rate and any delta.
 ## Presses come through the actor's InputBuffer, so one made up to 9 frames early comes out on the first
-## frame it can: when a cancel window that takes it opens, or when the actor is free again.
+## frame it can: when a cancel window that takes it opens, or when the actor is free again. An attack or a
+## dodge also needs stamina (Stats.can_act): a press it cannot pay for is used up and nothing starts, and
+## a move that starts spends its stamina_cost on that frame.
 ##
 ## The actor's child MoveRunner; Actor._ready sets `actor`, and the actor calls tick() once per physics
 ## frame (nothing here runs by itself). Moves are looked up by id in the Registry. The runner tells the
@@ -75,7 +77,9 @@ func tick(intent: Intent, delta: float) -> Vector3:
 	return velocity
 
 
-# Starts `move`. A dodge with the stick pushed (`intent` from this frame, or null) faces the stick at once.
+# Starts `move`, unless it is an attack or a dodge and the actor cannot act (no stamina, or exhausted): then
+# nothing changes, a move that plays goes on, and the press that asked is gone, since the callers have consumed
+# it. A dodge with the stick pushed (`intent` from this frame, or null) faces the stick at once.
 func _start(move: MoveData, intent: Intent) -> void:
 	if move == null:
 		push_error("MoveRunner: no move to start on '%s'" % actor.name)
@@ -84,6 +88,10 @@ func _start(move: MoveData, intent: Intent) -> void:
 	if not rig.tree.has_animation(move.clip):
 		push_error("MoveRunner: '%s' has no clip '%s' for move '%s'" % [actor.name, move.clip, move.id])
 		return
+	if (move.kind == MoveData.Kind.ATTACK or move.kind == MoveData.Kind.DODGE) and not actor.stats.can_act():
+		return
+	if move.stamina_cost > 0.0:
+		actor.stats.spend_stamina(move.stamina_cost)
 	if current != null:
 		_end(true)
 	current = move

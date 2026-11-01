@@ -11,22 +11,24 @@ extends CharacterBody3D
 ##   3. the intent's presses go into the input buffer, stamped with this frame
 ##   4. the runner ticks: the current move advances (its marks, a cancel window, its end), or a buffered
 ##      press starts one; this is how a press shows on the frame it is made
-##   5. on a frame with no move, locomotion turns the stick into a velocity, sprinting while dodge is held,
-##      and with the intent's face_target set the body turns toward the target (at the turn rate) rather
-##      than toward the way it goes, unless it sprints (a sprint runs where it goes, as in Souls); on a
-##      frame a move ran (one that ended this frame too), the velocity is the move's root motion, and
-##      locomotion takes it over, so it carries on from the move's speed when the move is done
-##   6. move_and_slide, with gravity when off the floor
-##   7. the body turns to locomotion's facing
-##   8. the rig is given the strafe (the way the body goes against the way it faces, when it keeps facing a
+##   5. on a frame with no move, locomotion turns the stick into a velocity, sprinting while dodge is held
+##      (and the actor can act: an exhausted actor jogs instead), and with the intent's face_target set the
+##      body turns toward the target (at the turn rate) rather than toward the way it goes, unless it sprints
+##      (a sprint runs where it goes, as in Souls); on a frame a move ran (one that ended this frame too), the
+##      velocity is the move's root motion, and locomotion takes it over, so it carries on from the move's
+##      speed when the move is done
+##   6. a sprint spends sprint_stamina a second, and the stats are ticked: stamina and posture come back
+##   7. move_and_slide, with gravity when off the floor
+##   8. the body turns to locomotion's facing
+##   9. the rig is given the strafe (the way the body goes against the way it faces, when it keeps facing a
 ##      target), which says whether locomotion plays backward, then the speed (see _rig_speed: while a move
 ##      plays it is not the speed the move carries, which would show as a run under it), and its exertion
 ##      while sprinting
-##   9. each foot is probed: a ray on `ik_surface` from 0.5 m above where the foot is in the clip's pose to
+##  10. each foot is probed: a ray on `ik_surface` from 0.5 m above where the foot is in the clip's pose to
 ##      0.5 m below it, whose hit (or miss) the rig stands the foot on
-##  10. the actor picks what to look at (the intent's look_target; else the nearest node in the group `poi`
+##  11. the actor picks what to look at (the intent's look_target; else the nearest node in the group `poi`
 ##      within 6 m and 100° of its facing, an actor at its head; else nothing) and the rig turns its head to it
-##  11. the rig is ticked: the only place it animates
+##  12. the rig is ticked: the only place it animates
 ## Holding dodge sprints only after the roll its press started is over, since locomotion does not run
 ## while a move does (Bloodborne-style: tap to roll, hold to run).
 
@@ -56,7 +58,7 @@ var buffer := InputBuffer.new()
 var frame := 0
 var locomotion: Locomotion
 var rig: Rig
-## The world point (Vector3) the actor chose to look at this frame, or null (see _physics_process, step 10).
+## The world point (Vector3) the actor chose to look at this frame, or null (see _physics_process, step 11).
 var look_target: Variant = null
 
 # The speed the rig's locomotion layer is given. With no move it is locomotion's. A move that starts is laid over
@@ -139,12 +141,16 @@ func _physics_process(delta: float) -> void:
 	if moved_by_move or runner.busy():
 		locomotion.carry(planar)
 	else:
-		planar = locomotion.tick(intent.move, intent.held.has(SPRINT_ACTION), delta)
+		planar = locomotion.tick(intent.move, intent.held.has(SPRINT_ACTION) and stats.can_act(), delta)
 		if _keeps_facing(intent):
 			var to_target := _flat_to(intent.face_target)
 			if not to_target.is_zero_approx():
 				locomotion.facing_yaw = Locomotion.turn_toward(facing_before, Locomotion.yaw_of(to_target),
 						deg_to_rad(locomotion.tuning.turn_rate_deg) * delta)
+	if locomotion.sprinting:
+		stats.drain_stamina(stats.tuning.sprint_stamina, delta)
+	# Guarding comes with the guard (it slows stamina's return); nothing holds one yet.
+	stats.tick(delta, false)
 	var fall := velocity.y
 	if not is_on_floor():
 		fall += get_gravity().y * delta

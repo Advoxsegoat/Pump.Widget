@@ -16,6 +16,7 @@ hitstop_frames = 4
 script = ExtResource("1_move")
 id = &"palm_cross"
 clip = &"palm_cross"
+stamina_cost = 14.0
 hits = {
 &"palm": SubResource("Resource_palm")
 }

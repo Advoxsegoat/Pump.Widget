@@ -8,3 +8,4 @@ id = &"dodge_roll"
 kind = 1
 clip = &"dodge_roll"
 root_motion_scale = 0.58
+stamina_cost = 18.0
