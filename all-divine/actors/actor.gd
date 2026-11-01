@@ -15,10 +15,12 @@ extends CharacterBody3D
 ## Each physics frame, in this order:
 ##   1. frame += 1
 ##   2. the brain thinks, giving an Intent (not once the actor is dead: the dead want nothing)
-##   3. the intent's presses go into the input buffer, stamped with this frame
+##   3. the intent's presses go into the input buffer, stamped with this frame's buffer_frame
 ##      Then, if the actor is frozen (hit-stop, see freeze), the frame is over: one frozen frame is counted off and
 ##      steps 4 to 13 do not happen, so its move, locomotion, velocity, stats, rig and scanner all stand still, while
-##      the brain went on thinking and its presses wait in the buffer (they last 9 frames, more than any freeze)
+##      the brain went on thinking and its presses wait in the buffer. They last 9 frames of the buffer's clock,
+##      which stands still while frozen, so a freeze never uses up a press: one made just before a cancel window
+##      opens still comes out on its first frame, however long the hit-stop in between
 ##   4. the runner ticks: the current move advances (its marks, a cancel window, its end), or a buffered
 ##      press starts one; this is how a press shows on the frame it is made
 ##   5. on a frame with no move, locomotion turns the stick into a velocity, sprinting while dodge is held
@@ -81,8 +83,11 @@ const HIT_REACT_POISE := 20.0
 var brain: Brain = Brain.new()
 var stats: Stats
 var buffer := InputBuffer.new()
-## Physics frames this actor has lived; the first is frame 1. Presses are buffered by it.
+## Physics frames this actor has lived; the first is frame 1.
 var frame := 0
+## `frame` less the frames spent frozen: the clock the input buffer keeps its time by (presses are stamped with it
+## and age by it), so that hit-stop does not count toward the 9 frames a press is good for.
+var buffer_frame := 0
 var locomotion: Locomotion
 var rig: Rig
 ## The world point (Vector3) the actor chose to look at this frame, or null (see _physics_process, step 11).
@@ -239,11 +244,13 @@ func die() -> void:
 
 func _physics_process(delta: float) -> void:
 	frame += 1
+	if frozen == 0:
+		buffer_frame += 1
 	var intent: Intent = brain.think(self, delta) if brain != null and not dead else null
 	if intent == null:
 		intent = Intent.new()
 	for action in intent.pressed:
-		buffer.push(action, frame)
+		buffer.push(action, buffer_frame)
 	if frozen > 0:
 		frozen -= 1
 		return

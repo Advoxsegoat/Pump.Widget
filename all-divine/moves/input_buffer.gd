@@ -4,7 +4,8 @@ extends RefCounted
 ## move it belongs to becomes possible (a cancel window opening, a recovery ending).
 ##
 ## Presses are pushed with the frame they happened on; consume hands out the newest one an action list
-## allows and forgets it. Frames are physics frames (60 per second), so 9 of them are 150 ms.
+## allows and forgets it. Frames are physics frames (60 per second), so 9 of them are 150 ms. The caller says which
+## frames: an Actor counts only those it was not frozen for (Actor.buffer_frame), so hit-stop does not use a press up.
 
 ## A press is good for this many frames after the one it happened on (ages 0 to WINDOW).
 const WINDOW := 9

@@ -89,6 +89,27 @@ func test_press_during_hit_stop_comes_out_after() -> void:
 	assert_eq(started, [[&"palm_jab", 1], [&"palm_cross", 19]], "the cross starts on frame 19, which is frame 16 plus 3")
 
 
+func _cross_frame(press_frame: int) -> Array:
+	# Where the cross starts when a second palm is pressed on `press_frame` and the jab lands on a target a metre
+	# away (frame 11, freezing both until frame 14); the jab is pressed on frame 1. [] if it never does.
+	var steps := [{"frames": 1, "press": [&"palm"]}, {"frames": press_frame - 2}, {"frames": 1, "press": [&"palm"]}, {"frames": 40}]
+	var run := Duel.make(self, steps)
+	var a: Actor = run["a"]
+	var started := []
+	a.runner.move_started.connect(func(m: MoveData) -> void: started.append([m.id, a.frame]))
+	await Duel.play_to(self, a, 30)
+	(run["arena"] as Node).free()
+	return started
+
+
+func test_the_buffer_does_not_age_during_hit_stop() -> void:
+	# With no freeze the jab's cross window opens on frame 16, and the oldest press it takes is 9 frames old: the one
+	# of frame 7. The jab lands on frame 11 and the freeze puts the window on frame 19, 12 frames after that press,
+	# but 3 of them were frozen, so the press has aged 9 and still comes out on the window's first frame.
+	assert_eq(await _cross_frame(7), [[&"palm_jab", 1], [&"palm_cross", 19]], "the oldest press the window allows")
+	assert_eq(await _cross_frame(6), [[&"palm_jab", 1]], "one frame older is past the 9 and is lost, freeze or not")
+
+
 func test_the_brain_thinks_while_frozen() -> void:
 	var steps := [{"frames": 1, "press": [&"palm"]}, {"frames": 11}, {"frames": 3, "move": Vector2(1, 0)}, {"frames": 10}]
 	var run := Duel.make(self, steps)

@@ -3,8 +3,8 @@ extends Node
 ## Plays an actor's moves. A move is a clip and the marks on it (moves/marks.gd): the runner keeps the
 ## move's gameplay time, and as that time passes a mark it acts on it, so hitboxes, invulnerability,
 ## hyper-armour and cancel windows follow the clip to the frame, at any frame rate and any delta.
-## Presses come through the actor's InputBuffer, so one made up to 9 frames early comes out on the first
-## frame it can: when a cancel window that takes it opens, or when the actor is free again. An attack or a
+## Presses come through the actor's InputBuffer, so one made up to 9 frames early (not counting frames of hit-stop)
+## comes out on the first frame it can: when a cancel window that takes it opens, or when the actor is free again. An attack or a
 ## dodge also needs stamina (Stats.can_act): a press it cannot pay for is used up and nothing starts, and
 ## a move that starts spends its stamina_cost on that frame.
 ##
@@ -67,13 +67,13 @@ func tick(intent: Intent, delta: float) -> Vector3:
 		actor.rig.set_move_time(time)
 		_pass_marks(before, time)
 	if current != null and not window.is_empty():
-		var action := actor.buffer.consume(window.keys(), actor.frame)
+		var action := actor.buffer.consume(window.keys(), actor.buffer_frame)
 		if action != &"":
 			_start(_fetch(window[action]), intent)
 	if current != null and time >= _anim.length - Marks.EPSILON:
 		_end(false)
 	if current == null:
-		var action := actor.buffer.consume(actor.def.moveset.keys(), actor.frame)
+		var action := actor.buffer.consume(actor.def.moveset.keys(), actor.buffer_frame)
 		if action != &"":
 			_start(_fetch(actor.def.moveset[action]), intent)
 	return velocity
