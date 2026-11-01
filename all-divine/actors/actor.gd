@@ -19,12 +19,13 @@ extends CharacterBody3D
 ##   6. move_and_slide, with gravity when off the floor
 ##   7. the body turns to locomotion's facing
 ##   8. the rig is given the strafe (the way the body goes against the way it faces, when it keeps facing a
-##      target), which says whether locomotion plays backward, then the speed, and its exertion while
-##      sprinting
+##      target), which says whether locomotion plays backward, then the speed (0 while a move plays: the
+##      move's clip poses the whole body, and the speed it carries would show as a run under it), and its
+##      exertion while sprinting
 ##   9. each foot is probed: a ray on `ik_surface` from 0.5 m above where the foot is in the clip's pose to
 ##      0.5 m below it, whose hit (or miss) the rig stands the foot on
 ##  10. the actor picks what to look at (the intent's look_target; else the nearest node in the group `poi`
-##      within 6 m and 100° of its facing; else nothing) and the rig turns its head to it
+##      within 6 m and 100° of its facing, an actor at its head; else nothing) and the rig turns its head to it
 ##  11. the rig is ticked: the only place it animates
 ## Holding dodge sprints only after the roll its press started is over, since locomotion does not run
 ## while a move does (Bloodborne-style: tap to roll, hold to run).
@@ -35,12 +36,11 @@ signal brain_changed(brain: Brain)
 const SPRINT_ACTION := &"dodge"
 ## Below this ground speed, in m/s, the body is not going anywhere, so it has no strafe.
 const STRAFE_MIN_SPEED := 0.1
-## The feet the rig plants, and the probe under each: from PROBE_UP above the foot, PROBE_LENGTH down.
+## The feet the rig plants, and the probe under each (on the ik_surface layer, the visible ground, steps and
+## all): from PROBE_UP above the foot, PROBE_LENGTH down.
 const FEET: Array[StringName] = [&"foot_l", &"foot_r"]
 const PROBE_UP := 0.5
 const PROBE_LENGTH := 1.0
-## The physics layer the feet stand on (ik_surface, layer 2): the visible ground, steps and all.
-const IK_SURFACE_MASK := 1 << 1
 ## Members of this group are points of interest: an actor glances at the nearest within LOOK_RANGE metres
 ## and LOOK_FIELD_DEG degrees of its facing, when its brain gives it nothing to look at.
 const POI_GROUP := &"poi"
@@ -76,6 +76,10 @@ func _ready() -> void:
 	locomotion = Locomotion.new(def.locomotion)
 	locomotion.facing_yaw = rotation.y
 	runner.actor = self
+	# Where in its breath each actor starts comes from its name, so that actors standing together do not
+	# breathe in step. The hash is stirred (rand_from_seed) first: names that end in different characters,
+	# like Knuckle2 and Knuckle3, hash to neighbours, which alone would put them a thousandth of a radian apart.
+	rig.set_breath_phase(float(rand_from_seed(hash(name))[0] % 6283) / 1000.0)
 
 
 ## Hands the actor to `b` from the next frame on.
@@ -97,6 +101,18 @@ func place(at: Transform3D) -> void:
 ## The way the body faces, in the world: its +Z.
 func facing() -> Vector3:
 	return global_basis.z
+
+
+## Turns the body to face `yaw` (radians about up; 0 faces +Z) at once, with no turn rate, and locomotion
+## with it so that it carries on from there. What a roll does to face the stick, and an aim assist to face a foe.
+func snap_facing(yaw: float) -> void:
+	locomotion.facing_yaw = yaw
+	rotation.y = yaw
+
+
+## Where others look at this actor: its head, def.look_height above its feet.
+func head_point() -> Vector3:
+	return global_position + Vector3.UP * def.look_height
 
 
 ## True while a move's marks make the actor invulnerable (a roll's iframes).
@@ -130,7 +146,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	rotation.y = locomotion.facing_yaw
 	var back := rig.set_strafe(_strafe_angle(intent, planar))
-	rig.set_locomotion(locomotion.speed, back)
+	rig.set_locomotion(0.0 if runner.busy() else locomotion.speed, back)
 	if locomotion.sprinting:
 		rig.set_exertion(1.0)
 	_probe_feet()
@@ -144,13 +160,14 @@ func _probe_feet() -> void:
 	var space := get_world_3d().direct_space_state
 	for foot in FEET:
 		var from := rig.animated_foot(foot) + Vector3.UP * PROBE_UP
-		var query := PhysicsRayQueryParameters3D.create(from, from + Vector3.DOWN * PROBE_LENGTH, IK_SURFACE_MASK, [get_rid()])
+		var query := PhysicsRayQueryParameters3D.create(from, from + Vector3.DOWN * PROBE_LENGTH, Layers.IK_SURFACE, [get_rid()])
 		var hit := space.intersect_ray(query)
 		rig.set_foot_ground(foot, null if hit.is_empty() else {position = hit.position, normal = hit.normal})
 
 
 # What to look at: the intent's look_target; failing that, the nearest point of interest (a Node3D in
-# POI_GROUP, not this actor or part of it) within LOOK_RANGE and LOOK_FIELD_DEG of the facing; or null.
+# POI_GROUP, not this actor or part of it) within LOOK_RANGE and LOOK_FIELD_DEG of the facing, where an
+# actor's point is its head; or null.
 func _choose_look_target(intent: Intent) -> Variant:
 	if intent.look_target is Vector3:
 		return intent.look_target
@@ -160,7 +177,7 @@ func _choose_look_target(intent: Intent) -> Variant:
 		var poi := node as Node3D
 		if poi == null or poi == self or is_ancestor_of(poi):
 			continue
-		var point := poi.global_position
+		var point := (poi as Actor).head_point() if poi is Actor else poi.global_position
 		var distance := global_position.distance_to(point)
 		if distance > best_distance:
 			continue

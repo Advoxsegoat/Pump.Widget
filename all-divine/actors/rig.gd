@@ -213,6 +213,13 @@ func set_exertion(exertion: float) -> void:
 		breathing.exertion = clampf(exertion, 0.0, 1.0)
 
 
+## Sets where the breath is, `phase` in radians (0 is mid-breath on the way in, PI / 2 the top): where it
+## starts, so that bodies standing together do not breathe in step. It carries on from there.
+func set_breath_phase(phase: float) -> void:
+	if breathing != null:
+		breathing.phase = fposmod(phase, TAU)
+
+
 ## A blow travelling along `dir` (world space, from the striker through the body) with `strength` (1 is an
 ## ordinary hit): the upper body is knocked away from it and springs back (HitReact).
 func hit_react(dir: Vector3, strength: float) -> void:

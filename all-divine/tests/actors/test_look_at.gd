@@ -262,3 +262,19 @@ func test_actor_does_not_look_at_itself() -> void:
 	actor.add_to_group(&"poi")
 	await frames(3)
 	assert_eq(actor.look_target, null)
+
+
+func test_actor_poi_is_looked_at_head_height() -> void:
+	# Another actor that is a point of interest is looked at in the eyes, not at the feet.
+	var arena := TestArena.make(self)
+	var actor := TestArena.spawn(arena, load(ABARAX) as ActorDef, Brain.new())
+	var other := TestArena.spawn(arena, load(ABARAX) as ActorDef, Brain.new(), Vector3(0.5, 0.0, 3.0))
+	other.add_to_group(&"poi")
+	await frames(5)
+	var at: Variant = actor.rig.looking_at()
+	assert_true(at is Vector3, "he looks at something")
+	if at is Vector3:
+		assert_near((at as Vector3).y, other.head_point().y, 0.01)
+		assert_vec_near(at, other.head_point(), 0.01, "at his head")
+	assert_near(other.head_point().y, 1.6, 0.01)
+	assert_eq(actor.look_target, other.head_point())

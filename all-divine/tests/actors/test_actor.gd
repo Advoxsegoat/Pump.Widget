@@ -122,6 +122,52 @@ func test_place_stands_the_actor_there_at_rest_facing_its_way() -> void:
 	assert_near(actor.rotation.y, deg_to_rad(-120), 1e-4, "still facing that way")
 
 
+# snap_facing turns the body and locomotion's facing at once, with no turn rate in it: what a roll does to face the
+# stick, and what an aim assist does to face a foe.
+func test_snap_facing_turns_the_body_and_locomotion_at_once() -> void:
+	var arena := TestArena.make(self)
+	var actor := TestArena.spawn(arena, _def(), Brain.new())
+	actor.snap_facing(2.0)
+	assert_near(actor.locomotion.facing_yaw, 2.0, 1e-9)
+	assert_near(actor.rotation.y, 2.0, 1e-9)
+	await frames(3)
+	assert_near(actor.rotation.y, 2.0, 1e-6, "and he keeps facing it, wanting nothing")
+	assert_vec_near(actor.facing(), Vector3(sin(2.0), 0, cos(2.0)), 1e-6)
+
+
+# head_point is where others look at an actor: look_height above his feet, wherever he stands.
+func test_head_point_is_look_height_above_the_feet() -> void:
+	var arena := TestArena.make(self)
+	var actor := TestArena.spawn(arena, _def(), Brain.new(), Vector3(2, 0, -1))
+	assert_near(_def().look_height, 1.6, 1e-9, "the default")
+	assert_vec_near(actor.head_point(), Vector3(2, 1.6, -1), 1e-6)
+	var tall := _def().duplicate() as ActorDef
+	tall.look_height = 2.4
+	var giant := TestArena.spawn(arena, tall, Brain.new(), Vector3(-3, 0, 0))
+	assert_vec_near(giant.head_point(), Vector3(-3, 2.4, 0), 1e-6, "a taller def, a higher point")
+
+
+# The roll carries the speed he ran at (locomotion.speed), so that he runs on from it when the roll is done. The
+# rig's locomotion layer, which the move layer is laid over, rests meanwhile: it would show a run under the roll.
+func test_locomotion_layer_rests_while_a_move_plays() -> void:
+	var arena := TestArena.make(self)
+	var ahead := Vector2(0, 1)
+	var brain := ScriptBrain.new([{"frames": 40, "move": ahead}, {"frames": 1, "press": [&"dodge"], "move": ahead}, {"frames": 60}])
+	var actor := TestArena.spawn(arena, _def(), brain)
+	await frames(30)
+	assert_true(float(actor.rig.tree.get(Rig.LOCO_SPEED)) > 3.0, "running: %s" % actor.rig.tree.get(Rig.LOCO_SPEED))
+	while not actor.runner.busy():
+		await frames(1)
+	await frames(5)
+	assert_true(actor.runner.busy(), "mid-roll")
+	assert_true(actor.locomotion.speed > 1.0, "the roll carries speed (%s)" % actor.locomotion.speed)
+	assert_near(float(actor.rig.tree.get(Rig.LOCO_SPEED)), 0.0, 1e-9, "but the locomotion layer is at rest")
+	while actor.runner.busy():
+		await frames(1)
+	await frames(1)
+	assert_near(float(actor.rig.tree.get(Rig.LOCO_SPEED)), actor.locomotion.speed, 1e-6, "and takes the speed up again when the roll is over")
+
+
 # Ten seconds on a pad resting at each reading, one actor per reading, 6 m apart.
 func test_drift_does_not_move_actor() -> void:
 	var drifts: Array[Vector2] = [Vector2(0.15, 0), Vector2(0.15, 0.15), Vector2(0.19, 0.19), Vector2(0.12, 0.17), Vector2(-0.19, 0.19)]

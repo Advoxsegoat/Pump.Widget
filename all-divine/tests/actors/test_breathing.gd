@@ -74,6 +74,33 @@ func test_modifiers_run_once_per_tick() -> void:
 	assert_true(r.shown_pose(&"spine_03").is_equal_approx(before), "a zero tick changes nothing")
 
 
+func test_breath_phase_sets_where_the_breath_starts() -> void:
+	# At the top of the breath (PI / 2) the chest is already as far back as it goes; at the default phase (0)
+	# it has barely left mid-breath after one tick.
+	var r := rig(); var top := rig(); var still := rig()
+	still.breathing.active = false
+	top.set_breath_phase(PI / 2)
+	r.tick(DT); top.tick(DT); still.tick(DT)
+	assert_near(_tilt(r, still, &"spine_02"), 0.0, 0.1, "phase 0: mid-breath")
+	assert_near(_tilt(top, still, &"spine_02"), 1.5, 0.1, "phase PI / 2: the top")
+	assert_near(top.breathing.phase, PI / 2 + TAU * 0.25 * DT, 1e-6, "and it carries on from there")
+	top.set_breath_phase(TAU + 1.0)
+	assert_near(top.breathing.phase, 1.0, 1e-6, "a phase is kept within a turn")
+
+
+func test_two_actors_do_not_breathe_in_step() -> void:
+	# Each actor starts its breath at a phase taken from its name, so a crowd does not heave together. The
+	# names differ only in their last letter, which is the case a bare hash would leave in step.
+	var arena := TestArena.make(self)
+	var a := TestArena.spawn(arena, load(ABARAX) as ActorDef, Brain.new(), Vector3(-2, 0, 0), "A")
+	var b := TestArena.spawn(arena, load(ABARAX) as ActorDef, Brain.new(), Vector3(2, 0, 0), "B")
+	await frames(30)
+	var chest_a := a.rig.global_basis.inverse() * a.rig.shown_pose(&"spine_02").basis.y
+	var chest_b := b.rig.global_basis.inverse() * b.rig.shown_pose(&"spine_02").basis.y
+	var apart := rad_to_deg(chest_a.angle_to(chest_b))
+	assert_true(apart > 0.2, "their chests are at different points of the breath (%.3f° apart)" % apart)
+
+
 func test_sprinting_exerts() -> void:
 	var arena := TestArena.make(self)
 	var brain := ScriptBrain.new([{"frames": 30, "move": Vector2(0, 1), "hold": [&"dodge"]}, {"frames": 60}])

@@ -16,5 +16,7 @@ extends Resource
 @export var max_stamina := 100.0
 @export var max_posture := 100.0
 @export var poise := 10.0
+## How high the head is above the feet, in metres: where others look at the actor (Actor.head_point).
+@export var look_height := 1.6
 ## Clips the rig must have, and that must not leave the bind pose showing (see ClipChecker).
 @export var required_clips := PackedStringArray(["idle", "walk", "jog", "sprint"])

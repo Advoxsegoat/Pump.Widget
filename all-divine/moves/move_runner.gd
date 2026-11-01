@@ -93,9 +93,7 @@ func _start(move: MoveData, intent: Intent) -> void:
 	_root_track = _anim.find_track(rig.tree.root_motion_track, Animation.TYPE_POSITION_3D) if move.root_motion else -1
 	rig.play_move(move.clip, move.blend_in)
 	if move.kind == MoveData.Kind.DODGE and intent != null and intent.move.length() > 0.0:
-		var yaw := Locomotion.yaw_of(intent.move)
-		actor.locomotion.facing_yaw = yaw
-		actor.rotation.y = yaw
+		actor.snap_facing(Locomotion.yaw_of(intent.move))
 	move_started.emit(move)
 	_pass_marks(BEFORE_START, 0.0)
 
