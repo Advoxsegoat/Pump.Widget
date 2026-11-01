@@ -19,9 +19,9 @@ extends CharacterBody3D
 ##   6. move_and_slide, with gravity when off the floor
 ##   7. the body turns to locomotion's facing
 ##   8. the rig is given the strafe (the way the body goes against the way it faces, when it keeps facing a
-##      target), which says whether locomotion plays backward, then the speed (0 while a move plays: the
-##      move's clip poses the whole body, and the speed it carries would show as a run under it), and its
-##      exertion while sprinting
+##      target), which says whether locomotion plays backward, then the speed (see _rig_speed: while a move
+##      plays it is not the speed the move carries, which would show as a run under it), and its exertion
+##      while sprinting
 ##   9. each foot is probed: a ray on `ik_surface` from 0.5 m above where the foot is in the clip's pose to
 ##      0.5 m below it, whose hit (or miss) the rig stands the foot on
 ##  10. the actor picks what to look at (the intent's look_target; else the nearest node in the group `poi`
@@ -58,6 +58,12 @@ var locomotion: Locomotion
 var rig: Rig
 ## The world point (Vector3) the actor chose to look at this frame, or null (see _physics_process, step 10).
 var look_target: Variant = null
+
+# The speed the rig's locomotion layer is given. With no move it is locomotion's. A move that starts is laid over
+# that layer in its blend_in, so the layer keeps the speed it had until the move is fully in (dropping it to
+# idle at once would pop the legs under a third of the move); then it eases down to 0 over the blend_in, so the
+# speed a roll carries on from (locomotion.speed, root motion) never shows as a run under the move.
+var _rig_speed := 0.0
 
 @onready var runner: MoveRunner = $MoveRunner
 
@@ -146,13 +152,23 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	rotation.y = locomotion.facing_yaw
 	var back := rig.set_strafe(_strafe_angle(intent, planar))
-	rig.set_locomotion(0.0 if runner.busy() else locomotion.speed, back)
+	rig.set_locomotion(_next_rig_speed(delta), back)
 	if locomotion.sprinting:
 		rig.set_exertion(1.0)
 	_probe_feet()
 	look_target = _choose_look_target(intent)
 	rig.look_at_point(look_target)
 	rig.tick(delta)
+
+
+# _rig_speed for this frame (see there).
+func _next_rig_speed(delta: float) -> float:
+	if not runner.busy():
+		_rig_speed = locomotion.speed
+	elif rig.move_weight() >= 1.0:
+		var blend_in := maxf(runner.current.blend_in, delta)
+		_rig_speed = move_toward(_rig_speed, 0.0, locomotion.tuning.sprint_speed / blend_in * delta)
+	return _rig_speed
 
 
 # Casts each foot's probe and hands the rig what it hit: {position, normal}, or null.

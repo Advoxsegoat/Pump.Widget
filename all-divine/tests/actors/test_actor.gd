@@ -148,7 +148,8 @@ func test_head_point_is_look_height_above_the_feet() -> void:
 
 
 # The roll carries the speed he ran at (locomotion.speed), so that he runs on from it when the roll is done. The
-# rig's locomotion layer, which the move layer is laid over, rests meanwhile: it would show a run under the roll.
+# rig's locomotion layer, which the move layer is laid over, rests once the roll is fully in (10 frames on: the
+# layer is in after 3 and the speed then eases to 0 in 3 more): it would show a run under the roll.
 func test_locomotion_layer_rests_while_a_move_plays() -> void:
 	var arena := TestArena.make(self)
 	var ahead := Vector2(0, 1)
@@ -158,7 +159,7 @@ func test_locomotion_layer_rests_while_a_move_plays() -> void:
 	assert_true(float(actor.rig.tree.get(Rig.LOCO_SPEED)) > 3.0, "running: %s" % actor.rig.tree.get(Rig.LOCO_SPEED))
 	while not actor.runner.busy():
 		await frames(1)
-	await frames(5)
+	await frames(10)
 	assert_true(actor.runner.busy(), "mid-roll")
 	assert_true(actor.locomotion.speed > 1.0, "the roll carries speed (%s)" % actor.locomotion.speed)
 	assert_near(float(actor.rig.tree.get(Rig.LOCO_SPEED)), 0.0, 1e-9, "but the locomotion layer is at rest")
@@ -166,6 +167,39 @@ func test_locomotion_layer_rests_while_a_move_plays() -> void:
 		await frames(1)
 	await frames(1)
 	assert_near(float(actor.rig.tree.get(Rig.LOCO_SPEED)), actor.locomotion.speed, 1e-6, "and takes the speed up again when the roll is over")
+
+
+# A move started from a jog fades in over 0.05 s with the jog still under it, so the locomotion layer must keep
+# the jog's speed until the move layer is fully in: if it dropped to idle at once, the legs would pop to the idle
+# stance under a third of the move. Over the first six ticks of the jab no leg bone moves (against the pelvis)
+# by more than 1.5 times the most it moved in one tick of the jog just before.
+func test_a_move_started_from_a_jog_does_not_pop_the_legs() -> void:
+	var arena := TestArena.make(self)
+	var ahead := Vector2(0, 1)
+	var brain := ScriptBrain.new([{"frames": 40, "move": ahead}, {"frames": 1, "press": [&"palm"], "move": ahead}, {"frames": 30, "move": ahead}])
+	var actor := TestArena.spawn(arena, _def(), brain)
+	var legs: Array[StringName] = [&"thigh_l", &"thigh_r", &"calf_l", &"calf_r", &"foot_l", &"foot_r"]
+	var shown := {}  # actor frame -> {leg bone: where it is against the pelvis, in the actor's own axes}
+	while actor.frame < 46:
+		await frames(1)
+		var legs_now := {}
+		for bone in legs:
+			legs_now[bone] = actor.global_basis.inverse() * (actor.rig.bone_global(bone) - actor.rig.bone_global(&"pelvis"))
+		shown[actor.frame] = legs_now
+	assert_true(float(actor.rig.tree.get(Rig.LOCO_SPEED)) < actor.def.locomotion.jog_speed, "the jab's layer has let the jog go by the end of it")
+	var jogging := _largest_leg_step(shown, 34, 40)
+	var jab := _largest_leg_step(shown, 40, 46)
+	assert_true(jogging > 0.005, "the jog moves the legs (%.4f m a tick)" % jogging)
+	assert_true(jab <= 1.5 * jogging, "the legs move %.4f m in a tick of the jab, %.4f m in a tick of the jog" % [jab, jogging])
+
+
+# The most any leg bone in `shown` (see above) moves in one tick, from frame `from` to frame `to`.
+func _largest_leg_step(shown: Dictionary, from: int, to: int) -> float:
+	var most := 0.0
+	for f in range(from + 1, to + 1):
+		for bone: StringName in shown[f]:
+			most = maxf(most, ((shown[f][bone] as Vector3) - (shown[f - 1][bone] as Vector3)).length())
+	return most
 
 
 # Ten seconds on a pad resting at each reading, one actor per reading, 6 m apart.
