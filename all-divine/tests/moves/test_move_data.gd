@@ -126,6 +126,25 @@ func test_locomotion_tuning_defaults_are_the_measured_ground_speeds_to_a_tenth()
 	assert_eq([plain.walk_speed, plain.jog_speed, plain.sprint_speed], [1.0, 5.5, 8.5], "the class defaults agree")
 
 
+func test_combat_tuning_defaults_are_the_numbers_of_the_abarax_file() -> void:
+	var tuning := load("res://data/tuning/combat_abarax.tres") as CombatTuning
+	assert_ne(tuning, null)
+	var plain := CombatTuning.new()
+	for property: Dictionary in plain.get_property_list():
+		if property["usage"] & PROPERTY_USAGE_SCRIPT_VARIABLE:
+			assert_eq(tuning.get(property["name"]), plain.get(property["name"]), "the file and the class agree on %s" % property["name"])
+
+
+func test_combat_tuning_numbers() -> void:
+	var t := CombatTuning.new()
+	assert_eq([t.stamina_regen_rate, t.stamina_regen_delay, t.guard_regen_scale, t.exhausted_until, t.sprint_stamina], [45.0, 0.6, 0.4, 20.0, 12.0])
+	assert_eq([t.posture_regen_delay, t.posture_regen_rate, t.broken_time], [1.5, 20.0, 2.0])
+	assert_eq([t.guard_arc_deg, t.guard_speed_scale, t.parry_posture_scale, t.catch_posture], [75.0, 0.45, 2.0, 50.0])
+	assert_eq([t.finisher_range, t.finisher_arc_deg], [1.6, 60.0])
+	assert_eq([t.aim_assist_deg, t.aim_assist_range, t.aim_turn_rate_deg], [30.0, 3.5, 540.0])
+	assert_eq(t.knockback_decay, 10.0)
+
+
 func test_abarax_is_defined_by_data() -> void:
 	var def := Registry.fetch(&"actors", &"abarax") as ActorDef
 	if def == null:
