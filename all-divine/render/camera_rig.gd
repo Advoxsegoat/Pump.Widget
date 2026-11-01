@@ -41,6 +41,8 @@ const TRAUMA_DECAY := 2.5
 const SHAKE_RATE := 16.0
 ## The noise's seed: the same shake every time.
 const SHAKE_SEED := 7
+## A ray whose downward slope is less than this (the sine of its angle to the plane) is parallel to the plane.
+const PARALLEL := 1e-6
 
 @export var target: Node3D
 ## Seconds the follow takes to settle, roughly.
@@ -99,6 +101,24 @@ func focus_distance() -> float:
 		return DISTANCE
 	var to_target := target.get_global_transform_interpolated().origin - camera.global_position
 	return to_target.dot(-camera.global_basis.z)
+
+
+## The point of the plane y = `plane_y` that the window point `screen` (a mouse position, in the coordinates of the
+## viewport the PixelStage is in) shows, or null if there is no telling: the ray through that pixel of the picture
+## runs parallel to the plane (a level camera), or the rig has no stage to say how the window maps onto the picture.
+## The stage shows the World image scaled up by a whole number, centred, shifted by what the camera's snap took away
+## (PixelStage.world_pixel undoes all that), and the camera's ray through the pixel it comes to is run down to the
+## plane. Where the player's cursor is on the ground (at the height of the feet) is where Abarax faces on the
+## keyboard and mouse.
+func cursor_ground(screen: Vector2, plane_y: float) -> Variant:
+	if not is_instance_valid(stage) or not stage.is_inside_tree() or not camera.is_inside_tree():
+		return null
+	var pixel := stage.world_pixel(screen)
+	var origin := camera.project_ray_origin(pixel)
+	var direction := camera.project_ray_normal(pixel)
+	if absf(direction.y) < PARALLEL:
+		return null
+	return origin + direction * ((plane_y - origin.y) / direction.y)
 
 
 ## Goes straight to the target with no easing, for spawns and tests. If the target was just

@@ -108,6 +108,18 @@ static func draw_offset(sub: Vector2, k: int) -> Vector2i:
 	return Vector2i(roundi((-float(PixelSnap.MARGIN) - sub.x) * k), roundi((-float(PixelSnap.MARGIN) + sub.y) * k))
 
 
+## Where in the World image (the 642x362 pixels the camera renders) the window point `screen` shows: the inverse of
+## what _draw does. `screen` is in the coordinates of the viewport the stage is in (a mouse position). It need not be
+## on the picture: a point on a bar or past the edge is where the picture would be if it went on. It is fractional,
+## which is what Camera3D.project_ray_origin takes.
+func world_pixel(screen: Vector2) -> Vector2:
+	var local := get_global_transform_with_canvas().affine_inverse() * screen
+	var window := Vector2i(size)
+	var k := scale_for(window)
+	var corner := Vector2(layout(window).position + draw_offset(subpixel, k))
+	return (local - corner) / k
+
+
 func _draw() -> void:
 	var window := Vector2i(size)
 	var rect := layout(window)

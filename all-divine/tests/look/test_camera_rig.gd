@@ -111,3 +111,86 @@ func test_camera_survives_having_no_target() -> void:
 
 func test_physics_interpolation_enabled() -> void:
 	assert_true(ProjectSettings.get_setting("physics/common/physics_interpolation"))
+
+
+# --- cursor_ground: a point of the window to a point of the ground ---
+
+# The windows to try: the game's 1920x1080 (3x), a 1366x768 laptop (2x, with bars above and below), and a window
+# hardly bigger than the picture (1x, with bars on every side).
+const WINDOWS: Array[Vector2i] = [Vector2i(1920, 1080), Vector2i(1366, 768), Vector2i(700, 400)]
+
+
+# Makes the stage fill a window of `window` pixels with its top-left corner at the origin.
+func _fit_stage(window: Vector2i) -> void:
+	stage.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	stage.size = Vector2(window)
+
+
+# Where the window shows the ground point `ground`, the way the stage draws it: the camera's pixel in the 642x362
+# World image, scaled up and placed at the layout's corner, moved by the draw offset the sub-pixel shift gives.
+func _window_point_of(ground: Vector3, window: Vector2i) -> Vector2:
+	var k := PixelStage.scale_for(window)
+	var corner := Vector2(PixelStage.layout(window).position + PixelStage.draw_offset(stage.subpixel, k))
+	return corner + rig.camera.unproject_position(ground) * k
+
+
+func test_cursor_ground_finds_a_ground_point_it_was_shown_at() -> void:
+	target.position = Vector3(0.013, 0, 0.021)   # off the texel grid: the stage is drawn shifted
+	target.reset_physics_interpolation()
+	rig.snap_now()
+	assert_true(stage.subpixel.length() > 0.1, "the camera snapped away from where it looks, so the picture is shifted")
+	for window in WINDOWS:
+		_fit_stage(window)
+		for ground in [Vector3(0, 0, 0), Vector3(3.5, 0, -2.0), Vector3(-5.25, 0, 4.0), Vector3(1.1, 0, 6.3)]:
+			var found: Variant = rig.cursor_ground(_window_point_of(ground, window), 0.0)
+			assert_true(found is Vector3, "a ray meets the ground (%s, %s)" % [ground, window])
+			if found is Vector3:
+				assert_vec_near(found, ground, 1e-3, "the point shown at %s in a %s window" % [ground, window])
+
+
+func test_cursor_ground_reads_the_picture_not_the_window() -> void:
+	# The middle of the picture shows what the camera looks at: the target. A metre east of it is 32 texels right
+	# of the middle, k pixels each; a metre north is sin(40 degrees) of a metre up the screen. Not the same
+	# formulas as the stage's, so this catches a layout that is wrong the same way in both directions.
+	target.position = Vector3(0.013, 0, 0.021)
+	target.reset_physics_interpolation()
+	rig.snap_now()
+	for window in WINDOWS:
+		_fit_stage(window)
+		var k := PixelStage.scale_for(window)
+		var tolerance := PixelSnap.TEXEL / k   # the stage rounds its shift to whole output pixels
+		var middle := Vector2(window) / 2.0
+		var here: Variant = rig.cursor_ground(middle, 0.0)
+		assert_true(here is Vector3)
+		if here is Vector3:
+			assert_vec_near(here, target.position, tolerance, "the middle of a %s window is the target" % window)
+		var east: Variant = rig.cursor_ground(middle + Vector2(32.0 * k, 0), 0.0)
+		var north: Variant = rig.cursor_ground(middle + Vector2(0, -32.0 * k * sin(deg_to_rad(40.0))), 0.0)
+		assert_true(east is Vector3 and north is Vector3)
+		if east is Vector3 and north is Vector3:
+			assert_vec_near(east, target.position + Vector3(1, 0, 0), tolerance, "a metre of picture to the right is a metre east")
+			assert_vec_near(north, target.position + Vector3(0, 0, -1), tolerance, "and one up is a metre away from the camera")
+
+
+func test_cursor_ground_meets_the_plane_it_is_given() -> void:
+	rig.snap_now()
+	_fit_stage(WINDOWS[0])
+	var up := Vector3(2.0, 1.5, -1.0)   # a point at head height: the plane through it is 1.5 m up
+	var found: Variant = rig.cursor_ground(_window_point_of(up, WINDOWS[0]), 1.5)
+	assert_true(found is Vector3)
+	if found is Vector3:
+		assert_vec_near(found, up, 1e-3, "the same ray meets a higher plane further along it")
+		assert_near((found as Vector3).y, 1.5, 1e-4)
+
+
+func test_cursor_ground_is_null_for_a_ray_parallel_to_the_plane() -> void:
+	rig.snap_now()
+	_fit_stage(WINDOWS[0])
+	rig.rotation.x = 0.0   # looking level: every ray runs along the ground
+	assert_eq(rig.cursor_ground(Vector2(960, 540), 0.0), null)
+
+
+func test_cursor_ground_is_null_without_a_stage() -> void:
+	rig.snap_now()
+	rig.stage = null
+	assert_eq(rig.cursor_ground(Vector2(960, 540), 0.0), null, "with no stage there is no telling how the window maps")
