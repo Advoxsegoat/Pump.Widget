@@ -107,7 +107,7 @@ It was copied word for word from the build ledger before the scratch workspace w
 - Task 7: minor (deferred): rig.gd silently leaves skeleton null when the model has no Skeleton3D.
 - Task 7: minor (deferred): test_contact_sheet.gd comment nits (line 39 centre comment unclear; line 8 "picture of the actor" includes ground/shadow).
 - Task 8: minor (deferred): clip_checker skips the T-pose rule silently when the rig has no Skeleton3D — report it.
-- Task 8: minor (deferred): hitstop frames 3.5 passes via int(frames) — require whole numbers.
+- Task 8: minor (deferred): hitstop frames 3.5 passes via int(frames) — require whole numbers. **Since then:** F1 Task 3 removed the `hitstop` mark; hit-stop is `HitProfile.hitstop_frames`, an int, so a half frame cannot be written.
 - Task 8: minor (deferred): _check_actor does four jobs + `reached` out-param — extract the BFS; _angle duplicated from test_rig.gd; reads Rig Hitboxes children by name (add Rig.hitbox_ids()).
 - Task 8: minor (deferred): clip_check tests pin "3 moves, 1 actors" (will break in F1). **Since then:** F1 Task 1 took the counts from the Registry.
 - Task 8: minor (deferred): InputBuffer same-frame tie rule (later push wins) untested.
