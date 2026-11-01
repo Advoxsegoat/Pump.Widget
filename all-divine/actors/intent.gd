@@ -13,8 +13,9 @@ var face_target: Variant = null
 ## A world point (Vector3) for the head and eyes to look at, or null.
 var look_target: Variant = null
 ## A world point (Vector3) the body turns toward while an attack winds up, or null: the foe aim assist picked, or
-## the one locked on to. Only an attack whose MoveData has `aim` turns to it, and only until its first hitbox
-## comes on, or, with `track`, until its last goes off.
+## the one locked on to, or, on the keyboard and mouse with no foe near, the cursor's ground point. Only an attack
+## whose MoveData has `aim` turns to it, and only until its first hitbox comes on, or, with `track`, until its last
+## goes off.
 var aim_target: Variant = null
 ## Whether the turn toward aim_target goes on through the attack's active frames too (lock-on tracks its foe
 ## through a swing; aim assist turns him only in the wind-up).

@@ -335,4 +335,29 @@ func test_keyboard_mouse_aims_from_the_cursor_not_the_stick_or_the_facing() -> v
 	var east := _foe(_toward(90, 2))
 	assert_eq(brain.think(player, DT).aim_target, east.global_position, "the foe by the cursor, not the one he faces or walks toward")
 	east.die()
-	assert_eq(brain.think(player, DT).aim_target, null, "and with that one gone, none: the one ahead is nowhere near the cursor")
+	assert_eq(brain.think(player, DT).aim_target, Vector3(5, 0, 0), "and with that one gone, the cursor itself: the one ahead is nowhere near it")
+
+
+func test_keyboard_mouse_with_no_foe_in_the_cone_aims_the_swing_at_the_cursor() -> void:
+	# The cursor 60 degrees off the way he faces and no foe at all: the jab's wind-up (10 frames, 9 degrees each at
+	# 540 a second) turns him onto it, the body trailing no facing, and no further.
+	_use(Inputs.Device.KEYBOARD_MOUSE)
+	var cursor := _toward(60, 5)
+	_rig_at(cursor)
+	var player := _swinger()
+	assert_eq(AimBrain.new().think(player, DT).aim_target, cursor, "the cursor's ground point is the aim")
+	await frames(3)
+	assert_near(rad_to_deg(player.locomotion.facing_yaw), 18.0, 0.01, "two ticks of the wind-up in, at 9 degrees a frame (not the idle turn rate, 12)")
+	await frames(8)
+	assert_true(_yaw_off(player, _yaw_toward(cursor)) < ON_TARGET, "by the frame the hitbox comes on he faces the cursor: %s" % rad_to_deg(player.locomotion.facing_yaw))
+	assert_eq(player.rig.active_hitboxes(), [&"palm_l"], "and that is the frame the jab's hand comes on")
+
+
+func test_a_gamepad_with_no_foe_swings_along_its_facing_whatever_the_cursor() -> void:
+	var cursor := _toward(60, 5)
+	var rig := _rig_at(cursor)
+	var player := _swinger()
+	assert_eq(AimBrain.new().think(player, DT).aim_target, null)
+	await frames(16)
+	assert_near(player.locomotion.facing_yaw, 0.0, 1e-6, "no foe and no stick: no turn")
+	assert_eq(rig.asked, [], "and the cursor was not even asked")

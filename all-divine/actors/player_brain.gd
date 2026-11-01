@@ -5,9 +5,11 @@ extends Brain
 ##
 ## The aim is two things (see _aim). On the keyboard and mouse, with no foe locked on to, he faces the cursor
 ## (face_target is the point of the ground under it), since there is no stick to say where he looks. And his
-## attacks turn him toward a foe (aim_target): the lock-on target when there is one; otherwise the nearest live foe (the
-## group `lockable`) within the tuning's aim_assist_range and aim_assist_deg of the direction he means (the
-## stick, or the way he faces when it rests, or the cursor on the keyboard and mouse); otherwise nothing.
+## attacks turn him toward a foe (aim_target): the lock-on target when there is one; otherwise the nearest live
+## foe (the group `lockable`) within the tuning's aim_assist_range and aim_assist_deg of the direction he means (the
+## stick, or the way he faces when it rests, or the cursor on the keyboard and mouse); otherwise, on the keyboard
+## and mouse, the cursor's ground point itself, so a swing turns him to where the player points rather than along a
+## facing that trails the cursor; otherwise (a stick) nothing.
 
 ## The camera's yaw (CameraRig.yaw()). At 0 the camera looks along -Z, so pushing up goes to -Z and
 ## pushing right to +X; a turned camera turns the stick with it.
@@ -53,14 +55,17 @@ func _aim(actor: Actor, intent: Intent) -> void:
 		intent.aim_target = locked
 		return
 	var toward := intent.move
+	var cursor: Variant = null
 	if Inputs.last_device() == Inputs.Device.KEYBOARD_MOUSE:
-		var cursor: Variant = _cursor(actor)
+		cursor = _cursor(actor)
 		if cursor is Vector3:
 			intent.face_target = cursor
 			toward = _flat_from(actor, cursor)
 	if toward.is_zero_approx():
 		toward = Vector2(actor.facing().x, actor.facing().z)
-	intent.aim_target = _assist_target(actor, toward)
+	# With no foe near the line, a stick swings along the way he faces, but a cursor is a place to swing at.
+	var foe: Variant = _assist_target(actor, toward)
+	intent.aim_target = foe if foe != null else cursor
 
 
 # The point of the ground (at the height of the actor's feet) under the cursor, or null: no camera, or it cannot say.
