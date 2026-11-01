@@ -60,6 +60,8 @@ var locomotion: Locomotion
 var rig: Rig
 ## The world point (Vector3) the actor chose to look at this frame, or null (see _physics_process, step 11).
 var look_target: Variant = null
+## Set for good by die().
+var dead := false
 
 # The speed the rig's locomotion layer is given. With no move it is locomotion's. A move that starts is laid over
 # that layer in its blend_in, so the layer keeps the speed it had until the move is fully in (dropping it to
