@@ -1,5 +1,5 @@
 extends TestCase
-## The F0 content: the moves, Abarax's definition and his locomotion tuning, as committed under data/.
+## The content so far: the moves, Abarax's definition and his locomotion tuning, as committed under data/.
 ## The marks are checked against the table the clips were authored from; the rules they must keep are
 ## ClipChecker's (test_clip_checker.gd).
 
@@ -23,9 +23,29 @@ const TABLE := {
 		[15, &"hitbox_on", {"id": &"palm_r", "profile": &"palm"}],
 		[15, &"fx", {"name": &"palm_trail", "bone": &"hand_r"}],
 		[20, &"hitbox_off", {"id": &"palm_r"}],
-		[20, &"cancel_open", {"into": {&"palm": &"palm_jab"}}],
+		[20, &"cancel_open", {"into": {&"palm": &"palm_hook"}}],
 		[25, &"recovery", {}],
-		[25, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dodge_roll"}}],
+		[25, &"cancel_open", {"into": {&"palm": &"palm_hook", &"dodge": &"dodge_roll"}}],
+	],
+	# The hook and the heavy palm's contact frames are where their clips show full extension (F1 Task 7's sheet).
+	&"palm_hook": [
+		[5, &"sfx", {"name": &"palm_whoosh"}],
+		[15, &"hitbox_on", {"id": &"palm_r", "profile": &"hook"}],
+		[15, &"fx", {"name": &"palm_trail", "bone": &"hand_r"}],
+		[20, &"hitbox_off", {"id": &"palm_r"}],
+		[30, &"recovery", {}],
+		[30, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dodge_roll"}}],
+	],
+	&"palm_heavy": [
+		[10, &"hyperarmour_on", {}],
+		[10, &"charge_hold", {"action": &"heavy", "frames": 40, "profile": &"charged"}],
+		[15, &"sfx", {"name": &"whoosh_heavy"}],
+		[15, &"hitbox_on", {"id": &"palm_r", "profile": &"heavy"}],
+		[15, &"fx", {"name": &"palm_trail", "bone": &"hand_r"}],
+		[20, &"hitbox_off", {"id": &"palm_r"}],
+		[20, &"hyperarmour_off", {}],
+		[40, &"recovery", {}],
+		[45, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dodge_roll"}}],
 	],
 	&"dodge_roll": [
 		[0, &"sfx", {"name": &"roll_cloth"}],
@@ -37,8 +57,8 @@ const TABLE := {
 		[22, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dodge_roll"}}],
 	],
 }
-const LENGTHS := {&"palm_jab": 35, &"palm_cross": 40, &"dodge_roll": 30}
-const STEPS := {&"palm_jab": 12, &"palm_cross": 12, &"dodge_roll": 0}
+const LENGTHS := {&"palm_jab": 35, &"palm_cross": 40, &"palm_hook": 45, &"palm_heavy": 57, &"dodge_roll": 30}
+const STEPS := {&"palm_jab": 12, &"palm_cross": 12, &"palm_hook": 12, &"palm_heavy": 12, &"dodge_roll": 0}
 # The reactions every actor shares (F1 Task 5): [length in frames, whether the move takes the clip's root
 # motion, then its marks as in TABLE]. Each is smooth. The death's thud and dust are on the frame its hips
 # meet the ground.
@@ -67,7 +87,8 @@ func _clip(n: StringName) -> Animation:
 
 
 func test_moves_are_registered_with_their_kinds_and_clips() -> void:
-	var want := {&"palm_jab": MoveData.Kind.ATTACK, &"palm_cross": MoveData.Kind.ATTACK, &"dodge_roll": MoveData.Kind.DODGE}
+	var want := {&"palm_jab": MoveData.Kind.ATTACK, &"palm_cross": MoveData.Kind.ATTACK, &"palm_hook": MoveData.Kind.ATTACK,
+			&"palm_heavy": MoveData.Kind.ATTACK, &"dodge_roll": MoveData.Kind.DODGE}
 	for id: StringName in want:
 		var move := Registry.fetch(&"moves", id) as MoveData
 		if move == null:
@@ -114,6 +135,31 @@ func test_abarax_jab_and_cross_have_a_palm_profile() -> void:
 				[0.0, false, HitProfile.Height.MID, HitProfile.Perilous.NONE, &"impact_palm"], "%s: the rest is the default" % id)
 	assert_eq((Registry.fetch(&"moves", &"palm_jab") as MoveData).hits[&"palm"].hitstop_frames, 3)
 	assert_eq((Registry.fetch(&"moves", &"palm_cross") as MoveData).hits[&"palm"].hitstop_frames, 4)
+
+
+func test_the_hook_has_a_hook_profile() -> void:
+	var move := Registry.fetch(&"moves", &"palm_hook") as MoveData
+	assert_eq(move.hits.keys(), [&"hook"])
+	var p := move.hits[&"hook"] as HitProfile
+	assert_eq([p.damage, p.poise_damage, p.posture_damage, p.guard_stamina, p.hitstop_frames, p.shake, p.knockback],
+			[13.0, 12.0, 10.0, 14.0, 5, 0.3, 2.0])
+	assert_eq([p.staggers, p.height, p.perilous, p.impact_sound], [false, HitProfile.Height.MID, HitProfile.Perilous.NONE, &"impact_palm"])
+	assert_eq(move.stamina_cost, 16.0)
+
+
+func test_the_heavy_palm_has_a_heavy_and_a_charged_profile() -> void:
+	var move := Registry.fetch(&"moves", &"palm_heavy") as MoveData
+	assert_eq(Array(move.hits.keys()).size(), 2)
+	# [damage, poise, posture, guard_stamina, hitstop_frames, shake, knockback]
+	var want := {&"heavy": [22.0, 25.0, 22.0, 24.0, 6, 0.5, 3.0], &"charged": [34.0, 40.0, 35.0, 34.0, 6, 0.8, 5.0]}
+	for name: StringName in want:
+		var p := move.hits.get(name) as HitProfile
+		if p == null:
+			fail("hits[%s] is a HitProfile" % name)
+			continue
+		assert_eq([p.damage, p.poise_damage, p.posture_damage, p.guard_stamina, p.hitstop_frames, p.shake, p.knockback], want[name], str(name))
+		assert_eq([p.staggers, p.impact_sound], [true, &"impact_heavy"], "%s staggers and lands heavy" % name)
+	assert_eq(move.stamina_cost, 24.0)
 
 
 func test_the_roll_hits_nothing() -> void:
@@ -176,7 +222,7 @@ func test_roll_root_motion_scale_makes_the_roll_cover_three_metres() -> void:
 
 
 func test_attacks_keep_the_clips_own_root_motion_scale() -> void:
-	for id in [&"palm_jab", &"palm_cross"]:
+	for id in [&"palm_jab", &"palm_cross", &"palm_hook", &"palm_heavy"]:
 		assert_eq((Registry.fetch(&"moves", id) as MoveData).root_motion_scale, 1.0, str(id))
 
 
@@ -218,7 +264,7 @@ func test_abarax_is_defined_by_data() -> void:
 		fail("abarax is a registered ActorDef")
 		return
 	assert_eq(def.id, &"abarax")
-	assert_eq(def.moveset, {&"palm": &"palm_jab", &"dodge": &"dodge_roll"})
+	assert_eq(def.moveset, {&"palm": &"palm_jab", &"heavy": &"palm_heavy", &"dodge": &"dodge_roll"})
 	assert_eq(def.max_hp, 100.0); assert_eq(def.max_stamina, 100.0); assert_eq(def.max_posture, 100.0); assert_eq(def.poise, 10.0)
 	assert_eq(def.required_clips, PackedStringArray(["idle", "walk", "jog", "sprint"]))
 	assert_eq(def.locomotion, load("res://data/tuning/abarax_locomotion.tres"))

@@ -448,7 +448,7 @@ func test_a_hits_entry_that_is_not_a_hit_profile_is_reported() -> void:
 
 func test_unpaired_parry_window_is_reported() -> void:
 	# (The jab is stepped at 12 fps, so these marks sit on its 5-frame grid.)
-	for window in ["parry", "guard", "airborne"]:
+	for window in ["parry", "guard", "airborne", "hyperarmour"]:
 		var on := StringName(window + "_on")
 		var off := StringName(window + "_off")
 		var problems := _jab(_jab_marks([], [_m(5, on)]))
@@ -690,7 +690,7 @@ func test_real_data_passes() -> void:
 func test_real_data_has_the_f0_moves_and_abarax() -> void:
 	# Later work adds moves and actors, so this names what must be there and not how many there are.
 	var moves := Array(Registry.ids(&"moves"))
-	for id in ["dodge_roll", "palm_cross", "palm_jab"]:
+	for id in ["dodge_roll", "palm_cross", "palm_hook", "palm_heavy", "palm_jab"]:
 		assert_true(moves.has(id), "the move %s" % id)
 	assert_true(Array(Registry.ids(&"actors")).has("abarax"), "the actor abarax")
 

@@ -442,7 +442,7 @@ tracks/57/keys = {
 }, {
 "args": [{
 &"into": {
-&"palm": &"palm_jab"
+&"palm": &"palm_hook"
 }
 }],
 "method": &"cancel_open"
@@ -450,7 +450,7 @@ tracks/57/keys = {
 "args": [{
 &"into": {
 &"dodge": &"dodge_roll",
-&"palm": &"palm_jab"
+&"palm": &"palm_hook"
 }
 }],
 "method": &"cancel_open"

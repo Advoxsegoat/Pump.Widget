@@ -14,7 +14,8 @@ extends RefCounted
 ##   every fx names an FxDef in the Registry kind `fx` and every sfx a SoundCue in the kind `sounds` (a mark with
 ##       no name, or one the data does not have, is reported), and an fx's optional `bone` is a bone of the rig
 ##   every hit profile of a move is a HitProfile with hitstop_frames 3 to 6
-##   parry_on/parry_off, guard_on/guard_off and airborne_on/airborne_off come as on-then-off pairs
+##   parry_on/parry_off, guard_on/guard_off, airborne_on/airborne_off and hyperarmour_on/hyperarmour_off come as
+##       on-then-off pairs
 ##   every mark is a known kind and lies within [0, the clip's length]
 ##   cancel_open's `into` names existing moves; hitbox ids are hitboxes of the rig; `neutral_variant`
 ##       names an existing move
@@ -47,6 +48,7 @@ const WINDOW_PAIRS := {
 	"parry": [&"parry_on", &"parry_off"],
 	"guard": [&"guard_on", &"guard_off"],
 	"airborne": [&"airborne_on", &"airborne_off"],
+	"hyperarmour": [&"hyperarmour_on", &"hyperarmour_off"],
 }
 ## The reaction that needs no recovery: the clip ends with the actor on the ground.
 const DEATH := &"death"

@@ -2,7 +2,7 @@ extends TestCase
 ## What a cancel leaves behind. When a move is cancelled into another, nothing of the first may carry on in
 ## the second: its hitboxes are off, its invulnerability and armour are off, and its cancel window is gone
 ## (the new move has its own, from its own marks). Tested on the real clips' windows: palm_jab opens
-## {palm: palm_cross} at f15 and {palm, dodge} at f20; palm_cross opens {palm: palm_jab} at f20 and
+## {palm: palm_cross} at f15 and {palm, dodge} at f20; palm_cross opens {palm: palm_hook} at f20 and
 ## {palm, dodge} at f25; dodge_roll has iframes on f3 to f15 and opens {palm, dodge} at f22. The jab's hitbox
 ## is palm_l (on at f10, off at f15), the cross's is palm_r (f15 to f20).
 ##
@@ -69,7 +69,7 @@ func test_jab_cancelled_into_cross_turns_its_hitbox_off() -> void:
 	assert_false(cancel["recovery"], "and the jab's recovery with it")
 	assert_eq(_at(run, 40)["hitboxes"], [] as Array[StringName], "the cross's own hand comes on at its f15, frame 41")
 	assert_eq(_at(run, 41)["hitboxes"], [&"palm_r"])
-	assert_eq(_at(run, 46)["window"], {&"palm": &"palm_jab"}, "the cross's window at its f20")
+	assert_eq(_at(run, 46)["window"], {&"palm": &"palm_hook"}, "the cross's window at its f20")
 
 
 func test_jab_cancelled_into_roll_at_its_recovery_window() -> void:

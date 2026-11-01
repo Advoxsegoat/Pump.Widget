@@ -1,28 +1,32 @@
 [gd_resource type="AnimationLibrary" format=3]
 
-[ext_resource type="Animation" path="res://assets/anim/abarax/death.tres" id="1_nedxh"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/dodge_roll.tres" id="2_dmner"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/flinch.tres" id="3_rl8gj"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/idle.tres" id="4_ac2f2"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/jog.tres" id="5_twp2h"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/palm_cross.tres" id="6_3vthc"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/palm_jab.tres" id="7_i013r"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/sprint.tres" id="8_5qdjv"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/stagger.tres" id="9_myh5j"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/t_pose.tres" id="10_lk47n"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/walk.tres" id="11_j4yx3"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/death.tres" id="1_rl8gj"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/dodge_roll.tres" id="2_ac2f2"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/flinch.tres" id="3_twp2h"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/idle.tres" id="4_3vthc"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/jog.tres" id="5_i013r"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/palm_cross.tres" id="6_5qdjv"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/palm_heavy.tres" id="7_myh5j"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/palm_hook.tres" id="8_lk47n"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/palm_jab.tres" id="9_j4yx3"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/sprint.tres" id="10_bi1kx"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/stagger.tres" id="11_6l7io"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/t_pose.tres" id="12_b56rc"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/walk.tres" id="13_tkyni"]
 
 [resource]
 _data = {
-&"death": ExtResource("1_nedxh"),
-&"dodge_roll": ExtResource("2_dmner"),
-&"flinch": ExtResource("3_rl8gj"),
-&"idle": ExtResource("4_ac2f2"),
-&"jog": ExtResource("5_twp2h"),
-&"palm_cross": ExtResource("6_3vthc"),
-&"palm_jab": ExtResource("7_i013r"),
-&"sprint": ExtResource("8_5qdjv"),
-&"stagger": ExtResource("9_myh5j"),
-&"t_pose": ExtResource("10_lk47n"),
-&"walk": ExtResource("11_j4yx3")
+&"death": ExtResource("1_rl8gj"),
+&"dodge_roll": ExtResource("2_ac2f2"),
+&"flinch": ExtResource("3_twp2h"),
+&"idle": ExtResource("4_3vthc"),
+&"jog": ExtResource("5_i013r"),
+&"palm_cross": ExtResource("6_5qdjv"),
+&"palm_heavy": ExtResource("7_myh5j"),
+&"palm_hook": ExtResource("8_lk47n"),
+&"palm_jab": ExtResource("9_j4yx3"),
+&"sprint": ExtResource("10_bi1kx"),
+&"stagger": ExtResource("11_6l7io"),
+&"t_pose": ExtResource("12_b56rc"),
+&"walk": ExtResource("13_tkyni")
 }
