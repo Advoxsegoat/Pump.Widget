@@ -338,5 +338,28 @@ class Urls(unittest.TestCase):
                 fetch.require_web_url(bad)
 
 
+class CommittedSources(unittest.TestCase):
+    """The real tools/assets/sources.json: every pack is well formed, and the ones the clip library
+    reads (ual1, ual2) are there with the hashes the builds were made against."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.sources = fetch.load_sources(fetch.sources_path())
+
+    def test_every_pack_has_a_recorded_sha256(self):
+        for source_id, source in self.sources.items():
+            with self.subTest(pack=source_id):
+                self.assertRegex(source.get("sha256", ""), r"^[0-9a-f]{64}$")
+
+    def test_ual2_is_the_second_universal_animation_library(self):
+        ual2 = self.sources["ual2"]
+        self.assertEqual(ual2["kind"], "itch")
+        self.assertEqual(ual2["page"], "https://quaternius.itch.io/universal-animation-library-2")
+        self.assertEqual(ual2["sha256"], "4008ea208a604773a2b2177d965f0f5d3195498b5bf838c3f5785d68e95f2a68")
+
+    def test_ual1_is_still_the_first(self):
+        self.assertEqual(self.sources["ual1"]["page"], "https://quaternius.itch.io/universal-animation-library")
+
+
 if __name__ == "__main__":
     unittest.main()
