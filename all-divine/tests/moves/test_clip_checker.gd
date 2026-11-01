@@ -4,6 +4,7 @@ extends TestCase
 const RIG := "res://actors/abarax/abarax_rig.tscn"
 const LIB := "res://assets/anim/abarax/library.tres"
 const BAD_DATA := "res://tests/fixtures/moves/bad_data"
+const REACH_DATA := "res://tests/fixtures/moves/reach_data"
 const HITBOXES: PackedStringArray = ["palm_l", "palm_r"]
 const MOVES: PackedStringArray = ["palm_jab", "palm_cross", "dodge_roll"]
 
@@ -27,11 +28,22 @@ func _anim(frames: int, step_fps: int, marks: Array) -> Animation:
 	return a
 
 
+# A HitProfile with the given hit-stop and perilous kind.
+func _profile(hitstop := 3, perilous := HitProfile.Perilous.NONE) -> HitProfile:
+	var p := HitProfile.new()
+	p.hitstop_frames = hitstop
+	p.perilous = perilous
+	return p
+
+
+# A move of `kind`. An attack comes with the one profile, palm, that the jab's hitbox_on names.
 func _move(id: StringName, kind: MoveData.Kind) -> MoveData:
 	var move := MoveData.new()
 	move.id = id
 	move.kind = kind
 	move.clip = id
+	if kind == MoveData.Kind.ATTACK:
+		move.hits = {&"palm": _profile()}
 	return move
 
 
@@ -65,6 +77,27 @@ func _roll_marks(without: Array = [], extra: Array = []) -> Array:
 
 func _jab(marks: Array = _jab_marks()) -> PackedStringArray:
 	return ClipChecker.new().check_move(_move(&"palm_jab", MoveData.Kind.ATTACK), _anim(35, 12, marks), HITBOXES, MOVES)
+
+
+# check_move for `move` on a clip with `marks` (smooth, 60 frames), as an actor of `team` would play it.
+func _check(move: MoveData, marks: Array, team := ActorDef.Team.PLAYER) -> PackedStringArray:
+	return ClipChecker.new().check_move(move, _anim(60, 0, marks), HITBOXES, MOVES, team)
+
+
+# The marks of an attack whose hitbox is on at frame `on` (it carries the profile palm) and that has a tell
+# of `tell_kind` at frame `tell_at` (-1: none).
+func _attack_marks(on: int, tell_at := -1, tell_kind := &"glint") -> Array:
+	var marks := [
+		_m(0, &"sfx", {"name": &"palm_whoosh"}),
+		_m(0, &"fx", {"name": &"palm_trail"}),
+		_m(on, &"hitbox_on", {"id": &"palm_l", "profile": &"palm"}),
+		_m(on + 5, &"hitbox_off", {"id": &"palm_l"}),
+		_m(on + 5, &"cancel_open", {"into": {&"palm": &"palm_cross"}}),
+		_m(on + 10, &"recovery"),
+	]
+	if tell_at >= 0:
+		marks.append(_m(tell_at, &"tell", {"kind": tell_kind}))
+	return marks
 
 
 func _roll(marks: Array = _roll_marks()) -> PackedStringArray:
@@ -160,13 +193,13 @@ func test_hitbox_turned_on_twice_is_reported() -> void:
 
 func test_each_hitbox_is_judged_on_its_own() -> void:
 	# palm_r goes on and never off, while palm_l is fine.
-	var problems := _jab(_jab_marks([], [_m(10, &"hitbox_on", {"id": &"palm_r"})]))
+	var problems := _jab(_jab_marks([], [_m(10, &"hitbox_on", {"id": &"palm_r", "profile": &"palm"})]))
 	assert_true(_has_problem(problems, ["never off", "palm_r"]), "\n".join(problems))
 	assert_false(_has_problem(problems, ["never off", "palm_l"]), "\n".join(problems))
 
 
 func test_two_hits_by_one_hitbox_are_fine() -> void:
-	var marks := _jab_marks([&"recovery"], [_m(25, &"hitbox_on", {"id": &"palm_l"}), _m(30, &"hitbox_off", {"id": &"palm_l"}), _m(30, &"recovery")])
+	var marks := _jab_marks([&"recovery"], [_m(25, &"hitbox_on", {"id": &"palm_l", "profile": &"palm"}), _m(30, &"hitbox_off", {"id": &"palm_l"}), _m(30, &"recovery")])
 	assert_eq(_jab(marks), PackedStringArray(), "on, off, on, off, and the recovery after the last off")
 
 
@@ -176,7 +209,7 @@ func test_an_attack_with_no_hitbox_is_reported() -> void:
 
 
 func test_hitbox_that_the_rig_does_not_have_is_reported() -> void:
-	var marks := _jab_marks([&"hitbox_on", &"hitbox_off"], [_m(10, &"hitbox_on", {"id": &"palm_x"}), _m(15, &"hitbox_off", {"id": &"palm_x"})])
+	var marks := _jab_marks([&"hitbox_on", &"hitbox_off"], [_m(10, &"hitbox_on", {"id": &"palm_x", "profile": &"palm"}), _m(15, &"hitbox_off", {"id": &"palm_x"})])
 	var problems := _jab(marks)
 	assert_true(_has_problem(problems, ["palm_x", "rig"]), "\n".join(problems))
 
@@ -319,6 +352,187 @@ func test_the_problems_name_the_frame() -> void:
 	assert_true(_has_problem(problems, ["hitbox_on", "no id", "f10"]), "\n".join(problems))
 
 
+# --- hit profiles ---
+
+func test_hitbox_profile_must_exist() -> void:
+	var marks := _jab_marks([&"hitbox_on"], [_m(10, &"hitbox_on", {"id": &"palm_l", "profile": &"slam"})])
+	var problems := _jab(marks)
+	assert_true(_has_problem(problems, ["unknown profile", "slam", "f10"]), "\n".join(problems))
+	assert_eq(problems.size(), 1, "\n".join(problems))
+
+
+func test_hitbox_without_a_profile_is_reported() -> void:
+	var problems := _jab(_jab_marks([&"hitbox_on"], [_m(10, &"hitbox_on", {"id": &"palm_l"})]))
+	assert_true(_has_problem(problems, ["hitbox_on", "no profile", "f10"]), "\n".join(problems))
+
+
+func test_every_hitbox_of_an_attack_names_one_of_its_profiles() -> void:
+	var move := _move(&"palm_jab", MoveData.Kind.ATTACK)
+	move.hits = {&"palm": _profile(), &"heavy": _profile(6)}
+	var marks := _jab_marks([&"hitbox_on"], [_m(10, &"hitbox_on", {"id": &"palm_l", "profile": &"heavy"})])
+	assert_eq(_check(move, marks), PackedStringArray())
+
+
+func test_attack_without_hits_is_reported() -> void:
+	var move := _move(&"palm_jab", MoveData.Kind.ATTACK)
+	move.hits = {}
+	var problems := _check(move, _jab_marks())
+	assert_true(_has_problem(problems, ["no hits"]), "\n".join(problems))
+	assert_eq(problems.size(), 1, "the hitbox's profile is not also called unknown: \n" + "\n".join(problems))
+
+
+func test_hits_of_other_moves_are_not_required() -> void:
+	assert_eq(_roll(), PackedStringArray(), "the roll has no hits and needs none")
+
+
+func test_a_hit_profiles_hitstop_must_be_three_to_six_frames() -> void:
+	for frames in [2, 7, 0, 12]:
+		var move := _move(&"palm_jab", MoveData.Kind.ATTACK)
+		move.hits = {&"palm": _profile(frames)}
+		var problems := _check(move, _jab_marks())
+		assert_true(_has_problem(problems, ["palm_jab", "'palm'", "hitstop_frames", str(frames)]), "frames %d: %s" % [frames, "\n".join(problems)])
+	for frames in [3, 4, 5, 6]:
+		var move := _move(&"palm_jab", MoveData.Kind.ATTACK)
+		move.hits = {&"palm": _profile(frames)}
+		assert_eq(_check(move, _jab_marks()), PackedStringArray(), "frames %d" % frames)
+
+
+func test_every_profile_is_held_to_the_hitstop_range_even_one_no_hitbox_uses() -> void:
+	var move := _move(&"palm_jab", MoveData.Kind.ATTACK)
+	move.hits = {&"palm": _profile(), &"spare": _profile(9)}
+	assert_true(_has_problem(_check(move, _jab_marks()), ["'spare'", "hitstop_frames", "9"]))
+
+
+func test_a_hits_entry_that_is_not_a_hit_profile_is_reported() -> void:
+	var move := _move(&"palm_jab", MoveData.Kind.ATTACK)
+	move.hits = {&"palm": _profile(), &"odd": "not a profile"}
+	var problems := _check(move, _jab_marks())
+	assert_true(_has_problem(problems, ["'odd'", "not a HitProfile"]), "\n".join(problems))
+	assert_eq(problems.size(), 1, "\n".join(problems))
+
+
+# --- windows, tells and charge holds ---
+
+func test_unpaired_parry_window_is_reported() -> void:
+	# (The jab is stepped at 12 fps, so these marks sit on its 5-frame grid.)
+	for window in ["parry", "guard", "airborne"]:
+		var on := StringName(window + "_on")
+		var off := StringName(window + "_off")
+		var problems := _jab(_jab_marks([], [_m(5, on)]))
+		assert_true(_has_problem(problems, [window, "never off", "f5"]), "%s: %s" % [window, "\n".join(problems)])
+		problems = _jab(_jab_marks([], [_m(5, off)]))
+		assert_true(_has_problem(problems, [window, "before", "f5"]), "%s: %s" % [window, "\n".join(problems)])
+		problems = _jab(_jab_marks([], [_m(0, on), _m(5, off), _m(30, on)]))
+		assert_true(_has_problem(problems, [window, "never off", "f30"]), "%s: %s" % [window, "\n".join(problems)])
+		assert_eq(_jab(_jab_marks([], [_m(5, on), _m(10, off)])), PackedStringArray(), "%s: on then off is fine" % window)
+
+
+func test_each_window_kind_is_judged_on_its_own() -> void:
+	var problems := _jab(_jab_marks([], [_m(5, &"parry_on"), _m(10, &"guard_off")]))
+	assert_true(_has_problem(problems, ["parry", "never off"]), "\n".join(problems))
+	assert_true(_has_problem(problems, ["guard", "before"]), "\n".join(problems))
+
+
+func test_reaction_without_recovery_is_reported() -> void:
+	var move := _move(&"flinch", MoveData.Kind.REACTION)
+	var marks := [_m(0, &"sfx"), _m(0, &"fx")]
+	var problems := _check(move, marks)
+	assert_true(_has_problem(problems, ["flinch", "recovery"]), "\n".join(problems))
+	assert_eq(_check(move, marks + [_m(12, &"recovery")]), PackedStringArray())
+	problems = _check(move, marks + [_m(12, &"recovery"), _m(14, &"recovery")])
+	assert_true(_has_problem(problems, ["recovery", "2"]), "\n".join(problems))
+
+
+func test_a_death_needs_no_recovery() -> void:
+	var death := _move(&"death", MoveData.Kind.REACTION)
+	assert_eq(_check(death, [_m(0, &"sfx"), _m(0, &"fx")]), PackedStringArray())
+
+
+func test_a_reaction_needs_no_hits_or_hitbox() -> void:
+	var move := _move(&"stagger", MoveData.Kind.REACTION)
+	assert_eq(_check(move, [_m(0, &"sfx"), _m(0, &"fx"), _m(20, &"recovery")]), PackedStringArray())
+
+
+func test_tell_kind_must_be_glint_or_perilous() -> void:
+	var move := _move(&"palm_jab", MoveData.Kind.ATTACK)
+	for kind in [&"glint", &"perilous"]:
+		assert_eq(_check(move, _attack_marks(20, 0, kind)), PackedStringArray(), str(kind))
+	var problems := _check(move, _attack_marks(20, 0, &"flash"))
+	assert_true(_has_problem(problems, ["tell", "kind", "flash", "f0"]), "\n".join(problems))
+	problems = _check(move, _attack_marks(20) + [_m(0, &"tell")])
+	assert_true(_has_problem(problems, ["tell", "no kind", "f0"]), "\n".join(problems))
+
+
+func test_enemy_attack_needs_a_tell_twelve_frames_ahead() -> void:
+	var move := _move(&"knuckle_jab", MoveData.Kind.ATTACK)
+	var enemy := ActorDef.Team.ENEMY
+	var problems := _check(move, _attack_marks(15, 10), enemy)
+	assert_true(_has_problem(problems, ["knuckle_jab", "tell", "12", "f15"]), "tell at f10, hitbox_on at f15: " + "\n".join(problems))
+	assert_true(_has_problem(_check(move, _attack_marks(20), enemy), ["tell"]), "no tell at all")
+	assert_true(_has_problem(_check(move, _attack_marks(20, 25), enemy), ["tell"]), "a tell after the blow is no warning")
+	assert_true(_has_problem(_check(move, _attack_marks(17, 6), enemy), ["tell"]), "11 frames ahead is not enough")
+	assert_eq(_check(move, _attack_marks(17, 5), enemy), PackedStringArray(), "12 frames ahead is")
+	assert_eq(_check(move, _attack_marks(20, 0, &"perilous"), enemy), PackedStringArray(), "either kind of tell warns")
+
+
+func test_the_tell_is_ahead_of_the_first_hitbox() -> void:
+	# A second blow later in the clip is not warned separately: the tell is ahead of the first hitbox_on.
+	var move := _move(&"knuckle_jab", MoveData.Kind.ATTACK)
+	var marks := _attack_marks(20, 5) + [_m(26, &"hitbox_on", {"id": &"palm_r", "profile": &"palm"}), _m(28, &"hitbox_off", {"id": &"palm_r"})]
+	assert_eq(_check(move, marks, ActorDef.Team.ENEMY), PackedStringArray())
+
+
+func test_the_player_needs_no_tell() -> void:
+	var move := _move(&"palm_jab", MoveData.Kind.ATTACK)
+	assert_eq(_check(move, _attack_marks(5)), PackedStringArray())
+	assert_eq(_check(move, _attack_marks(5), ActorDef.Team.PLAYER), PackedStringArray())
+
+
+func test_only_attacks_of_enemies_need_a_tell() -> void:
+	var feint := _move(&"knuckle_feint", MoveData.Kind.OTHER)
+	assert_eq(_check(feint, [_m(0, &"sfx"), _m(0, &"fx")], ActorDef.Team.ENEMY), PackedStringArray())
+
+
+func test_perilous_hit_needs_a_perilous_tell() -> void:
+	var enemy := ActorDef.Team.ENEMY
+	for perilous in [HitProfile.Perilous.SWEEP, HitProfile.Perilous.THRUST, HitProfile.Perilous.GRAB]:
+		var move := _move(&"knuckle_sweep", MoveData.Kind.ATTACK)
+		move.hits = {&"palm": _profile(3, perilous)}
+		var problems := _check(move, _attack_marks(20, 0, &"glint"), enemy)
+		assert_true(_has_problem(problems, ["knuckle_sweep", "perilous", "tell"]), "perilous %d: %s" % [perilous, "\n".join(problems)])
+		assert_eq(problems.size(), 1, "the glint is a tell ahead of the blow; only the kind is wrong: \n" + "\n".join(problems))
+		assert_eq(_check(move, _attack_marks(20, 0, &"perilous"), enemy), PackedStringArray(), "perilous %d with its tell" % perilous)
+
+
+func test_a_perilous_tell_on_an_ordinary_move_is_fine() -> void:
+	var move := _move(&"knuckle_jab", MoveData.Kind.ATTACK)
+	assert_eq(_check(move, _attack_marks(20, 0, &"perilous"), ActorDef.Team.ENEMY), PackedStringArray())
+
+
+func test_charge_hold_is_only_in_an_attack_and_names_a_profile_it_has() -> void:
+	var hold := {"action": &"palm", "frames": 12, "profile": &"heavy"}
+	var move := _move(&"palm_jab", MoveData.Kind.ATTACK)
+	move.hits = {&"palm": _profile(), &"heavy": _profile(6)}
+	assert_eq(_check(move, _attack_marks(20) + [_m(10, &"charge_hold", hold)]), PackedStringArray())
+	var problems := _check(move, _attack_marks(20) + [_m(10, &"charge_hold", {"action": &"palm", "frames": 12, "profile": &"slam"})])
+	assert_true(_has_problem(problems, ["charge_hold", "unknown profile", "slam", "f10"]), "\n".join(problems))
+	problems = _check(move, _attack_marks(20) + [_m(10, &"charge_hold", {"action": &"palm", "frames": 12})])
+	assert_true(_has_problem(problems, ["charge_hold", "no profile", "f10"]), "\n".join(problems))
+	for kind in [MoveData.Kind.DODGE, MoveData.Kind.OTHER, MoveData.Kind.REACTION]:
+		var other := _move(&"gesture", kind)
+		problems = _check(other, [_m(0, &"sfx"), _m(0, &"fx"), _m(10, &"charge_hold", hold)])
+		assert_true(_has_problem(problems, ["gesture", "charge_hold", "attack", "f10"]), "kind %d: %s" % [kind, "\n".join(problems)])
+
+
+func test_a_neutral_variant_must_be_a_move() -> void:
+	var move := _move(&"palm_jab", MoveData.Kind.ATTACK)
+	move.neutral_variant = &"palm_cross"
+	assert_eq(_check(move, _jab_marks()), PackedStringArray())
+	move.neutral_variant = &"palm_hook"
+	var problems := _check(move, _jab_marks())
+	assert_true(_has_problem(problems, ["palm_jab", "neutral_variant", "unknown move", "palm_hook"]), "\n".join(problems))
+
+
 # --- the T-pose rule, on clips and on an actor ---
 
 func test_a_clip_that_holds_the_rest_pose_is_a_t_pose() -> void:
@@ -399,6 +613,38 @@ func test_a_move_whose_clip_the_rig_lacks_is_reported() -> void:
 	clips.erase("palm_cross")
 	var problems := ClipChecker.new().check_actor(_actor(_rig_with(clips), {&"palm": &"palm_jab"}))
 	assert_true(_has_problem(problems, ["palm_cross", "clip", "rig"]), "\n".join(problems))
+
+
+func test_the_team_of_an_actor_decides_whether_its_attacks_need_tells() -> void:
+	# The real jab and cross, which have no tell: fine for the player, wrong for an enemy.
+	var player := ClipChecker.new().check_actor(_actor(load(RIG), {&"palm": &"palm_jab"}))
+	assert_eq(player, PackedStringArray())
+	var def := _actor(load(RIG), {&"palm": &"palm_jab"})
+	def.team = ActorDef.Team.ENEMY
+	var problems := ClipChecker.new().check_actor(def)
+	assert_true(_has_problem(problems, ["palm_jab", "tell"]), "\n".join(problems))
+	assert_true(_has_problem(problems, ["palm_cross", "tell"]), "the cross is reached by the jab's cancel window: \n" + "\n".join(problems))
+
+
+func test_an_actors_reactions_must_name_moves_that_exist() -> void:
+	var def := _actor(load(RIG), {&"palm": &"palm_jab"})
+	def.reactions = {&"flinch": &"no_such_reaction"}
+	var problems := ClipChecker.new().check_actor(def)
+	assert_true(_has_problem(problems, ["fixture", "reaction", "flinch", "unknown move", "no_such_reaction"]), "\n".join(problems))
+
+
+func test_check_all_follows_reactions_and_neutral_variants() -> void:
+	# tests/fixtures/moves/reach_data: an actor whose moveset starts `start` and whose reaction `flinch`
+	# is `answer`; `start`'s neutral variant is `variant`; `stray` is named by nothing. Reached moves are
+	# checked (they are OTHER moves on the idle clip without marks, so each reports its missing sfx);
+	# unreached ones are reported as such.
+	assert_eq(Registry.scan(REACH_DATA), PackedStringArray())
+	var problems := ClipChecker.new().check_all()
+	for id in ["start", "answer", "variant"]:
+		assert_true(_has_problem(problems, [id, "has no sfx"]), "%s is checked: \n%s" % [id, "\n".join(problems)])
+		assert_false(_has_problem(problems, [id, "no actor"]), "%s is reached: \n%s" % [id, "\n".join(problems)])
+	assert_true(_has_problem(problems, ["stray", "no actor"]), "\n".join(problems))
+	assert_false(_has_problem(problems, ["stray", "has no sfx"]), "an unreached move is not checked: \n" + "\n".join(problems))
 
 
 # --- the real data ---
