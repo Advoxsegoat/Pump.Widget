@@ -16,6 +16,7 @@ const LAYOUT := "res://world/courtyard/layout.txt"
 const OUT := "res://world/courtyard/courtyard.tscn"
 # By path rather than by class name, so the tool also runs before the project has been imported.
 const REGION := preload("res://world/region.gd")
+const LAYERS := preload("res://core/layers.gd")
 const FLAGSTONE := preload("res://world/materials/flagstone.tres")
 const KENNEY := "res://assets/env/kenney_town/%s.glb"
 ## Kenney pieces are this many times their size: a tile of 2.5 m, a wall 2.5 m tall.
@@ -86,8 +87,8 @@ class Builder:
 	var _feet := 0  # of `ik_surface` alone
 
 	func build(text: String) -> Node3D:
-		_world_and_feet = layer_bit("world") | layer_bit("ik_surface")
-		_feet = layer_bit("ik_surface")
+		_world_and_feet = LAYERS.WORLD | LAYERS.IK_SURFACE
+		_feet = LAYERS.IK_SURFACE
 		_root = Node3D.new()
 		_root.name = "Courtyard"
 		_root.set_script(REGION)
@@ -234,7 +235,7 @@ class Builder:
 		var ramp_length := count * run / cos(angle)
 		var tilt := Basis(Vector3.RIGHT, angle)
 		var start := Vector3(0, 0, run / 2)
-		var walk := _body("WalkRamp", stairs, layer_bit("world"))
+		var walk := _body("WalkRamp", stairs, LAYERS.WORLD)
 		_box(walk, Vector3(frame.width, WALK_RAMP_THICKNESS, ramp_length),
 				Transform3D(tilt, start + tilt * Vector3(0, -WALK_RAMP_THICKNESS / 2, -ramp_length / 2)), null)
 		notes.append("%s: %d steps, rise %.4f m, run %.4f m, up to %.2f m; its walk ramp %.1f degrees" % [
@@ -507,13 +508,6 @@ class Builder:
 		_counts[key] = _counts.get(key, 0) + 1
 		var n: int = _counts[key]
 		return base if n == 1 else base + str(n)
-
-	## The collision bit of the 3D physics layer named `layer_name` in project.godot, or 0.
-	static func layer_bit(layer_name: String) -> int:
-		for i in range(1, 33):
-			if ProjectSettings.get_setting("layer_names/3d_physics/layer_%d" % i, "") == layer_name:
-				return 1 << (i - 1)
-		return 0
 
 	static func _pascal(piece: String) -> String:
 		var out := ""

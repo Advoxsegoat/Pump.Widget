@@ -13,7 +13,7 @@ static func make(t: TestCase) -> Node3D:
 	arena.name = "Arena"
 	var ground := StaticBody3D.new()
 	ground.name = "Floor"
-	ground.collision_layer = layer_bit("world") | layer_bit("ik_surface")
+	ground.collision_layer = Layers.WORLD | Layers.IK_SURFACE
 	ground.collision_mask = 0
 	var box := BoxShape3D.new()
 	box.size = Vector3(SIZE, 1.0, SIZE)
@@ -35,9 +35,12 @@ static func make(t: TestCase) -> Node3D:
 	return arena
 
 
-## An Actor of `def`, driven by `brain`, standing at `at` in `arena` (it is ready when this returns).
-static func spawn(arena: Node3D, def: ActorDef, brain: Brain, at := Vector3.ZERO) -> Actor:
+## An Actor of `def`, driven by `brain`, standing at `at` in `arena` (it is ready when this returns). It is
+## called `actor_name` if one is given: the name is what an actor's breath phase comes from.
+static func spawn(arena: Node3D, def: ActorDef, brain: Brain, at := Vector3.ZERO, actor_name := "") -> Actor:
 	var actor := (load(ACTOR) as PackedScene).instantiate() as Actor
+	if not actor_name.is_empty():
+		actor.name = actor_name
 	actor.def = def
 	actor.position = at
 	actor.set_brain(brain)
@@ -45,10 +48,10 @@ static func spawn(arena: Node3D, def: ActorDef, brain: Brain, at := Vector3.ZERO
 	return actor
 
 
-## The collision bit of the 3D physics layer named `layer_name` in project.godot, or 0.
+## The collision bit of the 3D physics layer named `layer_name` in project.godot (Layers.bit), reporting a
+## name that is not one: in a test that is a typo, not a layer to leave out.
 static func layer_bit(layer_name: String) -> int:
-	for i in range(1, 33):
-		if ProjectSettings.get_setting("layer_names/3d_physics/layer_%d" % i, "") == layer_name:
-			return 1 << (i - 1)
-	push_error("TestArena: no physics layer called '%s'" % layer_name)
-	return 0
+	var bit := Layers.bit(layer_name)
+	if bit == 0:
+		push_error("TestArena: no physics layer called '%s'" % layer_name)
+	return bit
