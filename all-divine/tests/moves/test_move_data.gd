@@ -39,6 +39,27 @@ const TABLE := {
 }
 const LENGTHS := {&"palm_jab": 35, &"palm_cross": 40, &"dodge_roll": 30}
 const STEPS := {&"palm_jab": 12, &"palm_cross": 12, &"dodge_roll": 0}
+# The reactions every actor shares (F1 Task 5): [length in frames, whether the move takes the clip's root
+# motion, then its marks as in TABLE]. Each is smooth. The death's thud and dust are on the frame its hips
+# meet the ground.
+const REACTIONS := {
+	&"flinch": [27, false, [
+		[0, &"sfx", {"name": &"surface_cloth"}],
+		[0, &"fx", {"name": &"roll_dust"}],
+		[20, &"recovery", {}],
+		[22, &"cancel_open", {"into": {&"dodge": &"dodge_roll"}}],
+	]],
+	&"stagger": [48, true, [
+		[0, &"sfx", {"name": &"surface_cloth"}],
+		[0, &"fx", {"name": &"roll_dust"}],
+		[40, &"recovery", {}],
+		[42, &"cancel_open", {"into": {&"dodge": &"dodge_roll"}}],
+	]],
+	&"death": [144, false, [
+		[56, &"sfx", {"name": &"body_fall"}],
+		[56, &"fx", {"name": &"roll_dust"}],
+	]],
+}
 
 
 func _clip(n: StringName) -> Animation:
@@ -107,14 +128,30 @@ func test_the_clips_have_the_lengths_and_steps_the_marks_were_placed_for() -> vo
 
 func test_marks_are_the_f0_table() -> void:
 	for id: StringName in TABLE:
-		var want: Array = TABLE[id]
-		var read := Marks.read(_clip(id))
-		assert_eq(read.size(), want.size(), "%s: number of marks" % id)
-		for i in mini(read.size(), want.size()):
-			var label := "%s mark %d (%s)" % [id, i, want[i][1]]
-			assert_eq(Marks.frame_of(read[i]["time"]), want[i][0], label + " frame")
-			assert_eq(read[i]["kind"], want[i][1], label + " kind")
-			assert_eq(read[i]["args"], want[i][2], label + " args")
+		_assert_marks(id, TABLE[id])
+
+
+func test_the_reactions_are_registered_with_their_clips_and_marks() -> void:
+	for id: StringName in REACTIONS:
+		var want: Array = REACTIONS[id]
+		var move := Registry.fetch(&"moves", id) as MoveData
+		if move == null:
+			fail("%s is a registered MoveData" % id)
+			continue
+		assert_eq([move.kind, move.clip, move.root_motion, move.stamina_cost, move.hits], [MoveData.Kind.REACTION, id, want[1], 0.0, {}], str(id))
+		assert_eq(Marks.frame_of(_clip(id).length), want[0], "%s is %d frames long" % [id, want[0]])
+		assert_eq(_clip(id).get_meta("step_fps"), 0, "%s is smooth" % id)
+		_assert_marks(id, want[2])
+
+
+func _assert_marks(id: StringName, want: Array) -> void:
+	var read := Marks.read(_clip(id))
+	assert_eq(read.size(), want.size(), "%s: number of marks" % id)
+	for i in mini(read.size(), want.size()):
+		var label := "%s mark %d (%s)" % [id, i, want[i][1]]
+		assert_eq(Marks.frame_of(read[i]["time"]), want[i][0], label + " frame")
+		assert_eq(read[i]["kind"], want[i][1], label + " kind")
+		assert_eq(read[i]["args"], want[i][2], label + " args")
 
 
 func test_the_dodge_is_invulnerable_for_13_frames_out_of_30() -> void:
@@ -187,7 +224,8 @@ func test_abarax_is_defined_by_data() -> void:
 	assert_eq(def.locomotion, load("res://data/tuning/abarax_locomotion.tres"))
 	assert_eq(def.team, ActorDef.Team.PLAYER)
 	assert_eq(def.combat, load("res://data/tuning/combat_abarax.tres"))
-	assert_eq(def.reactions, {}, "the reaction clips come with the tasks that add them")
+	assert_eq(def.reactions, {&"flinch": &"flinch", &"stagger": &"stagger", &"death": &"death"},
+			"the reactions so far; the others come with the tasks that add their clips")
 	assert_eq(def.surface_sound, &"surface_cloth")
 	assert_eq(def.hurt_voice, &"")
 	var rig := def.rig_scene.instantiate()

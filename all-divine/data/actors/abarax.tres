@@ -18,7 +18,11 @@ moveset = {
 }
 locomotion = ExtResource("3_tuning")
 combat = ExtResource("5_combat")
-reactions = {}
+reactions = {
+&"death": &"death",
+&"flinch": &"flinch",
+&"stagger": &"stagger"
+}
 max_hp = 100.0
 max_stamina = 100.0
 max_posture = 100.0

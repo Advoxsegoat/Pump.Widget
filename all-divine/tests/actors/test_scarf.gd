@@ -188,7 +188,8 @@ func test_scarf_stays_out_of_the_torso_in_every_clip() -> void:
 		assert_true(back >= CLEARANCE, "%s: a joint of the scarf came within %.3f m of the torso's centre line" % [clip, back])
 		assert_true(chest >= CLEARANCE, "%s: the tip came within %.3f m of the spine_02-spine_03 segment" % [clip, chest])
 		r.free()
-	assert_eq(worst.size(), 8, "every clip of the library was played (%s)" % [worst])
+	assert_eq(worst.size(), _clip_names().size(), "every clip of the library was played (%s)" % [worst])
+	assert_true(worst.has("death") and worst.has("stagger"), "the reactions among them")
 
 
 # The names of the rig's clips (the actor's library).
