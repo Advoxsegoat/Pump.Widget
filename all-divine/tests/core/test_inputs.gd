@@ -459,3 +459,46 @@ func test_ready_without_a_saved_file_applies_the_defaults_and_does_not_warn() ->
 	fresh.bindings_path = "user://no_such_input.cfg"
 	track(fresh)
 	assert_true(_same_map(Bindings.current(), Bindings.defaults()))
+
+# --- the last device ---
+
+func _mouse_move(relative: Vector2) -> void:
+	var event := InputEventMouseMotion.new()
+	event.relative = relative
+	event.position = Vector2(100, 100)
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+func _mouse_button(index: MouseButton, pressed: bool) -> void:
+	var event := InputEventMouseButton.new()
+	event.button_index = index
+	event.pressed = pressed
+	event.position = Vector2(100, 100)
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+func test_last_device_follows_the_last_event() -> void:
+	_pad_button(0, JOY_BUTTON_A, true)
+	assert_eq(Inputs.last_device(), Inputs.Device.GAMEPAD, "a pad button pressed")
+	_key_event(KEY_W, true)
+	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "a key pressed")
+	_stick(0, 0.15, -0.1)
+	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "a stick that drifts inside the deadzone is not a pad in use")
+	_stick(0, 0.64, 0.0)
+	assert_eq(Inputs.last_device(), Inputs.Device.GAMEPAD, "a stick pushed past the deadzone")
+	_mouse_move(Vector2(4, 1))
+	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "the mouse moved")
+	_pad_button(0, JOY_BUTTON_A, true)
+	_mouse_button(MOUSE_BUTTON_LEFT, true)
+	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "a mouse button pressed")
+
+func test_letting_go_and_standing_still_change_nothing() -> void:
+	_key_event(KEY_W, true)
+	_pad_button(0, JOY_BUTTON_A, false)
+	_stick(0, 0.0, 0.0)
+	_mouse_move(Vector2.ZERO)
+	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "a pad button let go, a stick at rest and a mouse that did not move are not the pad")
+	_pad_button(0, JOY_BUTTON_A, true)
+	_key_event(KEY_W, false)
+	_mouse_button(MOUSE_BUTTON_LEFT, false)
+	assert_eq(Inputs.last_device(), Inputs.Device.GAMEPAD, "a key and a mouse button let go are not the keyboard")

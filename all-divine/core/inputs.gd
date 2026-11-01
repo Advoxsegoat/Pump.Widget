@@ -3,7 +3,9 @@ extends Node
 ##
 ## Autoload "Inputs". The actions and their default events are in Bindings; this reads them
 ## (the movement stick with a deadzone, the buttons as actions), swaps them when the player
-## rebinds one, and saves and loads the player's table.
+## rebinds one, and saves and loads the player's table. It also keeps which kind of device the player used last
+## (last_device), since what the game asks of the player's aim depends on it: a pad aims with the stick, and the
+## keyboard and mouse aim at the cursor.
 
 ## Below this much stick deflection the stick is at rest. Past it, the deflection is rescaled to
 ## run from 0 at the edge of the deadzone to 1 at full. The deadzone is round (on the stick's length),
@@ -19,8 +21,13 @@ const GAMEPLAY: Array[StringName] = [
 
 const _SECTION := "bindings"
 
+## The kinds of device the player aims with.
+enum Device { GAMEPAD, KEYBOARD_MOUSE }
+
 ## The file _ready loads. Only a test changes it.
 var bindings_path := BINDINGS_PATH
+
+var _device := Device.KEYBOARD_MOUSE
 
 
 func _ready() -> void:
@@ -28,6 +35,29 @@ func _ready() -> void:
 	# A player who never rebound anything has no file, and that is not worth a warning.
 	if FileAccess.file_exists(bindings_path):
 		load_bindings(bindings_path)
+	if not Input.get_connected_joypads().is_empty():
+		_device = Device.GAMEPAD
+
+
+# The last device is that of the last event that is a press, or a move past the deadzone. An event that lets go
+# of something, or a stick that rests (or drifts inside the deadzone), is not the player's hand.
+func _input(event: InputEvent) -> void:
+	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+		var pushed: bool = event.pressed if event is InputEventJoypadButton else absf(event.axis_value) > DEADZONE
+		if pushed:
+			_device = Device.GAMEPAD
+	elif event is InputEventKey or event is InputEventMouseButton:
+		if event.pressed:
+			_device = Device.KEYBOARD_MOUSE
+	elif event is InputEventMouseMotion:
+		if not event.relative.is_zero_approx():
+			_device = Device.KEYBOARD_MOUSE
+
+
+## Which kind of device the player used last (Device): the keyboard and mouse until a pad is touched, or from the
+## start if a pad is connected.
+func last_device() -> int:
+	return _device
 
 
 ## A stick reading with the deadzone taken out: 0 below DEADZONE, then (length - DEADZONE) / (1 - DEADZONE),
