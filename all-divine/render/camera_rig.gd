@@ -25,6 +25,9 @@ const SPRING_RATE := 4.0
 ## A target moving at this speed (m/s) or faster gets the whole `look_ahead`.
 const LOOK_AHEAD_FULL_SPEED := 4.0
 const POST_SHADER := preload("res://render/shaders/screen_post.gdshader")
+## The group the rig joins when it is ready: the one game camera, which hit feel (shake) and sound (Sfx, to find the
+## world to play in) look for there.
+const GROUP := &"camera_rig"
 
 @export var target: Node3D
 ## Seconds the follow takes to settle, roughly.
@@ -58,6 +61,7 @@ func _init() -> void:
 func _ready() -> void:
 	# Set here, not in _init, so a transform stored in a scene cannot change the view.
 	rotation = Vector3(deg_to_rad(PITCH_DEG), deg_to_rad(YAW_DEG), 0.0)
+	add_to_group(GROUP)
 	camera.make_current()
 	# Joining a stage that already has its look: take it.
 	if is_instance_valid(stage) and stage.settings != null:

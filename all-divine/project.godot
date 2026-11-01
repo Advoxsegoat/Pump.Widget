@@ -20,6 +20,7 @@ SelfTest="*res://core/self_test.gd"
 Game="*res://core/game.gd"
 Inputs="*res://core/inputs.gd"
 Registry="*res://core/registry.gd"
+Sfx="*res://core/sfx.gd"
 Melee="*res://combat/melee.gd"
 
 [display]

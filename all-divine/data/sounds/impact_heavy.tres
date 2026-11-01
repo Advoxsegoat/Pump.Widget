@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="SoundCue" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://audio/sound_cue.gd" id="1_cue"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/impact_heavy_1.wav" id="2_1"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/impact_heavy_2.wav" id="3_2"]
+
+[resource]
+script = ExtResource("1_cue")
+id = &"impact_heavy"
+streams = Array[AudioStream]([ExtResource("2_1"), ExtResource("3_2")])
+pitch_jitter = 0.06
