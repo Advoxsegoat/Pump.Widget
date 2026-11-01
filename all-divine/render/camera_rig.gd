@@ -59,7 +59,7 @@ var post_quad: MeshInstance3D
 
 var _follow := Vector3.ZERO
 var _has_follow := false
-var _shake_time := 0.0  # seconds of shaking so far: where the noise is
+var _shake_time := 0.0  # seconds this camera has shaken in all: where the noise is
 static var _noise: FastNoiseLite
 
 
@@ -144,10 +144,10 @@ static func shake_at(trauma_now: float, seconds: float) -> Vector2:
 
 func _process(delta: float) -> void:
 	if trauma > 0.0:
+		# The noise only moves while there is a shake, and carries on where the last one left it, so that each
+		# shake sets off in a different way.
 		trauma = maxf(trauma - TRAUMA_DECAY * delta, 0.0)
 		_shake_time += delta
-	else:
-		_shake_time = 0.0
 	if target == null or not target.is_inside_tree():
 		return
 	var goal := _goal()
