@@ -8,6 +8,12 @@ extends Node
 ## dodge also needs stamina (Stats.can_act): a press it cannot pay for is used up and nothing starts, and
 ## a move that starts spends its stamina_cost on that frame.
 ##
+## A move can be charged. At a charge_hold mark, if the player is holding the mark's action, the clip stops at the
+## mark (its time stands still, so the pose holds) until the action is let go, or the mark's `frames` have passed:
+## then the move is charged (`charge_profile` is the mark's `profile`, which every hitbox_on after it uses in place of
+## its own, and `charged` is emitted). Let go early, the blow goes out as if there had been no hold. A move that ends
+## or is cancelled loses its charge, and so does a flinch, which cancels it.
+##
 ## The actor's child MoveRunner; Actor._ready sets `actor`, and the actor calls tick() once per physics
 ## frame (nothing here runs by itself). Moves are looked up by id in the Registry. The runner tells the
 ## actor's rig what to show, and the actor's HitScanner when a hitbox comes on (with the profile its mark
@@ -17,6 +23,9 @@ extends Node
 signal move_started(move: MoveData)
 ## `cancelled` is true when another move took over before the clip's end.
 signal move_ended(move: MoveData, cancelled: bool)
+## The move's charge has filled: the whole hold of its charge_hold mark was held. Whoever shows a charge (ActorFx)
+## listens here.
+signal charged(move: MoveData)
 ## Every mark the move passes, in clip order, after the runner has acted on it (turned the hitbox on,
 ## opened the window, ...). Effects, sounds, shakes and hit-stops are only this signal: whoever plays
 ## them listens here.
@@ -37,11 +46,18 @@ var hyperarmour := false
 ## The open cancel window: action -> the id of the move it cancels into. Empty while closed.
 var window := {}
 var in_recovery := false
+## True while the clip stands at a charge_hold mark for the player holding its action.
+var charging := false
+## The HitProfile name the move's hitboxes carry, in place of the one their marks name, once it has charged;
+## &"" until then.
+var charge_profile := &""
 
 var _anim: Animation  # the current move's clip
 var _marks: Array[Dictionary] = []  # its marks (Marks.read)
 var _root_track := -1  # its root position track, or -1 when the move has no root motion
 var _hitboxes_on: Array[StringName] = []  # the hitboxes the current move has turned on
+var _charge_args := {}  # the arguments of the charge_hold mark being held at
+var _charge_left := 0.0  # seconds of the hold still to go
 var _aim_until := -1.0  # the time of the current move's first hitbox_on, where aim assist stops turning the body; -1 if it has none
 var _track_until := -1.0  # the time of its last hitbox_off, where a lock-on's tracking stops
 
@@ -64,11 +80,20 @@ func tick(intent: Intent, delta: float) -> Vector3:
 	var velocity := Vector3.ZERO
 	if current != null:
 		_aim(intent, delta)
-		var before := time
-		time += delta
-		velocity = _root_velocity(before, time, delta)
-		actor.rig.set_move_time(time)
-		_pass_marks(before, time)
+		if charging:
+			_keep_charging(intent, delta)
+		if not charging:
+			var move := current
+			var before := time
+			time += delta
+			var hold := _hold_between(before, time, intent)
+			if not hold.is_empty():
+				time = hold["time"]
+			velocity = _root_velocity(before, time, delta)
+			actor.rig.set_move_time(time)
+			_pass_marks(before, time)
+			if not hold.is_empty() and current == move:
+				_begin_charge(hold["args"])
 	if current != null and not window.is_empty():
 		var action := actor.buffer.consume(window.keys(), actor.buffer_frame)
 		if action != &"":
@@ -138,6 +163,9 @@ func _end(cancelled: bool) -> void:
 	_root_track = -1
 	_aim_until = -1.0
 	_track_until = -1.0
+	charging = false
+	charge_profile = &""
+	_charge_args = {}
 	if not cancelled:
 		actor.rig.stop_move(ended.blend_out)
 	move_ended.emit(ended, cancelled)
@@ -161,6 +189,35 @@ func _aim(intent: Intent, delta: float) -> void:
 	actor.snap_facing(Locomotion.turn_toward(actor.locomotion.facing_yaw, Locomotion.yaw_of(to), step))
 
 
+# The charge_hold mark in t0 < time <= t1 that stops the clip this tick: the first one whose action is held. Empty
+# if there is none (an action let go passes its mark as if it were not there).
+func _hold_between(t0: float, t1: float, intent: Intent) -> Dictionary:
+	for m: Dictionary in Marks.between(_marks, t0, t1):
+		if m["kind"] == &"charge_hold" and intent.held.has(StringName(m["args"].get("action", &""))):
+			return m
+	return {}
+
+
+# The clip has reached the charge_hold mark with `args`, and the player holds its action: stand at it. The frame it
+# arrived on is the first of `frames` the clip stands there.
+func _begin_charge(args: Dictionary) -> void:
+	charging = true
+	_charge_args = args
+	_charge_left = float(args.get("frames", 0)) / Marks.RATE
+
+
+# A tick of the hold: counts it off, and ends it when the action is let go (the clip goes on from this tick) or when
+# the whole of it has been held (the move is charged, and goes on from this tick too).
+func _keep_charging(intent: Intent, delta: float) -> void:
+	_charge_left -= delta
+	if _charge_left <= Marks.EPSILON:
+		charging = false
+		charge_profile = StringName(_charge_args.get("profile", &""))
+		charged.emit(current)
+	elif not intent.held.has(StringName(_charge_args.get("action", &""))):
+		charging = false
+
+
 # Acts on the current move's marks with t0 < time <= t1, in order. Stops if a listener of `mark` started
 # another move.
 func _pass_marks(t0: float, t1: float) -> void:
@@ -176,7 +233,7 @@ func _act(kind: StringName, args: Dictionary) -> void:
 		&"hitbox_on":
 			var id := StringName(args.get("id", &""))
 			actor.rig.set_hitbox_active(id, true)
-			actor.scanner.begin(id, StringName(args.get("profile", &"")), current)
+			actor.scanner.begin(id, charge_profile if charge_profile != &"" else StringName(args.get("profile", &"")), current)
 			if not _hitboxes_on.has(id):
 				_hitboxes_on.append(id)
 		&"hitbox_off":
