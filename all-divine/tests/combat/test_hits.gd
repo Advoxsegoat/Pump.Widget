@@ -16,13 +16,17 @@ const O := HitResult.Outcome
 
 
 # Runs in the middle of a physics frame, as an actor does (after Melee's snapshot, before Melee): sets the
-# target of `event` invulnerable or not, as `invulnerable` says, then posts the event, once.
+# target of `event` invulnerable or not, as `invulnerable` says (and kills it first, with `kill`), then posts
+# the event, once.
 class MidFrame extends Node:
 	var event: HitEvent
 	var invulnerable := false
+	var kill := false
 
 	func _physics_process(_delta: float) -> void:
 		if event != null:
+			if kill:
+				event.target.die()
 			event.target.runner.iframes = invulnerable
 			Melee.post(event)
 			event = null
@@ -60,6 +64,40 @@ func _duel(a_steps: Array, b_steps: Array, b_def: ActorDef, a_def: ActorDef = nu
 		actor.place(Transform3D(Basis(Vector3.UP, spec[4]), spec[3]))
 		_watch(run, spec[0], actor)
 	return run
+
+
+## Spawns, in a new arena, a target `b` (an ENEMY copy of poise 5, with `b_hp` HP) between two PLAYER attackers
+## facing it, `a` GAP in front of it at the origin and `c` GAP behind it, with `c` before `a` in the tree when
+## `c_first`. Both start their move at once, `a` the jab and `c` `c_move`, so both hands come on and reach the
+## target on the same frame (frame 10: the moves start before the actors' first frame). Records as _duel does,
+## for a, b and c.
+func _pincer(c_move: MoveData, b_hp: float, c_first: bool) -> Dictionary:
+	var arena := TestArena.make(self)
+	var run := {"arena": arena}
+	var specs := [["a", Vector3.ZERO, 0.0], ["c", Vector3(0, 0, 2 * GAP), PI]]
+	if c_first:
+		specs.reverse()
+	specs.append(["b", Vector3(0, 0, GAP), PI])
+	for spec: Array in specs:
+		var def: ActorDef = _foe(5.0) if spec[0] == "b" else load(ABARAX)
+		var actor := TestArena.spawn(arena, def, ScriptBrain.new([]), spec[1], spec[0].to_upper())
+		actor.place(Transform3D(Basis(Vector3.UP, spec[2]), spec[1]))
+		_watch(run, spec[0], actor)
+	(run["b"] as Actor).stats.hp = b_hp
+	(run["a"] as Actor).runner.start(Registry.fetch(&"moves", &"palm_jab") as MoveData)
+	(run["c"] as Actor).runner.start(c_move)
+	return run
+
+
+## A copy of the jab whose palm profile staggers.
+func _staggering_jab() -> MoveData:
+	var jab := Registry.fetch(&"moves", &"palm_jab") as MoveData
+	var move := jab.duplicate() as MoveData
+	move.id = &"staggering_jab"
+	var palm := (jab.hits[&"palm"] as HitProfile).duplicate() as HitProfile
+	palm.staggers = true
+	move.hits = {&"palm": palm}
+	return move
 
 
 func _watch(run: Dictionary, key: String, actor: Actor) -> void:
@@ -251,21 +289,69 @@ func test_dead_are_not_hit_and_die_once() -> void:
 	assert_eq(_current(b), &"death", "and are left to fall")
 
 
+func test_a_flinch_and_a_stagger_on_one_frame_are_one_stagger() -> void:
+	# The jab from in front flinches the target; the staggering jab from behind staggers it. Both land on frame
+	# 10, and whichever attacker runs first, they come to one reaction, the stronger, started once.
+	for c_first in [false, true]:
+		var run := _pincer(_staggering_jab(), 100.0, c_first)
+		var b: Actor = run["b"]
+		var sounds := []
+		b.runner.mark.connect(func(kind: StringName, _args: Dictionary) -> void:
+			if kind == &"sfx":
+				sounds.append(b.frame))
+		await _play_to(b, 15)
+		var order := "c first" if c_first else "a first"
+		assert_eq([run["a_landed"], run["c_landed"]], [[["HIT", 10]], [["HIT", 10]]], "both land (%s)" % order)
+		assert_eq(b.stats.hp, 84.0, "both blows' damage (%s)" % order)
+		assert_eq(run["b_started"], [[&"stagger", 10]], "one reaction, the stagger (%s)" % order)
+		assert_eq(sounds, [10], "its sound once (%s)" % order)
+		(run["arena"] as Node).free()
+
+
 func test_two_killing_blows_on_one_frame_die_once() -> void:
-	# A third actor behind the target jabs it in the back on the same frame as the one in front. Both blows were
-	# struck at a living body and both land; the second finds it dead and changes nothing.
-	var jab := [{"frames": 1, "press": [&"palm"]}, {"frames": 30}]
-	var run := _duel(jab, [], _foe(5.0))
+	# Two blows of 8 on a body of 8 HP on the same frame, from in front and behind. Each would kill it alone;
+	# they land together, and are one death that both dealt, whichever attacker runs first.
+	for c_first in [false, true]:
+		var run := _pincer(Registry.fetch(&"moves", &"palm_jab") as MoveData, 8.0, c_first)
+		var b: Actor = run["b"]
+		await _play_to(b, 15)
+		var order := "c first" if c_first else "a first"
+		assert_eq([run["a_landed"], run["c_landed"]], [[["HIT", 10]], [["HIT", 10]]], "both land (%s)" % order)
+		assert_eq(run["b_got"], [["HIT", 10], ["HIT", 10]], order)
+		assert_eq([run["b_died"], b.stats.hp], [1, 0.0], "one death (%s)" % order)
+		assert_eq(run["b_started"], [[&"death", 10]], "and no reaction before it (%s)" % order)
+		(run["arena"] as Node).free()
+
+
+func test_two_blows_that_kill_together_die_once_without_a_flinch() -> void:
+	# Two blows of 8 on a body of 12 HP: neither kills alone, both together do. The body dies, and does not
+	# flinch on the way.
+	for c_first in [false, true]:
+		var run := _pincer(Registry.fetch(&"moves", &"palm_jab") as MoveData, 12.0, c_first)
+		var b: Actor = run["b"]
+		await _play_to(b, 15)
+		var order := "c first" if c_first else "a first"
+		assert_eq([run["a_landed"], run["c_landed"]], [[["HIT", 10]], [["HIT", 10]]], "both land (%s)" % order)
+		assert_eq([run["b_died"], b.stats.hp], [1, 0.0], "they kill it together (%s)" % order)
+		assert_eq(run["b_started"], [[&"death", 10]], "with no flinch first (%s)" % order)
+		(run["arena"] as Node).free()
+
+
+func test_a_blow_on_a_body_that_died_mid_frame_comes_to_nothing() -> void:
+	# The target dies in the middle of a frame, after the snapshot, before Melee: the blow posted at it that
+	# frame takes nothing, and both sides hear it was a whiff.
+	var run := _duel([], [], _foe(5.0))
 	var b: Actor = run["b"]
-	var c := TestArena.spawn(run["arena"], load(ABARAX), ScriptBrain.new(jab), Vector3(0, 0, 2 * GAP), "C")
-	c.place(Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, 2 * GAP)))
-	_watch(run, "c", c)
-	b.stats.hp = 8.0
-	await _play_to(run["a"], 20)
-	assert_eq([run["a_landed"], run["c_landed"]], [[["HIT", 11]], [["HIT", 11]]], "both land")
-	assert_eq(run["b_died"], 1)
-	assert_eq(b.stats.hp, 0.0)
-	assert_eq(run["b_started"], [[&"death", 11]])
+	await frames(2)
+	var mid := MidFrame.new()
+	mid.event = _jab_on(run["a"], b)
+	mid.kill = true
+	track(mid)
+	await frames(1)
+	assert_true(b.dead)
+	assert_eq(b.stats.hp, 100.0, "nothing taken")
+	assert_eq([run["a_landed"].map(func(l: Array) -> String: return l[0]), run["b_got"].map(func(g: Array) -> String: return g[0])],
+			[["WHIFF"], ["WHIFF"]], "and both sides hear so")
 
 
 func test_the_dead_fall_and_leave_the_actor_layer() -> void:

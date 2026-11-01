@@ -7,7 +7,8 @@ extends CharacterBody3D
 ##
 ## It fights through its HitScanner, which finds what its hitboxes strike, and Melee, which judges every hit of
 ## a frame once all actors have moved and hands each target its blow (apply_hit) and each attacker the result
-## (hit_landed). The actor joins the group `actors` when ready, which is how Melee finds every defender, and
+## (hit_landed); all the blows a frame lands on it are taken together (apply_hits). The actor joins the group
+## `actors` when ready, which is how Melee finds every defender, and
 ## marks its rig's hurtbox with the meta `actor`, which is how a scanner knows whose body it reached.
 ##
 ## Each physics frame, in this order:
@@ -157,17 +158,39 @@ func is_invulnerable() -> bool:
 	return runner.iframes
 
 
-## Takes the blow `e`, which Melee judged to come to `r`: what `r` takes off comes off its HP, posture and
-## stamina. A HIT or a GUARDED blow (and a GRABBED one, a HIT for now) kicks the upper body away from it
-## (Rig.hit_react, harder the more poise damage it carries): the additive flinch every blow gets, whether or
-## not it interrupts what the actor is doing. A blow that empties the HP kills the actor (die); otherwise a
-## FLINCH or a STAGGER plays the def's `flinch` or `stagger` reaction move, cutting off the move that was
-## playing. A WHIFF changes nothing, nor does a blow on the dead (one that died to an earlier blow of the same
-## frame). got_hit is emitted after, whatever the outcome.
+## Takes the blow `e`, which Melee judged to come to `r`, on its own: apply_hits with that one blow.
 func apply_hit(e: HitEvent, r: HitResult) -> void:
-	if not dead and r.outcome != HitResult.Outcome.WHIFF:
-		_take(e, r)
-	got_hit.emit(r, e)
+	var events: Array[HitEvent] = [e]
+	var results: Array[HitResult] = [r]
+	apply_hits(events, results)
+
+
+## Takes every blow that landed on the actor in one frame (`events`, and what Melee judged each to come to,
+## `results`) together, so that what comes of them does not depend on the order they are taken in. Each blow's
+## HP, posture and stamina come off, and each HIT or GUARDED blow (and a GRABBED one, a HIT for now) kicks the
+## upper body away from it (Rig.hit_react, harder the more poise damage it carries): the additive flinch every
+## blow gets, whether or not it interrupts what the actor is doing. Then one thing comes of them all: if
+## together they emptied the HP the actor dies (die), and otherwise the strongest reaction among them plays,
+## once: a STAGGER over a FLINCH (the def's `stagger` or `flinch` reaction move, cutting off the move that was
+## playing). A WHIFF changes nothing, nor does any blow on the dead. got_hit is emitted for each blow after,
+## whatever its outcome.
+func apply_hits(events: Array[HitEvent], results: Array[HitResult]) -> void:
+	if not dead:
+		var killed := false
+		var reaction := HitResult.Reaction.NONE
+		for i in events.size():
+			if results[i].outcome == HitResult.Outcome.WHIFF:
+				continue
+			killed = _take(events[i], results[i]) or killed
+			reaction = maxi(reaction, results[i].reaction) as HitResult.Reaction
+		if killed:
+			die()
+		elif reaction == HitResult.Reaction.STAGGER:
+			_react(&"stagger")
+		elif reaction == HitResult.Reaction.FLINCH:
+			_react(&"flinch")
+	for i in events.size():
+		got_hit.emit(results[i], events[i])
 
 
 ## Kills the actor, once: it plays its def's `death` reaction, its hurtbox goes off (no blow finds it again),
@@ -228,22 +251,15 @@ func _physics_process(delta: float) -> void:
 		Melee.post(e)
 
 
-# The numbers of apply_hit, the kick, then the death or the reaction.
-func _take(e: HitEvent, r: HitResult) -> void:
+# One blow of apply_hits: its kick and its numbers. True if it emptied the HP.
+func _take(e: HitEvent, r: HitResult) -> bool:
 	if r.outcome in [HitResult.Outcome.HIT, HitResult.Outcome.GUARDED, HitResult.Outcome.GRABBED]:
 		rig.hit_react(e.direction, HIT_REACT_BASE + e.profile.poise_damage / HIT_REACT_POISE)
 	if r.stamina_cost > 0.0:
 		stats.spend_stamina(r.stamina_cost)
 	if r.posture_damage > 0.0:
 		stats.damage_posture(r.posture_damage)
-	if stats.take_damage(r.hp_damage):
-		die()
-		return
-	match r.reaction:
-		HitResult.Reaction.FLINCH:
-			_react(&"flinch")
-		HitResult.Reaction.STAGGER:
-			_react(&"stagger")
+	return stats.take_damage(r.hp_damage)
 
 
 # Plays the def's reaction move `reaction`, if it has one.
