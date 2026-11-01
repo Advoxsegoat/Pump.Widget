@@ -5,6 +5,7 @@ extends TestCase
 const LIB := "res://assets/anim/abarax/library.tres"
 const CONFIG := "res://assets/anim/clips.cfg"
 const MODEL := "res://assets/characters/abarax/abarax.glb"
+const RIG := "res://actors/abarax/abarax_rig.tscn"
 const CLIPS: PackedStringArray = ["idle", "walk", "jog", "sprint", "dodge_roll", "palm_jab", "palm_cross", "t_pose"]
 const LOCOMOTION: PackedStringArray = ["walk", "jog", "sprint"]
 const MAX_CLIP_BYTES := 2 * 1024 * 1024
@@ -167,3 +168,25 @@ func _lowest_toe(skeleton: Skeleton3D, anim: Animation, time: float) -> float:
 		var pose := skeleton.get_bone_global_pose(skeleton.find_bone(toe))
 		lowest = minf(lowest, (skeleton.global_transform * pose).origin.y)
 	return lowest
+
+
+func test_the_stagger_stays_on_its_feet_and_ends_where_idle_begins() -> void:
+	# A stagger rocks the body back twice (UAL1 Hit_Head, then Hit_Chest) and lets it go: standing all through (a
+	# knockdown would end on the ground, and stand up in the 0.15 s the move takes to fade back to locomotion),
+	# and ending close to idle's pose, which it fades into.
+	var r: Rig = track(load(RIG).instantiate())
+	var anim := r.tree.get_animation(&"stagger")
+	r.play_move(&"stagger", 0.0)
+	var lowest := INF
+	for f in Marks.frame_of(anim.length) + 1:
+		r.set_move_time(f / 60.0)
+		r.tick(0.0)
+		lowest = minf(lowest, r.bone_global(&"Head").y)
+	var end := {&"Head": r.bone_global(&"Head"), &"pelvis": r.bone_global(&"pelvis")}
+	r.play_move(&"idle", 0.0)
+	r.set_move_time(0.0)
+	r.tick(0.0)
+	assert_true(lowest > 1.3, "the head never drops below 1.3 m (lowest %.2f m)" % lowest)
+	for bone: StringName in end:
+		var off: float = (end[bone] as Vector3).distance_to(r.bone_global(bone))
+		assert_true(off < 0.1, "%s ends %.3f m from where idle begins" % [bone, off])

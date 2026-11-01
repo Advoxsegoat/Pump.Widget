@@ -7,3 +7,4 @@ script = ExtResource("1_move")
 id = &"stagger"
 kind = 3
 clip = &"stagger"
+root_motion = false

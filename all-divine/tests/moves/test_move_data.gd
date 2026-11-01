@@ -49,7 +49,7 @@ const REACTIONS := {
 		[20, &"recovery", {}],
 		[22, &"cancel_open", {"into": {&"dodge": &"dodge_roll"}}],
 	]],
-	&"stagger": [48, true, [
+	&"stagger": [48, false, [
 		[0, &"sfx", {"name": &"surface_cloth"}],
 		[0, &"fx", {"name": &"roll_dust"}],
 		[40, &"recovery", {}],

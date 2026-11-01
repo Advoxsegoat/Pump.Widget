@@ -107,8 +107,8 @@ func test_no_ground_leaves_the_legs_alone() -> void:
 			for bone in [&"pelvis", &"thigh_l", &"calf_l", &"foot_l", &"ball_l", &"thigh_r", &"calf_r", &"foot_r", &"ball_r"]:
 				worst = maxf(worst, (r.bone_global(bone) - plain.bone_global(bone)).length())
 	# Not to the micron: each foot is turned back by the turn the IK gave its calf on the tick before (see
-	# FootPlanter), and a tick here jumps three frames, so where a clip changes the leg fastest (the stagger
-	# springing out of its crouch, the death's landing) the knee is a few millimetres off: under a sixth of a texel (32 to the metre).
+	# FootPlanter), and a tick here jumps three frames, so where a clip changes the leg fastest (the death, as
+	# the hips hit the ground) the knee is a few millimetres off: under a sixth of a texel (32 to the metre).
 	# Aiming at the last frame's targets would be centimetres off.
 	assert_true(worst < 0.005, "the legs are the clips' (%.4f m off at worst)" % worst)
 
