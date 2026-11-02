@@ -95,6 +95,20 @@ func test_sprint_only_when_held_and_moving() -> void:
 	assert_near(loco.speed, 4.0, 1e-9, "back down to jog")
 
 
+func test_a_guard_only_walks_at_its_scale_and_never_sprints() -> void:
+	# guard_scale 0.45: a full stick asks for the walk (1.6), not the jog, times 0.45; half the walk threshold, half
+	# that; sprint held changes nothing.
+	for row in [[1.0, 1.6 * 0.45], [0.25, 0.8 * 0.45]]:
+		var loco := _loco()
+		for f in 30:
+			loco.tick(Vector2(0, row[0]), true, DT, 0.45)
+		assert_near(loco.speed, row[1], 1e-9, "stick %s" % row[0])
+		assert_false(loco.sprinting, "no sprint under a guard (stick %s)" % row[0])
+	var plain := _loco()
+	plain.tick(Vector2(0, 1), true, DT, 0.0)
+	assert_true(plain.sprinting, "a guard_scale of 0 is no guard")
+
+
 func test_yaw_of_faces_the_direction() -> void:
 	assert_near(Locomotion.yaw_of(Vector2(0, 1)), 0.0, 1e-9, "+Z is yaw 0")
 	assert_near(Locomotion.yaw_of(Vector2(1, 0)), PI / 2, 1e-9)

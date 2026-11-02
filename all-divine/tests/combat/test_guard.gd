@@ -98,6 +98,21 @@ func test_a_guarded_blow_rings_on_the_guard_not_the_body() -> void:
 	assert_false(heard.has(&"impact_palm") or heard.has(&"surface_cloth"), "and no flesh: %s" % [heard])
 
 
+func test_a_raise_cancelled_into_a_jab_leaves_no_guard_up() -> void:
+	# Guard held from frame 1, palm on frame 11: the raise's window at f10 takes the jab, and the guard its mark held
+	# up goes with the raise, guard held or not.
+	var steps := [{"frames": 1, "press": [&"guard"], "hold": [&"guard"]}, {"frames": 9, "hold": [&"guard"]},
+			{"frames": 1, "press": [&"palm"], "hold": [&"guard"]}, {"frames": 30, "hold": [&"guard"]}]
+	var run := _duel([], steps)
+	var b: Actor = run["b"]
+	await Duel.play_to(self, b, 10)
+	assert_true(b.is_guarding(), "the raise's guard is up")
+	await Duel.play_to(self, b, 11)
+	assert_eq(run["b_started"], [[&"guard_raise", 1], [&"palm_jab", 11]])
+	assert_false(b.is_guarding(), "the jab holds no guard")
+	assert_false(Defense.of(b).parrying, "and no parry")
+
+
 func test_jab_from_behind_hits_a_guard() -> void:
 	var run := _duel(JAB_AT_20, GUARD_HELD)
 	var b: Actor = run["b"]

@@ -158,6 +158,19 @@ func test_a_parry_that_empties_the_posture_staggers_the_attacker() -> void:
 	assert_eq(_current(a), &"stagger")
 
 
+func test_a_broken_posture_plays_the_defs_posture_broken_when_it_has_one() -> void:
+	var a_def := Duel.def(ActorDef.Team.PLAYER, 5.0)
+	a_def.reactions = a_def.reactions.duplicate()
+	a_def.reactions[&"posture_broken"] = &"guard_break"  # any move will do, until Task 10 brings its own
+	var run := Duel.make(self, JAB, _tap_guard(6), 1.0, null, a_def)
+	var a: Actor = run["a"]
+	await Duel.play_to(self, a, LANDS - 1)
+	a.stats.damage_posture(92.0)
+	await Duel.play_to(self, a, LANDS)
+	assert_true(a.stats.posture_broken)
+	assert_eq(_current(a), &"guard_break", "the def's posture_broken")
+
+
 func test_a_blow_turned_back_twice_on_one_frame_is_taken_once_in_either_order() -> void:
 	# a's palm, posted at two parrying foes on one frame (as a wide swing would find both), whichever of them runs
 	# and is posted first: a loses the posture of both parries and starts `parried` once.
