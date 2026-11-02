@@ -405,7 +405,7 @@ tracks/56/keys = {
 "transitions": PackedFloat32Array(1, 1, 1),
 "values": [{
 "args": [{
-&"name": &"surface_cloth"
+&"name": &"roll_cloth"
 }],
 "method": &"sfx"
 }, {

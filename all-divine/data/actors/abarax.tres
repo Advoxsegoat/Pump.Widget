@@ -14,14 +14,21 @@ rig_scene = ExtResource("2_rig")
 palette = ExtResource("4_palette")
 moveset = {
 &"dodge": &"dodge_roll",
+&"guard": &"guard_raise",
 &"heavy": &"palm_heavy",
 &"palm": &"palm_jab"
 }
 locomotion = ExtResource("3_tuning")
 combat = ExtResource("5_combat")
 reactions = {
+&"catch": &"catch",
+&"caught": &"caught",
 &"death": &"death",
 &"flinch": &"flinch",
+&"guard_break": &"guard_break",
+&"guard_hit": &"guard_hit",
+&"parried": &"parried",
+&"parry": &"parry",
 &"stagger": &"stagger"
 }
 max_hp = 100.0

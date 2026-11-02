@@ -155,6 +155,21 @@ func test_a_hit_plays_impact_surface_and_voice_layers() -> void:
 	assert_eq(heard[11], [&"impact_palm", &"surface_cloth", &"catch_snap"] as Array, "three layers")
 
 
+func test_a_jab_that_flinches_plays_each_layer_once_and_the_flinch_its_cloth() -> void:
+	# The Duel's target (poise 5) flinches at the jab's 6, with a voice. The blow plays impact, surface and voice
+	# once each; the flinch adds cloth moving (roll_cloth), not a second surface_cloth over the blow's.
+	var voiced := Duel.def(ActorDef.Team.ENEMY, 5.0)
+	voiced.hurt_voice = &"catch_snap"
+	var run := Duel.make(self, [{"frames": 1, "press": [&"palm"]}, {"frames": 60}], [], 1.0, voiced)
+	var b: Actor = run["b"]
+	var heard := await _sounds(run["a"], 11)
+	assert_eq(b.runner.current.id if b.runner.current != null else &"", &"flinch", "the jab flinched it")
+	var layers: Array = heard[11]
+	for id in [&"impact_palm", &"surface_cloth", &"catch_snap", &"roll_cloth"]:
+		assert_eq(layers.count(id), 1, "%s once: %s" % [id, layers])
+	assert_eq(layers.size(), 4, "and nothing else: %s" % [layers])
+
+
 func test_a_hit_shows_a_spark_flashes_the_body_white_and_shakes_the_camera() -> void:
 	var stage := track(STAGE_SCENE.instantiate()) as PixelStage
 	var camera := CameraRig.new()

@@ -145,7 +145,7 @@ func test_the_last_window_of_each_blow_is_the_next_blow_and_the_roll() -> void:
 
 func test_the_moveset_starts_the_heavy_from_heavy() -> void:
 	var def := load(Duel.ABARAX) as ActorDef
-	assert_eq(def.moveset, {&"palm": &"palm_jab", &"heavy": &"palm_heavy", &"dodge": &"dodge_roll"})
+	assert_eq(def.moveset.get(&"heavy"), &"palm_heavy")
 
 
 func test_heavy_released_early_uses_heavy() -> void:

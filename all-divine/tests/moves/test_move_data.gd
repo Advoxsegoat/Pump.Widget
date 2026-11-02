@@ -59,18 +59,19 @@ const TABLE := {
 }
 const LENGTHS := {&"palm_jab": 35, &"palm_cross": 40, &"palm_hook": 45, &"palm_heavy": 57, &"dodge_roll": 30}
 const STEPS := {&"palm_jab": 12, &"palm_cross": 12, &"palm_hook": 12, &"palm_heavy": 12, &"dodge_roll": 0}
-# The reactions every actor shares (F1 Task 5): [length in frames, whether the move takes the clip's root
+# The reactions every actor shares (F1 Tasks 5 and 8): [length in frames, whether the move takes the clip's root
 # motion, then its marks as in TABLE]. Each is smooth. The death's thud and dust are on the frame its hips
-# meet the ground.
+# meet the ground. A reaction's own sound is cloth moving (roll_cloth): the blow that caused it already plays
+# the target's surface (ActorFx).
 const REACTIONS := {
 	&"flinch": [27, false, [
-		[0, &"sfx", {"name": &"surface_cloth"}],
+		[0, &"sfx", {"name": &"roll_cloth"}],
 		[0, &"fx", {"name": &"roll_dust"}],
 		[20, &"recovery", {}],
 		[22, &"cancel_open", {"into": {&"dodge": &"dodge_roll"}}],
 	]],
 	&"stagger": [48, false, [
-		[0, &"sfx", {"name": &"surface_cloth"}],
+		[0, &"sfx", {"name": &"roll_cloth"}],
 		[0, &"fx", {"name": &"roll_dust"}],
 		[40, &"recovery", {}],
 		[42, &"cancel_open", {"into": {&"dodge": &"dodge_roll"}}],
@@ -78,6 +79,52 @@ const REACTIONS := {
 	&"death": [144, false, [
 		[56, &"sfx", {"name": &"body_fall"}],
 		[56, &"fx", {"name": &"roll_dust"}],
+	]],
+	&"guard_hit": [21, false, [
+		[0, &"sfx", {"name": &"roll_cloth"}],
+		[0, &"fx", {"name": &"roll_dust"}],
+		[12, &"recovery", {}],
+		[14, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dodge_roll"}}],
+	]],
+	&"guard_break": [60, false, [
+		[0, &"sfx", {"name": &"roll_cloth"}],
+		[0, &"fx", {"name": &"roll_dust"}],
+		[50, &"recovery", {}],
+	]],
+	&"parried": [36, false, [
+		[0, &"sfx", {"name": &"roll_cloth"}],
+		[0, &"fx", {"name": &"roll_dust"}],
+		[36, &"recovery", {}],
+	]],
+	&"caught": [54, false, [
+		[0, &"sfx", {"name": &"roll_cloth"}],
+		[0, &"fx", {"name": &"roll_dust"}],
+		[45, &"recovery", {}],
+	]],
+}
+# The guard and its answers to a blow (F1 Task 8), OTHER moves without root motion, as REACTIONS has them. The
+# raise's parry window is f0 to f9 (10 frames, 167 ms); its guard is up from f4 to its end. The parry and the
+# catch open the riposte: palm or heavy at f8 and f14.
+const GUARD_MOVES := {
+	&"guard_raise": [14, false, [
+		[0, &"parry_on", {}],
+		[0, &"sfx", {"name": &"whoosh_light"}],
+		[2, &"fx", {"name": &"glint"}],
+		[4, &"guard_on", {}],
+		[10, &"parry_off", {}],
+		[10, &"recovery", {}],
+		[10, &"cancel_open", {"into": {&"palm": &"palm_jab", &"heavy": &"palm_heavy", &"dodge": &"dodge_roll"}}],
+		[14, &"guard_off", {}],
+	]],
+	&"parry": [24, false, [
+		[0, &"sfx", {"name": &"roll_cloth"}],
+		[0, &"fx", {"name": &"glint"}],
+		[8, &"cancel_open", {"into": {&"palm": &"palm_jab", &"heavy": &"palm_heavy"}}],
+	]],
+	&"catch": [30, false, [
+		[0, &"sfx", {"name": &"roll_cloth"}],
+		[4, &"fx", {"name": &"palm_trail", "bone": &"hand_r"}],
+		[14, &"cancel_open", {"into": {&"palm": &"palm_jab", &"heavy": &"palm_heavy"}}],
 	]],
 }
 
@@ -190,6 +237,46 @@ func test_the_reactions_are_registered_with_their_clips_and_marks() -> void:
 		_assert_marks(id, want[2])
 
 
+func test_the_guard_moves_are_registered_with_their_clips_and_marks() -> void:
+	for id: StringName in GUARD_MOVES:
+		var want: Array = GUARD_MOVES[id]
+		var move := Registry.fetch(&"moves", id) as MoveData
+		if move == null:
+			fail("%s is a registered MoveData" % id)
+			continue
+		assert_eq([move.kind, move.clip, move.root_motion, move.stamina_cost, move.hits], [MoveData.Kind.OTHER, id, want[1], 0.0, {}], str(id))
+		assert_eq(Marks.frame_of(_clip(id).length), want[0], "%s is %d frames long" % [id, want[0]])
+		assert_eq(_clip(id).get_meta("step_fps"), 0, "%s is smooth" % id)
+		_assert_marks(id, want[2])
+
+
+func test_the_guard_stance_is_a_looping_clip_and_not_a_move() -> void:
+	assert_true((load(LIB) as AnimationLibrary).has_animation(&"guard_hold"), "the library has guard_hold")
+	if (load(LIB) as AnimationLibrary).has_animation(&"guard_hold"):
+		assert_eq(_clip(&"guard_hold").loop_mode, Animation.LOOP_LINEAR, "it loops under the walk")
+		assert_eq(Marks.read(_clip(&"guard_hold")), [] as Array[Dictionary], "and has no marks: it is no move")
+	assert_false(Registry.ids(&"moves").has("guard_hold"))
+
+
+func test_the_catch_is_the_parry_with_the_right_hand_reaching_to_grip() -> void:
+	# The catch plays the parry's span of Sword_Block over 30 frames, with the layer catch.json over it: the right
+	# upper and lower arm turned about 30 degrees from f4 to f16, and nothing turned outside that.
+	var layer: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://assets/anim/layers/catch.json"))
+	assert_true(layer is Dictionary, "catch.json is a layer")
+	if not layer is Dictionary:
+		return
+	assert_eq((layer as Dictionary).keys(), ["upperarm_r", "lowerarm_r"])
+	for bone: String in layer:
+		var keys: Array = layer[bone]
+		assert_eq([int(keys[0][0]), int(keys[keys.size() - 1][0])], [4, 16], "%s from f4 to f16" % bone)
+		var most := 0.0
+		for key: Array in keys:
+			most = maxf(most, Vector3(key[1], key[2], key[3]).length())
+		assert_near(most, 30.0, 5.0, "%s turns about 30 degrees" % bone)
+		assert_eq([keys[0].slice(1), keys[keys.size() - 1].slice(1)], [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+				"%s starts and ends at no turn, so nothing pops where the layer stops" % bone)
+
+
 func _assert_marks(id: StringName, want: Array) -> void:
 	var read := Marks.read(_clip(id))
 	assert_eq(read.size(), want.size(), "%s: number of marks" % id)
@@ -264,13 +351,14 @@ func test_abarax_is_defined_by_data() -> void:
 		fail("abarax is a registered ActorDef")
 		return
 	assert_eq(def.id, &"abarax")
-	assert_eq(def.moveset, {&"palm": &"palm_jab", &"heavy": &"palm_heavy", &"dodge": &"dodge_roll"})
+	assert_eq(def.moveset, {&"palm": &"palm_jab", &"heavy": &"palm_heavy", &"dodge": &"dodge_roll", &"guard": &"guard_raise"})
 	assert_eq(def.max_hp, 100.0); assert_eq(def.max_stamina, 100.0); assert_eq(def.max_posture, 100.0); assert_eq(def.poise, 10.0)
 	assert_eq(def.required_clips, PackedStringArray(["idle", "walk", "jog", "sprint"]))
 	assert_eq(def.locomotion, load("res://data/tuning/abarax_locomotion.tres"))
 	assert_eq(def.team, ActorDef.Team.PLAYER)
 	assert_eq(def.combat, load("res://data/tuning/combat_abarax.tres"))
-	assert_eq(def.reactions, {&"flinch": &"flinch", &"stagger": &"stagger", &"death": &"death"},
+	assert_eq(def.reactions, {&"flinch": &"flinch", &"stagger": &"stagger", &"death": &"death", &"guard_hit": &"guard_hit",
+			&"guard_break": &"guard_break", &"parry": &"parry", &"parried": &"parried", &"catch": &"catch", &"caught": &"caught"},
 			"the reactions so far; the others come with the tasks that add their clips")
 	assert_eq(def.surface_sound, &"surface_cloth")
 	assert_eq(def.hurt_voice, &"")
