@@ -1,4 +1,4 @@
-[gd_scene load_steps=24 format=3]
+[gd_scene load_steps=27 format=3]
 
 [ext_resource type="Script" path="res://actors/rig.gd" id="1_rig"]
 [ext_resource type="PackedScene" path="res://assets/characters/abarax/abarax.glb" id="2_model"]
@@ -55,6 +55,14 @@ animation = &"idle"
 
 [sub_resource type="AnimationNodeBlend2" id="move_blend"]
 
+[sub_resource type="AnimationNodeAnimation" id="stance"]
+animation = &"idle"
+
+[sub_resource type="AnimationNodeTimeSeek" id="stance_seek"]
+
+[sub_resource type="AnimationNodeBlend2" id="stance_blend"]
+filter_enabled = true
+
 [sub_resource type="AnimationNodeBlendTree" id="tree"]
 nodes/output/position = Vector2(200, 100)
 nodes/loco/node = SubResource("loco")
@@ -73,7 +81,13 @@ nodes/move_ab/node = SubResource("move_ab")
 nodes/move_ab/position = Vector2(-200, 300)
 nodes/move_blend/node = SubResource("move_blend")
 nodes/move_blend/position = Vector2(0, 100)
-node_connections = [&"output", 0, &"move_blend", &"loco_scale", 0, &"loco", &"seek_a", 0, &"move_a", &"seek_b", 0, &"move_b", &"move_ab", 0, &"seek_a", &"move_ab", 1, &"seek_b", &"move_blend", 0, &"loco_scale", &"move_blend", 1, &"move_ab"]
+nodes/stance/node = SubResource("stance")
+nodes/stance/position = Vector2(-600, -200)
+nodes/stance_seek/node = SubResource("stance_seek")
+nodes/stance_seek/position = Vector2(-400, -200)
+nodes/stance_blend/node = SubResource("stance_blend")
+nodes/stance_blend/position = Vector2(-200, -100)
+node_connections = [&"output", 0, &"move_blend", &"loco_scale", 0, &"loco", &"stance_seek", 0, &"stance", &"stance_blend", 0, &"loco_scale", &"stance_blend", 1, &"stance_seek", &"seek_a", 0, &"move_a", &"seek_b", 0, &"move_b", &"move_ab", 0, &"seek_a", &"move_ab", 1, &"seek_b", &"move_blend", 0, &"stance_blend", &"move_blend", 1, &"move_ab"]
 
 [sub_resource type="SphereShape3D" id="palm_zone"]
 radius = 0.18
@@ -195,6 +209,8 @@ parameters/seek_a/seek_request = -1.0
 parameters/seek_b/seek_request = -1.0
 parameters/move_ab/blend_amount = 0.0
 parameters/move_blend/blend_amount = 0.0
+parameters/stance_seek/seek_request = -1.0
+parameters/stance_blend/blend_amount = 0.0
 
 [node name="Marks" type="Node" parent="."]
 script = ExtResource("4_marks")

@@ -16,13 +16,18 @@ extends Node3D
 ##   Hurtbox        an Area3D around the body (`hurtbox`), where blows land
 ##
 ## The tree is an AnimationNodeBlendTree:
-##   loco (BlendSpace1D on speed) -> loco_scale (TimeScale) -> move_blend.in
+##   loco (BlendSpace1D on speed) -> loco_scale (TimeScale) -> stance_blend.in
+##   stance -> stance_seek -> stance_blend.blend;  stance_blend -> move_blend.in
 ##   move_a -> seek_a -> move_ab.in;  move_b -> seek_b -> move_ab.blend;  move_ab -> move_blend.blend
 ##   move_blend -> output
-## Locomotion plays on its own clock. A move plays in one of two slots, move_a or move_b; each new move
-## takes the other slot and move_ab crossfades to it, so one move can cancel into the next smoothly.
-## move_blend lays the move layer over locomotion. The slots are always placed with a seek, never left to
-## run, so a move shows exactly the time the gameplay says, stepped if its clip asks for that.
+## Locomotion plays on its own clock. The stance (set_stance: the guard held while walking) is a looping clip laid
+## over the upper body only: stance_blend's filter passes it to UPPER_BODY (spine_01) and every bone under it, so
+## the hips and legs keep locomotion. It is placed with a seek every tick, on a clock the rig keeps, so it stands
+## still when the rig is not ticked (hit-stop) and always shows a known time.
+## A move plays in one of two slots, move_a or move_b; each new move takes the other slot and move_ab crossfades
+## to it, so one move can cancel into the next smoothly. move_blend lays the move layer over locomotion and the
+## stance. The slots are always placed with a seek, never left to run, so a move shows exactly the time the
+## gameplay says, stepped if its clip asks for that.
 ## A move cancelled while the move before it is still fading out would have to take that move's slot, and
 ## drop what is left of it from the pose. So the pose the tree showed goes into the cancelled move's slot, as
 ## a clip of one key (SNAPSHOT_CLIP), and the new move fades in over that instead.
@@ -59,6 +64,14 @@ const MOVE_AB := &"parameters/move_ab/blend_amount"
 const MOVE_BLEND := &"parameters/move_blend/blend_amount"
 const SLOT_NODES: Array[StringName] = [&"move_a", &"move_b"]
 const SLOT_SEEKS: Array[StringName] = [&"parameters/seek_a/seek_request", &"parameters/seek_b/seek_request"]
+const STANCE_NODE := &"stance"
+const STANCE_SEEK := &"parameters/stance_seek/seek_request"
+const STANCE_BLEND := &"parameters/stance_blend/blend_amount"
+## Seconds the stance takes to fade in or out.
+const STANCE_FADE := 0.08
+## The bone the stance starts at: it and every bone under it (the chest, neck, head, arms and hands) take the
+## stance; the pelvis and legs do not.
+const UPPER_BODY := &"spine_01"
 ## Clip metadata: the rate a clip is shown at, in steps per second; 0 (or none) means smooth.
 const STEP_FPS_META := &"step_fps"
 ## Degrees either side of OrientationWarp.BACKWARD_FROM_DEG (110°) a strafe must pass to switch the cycle's
@@ -111,6 +124,9 @@ var _ab_time := 0.0
 var _layer := 0.0
 var _layer_goal := 0.0
 var _layer_time := 0.0
+var _stance := 0.0  # how much the stance shows over locomotion, 0 to 1, and where it is going
+var _stance_goal := 0.0
+var _stance_time := 0.0  # the stance clip's time, in seconds, on the rig's own clock
 var _backward := false  # the locomotion cycle's direction from the last set_strafe
 # Each bone's pose in the skeleton's space as last shown, modifiers included. The skeleton puts the clips'
 # pose back once it has drawn the modified one, so this is the only place the shown pose can be read.
@@ -140,6 +156,7 @@ func _ready() -> void:
 	var found := $Model.find_children("*", "Skeleton3D", true, false)
 	skeleton = found[0] if not found.is_empty() else null
 	if skeleton != null:
+		_filter_upper_body()
 		skeleton.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_MANUAL
 		for child in skeleton.get_children():
 			if child is OrientationWarp:
@@ -231,6 +248,21 @@ func set_strafe(angle: float) -> bool:
 		warp.angle = angle
 		warp.backward = _backward
 	return _backward
+
+
+## Lays the looping `clip` over the upper body when `on` (UPPER_BODY and every bone under it; the hips and legs keep
+## locomotion), fading it in over STANCE_FADE (0.08 s), or fades it out. A move is laid over it as over locomotion.
+## It plays from its start when it fades in from nothing, and carries on where it was when it comes back mid-fade.
+## A clip the rig does not have is an error, and changes nothing.
+func set_stance(clip: StringName, on: bool) -> void:
+	if on:
+		if not tree.has_animation(clip):
+			push_error("Rig: '%s' has no clip '%s'" % [name, clip])
+			return
+		(tree.tree_root.get_node(STANCE_NODE) as AnimationNodeAnimation).animation = clip
+		if is_zero_approx(_stance) and is_zero_approx(_stance_goal):
+			_stance_time = 0.0
+	_stance_goal = 1.0 if on else 0.0
 
 
 ## Sets how out of breath the body is, 0 (at rest) to 1; it fades back to rest by itself over six seconds.
@@ -385,8 +417,14 @@ func tick(delta: float) -> void:
 		if slot != _slot and _slot != -1 and _layer > 0.0 and _slot_weight(slot) > 0.0:
 			_slot_times[slot] += delta
 		tree.set(SLOT_SEEKS[slot], stepped_time(_slot_times[slot], _slot_steps[slot]))
+	if _stance > 0.0 or _stance_goal > 0.0:
+		_stance_time += delta
+		var length := tree.get_animation((tree.tree_root.get_node(STANCE_NODE) as AnimationNodeAnimation).animation).length
+		tree.set(STANCE_SEEK, fposmod(_stance_time, length) if length > 0.0 else 0.0)
+	_stance = _fade(_stance, _stance_goal, STANCE_FADE, delta)
 	_ab = _fade(_ab, _ab_goal, _ab_time, delta)
 	_layer = _fade(_layer, _layer_goal, _layer_time, delta)
+	tree.set(STANCE_BLEND, _stance)
 	tree.set(MOVE_AB, _ab)
 	tree.set(MOVE_BLEND, _layer)
 	tree.advance(delta)
@@ -489,6 +527,18 @@ func _hold_pose(slot: int) -> void:
 	node.animation = SNAPSHOT_CLIP
 	_slot_times[slot] = 0.0
 	_slot_steps[slot] = 0
+
+
+# Filters stance_blend to the upper body: the track paths of UPPER_BODY and every bone under it.
+func _filter_upper_body() -> void:
+	var blend := (tree.tree_root as AnimationNodeBlendTree).get_node(&"stance_blend") as AnimationNodeBlend2
+	var skeleton_path := get_path_to(skeleton)
+	var under := [skeleton.find_bone(UPPER_BODY)] if skeleton.find_bone(UPPER_BODY) >= 0 else []
+	while not under.is_empty():
+		var bone: int = under.pop_back()
+		blend.set_filter_path(NodePath("%s:%s" % [skeleton_path, skeleton.get_bone_name(bone)]), true)
+		under.append_array(Array(skeleton.get_bone_children(bone)))
+	blend.filter_enabled = true
 
 
 # Keeps each bone's pose as the skeleton shows it: called while it updates, with the modifiers applied.

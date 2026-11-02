@@ -86,6 +86,21 @@ func test_a_spend_restarts_the_wait() -> void:
 	assert_true(stats.stamina > 40.0, "and 1.1 s after it, back")
 
 
+func test_a_spend_of_nothing_does_not_restart_the_wait() -> void:
+	# A guard that pays nothing for a blow (a guard_stamina of 0) must not hold its stamina back.
+	var stats := _stats()
+	stats.spend_stamina(50.0)
+	_tick(stats, 0.5)
+	stats.spend_stamina(0.0)
+	stats.spend_stamina(-3.0)
+	_tick(stats, 0.2)
+	assert_near(stats.stamina, 50.0 + 45.0 * 0.1, 1e-6, "the wait ran on from the first spend: 0.1 s of regen")
+	var exhausted := _stats()
+	exhausted.spend_stamina(100.0)
+	exhausted.spend_stamina(0.0)
+	assert_true(exhausted.exhausted, "and nothing changes on an empty bar")
+
+
 func test_a_drain_restarts_the_wait_and_takes_stamina_by_the_second() -> void:
 	var stats := _stats()
 	for i in 60:

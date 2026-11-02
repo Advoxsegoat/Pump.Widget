@@ -1,7 +1,7 @@
 extends TestCase
 ## Abarax's rig (actors/abarax/abarax_rig.tscn, script actors/rig.gd): the AnimationTree layout, stepped
-## move playback, the move crossfade, and the hitboxes and hurtbox. Headless: the tree is advanced by
-## Rig.tick only, so everything here is read straight after a tick.
+## move playback, the move crossfade, the upper-body stance layer, and the hitboxes and hurtbox. Headless: the
+## tree is advanced by Rig.tick only, so everything here is read straight after a tick.
 
 const RIG := "res://actors/abarax/abarax_rig.tscn"
 const MODEL := "res://assets/characters/abarax/abarax.glb"
@@ -30,11 +30,11 @@ func test_tree_layout() -> void:
 	assert_ne(root, null, "the tree root is a blend tree")
 	assert_true(root.get_node(&"loco") is AnimationNodeBlendSpace1D, "loco")
 	assert_true(root.get_node(&"loco_scale") is AnimationNodeTimeScale, "loco_scale")
-	for n in [&"move_a", &"move_b"]:
+	for n in [&"move_a", &"move_b", &"stance"]:
 		assert_true(root.get_node(n) is AnimationNodeAnimation, n)
-	for n in [&"seek_a", &"seek_b"]:
+	for n in [&"seek_a", &"seek_b", &"stance_seek"]:
 		assert_true(root.get_node(n) is AnimationNodeTimeSeek, n)
-	for n in [&"move_ab", &"move_blend"]:
+	for n in [&"move_ab", &"move_blend", &"stance_blend"]:
 		assert_true(root.get_node(n) is AnimationNodeBlend2, n)
 	# [input node, input index, output node] for every connection.
 	var links := {}
@@ -47,10 +47,94 @@ func test_tree_layout() -> void:
 		"seek_b/0": &"move_b",
 		"move_ab/0": &"seek_a",
 		"move_ab/1": &"seek_b",
-		"move_blend/0": &"loco_scale",
+		"stance_seek/0": &"stance",
+		"stance_blend/0": &"loco_scale",
+		"stance_blend/1": &"stance_seek",
+		"move_blend/0": &"stance_blend",
 		"move_blend/1": &"move_ab",
 		"output/0": &"move_blend",
 	})
+
+
+func test_the_stance_layer_is_the_upper_body() -> void:
+	# stance_blend passes the stance to spine_01 and every bone under it (the chest, neck, head, scarf, arms, hands
+	# and fingers); the pelvis, the legs and the root stay locomotion's.
+	var r := rig()
+	var blend := (r.tree.tree_root as AnimationNodeBlendTree).get_node(&"stance_blend") as AnimationNodeBlend2
+	assert_true(blend.filter_enabled, "the stance blend is filtered")
+	var upper := {}
+	var under := [r.skeleton.find_bone("spine_01")]
+	while not under.is_empty():
+		var bone: int = under.pop_back()
+		upper[r.skeleton.get_bone_name(bone)] = true
+		under.append_array(Array(r.skeleton.get_bone_children(bone)))
+	for named in ["spine_02", "spine_03", "neck_01", "Head", "clavicle_l", "clavicle_r", "upperarm_r", "hand_l", "index_03_r"]:
+		assert_true(upper.has(named), "%s is upper body" % named)
+	for named in ["root", "pelvis", "thigh_l", "calf_r", "foot_l", "ball_r"]:
+		assert_false(upper.has(named), "%s is not" % named)
+	var skeleton := r.get_path_to(r.skeleton)
+	for b in r.skeleton.get_bone_count():
+		var bone := r.skeleton.get_bone_name(b)
+		assert_eq(blend.is_path_filtered(NodePath("%s:%s" % [skeleton, bone])), upper.has(bone), "%s in the filter" % bone)
+
+
+func test_the_stance_fades_in_and_out_over_80_ms() -> void:
+	var r := rig()
+	assert_near(float(r.tree.get(Rig.STANCE_BLEND)), 0.0, 1e-6, "no stance at first")
+	r.set_stance(&"guard_hold", true)
+	var stance := (r.tree.tree_root as AnimationNodeBlendTree).get_node(&"stance") as AnimationNodeAnimation
+	assert_eq(stance.animation, &"guard_hold", "the stance plays the clip")
+	r.tick(1.0 / 60)
+	assert_near(float(r.tree.get(Rig.STANCE_BLEND)), (1.0 / 60) / 0.08, 1e-4, "a tick into the fade")
+	for i in 4:
+		r.tick(1.0 / 60)
+	assert_near(float(r.tree.get(Rig.STANCE_BLEND)), 1.0, 1e-6, "in after 0.08 s")
+	r.set_stance(&"guard_hold", false)
+	r.tick(1.0 / 60)
+	assert_near(float(r.tree.get(Rig.STANCE_BLEND)), 1.0 - (1.0 / 60) / 0.08, 1e-4, "and out the same way")
+	for i in 4:
+		r.tick(1.0 / 60)
+	assert_near(float(r.tree.get(Rig.STANCE_BLEND)), 0.0, 1e-6)
+	quietly(func() -> void: r.set_stance(&"no_such_clip", true))
+	r.tick(1.0 / 60)
+	assert_near(float(r.tree.get(Rig.STANCE_BLEND)), 0.0, 1e-6, "a clip the rig lacks shows nothing")
+
+
+func test_with_the_stance_on_the_legs_keep_locomotion_and_the_upper_body_takes_the_stance() -> void:
+	# Two rigs walking alike, one with the guard stance: the stance rig's legs and hips are the walk's, bone for
+	# bone, while its chest shows guard_hold at the stance's own time (it started with the stance, a tick of 1/60 s
+	# at a time), not the walk.
+	var guard := rig(); var walk := rig()
+	guard.set_stance(&"guard_hold", true)
+	for r: Rig in [guard, walk]:
+		r.set_locomotion(1.0, false)
+	var ticks := 20
+	for i in ticks:
+		guard.tick(1.0 / 60); walk.tick(1.0 / 60)
+	for bone in ["pelvis", "thigh_l", "calf_l", "foot_l", "thigh_r", "calf_r", "foot_r"]:
+		var b := guard.skeleton.find_bone(bone)
+		assert_true(_angle(guard.skeleton.get_bone_pose_rotation(b), walk.skeleton.get_bone_pose_rotation(b)) < 1e-4,
+				"%s walks under the stance" % bone)
+	var b := guard.skeleton.find_bone("pelvis")
+	assert_vec_near(guard.skeleton.get_bone_pose_position(b), walk.skeleton.get_bone_pose_position(b), 1e-5, "the hips bob with the walk")
+	var hold: Animation = guard.tree.get_animation(&"guard_hold")
+	var spine := hold.find_track(NodePath("%s:spine_03" % guard.get_path_to(guard.skeleton)), Animation.TYPE_ROTATION_3D)
+	var chest := guard.skeleton.get_bone_pose_rotation(guard.skeleton.find_bone("spine_03"))
+	var want := hold.rotation_track_interpolate(spine, fposmod(ticks / 60.0, hold.length))
+	assert_true(_angle(chest, want) < 1e-3, "spine_03 is guard_hold's (%.4f rad off)" % _angle(chest, want))
+	var walked := walk.skeleton.get_bone_pose_rotation(walk.skeleton.find_bone("spine_03"))
+	assert_true(_angle(chest, walked) > 0.05, "and not the walk's (%.3f rad apart)" % _angle(chest, walked))
+
+
+func test_a_move_covers_the_stance() -> void:
+	# The move layer is laid over the stance as over locomotion: a move at full weight shows its own clip all over.
+	var guard := rig(); var plain := rig()
+	guard.set_stance(&"guard_hold", true)
+	for r: Rig in [guard, plain]:
+		r.play_move(&"palm_jab", 0.0); r.set_move_time(0.2)
+		for i in 6:
+			r.tick(1.0 / 60)
+	assert_eq(_worst_difference(guard, plain, false), "", "the jab, and no stance through it")
 
 
 func test_locomotion_points_are_clip_ground_speeds() -> void:
