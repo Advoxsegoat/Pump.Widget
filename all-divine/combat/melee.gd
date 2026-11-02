@@ -20,9 +20,9 @@ extends Node
 ## doing does not depend on which attacker's script ran first either: every blow's numbers come off and every
 ## blow kicks the body, and then one thing comes of them all, started once: the death, if together they emptied
 ## its HP, or else the strongest reaction among them (HitIntake.REACTIONS: a stagger over a flinch, a flinch over
-## a guard_hit, and so on). Two blows that would each kill it
-## are one death that both dealt, and each attacker hears its blow landed. A body that died since the frame
-## began (by something other than this frame's blows) takes nothing: its blows come to a WHIFF, on both sides.
+## a guard_hit, and so on). Two blows that would each kill it are one death that both dealt, and each attacker
+## hears its blow landed. A body that died since the frame began (by something other than this frame's blows)
+## takes nothing: its blows come to a WHIFF, on both sides.
 ##
 ## A blow that is turned back (TURNED_BACK: PARRIED, or CAUGHT) also does something to its attacker: the attacker
 ## recoils and loses the result's attacker_posture_damage. That too is taken with everything else that frame did to

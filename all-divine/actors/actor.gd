@@ -29,11 +29,10 @@ extends CharacterBody3D
 ##      if guard is let go or palm or heavy is pressed
 ##   5. on a frame with no move, locomotion turns the stick into a velocity, sprinting while dodge is held
 ##      (and the actor can act: an exhausted actor jogs instead; a guarding one only walks, slowly, and never
-##      sprints), and with the intent's face_target set the
-##      body turns toward the target (at the turn rate) rather than toward the way it goes, unless it sprints
-##      (a sprint runs where it goes, as in Souls); on a frame a move ran (one that ended this frame too), the
-##      velocity is the move's root motion, and locomotion takes it over, so it carries on from the move's
-##      speed when the move is done
+##      sprints), and with the intent's face_target set the body turns toward the target (at the turn rate)
+##      rather than toward the way it goes, unless it sprints (a sprint runs where it goes, as in Souls); on a
+##      frame a move ran (one that ended this frame too), the velocity is the move's root motion, and locomotion
+##      takes it over, so it carries on from the move's speed when the move is done
 ##   6. a sprint spends sprint_stamina a second, and the stats are ticked: stamina and posture come back (stamina
 ##      slower while a guard is up)
 ##   7. move_and_slide, with gravity when off the floor, and with the knockback added (see push), which the

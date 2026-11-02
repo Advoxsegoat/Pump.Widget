@@ -3,8 +3,9 @@ extends RefCounted
 ## How an actor takes the blows that land on it, and how it dies. Melee judges every blow of a frame and hands
 ## each body all of its blows at once (Actor.apply_hits, which comes here), with those of its own blows that were
 ## turned back; this is what they do to it: their numbers come off its Stats, each kicks its upper body, and one
-## thing comes of them all, a reaction move or its death. The actor owns one (Actor.intake), as it owns its Locomotion and Stats, and keeps the public face of it:
-## apply_hits, apply_hit, die, `dead` and the signals got_hit and died.
+## thing comes of them all, a reaction move or its death. The actor owns one (Actor.intake), as it owns its
+## Locomotion and Stats, and keeps the public face of it: apply_hits, apply_hit, die, `dead` and the signals got_hit
+## and died.
 
 ## How hard a blow kicks the upper body (Rig.hit_react): HIT_REACT_BASE plus its poise damage over
 ## HIT_REACT_POISE, so a jab (6) is 0.8 and a blow of 10 poise damage is 1.
