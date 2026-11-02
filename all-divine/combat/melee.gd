@@ -19,9 +19,15 @@ extends Node
 ## All the blows a frame lands on one body are taken together (Actor.apply_hits), so that what the body ends up
 ## doing does not depend on which attacker's script ran first either: every blow's numbers come off and every
 ## blow kicks the body, and then one thing comes of them all, started once: the death, if together they emptied
-## its HP, or else the strongest reaction among them, a STAGGER over a FLINCH. Two blows that would each kill it
+## its HP, or else the strongest reaction among them (HitIntake.REACTIONS: a stagger over a flinch, a flinch over
+## a guard_hit, and so on). Two blows that would each kill it
 ## are one death that both dealt, and each attacker hears its blow landed. A body that died since the frame
 ## began (by something other than this frame's blows) takes nothing: its blows come to a WHIFF, on both sides.
+##
+## A blow that is turned back (TURNED_BACK: PARRIED, or CAUGHT) also does something to its attacker: the attacker
+## recoils and loses the result's attacker_posture_damage. That too is taken with everything else that frame did to
+## the attacker's body, in the same one call (its apply_hits, as `turned`), so a body that is struck and has its own
+## blow turned back on one frame, or has two of its blows turned back, still takes them all at once, in any order.
 ##
 ## A blow that landed also has weight (_weigh): both fighters freeze for the profile's `hitstop_frames` and the
 ## target is pushed along the blow by its `knockback`. A trade freezes both for the longer of the two blows'
@@ -30,10 +36,12 @@ extends Node
 ## Melee's place in each physics frame: after every actor (which run at the default, 0).
 const PRIORITY := 100
 ## The outcomes that stop both fighters for the blow's hit-stop (Actor.freeze) and shove the target
-## (Actor.push): a blow that landed, was guarded, was turned back or was caught. A WHIFF touched nothing, so it
-## has no weight; a broken guard and a grab are other things (a grab is a paired move, not a blow).
-const FREEZES: Array[HitResult.Outcome] = [HitResult.Outcome.HIT, HitResult.Outcome.GUARDED, HitResult.Outcome.PARRIED,
-		HitResult.Outcome.CAUGHT]
+## (Actor.push): a blow that landed, was guarded, broke the guard, was turned back or was caught. A WHIFF touched
+## nothing, so it has no weight; a grab is another thing (a paired move, not a blow).
+const FREEZES: Array[HitResult.Outcome] = [HitResult.Outcome.HIT, HitResult.Outcome.GUARDED,
+		HitResult.Outcome.GUARD_BREAK, HitResult.Outcome.PARRIED, HitResult.Outcome.CAUGHT]
+## The outcomes that turn a blow back on its attacker, who then takes attacker_posture_damage and recoils.
+const TURNED_BACK: Array[HitResult.Outcome] = [HitResult.Outcome.PARRIED, HitResult.Outcome.CAUGHT]
 ## The snapshot's: before any actor moves.
 const SNAPSHOT_PRIORITY := -100
 
@@ -73,27 +81,42 @@ func _physics_process(_delta: float) -> void:
 	var events := _posted
 	_posted = []
 	var results: Array[HitResult] = []
-	var blows := {}  # target -> the indices of its blows, the targets in the order they were first struck
+	# body -> [the indices of the blows it took, those of its own blows turned back], the bodies in the order met
+	var bodies := {}
 	for i in events.size():
-		results.append(_judge(events[i]))
-		if results[i] != null:
-			if not blows.has(events[i].target):
-				blows[events[i].target] = []
-			(blows[events[i].target] as Array).append(i)
-	for target: Actor in blows:
+		var r := _judge(events[i])
+		if r != null and events[i].target.dead:
+			r = HitResult.new()  # it died since the frame began: the blow comes to nothing
+		results.append(r)
+		if r == null:
+			continue
+		_note(bodies, events[i].target, 0, i)
+		if TURNED_BACK.has(r.outcome):
+			_note(bodies, events[i].attacker, 1, i)
+	for body: Actor in bodies:
 		var taken: Array[HitEvent] = []
 		var came_to: Array[HitResult] = []
-		for i: int in blows[target]:
-			if target.dead:
-				results[i] = HitResult.new()
+		var turned: Array[HitEvent] = []
+		var turned_to: Array[HitResult] = []
+		for i: int in bodies[body][0]:
 			if results[i].outcome == HitResult.Outcome.WHIFF:
 				events[i].attacker.scanner.forget(events[i])
 			taken.append(events[i])
 			came_to.append(results[i])
-		target.apply_hits(taken, came_to)
-		for i: int in blows[target]:
+		for i: int in bodies[body][1]:
+			turned.append(events[i])
+			turned_to.append(results[i])
+		body.apply_hits(taken, came_to, turned, turned_to)
+		for i: int in bodies[body][0]:
 			_weigh(events[i], results[i])
 			events[i].attacker.hit_landed.emit(results[i], events[i])
+
+
+# Adds blow `i` to `body`'s list `which` in `bodies` (0: the blows it took, 1: its own turned back).
+static func _note(bodies: Dictionary, body: Actor, which: int, i: int) -> void:
+	if not bodies.has(body):
+		bodies[body] = [[], []]
+	(bodies[body][which] as Array).append(i)
 
 
 # Gives the blow `e`, which came to `r`, its weight: both fighters freeze for the profile's hit-stop frames

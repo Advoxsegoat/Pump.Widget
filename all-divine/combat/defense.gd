@@ -10,9 +10,9 @@ extends RefCounted
 var invulnerable := false
 ## Off the ground: a LOW blow passes under it.
 var airborne := false
-## A guard is up. Nothing raises one yet (the guard comes later), so it is false.
+## A guard is up: a move's guard_on mark (guard_raise from its f4), or the guard stance (Actor.is_guarding).
 var guarding := false
-## A parry window is open. Nothing opens one yet (the guard comes later), so it is false.
+## A parry window is open: a move's parry_on mark (guard_raise's first ten frames).
 var parrying := false
 ## A move's marks let the body take a blow without a reaction.
 var hyperarmour := false
@@ -34,6 +34,8 @@ static func of(actor: Actor) -> Defense:
 	d.invulnerable = actor.is_invulnerable()
 	d.airborne = actor.rig.airborne
 	d.hyperarmour = actor.runner.hyperarmour
+	d.guarding = actor.is_guarding()
+	d.parrying = actor.runner.parry_window
 	var flat := Vector3(actor.facing().x, 0.0, actor.facing().z)
 	if not flat.is_zero_approx():
 		d.facing = flat.normalized()

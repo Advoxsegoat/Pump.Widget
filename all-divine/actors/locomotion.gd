@@ -31,14 +31,20 @@ func target_speed(m: float, sprint: bool) -> float:
 
 
 ## One frame of movement with the stick at `move` (world (x, z), length 0 to 1), sprinting if `sprint`
-## and the stick is past walk_threshold. Returns the velocity, in m/s, on the ground plane.
-func tick(move: Vector2, sprint: bool, delta: float) -> Vector3:
+## and the stick is past walk_threshold. With a `guard_scale` above 0 the body holds a guard: it only walks (a
+## stick past walk_threshold asks for walk_speed, no more), at that times guard_scale, and never sprints. Returns
+## the velocity, in m/s, on the ground plane.
+func tick(move: Vector2, sprint: bool, delta: float, guard_scale := 0.0) -> Vector3:
 	var m := minf(move.length(), 1.0)
-	sprinting = sprint and m > tuning.walk_threshold
+	var guarding := guard_scale > 0.0
+	sprinting = sprint and m > tuning.walk_threshold and not guarding
 	var target := 0.0
 	if m > 0.0:
 		_heading = move.normalized()
-		target = target_speed(m, sprint)
+		if guarding:
+			target = target_speed(minf(m, tuning.walk_threshold), false) * guard_scale
+		else:
+			target = target_speed(m, sprint)
 		facing_yaw = turn_toward(facing_yaw, yaw_of(_heading), deg_to_rad(tuning.turn_rate_deg) * delta)
 	speed = move_toward(speed, target, (tuning.accel if target > speed else tuning.decel) * delta)
 	# Ten steps of 0.4 leave a few 1e-16 m/s of a 4 m/s jog: that is a stop.

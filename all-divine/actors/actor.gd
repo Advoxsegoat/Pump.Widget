@@ -24,14 +24,18 @@ extends CharacterBody3D
 ##      opens still comes out on its first frame, however long the hit-stop in between
 ##   4. the runner ticks: the current move advances (its marks, a cancel window, its end; an attack that aims
 ##      first turns the body toward the intent's aim_target while it winds up, and a charge_hold mark held
-##      stops the clock), or a buffered press starts one; this is how a press shows on the frame it is made
+##      stops the clock), or a buffered press starts one; this is how a press shows on the frame it is made.
+##      Then the guard stance is kept (see `guarding`): up if a guard move just played out with guard held, down
+##      if guard is let go or palm or heavy is pressed
 ##   5. on a frame with no move, locomotion turns the stick into a velocity, sprinting while dodge is held
-##      (and the actor can act: an exhausted actor jogs instead), and with the intent's face_target set the
+##      (and the actor can act: an exhausted actor jogs instead; a guarding one only walks, slowly, and never
+##      sprints), and with the intent's face_target set the
 ##      body turns toward the target (at the turn rate) rather than toward the way it goes, unless it sprints
 ##      (a sprint runs where it goes, as in Souls); on a frame a move ran (one that ended this frame too), the
 ##      velocity is the move's root motion, and locomotion takes it over, so it carries on from the move's
 ##      speed when the move is done
-##   6. a sprint spends sprint_stamina a second, and the stats are ticked: stamina and posture come back
+##   6. a sprint spends sprint_stamina a second, and the stats are ticked: stamina and posture come back (stamina
+##      slower while a guard is up)
 ##   7. move_and_slide, with gravity when off the floor, and with the knockback added (see push), which the
 ##      move and locomotion know nothing of
 ##   8. the body turns to locomotion's facing
@@ -78,6 +82,15 @@ const GROUP := &"actors"
 ## The foes the player can aim at: actors of team ENEMY, from when they are ready until they die. Aim assist picks
 ## its target from them, and lock-on will.
 const LOCKABLE_GROUP := &"lockable"
+## The action that raises the guard (the def's moveset names the raise) and, held as the raise plays out, keeps it
+## up: the guard stance.
+const GUARD_ACTION := &"guard"
+## Pressing one of these drops the guard stance, to attack out of it.
+const GUARD_DROPPED_BY: Array[StringName] = [&"palm", &"heavy"]
+## The clip the rig lays over the upper body while the guard stance is up.
+const GUARD_STANCE := &"guard_hold"
+## The reaction a guarded blow plays: the guard stance stays up through it (HitIntake, hold_guard).
+const GUARD_HIT := &"guard_hit"
 
 @export var def: ActorDef
 
@@ -101,6 +114,12 @@ var dead := false
 var scanner := HitScanner.new()
 ## Physics frames of hit-stop still to go (freeze).
 var frozen := 0
+## The guard stance is up: the guard held with no move playing, or through a guard_hit. It comes up when the def's
+## guard raise (moveset `guard`) or its guard_hit plays out with guard held, or a guarded blow lands while guard is
+## held (hold_guard); it goes down when guard is let go, palm or heavy is pressed, or any other move starts. While
+## it is up the rig shows GUARD_STANCE on the upper body, the body walks at the tuning's guard_speed_scale and
+## never sprints, and stamina comes back slower. See is_guarding for whether a guard is up at all.
+var guarding := false
 
 # The speed the rig's locomotion layer is given. With no move it is locomotion's. A move that starts is laid over
 # that layer in its blend_in, so the layer keeps the speed it had until the move is fully in (dropping it to
@@ -108,6 +127,8 @@ var frozen := 0
 # speed a roll carries on from (locomotion.speed, root motion) never shows as a run under the move.
 var _rig_speed := 0.0
 var _push := Vector3.ZERO  # the knockback still to travel, in m/s on the ground plane (see push)
+var _guard_held := false  # whether the brain held GUARD_ACTION on the latest frame
+var _guard_move_ended := false  # a guard move (the raise, or guard_hit) played out on this frame
 
 @onready var runner: MoveRunner = $MoveRunner
 
@@ -126,6 +147,8 @@ func _ready() -> void:
 	locomotion = Locomotion.new(def.locomotion)
 	locomotion.facing_yaw = rotation.y
 	runner.actor = self
+	runner.move_started.connect(_on_move_started)
+	runner.move_ended.connect(_on_move_ended)
 	intake = HitIntake.new(self)
 	rig.hurtbox.set_meta(&"actor", self)
 	add_to_group(GROUP)
@@ -194,6 +217,18 @@ func is_invulnerable() -> bool:
 	return runner.iframes
 
 
+## True while a guard is up: a move's guard_on mark (guard_raise from its f4), or the guard stance (`guarding`).
+func is_guarding() -> bool:
+	return runner.guard_window or guarding
+
+
+## Keeps the guard up if guard is held: a guarded blow calls it as its guard_hit starts (HitIntake), so the guard
+## stays up through the reaction (even one that cut short the raise whose mark held it up) and after it.
+func hold_guard() -> void:
+	if _guard_held:
+		_set_guarding(true)
+
+
 ## Takes the blow `e`, which Melee judged to come to `r`, on its own: apply_hits with that one blow.
 func apply_hit(e: HitEvent, r: HitResult) -> void:
 	var events: Array[HitEvent] = [e]
@@ -202,10 +237,12 @@ func apply_hit(e: HitEvent, r: HitResult) -> void:
 
 
 ## Takes every blow that landed on the actor in one frame (`events`, and what Melee judged each to come to,
-## `results`) together, so that what comes of them does not depend on the order they are taken in: their
+## `results`) together, with those of its own blows that were turned back that frame (`turned`, PARRIED or CAUGHT,
+## and `turned_results`), so that what comes of them does not depend on the order they are taken in: their
 ## numbers, their kicks, then one reaction or the death (HitIntake.take). got_hit is emitted for each blow after.
-func apply_hits(events: Array[HitEvent], results: Array[HitResult]) -> void:
-	intake.take(events, results)
+func apply_hits(events: Array[HitEvent], results: Array[HitResult], turned: Array[HitEvent] = [],
+		turned_results: Array[HitResult] = []) -> void:
+	intake.take(events, results, turned, turned_results)
 
 
 ## Kills the actor, once (HitIntake.die): it plays its def's `death` reaction, its hurtbox goes off, what it had
@@ -224,16 +261,19 @@ func _physics_process(delta: float) -> void:
 		intent = Intent.new()
 	for action in intent.pressed:
 		buffer.push(action, buffer_frame)
+	_guard_held = intent.held.has(GUARD_ACTION)
 	if frozen > 0:
 		frozen -= 1
 		return
 	var moved_by_move := runner.busy()
 	var facing_before := locomotion.facing_yaw
 	var planar := runner.tick(intent, delta)
+	_keep_guard(intent)
 	if moved_by_move or runner.busy():
 		locomotion.carry(planar)
 	else:
-		planar = locomotion.tick(intent.move, intent.held.has(SPRINT_ACTION) and stats.can_act(), delta)
+		var sprint := intent.held.has(SPRINT_ACTION) and stats.can_act()
+		planar = locomotion.tick(intent.move, sprint, delta, stats.tuning.guard_speed_scale if guarding else 0.0)
 		if _keeps_facing(intent):
 			var to_target := _flat_to(intent.face_target)
 			if not to_target.is_zero_approx():
@@ -241,8 +281,7 @@ func _physics_process(delta: float) -> void:
 						deg_to_rad(locomotion.tuning.turn_rate_deg) * delta)
 	if locomotion.sprinting:
 		stats.drain_stamina(stats.tuning.sprint_stamina, delta)
-	# Guarding comes with the guard (it slows stamina's return); nothing holds one yet.
-	stats.tick(delta, false)
+	stats.tick(delta, is_guarding())
 	var fall := velocity.y
 	if not is_on_floor():
 		fall += get_gravity().y * delta
@@ -260,6 +299,36 @@ func _physics_process(delta: float) -> void:
 	rig.tick(delta)
 	for e in scanner.scan(self):
 		Melee.post(e)
+
+
+# The guard stance for this frame, once the runner has ticked: up when a guard move played out on this frame with
+# guard held and nothing else has started; down when guard is let go, or palm or heavy is pressed (whether or not
+# the attack can start). A move that starts takes it down by itself (_on_move_started).
+func _keep_guard(intent: Intent) -> void:
+	if not _guard_held or intent.pressed.any(func(action: StringName) -> bool: return GUARD_DROPPED_BY.has(action)):
+		_set_guarding(false)
+	elif _guard_move_ended and not runner.busy():
+		_set_guarding(true)
+	_guard_move_ended = false
+
+
+func _set_guarding(on: bool) -> void:
+	if on == guarding:
+		return
+	guarding = on
+	rig.set_stance(GUARD_STANCE, on)
+
+
+# Any move but guard_hit takes the guard stance down: an attack or a roll out of it, a reaction, the death.
+func _on_move_started(move: MoveData) -> void:
+	if guarding and move.id != def.reactions.get(GUARD_HIT, &""):
+		_set_guarding(false)
+
+
+# The raise or guard_hit played out: the guard stance comes up this frame if guard is still held (_keep_guard).
+func _on_move_ended(move: MoveData, cancelled: bool) -> void:
+	if not cancelled and (move.id == def.moveset.get(GUARD_ACTION, &"") or move.id == def.reactions.get(GUARD_HIT, &"")):
+		_guard_move_ended = true
 
 
 # The knockback's velocity for this frame, and the push left after it: _push is the velocity at the start of the

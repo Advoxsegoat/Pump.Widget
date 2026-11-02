@@ -165,6 +165,6 @@ func test_a_blow_that_whiffs_freezes_nobody() -> void:
 		assert_eq(seen[f]["b_frozen"], 0, "nor b (frame %d)" % f)
 
 
-func test_melee_freezes_for_a_hit_a_guard_a_parry_and_a_catch() -> void:
+func test_melee_freezes_for_a_hit_a_guard_a_broken_guard_a_parry_and_a_catch() -> void:
 	var O := HitResult.Outcome
-	assert_eq(Melee.FREEZES, [O.HIT, O.GUARDED, O.PARRIED, O.CAUGHT])
+	assert_eq(Melee.FREEZES, [O.HIT, O.GUARDED, O.GUARD_BREAK, O.PARRIED, O.CAUGHT])

@@ -13,10 +13,15 @@ extends Node
 ##                      cue perilous_sting and a rose flash of the body
 ## A charge that fills (MoveRunner.charged): the FxDef charge_glow on the chest and the cue charge_hum, once, as it fills.
 ## A hit (Actor.got_hit), whatever the actor does about it: a blow that came to nothing (a WHIFF: a body held in
-## reach while invulnerable reports one every tick) shows and sounds nothing, and any other shows the hit_spark
-## where the blow met the body, flashes the body white, shakes the camera by the profile's `shake`, and plays
-## three layers of sound at that point: the profile's impact_sound, the actor's surface_sound (what it is made of)
-## and its hurt_voice (empty: nothing, for now).
+## reach while invulnerable reports one every tick) shows and sounds nothing. Any other shakes the camera by the
+## profile's `shake`, and sounds where it met, by what came of it:
+##   HIT, GRABBED        the blow reached the body: the hit_spark, a white flash of the body, and three layers of
+##                       sound: the profile's impact_sound, the actor's surface_sound (what it is made of) and its
+##                       hurt_voice (empty: nothing, for now)
+##   GUARDED, GUARD_BREAK the guard took it: the hit_spark and guard_block
+##   PARRIED             the hit_spark and parry_ring
+##   CAUGHT              catch_snap
+## The reaction the blow starts sounds its own cloth from its clip's marks, on top.
 ##
 ## An effect is shown in the world, where the actor is (so it stays where it was shown), or riding a bone in a
 ## BoneAttachment3D, and is freed after its FxDef's lifetime. Each is in the group GROUP, with the meta `fx` its id.
@@ -26,6 +31,13 @@ const GROUP := &"fx"
 ## A hit flashes the body white for 2 frames (of the 60 a second the physics runs at).
 const HIT_FLASH := Color.WHITE
 const HIT_FLASH_SECONDS := 2.0 / 60.0
+## What a blow that met a guard, a parry or a catch sounds like, by its outcome, in place of the body's layers.
+const ANSWER_SOUNDS := {
+	HitResult.Outcome.GUARDED: &"guard_block",
+	HitResult.Outcome.GUARD_BREAK: &"guard_block",
+	HitResult.Outcome.PARRIED: &"parry_ring",
+	HitResult.Outcome.CAUGHT: &"catch_snap",
+}
 ## A perilous attack's tell flashes it rose, #e8607e, for a quarter of a second.
 const PERILOUS_FLASH := Color("e8607e")
 const PERILOUS_FLASH_SECONDS := 0.25
@@ -82,9 +94,14 @@ func _tell(kind: StringName) -> void:
 func _on_got_hit(result: HitResult, event: HitEvent) -> void:
 	if result.outcome == HitResult.Outcome.WHIFF:
 		return
+	shake_camera(event.profile.shake)
+	if ANSWER_SOUNDS.has(result.outcome):
+		if result.outcome != HitResult.Outcome.CAUGHT:
+			show_fx(&"hit_spark", event.point)
+		Sfx.play(ANSWER_SOUNDS[result.outcome], event.point)
+		return
 	show_fx(&"hit_spark", event.point)
 	_actor.rig.flash(HIT_FLASH, HIT_FLASH_SECONDS)
-	shake_camera(event.profile.shake)
 	Sfx.play(event.profile.impact_sound, event.point)
 	Sfx.play(_actor.def.surface_sound, event.point)
 	Sfx.play(_actor.def.hurt_voice, event.point)

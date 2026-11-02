@@ -43,6 +43,10 @@ var current: MoveData
 var time := 0.0
 var iframes := false
 var hyperarmour := false
+## True between a parry_on and a parry_off mark: a blow judged now is turned back (Combat.resolve, rule 4).
+var parry_window := false
+## True between a guard_on and a guard_off mark: the move holds a guard up (guard_raise from its f4).
+var guard_window := false
 ## The open cancel window: action -> the id of the move it cancels into. Empty while closed.
 var window := {}
 var in_recovery := false
@@ -155,6 +159,8 @@ func _end(cancelled: bool) -> void:
 	_hitboxes_on.clear()
 	iframes = false
 	hyperarmour = false
+	parry_window = false
+	guard_window = false
 	window = {}
 	in_recovery = false
 	current = null
@@ -251,6 +257,14 @@ func _act(kind: StringName, args: Dictionary) -> void:
 			hyperarmour = true
 		&"hyperarmour_off":
 			hyperarmour = false
+		&"parry_on":
+			parry_window = true
+		&"parry_off":
+			parry_window = false
+		&"guard_on":
+			guard_window = true
+		&"guard_off":
+			guard_window = false
 		&"cancel_open":
 			var into: Variant = args.get("into", {})
 			window = (into as Dictionary).duplicate() if into is Dictionary else {}
