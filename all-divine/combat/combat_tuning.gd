@@ -36,6 +36,10 @@ extends Resource
 @export var parry_posture_scale := 2.0
 ## Posture damage a caught thrust deals to the attacker (a catch ignores the thrust's own numbers).
 @export var catch_posture := 50.0
+## A guard raise opens its parry window only if the raise before it started at least this many frames earlier
+## (frames the actor was not frozen for, as its input buffer counts them). One that comes sooner still guards. So
+## tapping guard over and over cannot chain fresh windows: a parry is a timed tap, not spam.
+@export var parry_refresh_frames := 20
 
 # --- finisher ---
 ## Metres within which a broken target can be finished.

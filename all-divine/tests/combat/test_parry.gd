@@ -120,6 +120,72 @@ func test_mashing_guard_does_not_reopen_the_window() -> void:
 	assert_eq(run["landed"], [["GUARDED", 13]], "guarded, not parried")
 
 
+func test_guard_spammed_every_ten_frames_parries_at_most_the_first_blow() -> void:
+	# Guard tapped every 10 frames for 2 s chains fresh raises, one as each ends (about every 14 frames). A blow is
+	# judged at the f5 of every raise, where its window would be open and its guard is up. Only a raise that starts parry_refresh_frames
+	# (20) or more after the one before opens its window, so the first blow is parried and every later one guarded.
+	# b's def leaves out the parry and guard_hit reactions, so no reaction cuts a raise short and spaces them out.
+	var b_def := Duel.def(ActorDef.Team.ENEMY, 5.0)
+	b_def.reactions = b_def.reactions.duplicate()
+	b_def.reactions.erase(&"parry")
+	b_def.reactions.erase(&"guard_hit")
+	var taps := []
+	for i in 12:
+		taps.append({"frames": 1, "press": [&"guard"]})
+		taps.append({"frames": 9})
+	var run := Duel.make(self, [], taps + [{"frames": 40}], 1.0, b_def)
+	var a: Actor = run["a"]
+	var b: Actor = run["b"]
+	var outcomes := []
+	b.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void: outcomes.append(O.keys()[r.outcome]))
+	var stream := Stream.new()
+	stream.attacker = a
+	stream.target = b
+	stream.event = _jab_on(a, b)
+	track(stream)
+	await Duel.play_to(self, b, 165)  # the taps end on frame 120; every raise has played out by then
+	assert_true(stream.raises >= 7, "the taps chained %d raises" % stream.raises)
+	assert_eq(outcomes.size(), stream.raises, "a blow met every raise: %s" % [outcomes])
+	assert_true(outcomes.count("PARRIED") <= 1 and (outcomes.find("PARRIED") <= 0), "at most the first is parried: %s" % [outcomes])
+	assert_eq(outcomes.slice(1).filter(func(o: String) -> bool: return o != "GUARDED"), [], "the rest are guarded: %s" % [outcomes])
+
+
+func test_an_honest_tap_twenty_frames_after_the_last_raise_still_parries() -> void:
+	# A raise on frame 1, then a second tapped `gap` frames after it; a's jab lands 5 frames into the second. 20 frames
+	# (parry_refresh_frames) after the first, its window is open; 19, it only guards.
+	for gap: int in [20, 19]:
+		var second := 1 + gap
+		var run := _duel([{"frames": second - 6}] + JAB, [{"frames": 1, "press": [&"guard"]}, {"frames": gap - 1},
+				{"frames": 1, "press": [&"guard"]}, {"frames": 40}])
+		await _play_to(run, second + 5)
+		assert_eq(run["b_started"].slice(0, 2), [[&"guard_raise", 1], [&"guard_raise", second]], "two raises (gap %d)" % gap)
+		assert_eq(run["landed"], [["PARRIED" if gap >= 20 else "GUARDED", second + 5]], "gap %d" % gap)
+		(run["arena"] as Node).free()
+
+
+# Posts the event `event` (a's jab on b) once per raise of b's, judged at the raise's f5: it runs after Melee's
+# snapshot and before the actors, so it sees b as the snapshot did.
+class Stream extends Node:
+	var attacker: Actor
+	var target: Actor
+	var event: HitEvent
+	var raises := 0
+	var _posted_for := -1
+
+	func _ready() -> void:
+		process_physics_priority = -50
+		target.runner.move_started.connect(func(m: MoveData) -> void:
+			if m.id == &"guard_raise":
+				raises += 1)
+
+	func _physics_process(_delta: float) -> void:
+		var runner := target.runner
+		if runner.current != null and runner.current.id == &"guard_raise" and Marks.frame_of(runner.time) == 5 \
+				and _posted_for != raises:
+			_posted_for = raises
+			Melee.post(event)
+
+
 func test_parried_thrust_is_caught() -> void:
 	var run := _duel([{"frames": 80}], _tap_guard(6))
 	var a: Actor = run["a"]

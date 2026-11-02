@@ -43,7 +43,9 @@ var current: MoveData
 var time := 0.0
 var iframes := false
 var hyperarmour := false
-## True between a parry_on and a parry_off mark: a blow judged now is turned back (Combat.resolve, rule 4).
+## True between a parry_on and a parry_off mark: a blow judged now is turned back (Combat.resolve, rule 4). A move
+## with a parry window that starts less than the tuning's parry_refresh_frames after the last one did (counted on the
+## actor's buffer_frame clock, so hit-stop does not count) passes its parry_on without opening it.
 var parry_window := false
 ## True between a guard_on and a guard_off mark: the move holds a guard up (guard_raise from its f4).
 var guard_window := false
@@ -64,6 +66,8 @@ var _charge_args := {}  # the arguments of the charge_hold mark being held at
 var _charge_left := 0.0  # seconds of the hold still to go
 var _aim_until := -1.0  # the time of the current move's first hitbox_on, where aim assist stops turning the body; -1 if it has none
 var _track_until := -1.0  # the time of its last hitbox_off, where a lock-on's tracking stops
+var _parry_started := -1  # the actor's buffer_frame when the last move with a parry window started; -1 before any
+var _parry_fresh := true  # whether the current move's parry_on opens its window (see parry_window)
 
 
 ## True while a move plays.
@@ -133,6 +137,9 @@ func _start(move: MoveData, intent: Intent) -> void:
 	time = 0.0
 	_anim = rig.tree.get_animation(move.clip)
 	_marks = Marks.read(_anim)
+	if _marks.any(func(m: Dictionary) -> bool: return m["kind"] == &"parry_on"):
+		_parry_fresh = _parry_started < 0 or actor.buffer_frame - _parry_started >= actor.stats.tuning.parry_refresh_frames
+		_parry_started = actor.buffer_frame
 	_root_track = _anim.find_track(rig.tree.root_motion_track, Animation.TYPE_POSITION_3D) if move.root_motion else -1
 	_aim_until = -1.0
 	_track_until = -1.0
@@ -258,7 +265,7 @@ func _act(kind: StringName, args: Dictionary) -> void:
 		&"hyperarmour_off":
 			hyperarmour = false
 		&"parry_on":
-			parry_window = true
+			parry_window = _parry_fresh
 		&"parry_off":
 			parry_window = false
 		&"guard_on":

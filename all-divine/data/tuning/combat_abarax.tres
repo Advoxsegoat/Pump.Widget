@@ -16,6 +16,7 @@ guard_arc_deg = 75.0
 guard_speed_scale = 0.45
 parry_posture_scale = 2.0
 catch_posture = 50.0
+parry_refresh_frames = 20
 finisher_range = 1.6
 finisher_arc_deg = 60.0
 aim_assist_deg = 30.0
