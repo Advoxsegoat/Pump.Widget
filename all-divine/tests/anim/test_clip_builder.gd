@@ -427,6 +427,20 @@ func test_join_parts_plays_only_the_span_of_each_clip_it_is_given() -> void:
 	assert_vec_near(joined.position_track_interpolate(root, 1.0), Vector3(0.0, 0.0, 1.5), 1e-4, "and B's half has its own metre")
 
 
+func test_join_parts_can_keep_the_travel_of_the_span_it_cuts_away() -> void:
+	# B cut from 0.5 s, its root lined up at 0 s: its root starts half a metre past A's end (B travels 1 m a second), as
+	# if the cut half had played; with a fade, the root blends there from A's, without a jump.
+	var a := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.0, 1.0))
+	var b := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.0, 1.0))
+	var kept := ClipBuilder.join_parts([{"anim": a}, {"anim": b, "from": 0.5, "root_from": 0.0}])
+	var root := kept.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
+	assert_vec_near(kept.position_track_interpolate(root, 1.0 + 1.0 / 60.0), Vector3(0.0, 0.0, 1.5 + 1.0 / 60.0), 1e-3, "past the cut travel")
+	var faded := ClipBuilder.join_parts([{"anim": a}, {"anim": b, "from": 0.5, "root_from": 0.0, "fade": 0.25}])
+	root = faded.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
+	assert_vec_near(faded.position_track_interpolate(root, 0.75), Vector3(0.0, 0.0, 0.75), 1e-3, "A's root where the fade starts")
+	assert_vec_near(faded.position_track_interpolate(root, 1.0), Vector3(0.0, 0.0, 0.75 + 0.5 + 0.25), 1e-3, "B's, cut travel and all, where it ends")
+
+
 func test_join_parts_with_nothing_cut_or_faded_is_the_plain_join() -> void:
 	var a := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.0, 1.0))
 	var b := _moving(0.5, Vector3(5.0, 0.0, 5.0), Vector3(5.0, 0.0, 5.5))

@@ -46,7 +46,7 @@ const STEP_RATES: PackedInt32Array = [0, 12, 24]
 const FRAME_EPSILON := 1e-4
 
 ## The keys a `then` entry written as a dictionary may have besides its clip (see join_parts).
-const THEN_KEYS: PackedStringArray = ["from", "to", "fade"]
+const THEN_KEYS: PackedStringArray = ["from", "to", "fade", "root_from"]
 const _SECTION_KEYS: PackedStringArray = ["source", "clip", "loop", "length", "step_fps", "ground_speed_from",
 		"then", "warp", "layer"]
 
@@ -221,6 +221,9 @@ static func join(clips: Array[Animation]) -> Animation:
 ## either end). So the length is the parts' spans added up, less the fades. The root goes on unbroken: each part's
 ## root travel is moved to carry on from where the root is when that part begins, and blends with the part before it
 ## over the fade; the other bones' poses blend as they are. A cut first part's root starts where its clip's does.
+## A part may say which time of its clip lines up with that root instead ("root_from", default `from`): with
+## "root_from": 0, the travel of the span cut away is kept, so feet that stand still in the clip while its root moves
+## stay where the part before left them as it fades in.
 ##
 ## With nothing cut or faded, this is join. Otherwise every bone track is sampled at KEY_RATE (and at the end), since
 ## a blend has no keys of its own. A bone a part has no track for holds the value of the part before it (or of the
@@ -233,7 +236,7 @@ static func join_parts(parts: Array) -> Animation:
 		var anim: Animation = part["anim"]
 		clips.append(anim)
 		if float(part.get("from", 0.0)) > 0.0 or (part.has("to") and float(part["to"]) < anim.length) \
-				or (i > 0 and float(part.get("fade", 0.0)) > 0.0):
+				or (i > 0 and float(part.get("fade", 0.0)) > 0.0) or part.has("root_from"):
 			plain = false
 	if plain:
 		return join(clips)
@@ -246,8 +249,9 @@ static func join_parts(parts: Array) -> Animation:
 		var to := float(part.get("to", anim.length))
 		var fade := float(part.get("fade", 0.0)) if i > 0 else 0.0
 		var span := {"anim": anim, "from": from, "to": to, "fade": fade, "start": maxf(start - fade, 0.0), "shift": Vector3.ZERO}
+		var root_from := float(part.get("root_from", from))
 		if i > 0:
-			span["shift"] = _root_at(spans, i - 1, span["start"]) - _root_local(anim, from)
+			span["shift"] = _root_at(spans, i - 1, span["start"]) - _root_local(anim, root_from)
 		else:
 			span["shift"] = _root_local(anim, 0.0) - _root_local(anim, from)  # a cut first part starts where its clip does
 		spans.append(span)
@@ -424,7 +428,8 @@ static func check(cfg_path: String, sources: Dictionary, model_path: String) -> 
 ##                        source or, with a "source:" in front, from another (see join). A single
 ##                        "Clip" instead of a list is the same. Joined before `length` or `warp` apply. An
 ##                        entry may instead be {"clip": "source:Clip", "from": s, "to": s, "fade": s}: only
-##                        that span of the clip, fading in over the end of the clip before (see join_parts)
+##                        that span of the clip, fading in over the end of the clip before (see join_parts);
+##                        "root_from": s says which time of the clip its root carries on from
 ##   warp=[out0, src0, out1, src1, ...]   plays the joined clip along a line through these points: output
 ##                        time to source time, both in seconds (see warp_time and apply_warp). The first
 ##                        output time is 0 and they increase; the clip is as long as the last one. It
