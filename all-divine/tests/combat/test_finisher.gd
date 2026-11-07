@@ -215,3 +215,22 @@ func test_palm_behind_or_far_from_a_broken_foe_is_a_jab() -> void:
 		assert_eq(_current(a), &"palm_jab", "the palm is a jab (%s)" % spot[0])
 		assert_eq(a.paired_with, null, spot[0])
 		(run["arena"] as Node).free()
+
+
+func test_a_riposte_on_a_foe_the_parry_broke_is_the_finisher() -> void:
+	# The whole of it in play: b (8 posture left) jabs on frame 1, a parries it with a guard tapped on frame 6 (the jab
+	# lands on frame 11), and the parry breaks b's posture. a's palm, pressed in the hit-stop, comes out in the parry's
+	# riposte window as the finisher.
+	var run := Duel.make(self, [{"frames": 5}, {"frames": 1, "press": [&"guard"]}, {"frames": 6}, {"frames": 1, "press": [&"palm"]},
+			{"frames": 100}], [{"frames": 1, "press": [&"palm"]}, {"frames": 100}], 1.0, _foe())
+	var a: Actor = run["a"]
+	var b: Actor = run["b"]
+	var started := []
+	a.runner.move_started.connect(func(m: MoveData) -> void: started.append(m.id))
+	await Duel.play_to(self, a, 10)
+	b.stats.damage_posture(92.0)
+	await Duel.play_to(self, a, 11)
+	assert_true(b.stats.posture_broken and b.is_in_group(Actor.FINISHABLE_GROUP), "the parry breaks b")
+	await Duel.play_to(self, a, 30)
+	assert_eq(started, [&"guard_raise", &"parry", &"finisher"], "the riposte is the finisher")
+	assert_eq(b.paired_with, a)

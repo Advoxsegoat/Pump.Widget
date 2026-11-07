@@ -7,4 +7,3 @@ script = ExtResource("1_move")
 id = &"finisher"
 kind = 2
 clip = &"finisher"
-aim = false
