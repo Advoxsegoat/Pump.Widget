@@ -389,6 +389,76 @@ func test_join_of_one_clip_is_that_clip() -> void:
 	_assert_same_pose(joined, 0.4, a, 0.4, 1e-6, "alone")
 
 
+func test_join_parts_crossfades_each_clip_into_the_next() -> void:
+	# A, then B fading in over A's last quarter second: 1.75 s in all, A alone, then both blended (smoothstep), then B.
+	var a := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.0, 1.0))
+	var b := _moving(1.0, Vector3(5.0, 0.0, 5.0), Vector3(5.0, 0.0, 6.0))
+	var joined := ClipBuilder.join_parts([{"anim": a}, {"anim": b, "fade": 0.25}])
+	assert_near(joined.length, 1.75, 1e-6, "the overlap is played once")
+	var hand := joined.find_track(HAND_PATH, Animation.TYPE_ROTATION_3D)
+	var root := joined.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
+	_assert_quat_near(joined.rotation_track_interpolate(hand, 0.5), _hand(a, 30), 1e-4, "A alone before the fade")
+	_assert_quat_near(joined.rotation_track_interpolate(hand, 1.5), _hand(b, 45), 1e-4, "B alone after it")
+	# Frame 54 (0.9 s) is 0.15 s into the fade: A at 0.9 s, B at 0.15 s, weighed by smoothstep(0.6).
+	var a_mid := a.rotation_track_interpolate(a.find_track(HAND_PATH, Animation.TYPE_ROTATION_3D), 0.9)
+	var b_mid := b.rotation_track_interpolate(b.find_track(HAND_PATH, Animation.TYPE_ROTATION_3D), 0.15)
+	_assert_quat_near(joined.rotation_track_interpolate(hand, 0.9), a_mid.slerp(b_mid, smoothstep(0.0, 1.0, 0.6)), 1e-4,
+			"a blend in the middle")
+	assert_vec_near(joined.position_track_interpolate(root, 0.75), Vector3(0.0, 0.0, 0.75), 1e-4, "the root goes on from A")
+	assert_vec_near(joined.position_track_interpolate(root, 1.75), Vector3(0.0, 0.0, 1.75), 1e-4, "and carries B's own travel on from there")
+	var worst := 0.0
+	for f in 105:
+		var step := joined.position_track_interpolate(root, (f + 1) / 60.0) - joined.position_track_interpolate(root, f / 60.0)
+		worst = maxf(worst, step.length())
+	assert_true(worst < 1.5 / 60.0, "no jump in the root anywhere (%.4f m in a frame at most)" % worst)
+
+
+func test_join_parts_plays_only_the_span_of_each_clip_it_is_given() -> void:
+	# A from 0.25 to 0.75 s, then B from 0.5 s on: 1 s in all, each the piece it was cut to, the root unbroken.
+	var a := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.0, 1.0))
+	var b := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.0, 2.0))
+	var joined := ClipBuilder.join_parts([{"anim": a, "from": 0.25, "to": 0.75}, {"anim": b, "from": 0.5}])
+	assert_near(joined.length, 1.0, 1e-6)
+	_assert_same_pose(_without_root(a), 0.35, joined, 0.1, 1e-3, "A's piece")
+	_assert_same_pose(_without_root(b), 0.8, joined, 0.8, 1e-3, "B's piece")
+	var root := joined.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
+	assert_vec_near(joined.position_track_interpolate(root, 0.0), Vector3.ZERO, 1e-4, "the root starts at 0")
+	assert_vec_near(joined.position_track_interpolate(root, 0.5), Vector3(0.0, 0.0, 0.5), 1e-4, "where A's piece ends")
+	assert_vec_near(joined.position_track_interpolate(root, 1.0), Vector3(0.0, 0.0, 1.5), 1e-4, "and B's half has its own metre")
+
+
+func test_join_parts_with_nothing_cut_or_faded_is_the_plain_join() -> void:
+	var a := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.0, 1.0))
+	var b := _moving(0.5, Vector3(5.0, 0.0, 5.0), Vector3(5.0, 0.0, 5.5))
+	var plain := ClipBuilder.join([a, b])
+	var parts := ClipBuilder.join_parts([{"anim": a}, {"anim": b}])
+	assert_eq(var_to_str(parts), var_to_str(plain), "the same clip, key for key")
+
+
+func test_build_reads_then_entries_that_cut_and_fade() -> void:
+	# Run (1 s) then Roll from 0.5 s (1.5 s left), fading in over 0.25 s: 2.25 s.
+	var run := _build_setup()
+	_write_text(run["cfg"], "[cut]\nsource=\"pack_rm\"\nclip=\"Run\"\nthen=[{\"clip\": \"Roll\", \"from\": 0.5, \"fade\": 0.25}]\n")
+	assert_eq(ClipBuilder.build(run["cfg"], run["sources"], run["out"], MODEL), OK)
+	assert_near((_load(run["out"] + "/cut.tres") as Animation).length, 2.25, 1e-3)
+
+
+func test_then_entries_that_cut_or_fade_wrongly_are_problems() -> void:
+	var run := _build_setup()
+	var bad := {
+		"{\"clip\": \"Roll\", \"fade\": -0.1}": "fade",
+		"{\"clip\": \"Roll\", \"from\": 1.0, \"to\": 0.5}": "from",
+		"{\"clip\": \"Roll\", \"speed\": 2}": "speed",
+		"{\"from\": 0.5}": "clip",
+		"{\"clip\": \"Roll\", \"fade\": 5.0}": "fade",
+	}
+	for entry: String in bad:
+		_write_text(run["cfg"], "[cut]\nsource=\"pack_rm\"\nclip=\"Run\"\nthen=[%s]\n" % entry)
+		var problems := ClipBuilder.check(run["cfg"], run["sources"], MODEL)
+		assert_true(Array(problems).any(func(p: String) -> bool: return p.begins_with("[cut]") and p.contains(bad[entry])),
+				"%s: %s" % [entry, "\n".join(problems)])
+
+
 # --- layers ---
 
 func test_layer_adds_its_rotation_between_keys_only() -> void:
@@ -908,6 +978,13 @@ func _moving(seconds: float, from := Vector3.ZERO, to := Vector3.ZERO) -> Animat
 		a.rotation_track_insert_key(hand_turn, t, Quaternion(Vector3.RIGHT, sin(4.0 * t)))
 		a.scale_track_insert_key(hand_scale, t, Vector3(1.0, 1.0 + 0.3 * t, 1.0))
 	return a
+
+
+# A copy of `anim` without its root position track: the pose, without the travel a join moves on.
+func _without_root(anim: Animation) -> Animation:
+	var copy := anim.duplicate() as Animation
+	copy.remove_track(copy.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D))
+	return copy
 
 
 # Frame `frame` of a 60 Hz grid, in seconds.

@@ -45,6 +45,8 @@ const STEP_RATES: PackedInt32Array = [0, 12, 24]
 ## Frames in a layer are compared to its keys within this.
 const FRAME_EPSILON := 1e-4
 
+## The keys a `then` entry written as a dictionary may have besides its clip (see join_parts).
+const THEN_KEYS: PackedStringArray = ["from", "to", "fade"]
 const _SECTION_KEYS: PackedStringArray = ["source", "clip", "loop", "length", "step_fps", "ground_speed_from",
 		"then", "warp", "layer"]
 
@@ -212,6 +214,123 @@ static func join(clips: Array[Animation]) -> Animation:
 	return out
 
 
+## The clips of `parts` played one after another as one clip, as join does, but each part may be cut and may fade
+## in over the end of the one before. A part is {"anim": Animation, "from": seconds, "to": seconds, "fade": seconds}:
+## it plays its clip from `from` (default 0) to `to` (default its length), and starts `fade` seconds (default 0) before
+## the part before it ends, blending from that part's pose into its own over the overlap (smoothstep: no kink at
+## either end). So the length is the parts' spans added up, less the fades. The root goes on unbroken: each part's
+## root travel is moved to carry on from where the root is when that part begins, and blends with the part before it
+## over the fade; the other bones' poses blend as they are. A cut first part's root starts where its clip's does.
+##
+## With nothing cut or faded, this is join. Otherwise every bone track is sampled at KEY_RATE (and at the end), since
+## a blend has no keys of its own. A bone a part has no track for holds the value of the part before it (or of the
+## first part after it that has one). The first part's fade is ignored. The input clips are left alone.
+static func join_parts(parts: Array) -> Animation:
+	var clips: Array[Animation] = []
+	var plain := true
+	for i in parts.size():
+		var part: Dictionary = parts[i]
+		var anim: Animation = part["anim"]
+		clips.append(anim)
+		if float(part.get("from", 0.0)) > 0.0 or (part.has("to") and float(part["to"]) < anim.length) \
+				or (i > 0 and float(part.get("fade", 0.0)) > 0.0):
+			plain = false
+	if plain:
+		return join(clips)
+	var spans: Array[Dictionary] = []  # each part: anim, from, to, fade, start (output time), root offset
+	var start := 0.0
+	for i in parts.size():
+		var part: Dictionary = parts[i]
+		var anim: Animation = part["anim"]
+		var from := float(part.get("from", 0.0))
+		var to := float(part.get("to", anim.length))
+		var fade := float(part.get("fade", 0.0)) if i > 0 else 0.0
+		var span := {"anim": anim, "from": from, "to": to, "fade": fade, "start": maxf(start - fade, 0.0), "shift": Vector3.ZERO}
+		if i > 0:
+			span["shift"] = _root_at(spans, i - 1, span["start"]) - _root_local(anim, from)
+		else:
+			span["shift"] = _root_local(anim, 0.0) - _root_local(anim, from)  # a cut first part starts where its clip does
+		spans.append(span)
+		start = span["start"] + (to - from)
+	var out := _empty_like(clips[0])
+	out.length = start
+	var times := _frame_times(start)
+	var tracks := {}  # [path, type] -> out track
+	for anim in clips:
+		for i in anim.get_track_count():
+			if not _is_bone_track(anim, i):
+				continue
+			var key := [anim.track_get_path(i), anim.track_get_type(i)]
+			if not tracks.has(key):
+				tracks[key] = _blank_track_like(anim, i, out)
+	for key: Array in tracks:
+		var path: NodePath = key[0]
+		var type: Animation.TrackType = key[1]
+		for time in times:
+			_insert_key(out, tracks[key], type, time, _parts_value(spans, path, type, time))
+	return out
+
+
+# The value of the track `path` of `type` at output time `time` of the parts `spans` (see join_parts).
+static func _parts_value(spans: Array[Dictionary], path: NodePath, type: Animation.TrackType, time: float) -> Variant:
+	var current := 0
+	while current + 1 < spans.size() and time >= float(spans[current + 1]["start"]) - FRAME_EPSILON:
+		current += 1
+	var value: Variant = _span_value(spans, current, path, type, time)
+	var span: Dictionary = spans[current]
+	var into := time - float(span["start"])
+	if current > 0 and float(span["fade"]) > 0.0 and into < float(span["fade"]):
+		var weight := smoothstep(0.0, 1.0, into / float(span["fade"]))
+		var before: Variant = _span_value(spans, current - 1, path, type, time)
+		if type == Animation.TYPE_ROTATION_3D:
+			value = (before as Quaternion).slerp(value as Quaternion, weight)
+		else:
+			value = (before as Vector3).lerp(value as Vector3, weight)
+	return value
+
+
+# The value of the track `path` of `type` in the part `index` of `spans` at output time `time` (held past the ends of
+# its span): the root position with the part's shift; a track the part has not, from the nearest part that has it.
+static func _span_value(spans: Array[Dictionary], index: int, path: NodePath, type: Animation.TrackType, time: float) -> Variant:
+	var order := [index]
+	for d in range(1, spans.size()):
+		if index - d >= 0:
+			order.append(index - d)
+		if index + d < spans.size():
+			order.append(index + d)
+	for i: int in order:
+		var span: Dictionary = spans[i]
+		var anim: Animation = span["anim"]
+		var track := anim.find_track(path, type)
+		if track < 0:
+			continue
+		var local := clampf(float(span["from"]) + time - float(span["start"]), float(span["from"]), float(span["to"]))
+		if i < index:
+			local = float(span["to"])
+		elif i > index:
+			local = float(span["from"])
+		var value: Variant = _sample(anim, track, local)
+		if type == Animation.TYPE_POSITION_3D and _bone_of(anim, track) == ROOT_BONE:
+			value = (value as Vector3) + (span["shift"] as Vector3)
+		return value
+	return Quaternion.IDENTITY if type == Animation.TYPE_ROTATION_3D else (Vector3.ONE if type == Animation.TYPE_SCALE_3D else Vector3.ZERO)
+
+
+# Where the root is in the part `index` of `spans` at output time `time`, shift and all (see join_parts).
+static func _root_at(spans: Array[Dictionary], index: int, time: float) -> Vector3:
+	var span: Dictionary = spans[index]
+	var local := clampf(float(span["from"]) + time - float(span["start"]), float(span["from"]), float(span["to"]))
+	return _root_local(span["anim"], local) + (span["shift"] as Vector3)
+
+
+# The root bone's position in `anim` at `time`, or zero when it has no root position track.
+static func _root_local(anim: Animation, time: float) -> Vector3:
+	for i in anim.get_track_count():
+		if anim.track_get_type(i) == Animation.TYPE_POSITION_3D and _is_bone_track(anim, i) and _bone_of(anim, i) == ROOT_BONE:
+			return anim.position_track_interpolate(i, time)
+	return Vector3.ZERO
+
+
 ## A copy of `anim` played to the time warp `warp` (see warp_time): its length is the last output time, and
 ## every bone track is sampled at KEY_RATE for it, so the new keys follow the warp however it bends (the
 ## source's keys are 30 Hz, and a hold or a reverse needs the finer grid). A key is also put at the length,
@@ -303,7 +422,9 @@ static func check(cfg_path: String, sources: Dictionary, model_path: String) -> 
 ##   ground_speed_from=<source key>   measure the clip's ground speed on the clip of the same name there
 ##   then=["Clip", "source:Clip"]   clips appended end to end after `clip`, each from the section's own
 ##                        source or, with a "source:" in front, from another (see join). A single
-##                        "Clip" instead of a list is the same. Joined before `length` or `warp` apply
+##                        "Clip" instead of a list is the same. Joined before `length` or `warp` apply. An
+##                        entry may instead be {"clip": "source:Clip", "from": s, "to": s, "fade": s}: only
+##                        that span of the clip, fading in over the end of the clip before (see join_parts)
 ##   warp=[out0, src0, out1, src1, ...]   plays the joined clip along a line through these points: output
 ##                        time to source time, both in seconds (see warp_time and apply_warp). The first
 ##                        output time is 0 and they increase; the clip is as long as the last one. It
@@ -443,16 +564,21 @@ static func _assemble(env: _Env, cfg: ConfigFile, section: String, key: String) 
 		return null
 	pieces.append(first)
 	var complete := true
-	for entry in _strings(cfg.get_value(section, "then", PackedStringArray())):
-		var parts := entry.split(":", true, 1)
-		var piece := _abarax_clip(env, section, parts[0] if parts.size() == 2 else key, parts[parts.size() - 1])
+	var parts: Array = [{"anim": first}]
+	for entry: Dictionary in _then_entries(cfg.get_value(section, "then", PackedStringArray())):
+		var named := String(entry["clip"]).split(":", true, 1)
+		var piece := _abarax_clip(env, section, named[0] if named.size() == 2 else key, named[named.size() - 1])
 		if piece == null:
 			complete = false
 		else:
 			pieces.append(piece)
-	if not complete:
+			var part := entry.duplicate()
+			part.erase("clip")
+			part["anim"] = piece
+			parts.append(part)
+	if not complete or not _spans_fit(env, section, parts):
 		return null
-	var joined := first if pieces.size() == 1 else join(pieces)
+	var joined := first if pieces.size() == 1 else join_parts(parts)
 	if cfg.has_section_key(section, "warp"):
 		return apply_warp(joined, _floats(cfg.get_value(section, "warp")))
 	var length := float(cfg.get_value(section, "length", 0.0))
@@ -657,6 +783,68 @@ static func _clip(env: _Env, section: String, key: String, clip_name: String) ->
 
 # The values of a config key that is a list of strings, or one string (which is a list of one), as a
 # PackedStringArray; empty if it is neither.
+# Whether the parts of a section's join (as _assemble makes them for join_parts) fit their clips: from and to within
+# the clip, and each fade no longer than its part or the part before it. Each that does not is a problem in `env`.
+static func _spans_fit(env: _Env, section: String, parts: Array) -> bool:
+	var fits := true
+	var before := INF
+	for part: Dictionary in parts:
+		var anim: Animation = part["anim"]
+		var from := float(part.get("from", 0.0))
+		var to := float(part.get("to", anim.length))
+		if to > anim.length + FRAME_EPSILON or from >= to:
+			env.problems.append("[%s] then cuts %s s to %s s of a clip %s s long" % [section, from, to, anim.length])
+			fits = false
+		var fade := float(part.get("fade", 0.0))
+		if fade > minf(before, to - from) + FRAME_EPSILON:
+			env.problems.append("[%s] then fades in over %s s, longer than the part (%s s) or the one before it (%s s)" % [section, fade, to - from, before])
+			fits = false
+		before = to - from
+	return fits
+
+
+# The entries of a section's `then` as {"clip": "Clip" or "source:Clip", and the "from", "to" and "fade" an entry
+# gives (see join_parts)}: a String entry is just the clip. Entries that are neither are left out (check says so).
+static func _then_entries(value: Variant) -> Array:
+	var items: Array = [value] if value is String else (Array(value) if value is Array or value is PackedStringArray else [])
+	var entries := []
+	for item: Variant in items:
+		if item is String:
+			entries.append({"clip": item})
+		elif item is Dictionary and (item as Dictionary).get("clip") is String:
+			var entry := {"clip": item["clip"]}
+			for key: String in THEN_KEYS:
+				if (item as Dictionary).has(key) and _is_number(item[key]):
+					entry[key] = float(item[key])
+			entries.append(entry)
+	return entries
+
+
+# What is wrong with one entry of a section's `then`, as lines for check. An entry is "Clip", "source:Clip", or
+# {"clip": either, "from": s, "to": s, "fade": s} with from and to within the clip (from before to) and a fade no longer
+# than this part or the one before it, which only a built clip can say (see _check_then_spans).
+static func _check_then_entry(section: String, item: Variant) -> PackedStringArray:
+	var found := PackedStringArray()
+	var clip: Variant = item
+	if item is Dictionary:
+		clip = (item as Dictionary).get("clip")
+		for key in item:
+			if not THEN_KEYS.has(key) and key != "clip":
+				found.append("[%s] then entry %s has an unknown key '%s' (it can have clip, %s)" % [section, item, key, ", ".join(THEN_KEYS)])
+		for key: String in THEN_KEYS:
+			if (item as Dictionary).has(key) and (not _is_number(item[key]) or float(item[key]) < 0.0):
+				found.append("[%s] then entry %s: %s must be a number of seconds, 0 or more" % [section, item, key])
+		if _is_number(item.get("from", 0.0)) and _is_number(item.get("to", INF)) and float(item.get("from", 0.0)) >= float(item.get("to", INF)):
+			found.append("[%s] then entry %s: from must come before to" % [section, item])
+	if not clip is String:
+		found.append("[%s] then entry %s needs a clip (Clip or source:Clip)" % [section, item])
+		return found
+	var parts := (clip as String).split(":", true, 1)
+	if parts[0] == "" or parts[parts.size() - 1] == "":
+		found.append("[%s] then '%s' must be Clip or source:Clip" % [section, clip])
+	return found
+
+
 static func _strings(value: Variant) -> PackedStringArray:
 	var list := PackedStringArray()
 	if value is String:
@@ -714,13 +902,11 @@ static func _check_section(cfg: ConfigFile, section: String) -> PackedStringArra
 			found.append("[%s] step_fps is %s: it must be one of %s" % [section, rate, STEP_RATES])
 	if cfg.has_section_key(section, "then"):
 		var then: Variant = cfg.get_value(section, "then")
-		var entries := _strings(then)
-		if entries.size() != (1 if then is String else _count(then)):
+		var items: Array = [then] if then is String else (Array(then) if then is Array or then is PackedStringArray else [])
+		if items.is_empty() or items.size() != (1 if then is String else _count(then)):
 			found.append("[%s] then must be a clip name or a list of them" % section)
-		for entry in entries:
-			var parts := entry.split(":", true, 1)
-			if parts[0] == "" or parts[parts.size() - 1] == "":
-				found.append("[%s] then '%s' must be Clip or source:Clip" % [section, entry])
+		for item: Variant in items:
+			found.append_array(_check_then_entry(section, item))
 	if cfg.has_section_key(section, "warp"):
 		if cfg.has_section_key(section, "length"):
 			found.append("[%s] has both length and warp: the warp sets the length" % section)
