@@ -26,7 +26,7 @@ extends CharacterBody3D
 ##      first turns the body toward the intent's aim_target while it winds up, and a charge_hold mark held
 ##      stops the clock), or a buffered press starts one; this is how a press shows on the frame it is made.
 ##      Then the guard stance is kept (see `guarding`): up if a guard move just played out with guard held, down
-##      if guard is let go or palm or heavy is pressed
+##      if guard is let go, or palm or heavy is pressed with no move playing
 ##   5. on a frame with no move, locomotion turns the stick into a velocity, sprinting while dodge is held
 ##      (and the actor can act: an exhausted actor jogs instead; a guarding one only walks, slowly, and never
 ##      sprints), and with the intent's face_target set the body turns toward the target (at the turn rate)
@@ -115,9 +115,10 @@ var scanner := HitScanner.new()
 var frozen := 0
 ## The guard stance is up: the guard held with no move playing, or through a guard_hit. It comes up when the def's
 ## guard raise (moveset `guard`) or its guard_hit plays out with guard held, or a guarded blow lands while guard is
-## held (hold_guard); it goes down when guard is let go, palm or heavy is pressed, or any other move starts. While
-## it is up the rig shows GUARD_STANCE on the upper body, the body walks at the tuning's guard_speed_scale and
-## never sprints, and stamina comes back slower. See is_guarding for whether a guard is up at all.
+## held (hold_guard); it goes down when guard is let go, palm or heavy is pressed with no move playing, or any other
+## move starts. While it is up the rig shows GUARD_STANCE on the upper body, the body walks at the tuning's
+## guard_speed_scale and never sprints, and stamina comes back slower. See is_guarding for whether a guard is up at
+## all.
 var guarding := false
 
 # The speed the rig's locomotion layer is given. With no move it is locomotion's. A move that starts is laid over
@@ -304,10 +305,13 @@ func _physics_process(delta: float) -> void:
 
 
 # The guard stance for this frame, once the runner has ticked: up when a guard move played out on this frame with
-# guard held and nothing else has started; down when guard is let go, or palm or heavy is pressed (whether or not
-# the attack can start). A move that starts takes it down by itself (_on_move_started).
+# guard held and nothing else has started; down when guard is let go, or when palm or heavy is pressed in the stance
+# proper, with no move playing (whether or not the attack can start). A press while a move plays (a guard_hit, which
+# takes no attack before its cancel window) waits in the buffer and leaves the guard up: the attack takes it down
+# when it starts (_on_move_started).
 func _keep_guard(intent: Intent) -> void:
-	if not _guard_held or intent.pressed.any(func(action: StringName) -> bool: return GUARD_DROPPED_BY.has(action)):
+	var attacking := not runner.busy() and intent.pressed.any(func(action: StringName) -> bool: return GUARD_DROPPED_BY.has(action))
+	if not _guard_held or attacking:
 		_set_guarding(false)
 	elif _guard_move_ended and not runner.busy():
 		_set_guarding(true)

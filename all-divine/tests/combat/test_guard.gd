@@ -103,6 +103,23 @@ func test_a_held_guard_mashed_for_two_seconds_lets_no_frontal_blow_through() -> 
 	assert_eq(through, [], "no frontal blow lands through the held guard (frames it would)")
 
 
+func test_palm_pressed_during_guard_hit_keeps_a_held_guard_up() -> void:
+	# The jab is guarded on frame 30: guard_hit plays, after 3 frames of hit-stop. b presses palm on frame 35 with guard
+	# still held. guard_hit takes no palm before its f14 (frame 47), so b can neither attack nor let its guard drop:
+	# a second frontal blow, judged on frame 40, is guarded.
+	var steps := [{"frames": 1, "press": [&"guard"], "hold": [&"guard"]}, {"frames": 33, "hold": [&"guard"]},
+			{"frames": 1, "press": [&"palm"], "hold": [&"guard", &"palm"]}, {"frames": 60, "hold": [&"guard"]}]
+	var run := _duel(JAB_AT_20, steps)
+	var b: Actor = run["b"]
+	var second := PostAt.new()
+	second.event = _jab_on(run["a"], b)
+	second.frame = 40
+	track(second)
+	await Duel.play_to(self, b, 40)
+	assert_eq(run["got"], [["GUARDED", LANDS], ["GUARDED", 40]], "both blows are guarded")
+	assert_eq(run["b_started"], [[&"guard_raise", 1], [&"guard_hit", LANDS], [&"guard_hit", 40]], "and no attack came out")
+
+
 func test_frontal_jab_is_blocked() -> void:
 	var run := _duel(JAB_AT_20, GUARD_HELD)
 	var b: Actor = run["b"]
@@ -271,6 +288,20 @@ class Probe extends Node:
 	func _physics_process(_delta: float) -> void:
 		var r := Combat.resolve(event, Defense.of(target), target.stats.tuning)
 		outcomes[target.frame + 1] = HitResult.Outcome.keys()[r.outcome]
+
+
+# Posts `event` to Melee to be judged on its target's frame `frame` (once).
+class PostAt extends Node:
+	var event: HitEvent
+	var frame := 0
+
+	func _ready() -> void:
+		process_physics_priority = -50
+
+	func _physics_process(_delta: float) -> void:
+		if event != null and event.target.frame + 1 == frame:
+			Melee.post(event)
+			event = null
 
 
 # A jab's palm from `a` on `b`, as a scanner would make it.
