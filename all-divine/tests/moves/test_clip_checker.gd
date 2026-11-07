@@ -715,11 +715,13 @@ func test_a_pair_hit_must_name_one_of_the_pairs_hits() -> void:
 	assert_eq(problems.size(), 3, "\n".join(problems))
 
 
-func test_a_pair_whose_lead_clip_is_longer_than_its_max_length_is_reported() -> void:
-	var marks := [_m(10, &"pair_hit", {"profile": &"f1"})]
-	assert_eq(_check_pair(_pair(), marks, [], 90), PackedStringArray(), "1.5 s is not longer")
-	var problems := _check_pair(_pair(), marks, [], 91)
-	assert_true(_has_problem(problems, ["fixture_pair", "palm_jab", "1.52 s", "max_length", "1.50 s"]), "\n".join(problems))
+func test_a_pair_whose_lead_clip_with_its_hit_stop_is_longer_than_its_max_length_is_reported() -> void:
+	# Spec 4.4 caps the player's wait, hit-stop included: the lead's clip and the hit-stop of every blow it lands. Two
+	# blows of 4 frames (0.133 s) on an 82-frame clip are 1.5 s; on 83 frames, 1.52 s.
+	var marks := [_m(10, &"pair_hit", {"profile": &"f1"}), _m(30, &"pair_hit", {"profile": &"f1"})]
+	assert_eq(_check_pair(_pair(), marks, [], 82), PackedStringArray(), "1.5 s is not longer")
+	var problems := _check_pair(_pair(), marks, [], 83)
+	assert_true(_has_problem(problems, ["fixture_pair", "palm_jab", "hit-stop", "1.52 s", "max_length", "1.50 s"]), "\n".join(problems))
 
 
 func test_a_pairs_hits_are_held_to_the_hitstop_range() -> void:
@@ -741,7 +743,7 @@ func test_an_actors_pairs_and_their_moves_are_checked() -> void:
 	short.hits.erase(&"f2")
 	def.finisher = short
 	var problems := ClipChecker.new().check_actor(def)
-	assert_true(_has_problem(problems, ["finisher_open_hand", "pair_hit at f40", "unknown profile 'f2'"]), "\n".join(problems))
+	assert_true(_has_problem(problems, ["finisher_open_hand", "pair_hit at f20", "unknown profile 'f2'"]), "\n".join(problems))
 	var lost := _pair()
 	lost.lead_move = &"no_such_lead"
 	def.finisher = null

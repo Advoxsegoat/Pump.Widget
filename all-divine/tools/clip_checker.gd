@@ -25,7 +25,8 @@ extends RefCounted
 ##       hitbox_on (the player must be able to see it coming), and a move with a perilous profile has a
 ##       tell of kind perilous
 ## per paired move (check_pair: a finisher or a grab, PairedMove), given the clips of its two moves:
-##   the lead's clip is no longer than the pair's max_length (spec 4.4: a finisher is 1.5 s at most)
+##   the lead's clip, with the hit-stop of every blow it lands, is no longer than the pair's max_length (spec 4.4: a
+##       finisher keeps the player 1.5 s at most, press to control; the lead is free when its clip ends)
 ##   every pair_hit, in either clip, names (`profile`) one of the pair's `hits`, whatever the kind of its move
 ##   every hit profile of the pair is a HitProfile with hitstop_frames 3 to 6
 ## and per actor (check_actor): each required clip exists and is not a T-pose, the moveset, the reactions and the
@@ -138,8 +139,14 @@ func check_all() -> PackedStringArray:
 func check_pair(pair: PairedMove, lead: Animation, follow: Animation) -> PackedStringArray:
 	var out := PackedStringArray()
 	var id := String(pair.id)
-	if lead.length > pair.max_length + TOLERANCE:
-		out.append("%s: the lead's clip '%s' is %.2f s, longer than the pair's max_length of %.2f s" % [id, pair.lead_move, lead.length, pair.max_length])
+	var hit_stop := 0.0
+	for mark in _of_kind(Marks.read(lead), &"pair_hit"):
+		var profile: Variant = pair.hits.get(StringName(str(mark["args"].get("profile", ""))))
+		if profile is HitProfile:
+			hit_stop += (profile as HitProfile).hitstop_frames / float(Marks.RATE)
+	if lead.length + hit_stop > pair.max_length + TOLERANCE:
+		out.append("%s: the lead's clip '%s' and the hit-stop of its blows are %.2f s, longer than the pair's max_length of %.2f s"
+				% [id, pair.lead_move, lead.length + hit_stop, pair.max_length])
 	_check_profiles(id, pair.hits, out)
 	for anim in [lead, follow]:
 		for mark in _of_kind(Marks.read(anim), &"pair_hit"):
