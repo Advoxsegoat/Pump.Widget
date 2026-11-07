@@ -441,6 +441,27 @@ func test_join_parts_can_keep_the_travel_of_the_span_it_cuts_away() -> void:
 	assert_vec_near(faded.position_track_interpolate(root, 1.0), Vector3(0.0, 0.0, 0.75 + 0.5 + 0.25), 1e-3, "B's, cut travel and all, where it ends")
 
 
+func test_join_parts_holds_the_root_through_a_part_that_has_none() -> void:
+	# A part with no root track (a clip that does not travel) stays where the root was left, before and after, even when
+	# the part after it keeps the travel it cuts away.
+	var a := _moving(1.0)
+	a.remove_track(a.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D))
+	var b := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.0, 1.0))
+	var joined := ClipBuilder.join_parts([{"anim": a}, {"anim": b, "from": 0.5, "root_from": 0.0, "fade": 0.25}])
+	var root := joined.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
+	assert_vec_near(joined.position_track_interpolate(root, 0.5), Vector3.ZERO, 1e-4, "A does not travel")
+	assert_vec_near(joined.position_track_interpolate(root, 1.0), Vector3(0.0, 0.0, 0.75), 1e-3, "B carries on from where A left the root")
+	# B travelling, then A fading in over B's last quarter: the root slows to a stop where B ends, never drawing back.
+	var stop := ClipBuilder.join_parts([{"anim": b}, {"anim": a, "fade": 0.25}])
+	root = stop.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
+	var last := -INF
+	for f in 106:
+		var z := stop.position_track_interpolate(root, f / 60.0).z
+		assert_true(z >= last - 1e-5, "the root goes on forward (frame %d: %.4f after %.4f)" % [f, z, last])
+		last = z
+	assert_vec_near(stop.position_track_interpolate(root, stop.length), Vector3(0.0, 0.0, 1.0), 1e-3, "and stops where B ends")
+
+
 func test_join_parts_with_nothing_cut_or_faded_is_the_plain_join() -> void:
 	var a := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.0, 1.0))
 	var b := _moving(0.5, Vector3(5.0, 0.0, 5.0), Vector3(5.0, 0.0, 5.5))

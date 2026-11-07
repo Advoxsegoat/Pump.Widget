@@ -220,14 +220,17 @@ static func join(clips: Array[Animation]) -> Animation:
 ## the part before it ends, blending from that part's pose into its own over the overlap (smoothstep: no kink at
 ## either end). So the length is the parts' spans added up, less the fades. The root goes on unbroken: each part's
 ## root travel is moved to carry on from where the root is when that part begins, and blends with the part before it
-## over the fade; the other bones' poses blend as they are. A cut first part's root starts where its clip's does.
+## over the fade; the other bones' poses blend as they are. A cut first part's root starts where its clip's does, and
+## a part whose clip does not travel (no root track) stays where the part before it ends, so a fade into it from one
+## that travels slows to a stop there rather than drawing back.
 ## A part may say which time of its clip lines up with that root instead ("root_from", default `from`): with
 ## "root_from": 0, the travel of the span cut away is kept, so feet that stand still in the clip while its root moves
 ## stay where the part before left them as it fades in.
 ##
 ## With nothing cut or faded, this is join. Otherwise every bone track is sampled at KEY_RATE (and at the end), since
 ## a blend has no keys of its own. A bone a part has no track for holds the value of the part before it (or of the
-## first part after it that has one). The first part's fade is ignored. The input clips are left alone.
+## first part after it that has one), but for the root's position: a part with none does not travel. The first part's
+## fade is ignored. The input clips are left alone.
 static func join_parts(parts: Array) -> Animation:
 	var clips: Array[Animation] = []
 	var plain := true
@@ -250,7 +253,9 @@ static func join_parts(parts: Array) -> Animation:
 		var fade := float(part.get("fade", 0.0)) if i > 0 else 0.0
 		var span := {"anim": anim, "from": from, "to": to, "fade": fade, "start": maxf(start - fade, 0.0), "shift": Vector3.ZERO}
 		var root_from := float(part.get("root_from", from))
-		if i > 0:
+		if i > 0 and not _has_root(anim):
+			span["shift"] = _root_at(spans, i - 1, start)  # one that does not travel stays where the part before ends
+		elif i > 0:
 			span["shift"] = _root_at(spans, i - 1, span["start"]) - _root_local(anim, root_from)
 		else:
 			span["shift"] = _root_local(anim, 0.0) - _root_local(anim, from)  # a cut first part starts where its clip does
@@ -294,8 +299,13 @@ static func _parts_value(spans: Array[Dictionary], path: NodePath, type: Animati
 
 
 # The value of the track `path` of `type` in the part `index` of `spans` at output time `time` (held past the ends of
-# its span): the root position with the part's shift; a track the part has not, from the nearest part that has it.
+# its span): the root position with the part's shift (a part with no root track does not travel); another track the
+# part has not, from the nearest part that has it.
 static func _span_value(spans: Array[Dictionary], index: int, path: NodePath, type: Animation.TrackType, time: float) -> Variant:
+	if type == Animation.TYPE_POSITION_3D and str(path.get_concatenated_subnames()) == ROOT_BONE:
+		var span: Dictionary = spans[index]
+		var local := clampf(float(span["from"]) + time - float(span["start"]), float(span["from"]), float(span["to"]))
+		return _root_local(span["anim"], local) + (span["shift"] as Vector3)  # a part with no root track stays put
 	var order := [index]
 	for d in range(1, spans.size()):
 		if index - d >= 0:
@@ -325,6 +335,14 @@ static func _root_at(spans: Array[Dictionary], index: int, time: float) -> Vecto
 	var span: Dictionary = spans[index]
 	var local := clampf(float(span["from"]) + time - float(span["start"]), float(span["from"]), float(span["to"]))
 	return _root_local(span["anim"], local) + (span["shift"] as Vector3)
+
+
+# Whether `anim` has a root position track: whether it travels.
+static func _has_root(anim: Animation) -> bool:
+	for i in anim.get_track_count():
+		if anim.track_get_type(i) == Animation.TYPE_POSITION_3D and _is_bone_track(anim, i) and _bone_of(anim, i) == ROOT_BONE:
+			return true
+	return false
 
 
 # The root bone's position in `anim` at `time`, or zero when it has no root position track.
