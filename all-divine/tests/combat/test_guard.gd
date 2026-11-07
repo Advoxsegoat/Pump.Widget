@@ -55,8 +55,8 @@ func test_holding_guard_raises_it_then_holds_the_stance() -> void:
 		await frames(1)
 		guarded[b.frame] = [b.is_guarding(), b.guarding]
 	assert_eq(run["b_started"], [[&"guard_raise", 1]], "guard raises the guard")
-	assert_eq([guarded[4], guarded[5], guarded[14]], [[false, false], [true, false], [true, false]],
-			"the raise guards from its f4 (frame 5), by its mark")
+	assert_eq([guarded[1], guarded[4], guarded[14]], [[true, false], [true, false], [true, false]],
+			"a raise played with guard held guards from its f0 (frame 1) on")
 	assert_eq([guarded[15], guarded[19]], [[true, true], [true, true]], "and when it ends with guard held, the stance takes over")
 	assert_eq(_current(b), &"", "the stance is no move: locomotion runs")
 	assert_near(float(b.rig.tree.get(Rig.STANCE_BLEND)), 1.0, 1e-6, "guard_hold is on the upper body")
@@ -66,10 +66,41 @@ func test_holding_guard_raises_it_then_holds_the_stance() -> void:
 func test_a_tapped_guard_raises_no_stance() -> void:
 	var run := _duel([], [{"frames": 1, "press": [&"guard"], "hold": [&"guard"]}, {"frames": 40}])
 	var b: Actor = run["b"]
-	await Duel.play_to(self, b, 20)
+	var guarded := {}
+	while b.frame < 20:
+		await frames(1)
+		guarded[b.frame] = b.is_guarding()
+	assert_eq([guarded[2], guarded[4], guarded[5], guarded[14]], [false, false, true, true],
+			"let go, the raise guards by its mark, from its f4 (frame 5)")
 	assert_eq(run["b_started"], [[&"guard_raise", 1]])
 	assert_false(b.is_guarding(), "let go before the raise ended: no guard after it")
 	assert_near(float(b.rig.tree.get(Rig.STANCE_BLEND)), 0.0, 1e-6)
+
+
+func test_a_held_guard_mashed_for_two_seconds_lets_no_frontal_blow_through() -> void:
+	# Guard held throughout and pressed again every 10 frames for 2 s: each raise ends on a buffered press that chains
+	# the next at once, and after the first, no raise is fresh enough for a parry window (parry_refresh_frames). A
+	# frontal jab is judged against b on every frame, as Melee's snapshot sees it, and none may land. (Judged, not
+	# applied: a real blow every frame would hold b in hit-stop and guard_hit for good, and it would never chain a
+	# raise. test_parry.gd lands real blows on a held, mashed guard.)
+	var mash := []
+	for i in 12:
+		mash.append({"frames": 1, "press": [&"guard"], "hold": [&"guard"]})
+		mash.append({"frames": 9, "hold": [&"guard"]})
+	var run := _duel([], mash + [{"frames": 20, "hold": [&"guard"]}])
+	var b: Actor = run["b"]
+	var probe := Probe.new()
+	probe.event = _jab_on(run["a"], b)
+	probe.target = b
+	track(probe)
+	await Duel.play_to(self, b, 140)
+	var raises: Array = run["b_started"].filter(func(s: Array) -> bool: return s[0] == &"guard_raise")
+	assert_true(raises.size() >= 7, "the presses chained %d raises" % raises.size())
+	var through := []
+	for f: int in probe.outcomes:
+		if f >= 2 and probe.outcomes[f] == "HIT":
+			through.append(f)
+	assert_eq(through, [], "no frontal blow lands through the held guard (frames it would)")
 
 
 func test_frontal_jab_is_blocked() -> void:
@@ -225,6 +256,35 @@ func test_guard_and_palm_same_frame_guard_wins() -> void:
 	await Duel.play_to(self, b, 1)
 	assert_eq(run["b_started"], [[&"guard_raise", 1]], "guard wins")
 	assert_eq(b.buffer.consume([&"palm"], b.buffer_frame), &"palm", "the palm is still buffered")
+
+
+# Judges `event` against its target every frame, after Melee's snapshot and before the actors (so it sees the target
+# as the snapshot did), without posting it: `outcomes` is {the frame being judged: outcome name}.
+class Probe extends Node:
+	var event: HitEvent
+	var target: Actor
+	var outcomes := {}
+
+	func _ready() -> void:
+		process_physics_priority = -50
+
+	func _physics_process(_delta: float) -> void:
+		var r := Combat.resolve(event, Defense.of(target), target.stats.tuning)
+		outcomes[target.frame + 1] = HitResult.Outcome.keys()[r.outcome]
+
+
+# A jab's palm from `a` on `b`, as a scanner would make it.
+func _jab_on(a: Actor, b: Actor) -> HitEvent:
+	var jab := Registry.fetch(&"moves", &"palm_jab") as MoveData
+	var e := HitEvent.new()
+	e.attacker = a
+	e.target = b
+	e.move = jab
+	e.profile = jab.hits[&"palm"]
+	e.hitbox = &"palm_l"
+	e.point = b.global_position + Vector3.UP
+	e.direction = (b.global_position - a.global_position).normalized()
+	return e
 
 
 # The smallest angle between `rotation` and the rotation track `track` of `anim` anywhere in the clip.

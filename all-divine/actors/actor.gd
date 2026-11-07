@@ -216,9 +216,12 @@ func is_invulnerable() -> bool:
 	return runner.iframes
 
 
-## True while a guard is up: a move's guard_on mark (guard_raise from its f4), or the guard stance (`guarding`).
+## True while a guard is up: a move's guard_on mark (guard_raise from its f4), the guard stance (`guarding`), or the
+## def's guard raise played while guard is held, from its first frame. So a held guard has no gap where a raise
+## starts: not where one chains onto the last as it ends, nor where guard is pressed again, even when the raise came
+## too soon after the last to open a parry window (CombatTuning.parry_refresh_frames).
 func is_guarding() -> bool:
-	return runner.guard_window or guarding
+	return runner.guard_window or guarding or (_guard_held and _raising())
 
 
 ## Keeps the guard up if guard is held: a guarded blow calls it as its guard_hit starts (HitIntake), so the guard
@@ -309,6 +312,11 @@ func _keep_guard(intent: Intent) -> void:
 	elif _guard_move_ended and not runner.busy():
 		_set_guarding(true)
 	_guard_move_ended = false
+
+
+# Whether the move playing is the def's guard raise (moveset `guard`).
+func _raising() -> bool:
+	return runner.current != null and runner.current.id == def.moveset.get(GUARD_ACTION, &"")
 
 
 func _set_guarding(on: bool) -> void:

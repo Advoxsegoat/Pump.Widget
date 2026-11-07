@@ -139,7 +139,6 @@ func test_guard_spammed_every_ten_frames_parries_at_most_the_first_blow() -> voi
 	var outcomes := []
 	b.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void: outcomes.append(O.keys()[r.outcome]))
 	var stream := Stream.new()
-	stream.attacker = a
 	stream.target = b
 	stream.event = _jab_on(a, b)
 	track(stream)
@@ -148,6 +147,34 @@ func test_guard_spammed_every_ten_frames_parries_at_most_the_first_blow() -> voi
 	assert_eq(outcomes.size(), stream.raises, "a blow met every raise: %s" % [outcomes])
 	assert_true(outcomes.count("PARRIED") <= 1 and (outcomes.find("PARRIED") <= 0), "at most the first is parried: %s" % [outcomes])
 	assert_eq(outcomes.slice(1).filter(func(o: String) -> bool: return o != "GUARDED"), [], "the rest are guarded: %s" % [outcomes])
+
+
+func test_a_held_guard_mashed_against_real_blows_guards_every_one_after_the_first() -> void:
+	# As above, but with guard held all along, and each blow judged at the raise's f2: before the raise's guard_on
+	# mark (f4). Only the first raise opens a parry window; every later one still guards from its start, because
+	# guard is held, so no blow lands.
+	var b_def := Duel.def(ActorDef.Team.ENEMY, 5.0)
+	b_def.reactions = b_def.reactions.duplicate()
+	b_def.reactions.erase(&"parry")
+	b_def.reactions.erase(&"guard_hit")
+	var taps := []
+	for i in 12:
+		taps.append({"frames": 1, "press": [&"guard"], "hold": [&"guard"]})
+		taps.append({"frames": 9, "hold": [&"guard"]})
+	var run := Duel.make(self, [], taps + [{"frames": 40, "hold": [&"guard"]}], 1.0, b_def)
+	var b: Actor = run["b"]
+	var outcomes := []
+	b.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void: outcomes.append(O.keys()[r.outcome]))
+	var stream := Stream.new()
+	stream.target = b
+	stream.event = _jab_on(run["a"], b)
+	stream.at = 2
+	track(stream)
+	await Duel.play_to(self, b, 165)
+	assert_true(stream.raises >= 7, "the presses chained %d raises" % stream.raises)
+	assert_eq(outcomes.size(), stream.raises, "a blow met every raise: %s" % [outcomes])
+	assert_eq(outcomes.slice(0, 1), ["PARRIED"], "the first is parried: %s" % [outcomes])
+	assert_eq(outcomes.slice(1).filter(func(o: String) -> bool: return o != "GUARDED"), [], "and the rest guarded: %s" % [outcomes])
 
 
 func test_an_honest_tap_twenty_frames_after_the_last_raise_still_parries() -> void:
@@ -163,12 +190,12 @@ func test_an_honest_tap_twenty_frames_after_the_last_raise_still_parries() -> vo
 		(run["arena"] as Node).free()
 
 
-# Posts the event `event` (a's jab on b) once per raise of b's, judged at the raise's f5: it runs after Melee's
-# snapshot and before the actors, so it sees b as the snapshot did.
+# Posts the event `event` (a's jab on b) once per raise of b's, judged at the raise's frame `at`: it runs after
+# Melee's snapshot and before the actors, so it sees b as the snapshot did.
 class Stream extends Node:
-	var attacker: Actor
 	var target: Actor
 	var event: HitEvent
+	var at := 5
 	var raises := 0
 	var _posted_for := -1
 
@@ -180,7 +207,7 @@ class Stream extends Node:
 
 	func _physics_process(_delta: float) -> void:
 		var runner := target.runner
-		if runner.current != null and runner.current.id == &"guard_raise" and Marks.frame_of(runner.time) == 5 \
+		if runner.current != null and runner.current.id == &"guard_raise" and Marks.frame_of(runner.time) == at \
 				and _posted_for != raises:
 			_posted_for = raises
 			Melee.post(event)
