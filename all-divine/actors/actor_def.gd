@@ -24,6 +24,12 @@ enum Team { PLAYER, ENEMY }
 ## `parried`, `caught`, `posture_broken`, `death` and `getup`), and its own answers to a blow, `parry` and
 ## `catch`. A name the actor has no clip for is left out.
 @export var reactions: Dictionary = {}
+## The paired move a palm press starts on a broken foe in reach (Actor.finishable_target); none: the actor finishes
+## no one.
+@export var finisher: PairedMove
+## The paired move a grab of the actor's starts once it takes hold (a GRABBED blow); none: the grab lands as a HIT
+## that staggers.
+@export var grab_pair: PairedMove
 @export var max_hp := 100.0
 @export var max_stamina := 100.0
 @export var max_posture := 100.0

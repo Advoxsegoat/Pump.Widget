@@ -6,7 +6,9 @@ extends Node
 ## Presses come through the actor's InputBuffer, so one made up to 9 frames early (not counting frames of hit-stop)
 ## comes out on the first frame it can: when a cancel window that takes it opens, or when the actor is free again.
 ## An attack or a dodge also needs stamina (Stats.can_act): a press it cannot pay for is used up and nothing starts,
-## and a move that starts spends its stamina_cost on that frame.
+## and a move that starts spends its stamina_cost on that frame. A palm press with a broken foe in reach starts the
+## actor's finisher instead of the move it asked for (Actor.start_finisher_on), from rest and from a cancel window
+## alike, so a riposte can finish.
 ##
 ## A dodge is the stick's too: a move with a `neutral_variant` (the roll's hop) starts that variant instead when the
 ## intent's stick is at rest, from rest and from a cancel window alike. The variant is checked as the move that was
@@ -22,7 +24,7 @@ extends Node
 ## frame (nothing here runs by itself). Moves are looked up by id in the Registry. The runner tells the
 ## actor's rig what to show, and the actor's HitScanner when a hitbox comes on (with the profile its mark
 ## names) and goes off; every activation ends when its move does. It returns the move's root motion as a
-## velocity for the actor to move by.
+## velocity for the actor to move by. A pair_hit mark is only passed on (`mark`): the Pairing the actor is in lands it.
 
 signal move_started(move: MoveData)
 ## `cancelled` is true when another move took over before the clip's end.
@@ -82,9 +84,11 @@ func busy() -> bool:
 	return current != null
 
 
-## Starts `move` now, cancelling the current one if there is one. The marks at time 0 fire at once.
-func start(move: MoveData) -> void:
-	_start(move, null)
+## Starts `move` now, cancelling the current one if there is one. The marks at time 0 fire at once. An attack or a
+## dodge is refused while the actor cannot act (Stats.can_act): nothing changes. With `force` it starts whatever the
+## stamina, as both moves of a paired move do.
+func start(move: MoveData, force := false) -> void:
+	_start(move, null, force)
 
 
 ## One physics frame: turns an attacking body toward the intent's aim_target (see _aim), advances the current
@@ -112,26 +116,26 @@ func tick(intent: Intent, delta: float) -> Vector3:
 				_begin_charge(hold["args"])
 	if current != null and not window.is_empty():
 		var action := actor.buffer.consume(window.keys(), actor.buffer_frame)
-		if action != &"":
+		if action != &"" and not actor.start_finisher_on(action):
 			_start(_fetch(window[action]), intent)
 	if current != null and time >= _anim.length - Marks.EPSILON:
 		_end(false)
 	if current == null:
 		var action := actor.buffer.consume(actor.def.moveset.keys(), actor.buffer_frame)
-		if action != &"":
+		if action != &"" and not actor.start_finisher_on(action):
 			_start(_fetch(actor.def.moveset[action]), intent)
 	return velocity
 
 
-# Starts `move`, unless it is an attack or a dodge and the actor cannot act (no stamina, or exhausted): then
-# nothing changes, a move that plays goes on, and the press that asked is gone, since the callers have consumed
-# it. A dodge with the stick pushed (`intent` from this frame, or null) faces the stick at once. With the stick at
-# rest, a move's neutral variant starts in its place, once the move asked for has passed the stamina gate.
-func _start(move: MoveData, intent: Intent) -> void:
+# Starts `move`, unless it is an attack or a dodge, the actor cannot act (no stamina, or exhausted) and it is not
+# `force`d: then nothing changes, a move that plays goes on, and the press that asked is gone, since the callers have
+# consumed it. A dodge with the stick pushed (`intent` from this frame, or null) faces the stick at once. With the
+# stick at rest, a move's neutral variant starts in its place, once the move asked for has passed the stamina gate.
+func _start(move: MoveData, intent: Intent, force := false) -> void:
 	if move == null:
 		push_error("MoveRunner: no move to start on '%s'" % actor.name)
 		return
-	if (move.kind == MoveData.Kind.ATTACK or move.kind == MoveData.Kind.DODGE) and not actor.stats.can_act():
+	if (move.kind == MoveData.Kind.ATTACK or move.kind == MoveData.Kind.DODGE) and not force and not actor.stats.can_act():
 		return
 	if move.neutral_variant != &"" and intent != null and intent.move.length() == 0.0:
 		var variant := _fetch(move.neutral_variant)

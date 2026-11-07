@@ -5,6 +5,8 @@ const RIG := "res://actors/abarax/abarax_rig.tscn"
 const LIB := "res://assets/anim/abarax/library.tres"
 const BAD_DATA := "res://tests/fixtures/moves/bad_data"
 const REACH_DATA := "res://tests/fixtures/moves/reach_data"
+const PAIR_DATA := "res://tests/fixtures/moves/pair_data"
+const FINISHER := "res://data/pairs/finisher_open_hand.tres"
 const HITBOXES: PackedStringArray = ["palm_l", "palm_r"]
 const MOVES: PackedStringArray = ["palm_jab", "palm_cross", "dodge_roll"]
 ## The bones of Abarax's rig that an `fx` mark may name (a few of them).
@@ -678,6 +680,89 @@ func test_check_all_follows_reactions_and_neutral_variants() -> void:
 		assert_false(_has_problem(problems, [id, "no actor"]), "%s is reached: \n%s" % [id, "\n".join(problems)])
 	assert_true(_has_problem(problems, ["stray", "no actor"]), "\n".join(problems))
 	assert_false(_has_problem(problems, ["stray", "has no sfx"]), "an unreached move is not checked: \n" + "\n".join(problems))
+
+
+# --- pairs ---
+
+# A pair whose lead is the jab and follow the cross, with one hit `f1` of `hitstop` frames, and `max_length`.
+func _pair(hitstop := 4, max_length := 1.5) -> PairedMove:
+	var pair := PairedMove.new()
+	pair.id = &"fixture_pair"
+	pair.lead_move = &"palm_jab"
+	pair.follow_move = &"palm_cross"
+	pair.max_length = max_length
+	pair.hits = {&"f1": _profile(hitstop)}
+	return pair
+
+
+# check_pair for `pair` with a stepped lead clip of `frames` frames and the marks `lead_marks`, and a follow clip
+# with `follow_marks`.
+func _check_pair(pair: PairedMove, lead_marks: Array, follow_marks := [], frames := 60) -> PackedStringArray:
+	return ClipChecker.new().check_pair(pair, _anim(frames, 12, lead_marks), _anim(60, 0, follow_marks))
+
+
+func test_a_valid_pair_has_no_problems() -> void:
+	assert_eq(_check_pair(_pair(), [_m(10, &"pair_hit", {"profile": &"f1"})]), PackedStringArray())
+
+
+func test_a_pair_hit_must_name_one_of_the_pairs_hits() -> void:
+	# Whatever the kind of the move it is in: a pair's moves are not attacks, and their blows are the pair's.
+	var problems := _check_pair(_pair(), [_m(10, &"pair_hit", {"profile": &"f9"}), _m(20, &"pair_hit")],
+			[_m(30, &"pair_hit", {"profile": &"f8"})])
+	assert_true(_has_problem(problems, ["fixture_pair", "pair_hit at f10", "unknown profile 'f9'", "f1"]), "\n".join(problems))
+	assert_true(_has_problem(problems, ["fixture_pair", "pair_hit at f20", "no profile"]), "\n".join(problems))
+	assert_true(_has_problem(problems, ["fixture_pair", "pair_hit at f30", "unknown profile 'f8'"]), "in the follow clip too: \n" + "\n".join(problems))
+	assert_eq(problems.size(), 3, "\n".join(problems))
+
+
+func test_a_pair_whose_lead_clip_is_longer_than_its_max_length_is_reported() -> void:
+	var marks := [_m(10, &"pair_hit", {"profile": &"f1"})]
+	assert_eq(_check_pair(_pair(), marks, [], 90), PackedStringArray(), "1.5 s is not longer")
+	var problems := _check_pair(_pair(), marks, [], 91)
+	assert_true(_has_problem(problems, ["fixture_pair", "palm_jab", "1.52 s", "max_length", "1.50 s"]), "\n".join(problems))
+
+
+func test_a_pairs_hits_are_held_to_the_hitstop_range() -> void:
+	var marks := [_m(10, &"pair_hit", {"profile": &"f1"})]
+	var problems := _check_pair(_pair(7), marks)
+	assert_true(_has_problem(problems, ["fixture_pair", "profile 'f1'", "hitstop_frames 7"]), "\n".join(problems))
+	var odd := _pair()
+	odd.hits[&"f2"] = MoveData.new()
+	problems = _check_pair(odd, marks)
+	assert_true(_has_problem(problems, ["fixture_pair", "hits['f2'] is not a HitProfile"]), "\n".join(problems))
+
+
+func test_an_actors_pairs_and_their_moves_are_checked() -> void:
+	var def := _actor(load(RIG), {&"palm": &"palm_jab"})
+	def.finisher = load(FINISHER)
+	assert_eq(ClipChecker.new().check_actor(def), PackedStringArray(), "the real finisher")
+	var short := (load(FINISHER) as PairedMove).duplicate() as PairedMove
+	short.hits = short.hits.duplicate()
+	short.hits.erase(&"f2")
+	def.finisher = short
+	var problems := ClipChecker.new().check_actor(def)
+	assert_true(_has_problem(problems, ["finisher_open_hand", "pair_hit at f40", "unknown profile 'f2'"]), "\n".join(problems))
+	var lost := _pair()
+	lost.lead_move = &"no_such_lead"
+	def.finisher = null
+	def.grab_pair = lost
+	problems = ClipChecker.new().check_actor(def)
+	assert_true(_has_problem(problems, ["fixture_pair", "lead_move", "unknown move", "no_such_lead"]), "\n".join(problems))
+
+
+func test_check_all_reaches_a_pairs_moves_through_the_actors_that_use_it() -> void:
+	# tests/fixtures/moves/pair_data: an actor whose finisher is the pair `used` (lead `lead`, follow `follow`), and a
+	# pair `stray` (lead `stray_lead`) that no actor uses. Reached moves are checked (OTHER moves on the idle clip
+	# without marks, so each reports its missing sfx); the stray pair and its lead are reported as unused.
+	assert_eq(Registry.scan(PAIR_DATA), PackedStringArray())
+	var problems := ClipChecker.new().check_all()
+	for id: String in ["lead", "follow"]:
+		assert_true(problems.has(id + ": has no sfx"), "%s is checked: \n%s" % [id, "\n".join(problems)])
+		assert_false(Array(problems).any(func(p: String) -> bool: return p.begins_with(id + ": no actor")),
+				"%s is reached: \n%s" % [id, "\n".join(problems)])
+	assert_true(_has_problem(problems, ["stray_lead", "no actor"]), "\n".join(problems))
+	assert_true(_has_problem(problems, ["stray", "no actor uses this pair"]), "\n".join(problems))
+	assert_false(_has_problem(problems, ["used:"]), "the used pair is fine: \n" + "\n".join(problems))
 
 
 # --- the real data ---

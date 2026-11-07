@@ -24,11 +24,16 @@ extends RefCounted
 ##   for an actor of team ENEMY, every ATTACK has a tell at least TELL_LEAD frames before its first
 ##       hitbox_on (the player must be able to see it coming), and a move with a perilous profile has a
 ##       tell of kind perilous
-## and per actor (check_actor): each required clip exists and is not a T-pose, the moveset and the
-## reactions name existing moves, and each move the actor can start, react with or cancel into is checked
-## against the actor's rig and team.
-## check_all runs every actor in the Registry, and reports the moves no actor can reach, since those
-## have no rig to be checked against.
+## per paired move (check_pair: a finisher or a grab, PairedMove), given the clips of its two moves:
+##   the lead's clip is no longer than the pair's max_length (spec 4.4: a finisher is 1.5 s at most)
+##   every pair_hit, in either clip, names (`profile`) one of the pair's `hits`, whatever the kind of its move
+##   every hit profile of the pair is a HitProfile with hitstop_frames 3 to 6
+## and per actor (check_actor): each required clip exists and is not a T-pose, the moveset, the reactions and the
+## pairs (its finisher and its grab_pair) name existing moves, each move the actor can start, react with, cancel
+## into or play in one of its pairs is checked against the actor's rig and team, and each of its pairs is checked
+## with the clips of its rig.
+## check_all runs every actor in the Registry, and reports the moves no actor can reach and the pairs no actor
+## uses, since those have no rig to be checked against.
 
 ## The mark kinds that name something in the data: kind -> [the Registry kind it is looked up in, what to call it].
 const NAMED := {
@@ -98,28 +103,52 @@ func check_move(move: MoveData, anim: Animation, hitbox_ids: PackedStringArray, 
 	return out
 
 
-## What is wrong with the actor `def`: its rig, its required clips, its moveset, and every move it can
-## start or cancel into (see the top of this file).
+## What is wrong with the actor `def`: its rig, its required clips, its moveset, its pairs, and every move it can
+## start, cancel into or play in a pair (see the top of this file).
 func check_actor(def: ActorDef) -> PackedStringArray:
-	return _check_actor(def, {})
+	return _check_actor(def, {}, {})
 
 
 ## check_actor for every actor in the Registry, each problem once, then a problem for every move in the
-## Registry that no actor's moveset (or cancel chain from it) reaches.
+## Registry that no actor's moveset (or cancel chain from it, or pair) reaches, and for every pair in the Registry
+## that no actor uses.
 func check_all() -> PackedStringArray:
 	var out := PackedStringArray()
 	var reached := {}
+	var paired := {}
 	for actor_id in Registry.ids(&"actors"):
 		var def := Registry.fetch(&"actors", StringName(actor_id)) as ActorDef
 		if def == null:
 			out.append("%s: is not an ActorDef" % actor_id)
 			continue
-		for problem in _check_actor(def, reached):
+		for problem in _check_actor(def, reached, paired):
 			if not out.has(problem):
 				out.append(problem)
 	for move_id in Registry.ids(&"moves"):
 		if not reached.has(String(move_id)):
 			out.append("%s: no actor's moveset reaches this move (directly or by cancelling), so its clip cannot be checked" % move_id)
+	for pair_id in Registry.ids(&"pairs"):
+		if not paired.has(String(pair_id)):
+			out.append("%s: no actor uses this pair (as its finisher or grab_pair), so its clips cannot be checked" % pair_id)
+	return out
+
+
+## What is wrong with the paired move `pair`, given `lead` and `follow`, the clips of its lead and follow moves (see
+## the top of this file). That its moves exist is check_actor's to say.
+func check_pair(pair: PairedMove, lead: Animation, follow: Animation) -> PackedStringArray:
+	var out := PackedStringArray()
+	var id := String(pair.id)
+	if lead.length > pair.max_length + TOLERANCE:
+		out.append("%s: the lead's clip '%s' is %.2f s, longer than the pair's max_length of %.2f s" % [id, pair.lead_move, lead.length, pair.max_length])
+	_check_profiles(id, pair.hits, out)
+	for anim in [lead, follow]:
+		for mark in _of_kind(Marks.read(anim), &"pair_hit"):
+			var where := "pair_hit at f%d" % Marks.frame_of(mark["time"])
+			var profile := str(mark["args"].get("profile", ""))
+			if profile.is_empty():
+				out.append("%s: %s has no profile" % [id, where])
+			elif not pair.hits.has(StringName(profile)):
+				out.append("%s: %s names unknown profile '%s' (the pair has %s)" % [id, where, profile, ", ".join(PackedStringArray(pair.hits.keys()))])
 	return out
 
 
@@ -188,8 +217,13 @@ func _check_mark(id: String, mark: Dictionary, anim: Animation, step_fps: int, h
 
 # What is wrong with a move's `hits`, whatever its kind: each is a HitProfile, and its hit-stop is in range.
 func _check_hits(id: String, move: MoveData, out: PackedStringArray) -> void:
-	for profile_name in move.hits:
-		var profile: Variant = move.hits[profile_name]
+	_check_profiles(id, move.hits, out)
+
+
+# What is wrong with `hits` (a move's or a pair's, profile name -> HitProfile) of the move or pair `id`.
+func _check_profiles(id: String, hits: Dictionary, out: PackedStringArray) -> void:
+	for profile_name in hits:
+		var profile: Variant = hits[profile_name]
 		if not profile is HitProfile:
 			out.append("%s: hits['%s'] is not a HitProfile" % [id, profile_name])
 		elif profile.hitstop_frames < HITSTOP_MIN or profile.hitstop_frames > HITSTOP_MAX:
@@ -300,9 +334,18 @@ static func _angle(a: Quaternion, b: Quaternion) -> float:
 
 # --- an actor ---
 
-# The moves `def` can start with no move before them, as ids: its moveset and its reactions. A name that is
-# not a move is a problem in `out`. Further sources of reachable moves (the pair it grabs with, F1 Task 10,
-# and the attacks of its brain, Task 13) are added here.
+# The pairs of `def`: its finisher and its grab_pair, those it has.
+static func _pairs_of(def: ActorDef) -> Array[PairedMove]:
+	var found: Array[PairedMove] = []
+	for pair in [def.finisher, def.grab_pair]:
+		if pair != null:
+			found.append(pair)
+	return found
+
+
+# The moves `def` can start with no move before them, as ids: its moveset, its reactions and both moves of each of
+# its pairs. A name that is not a move is a problem in `out`. Further sources of reachable moves (the attacks of its
+# brain, F1 Task 13) are added here.
 func _start_moves(def: ActorDef, move_ids: PackedStringArray, out: PackedStringArray) -> Array[String]:
 	var found: Array[String] = []
 	for action in def.moveset:
@@ -317,6 +360,13 @@ func _start_moves(def: ActorDef, move_ids: PackedStringArray, out: PackedStringA
 			found.append(move_id)
 		else:
 			out.append("%s: reaction '%s' names unknown move '%s'" % [def.id, reaction, move_id])
+	for pair in _pairs_of(def):
+		for role in [&"lead_move", &"follow_move"]:
+			var move_id := String(pair.get(role))
+			if move_ids.has(move_id):
+				found.append(move_id)
+			else:
+				out.append("%s: %s is the unknown move '%s'" % [pair.id, role, move_id])
 	return found
 
 
@@ -335,8 +385,9 @@ func _moves_after(move: MoveData, anim: Animation, move_ids: PackedStringArray) 
 	return found
 
 
-# check_actor, also noting in `reached` (move id -> true) every move it checked.
-func _check_actor(def: ActorDef, reached: Dictionary) -> PackedStringArray:
+# check_actor, also noting in `reached` (move id -> true) every move it checked, and in `paired` (pair id -> true)
+# every pair.
+func _check_actor(def: ActorDef, reached: Dictionary, paired: Dictionary) -> PackedStringArray:
 	var out := PackedStringArray()
 	var id := String(def.id)
 	if def.rig_scene == null:
@@ -384,5 +435,14 @@ func _check_actor(def: ActorDef, reached: Dictionary) -> PackedStringArray:
 			var anim := tree.get_animation(move.clip)
 			out.append_array(check_move(move, anim, hitbox_ids, move_ids, def.team, bone_names))
 			queue.append_array(_moves_after(move, anim, move_ids))
+	for pair in _pairs_of(def):
+		paired[String(pair.id)] = true
+		var clips: Array[Animation] = []
+		for role in [&"lead_move", &"follow_move"]:
+			var move: MoveData = Registry.fetch(&"moves", pair.get(role)) as MoveData if move_ids.has(String(pair.get(role))) else null
+			if move != null and tree.has_animation(move.clip):
+				clips.append(tree.get_animation(move.clip))
+		if clips.size() == 2:  # a move or a clip that is missing has been reported above
+			out.append_array(check_pair(pair, clips[0], clips[1]))
 	rig.free()
 	return out

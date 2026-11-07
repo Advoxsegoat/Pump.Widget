@@ -1,10 +1,11 @@
-[gd_resource type="Resource" script_class="ActorDef" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="ActorDef" load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://actors/actor_def.gd" id="1_def"]
 [ext_resource type="PackedScene" path="res://actors/abarax/abarax_rig.tscn" id="2_rig"]
 [ext_resource type="Resource" path="res://data/tuning/abarax_locomotion.tres" id="3_tuning"]
 [ext_resource type="Resource" path="res://data/palettes/abarax.tres" id="4_palette"]
 [ext_resource type="Resource" path="res://data/tuning/combat_abarax.tres" id="5_combat"]
+[ext_resource type="Resource" path="res://data/pairs/finisher_open_hand.tres" id="6_finisher"]
 
 [resource]
 script = ExtResource("1_def")
@@ -25,12 +26,15 @@ reactions = {
 &"caught": &"caught",
 &"death": &"death",
 &"flinch": &"flinch",
+&"getup": &"getup",
 &"guard_break": &"guard_break",
 &"guard_hit": &"guard_hit",
 &"parried": &"parried",
 &"parry": &"parry",
+&"posture_broken": &"posture_broken",
 &"stagger": &"stagger"
 }
+finisher = ExtResource("6_finisher")
 max_hp = 100.0
 max_stamina = 100.0
 max_posture = 100.0

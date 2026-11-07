@@ -24,7 +24,7 @@ var poise := 0.0
 var stamina := 0.0
 var posture_broken := false
 var dead := false
-## In a paired move (a finisher, a grab), where no one else's blow lands. Nothing pairs yet, so it is false.
+## In a paired move (a finisher, a grab; Actor.paired_with), where no one else's blow lands.
 var paired := false
 
 
@@ -43,4 +43,5 @@ static func of(actor: Actor) -> Defense:
 	d.stamina = actor.stats.stamina
 	d.posture_broken = actor.stats.posture_broken
 	d.dead = actor.dead
+	d.paired = actor.paired_with != null
 	return d

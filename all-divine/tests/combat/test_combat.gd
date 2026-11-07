@@ -3,7 +3,8 @@ extends TestCase
 ## values, one row per rule and per edge of it. The first rule that applies wins:
 ##   1. dead, paired or invulnerable: WHIFF
 ##   2. a LOW blow on the airborne: WHIFF
-##   3. a GRAB: GRABBED (taken as a HIT that staggers until paired moves exist)
+##   3. a GRAB: GRABBED (with the blow's numbers and a STAGGER, for an attacker without a grab pair; Melee starts the
+##      attacker's grab pair instead when it has one: test_paired.gd)
 ##   4. a parry facing the attacker: PARRIED (an ordinary blow) or CAUGHT (a thrust); a sweep goes on down
 ##   5. a guard facing the attacker, against a guardable blow: GUARDED, or GUARD_BREAK when the stamina is short
 ##   6. a HIT, whose reaction is NONE under hyper-armour, else STAGGER or FLINCH once the poise damage reaches

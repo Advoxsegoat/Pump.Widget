@@ -394,6 +394,15 @@ func set_move_time(t: float) -> void:
 		_slot_times[_slot] = t
 
 
+## Shows the last pose of `clip` at once, fully over locomotion, and keeps it there: a body left lying where its
+## move ended (a death, a finisher's victim), which the fade back to locomotion would stand up again. The next
+## play_move or stop_move lets it go.
+func hold_end_pose(clip: StringName) -> void:
+	play_move(clip, 0.0)
+	if tree.has_animation(clip):
+		set_move_time(tree.get_animation(clip).length)
+
+
 ## Fades the move layer out over `blend_out` seconds, back to locomotion. 0 or less is at once.
 func stop_move(blend_out: float) -> void:
 	_layer_goal = 0.0

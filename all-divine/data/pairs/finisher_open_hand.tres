@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="PairedMove" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://moves/paired_move.gd" id="1_pair"]
+[ext_resource type="Script" path="res://moves/hit_profile.gd" id="2_hit"]
+
+[sub_resource type="Resource" id="Resource_f1"]
+script = ExtResource("2_hit")
+damage = 15.0
+poise_damage = 6.0
+hitstop_frames = 4
+shake = 0.3
+
+[sub_resource type="Resource" id="Resource_f2"]
+script = ExtResource("2_hit")
+damage = 15.0
+poise_damage = 12.0
+hitstop_frames = 4
+shake = 0.3
+
+[sub_resource type="Resource" id="Resource_f3"]
+script = ExtResource("2_hit")
+damage = 30.0
+poise_damage = 25.0
+hitstop_frames = 6
+shake = 0.6
+impact_sound = &"impact_heavy"
+
+[resource]
+script = ExtResource("1_pair")
+id = &"finisher_open_hand"
+lead_move = &"finisher"
+follow_move = &"finisher_victim"
+hits = {
+&"f1": SubResource("Resource_f1"),
+&"f2": SubResource("Resource_f2"),
+&"f3": SubResource("Resource_f3")
+}
+follow_ends_down = true

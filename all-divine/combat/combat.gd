@@ -9,8 +9,8 @@ extends RefCounted
 ## from the attacker). The first rule that applies wins:
 ##   1. the target is dead, paired or invulnerable: WHIFF
 ##   2. a LOW blow on the airborne: WHIFF (it passes under)
-##   3. a GRAB: GRABBED. Until paired moves exist it is taken as a HIT that staggers, so it carries the
-##      blow's damage and posture and a STAGGER
+##   3. a GRAB: GRABBED, which starts the attacker's grab pair (Melee); for an attacker without one it is taken as a
+##      HIT that staggers, so it carries the blow's damage and posture and a STAGGER
 ##   4. a parry with the attacker inside the arc: an ordinary blow is PARRIED (the attacker loses the blow's
 ##      posture damage times parry_posture_scale), a THRUST is CAUGHT (the attacker loses catch_posture); a
 ##      SWEEP cannot be parried and goes on down the rules
@@ -62,6 +62,17 @@ static func resolve(e: HitEvent, d: Defense, tuning: CombatTuning) -> HitResult:
 		r.reaction = HitResult.Reaction.STAGGER
 	else:
 		r.reaction = HitResult.Reaction.FLINCH
+	return r
+
+
+## What a blow of a paired move (`e.paired`: a lead's pair_hit mark) comes to. No rule judges it, since the
+## follower is held where the lead's blows land and no one else's blow can reach either of them: it is a HIT with
+## the profile's damage and posture damage and no reaction, since the follow move is the follower's reaction.
+static func pair_hit(e: HitEvent) -> HitResult:
+	var r := HitResult.new()
+	r.outcome = HitResult.Outcome.HIT
+	r.hp_damage = e.profile.damage
+	r.posture_damage = e.profile.posture_damage
 	return r
 
 

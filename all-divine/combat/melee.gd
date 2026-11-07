@@ -32,12 +32,20 @@ extends Node
 ## A blow that landed also has weight (_weigh): both fighters freeze for the profile's `hitstop_frames` and the
 ## target is pushed along the blow by its `knockback`. A trade freezes both for the longer of the two blows'
 ## frames, not their sum, since a freeze that is on is only ever lengthened (Actor.freeze).
+##
+## Melee also keeps paired moves (finishers, grabs) in step, since it runs after every actor has moved. A pair that
+## began this frame (Actor.start_paired, begin_pair) has both its moves started here, after the blows; then every
+## pair in play places its follower and, once both its moves have ended, is finished (see Pairing). A grab that takes
+## hold (GRABBED) starts its attacker's grab pair here and comes to nothing more; an attacker without one has it taken
+## as a HIT that staggers. A pair's own blows (HitEvent.paired, the lead's pair_hit marks) are posted like any other
+## but not judged: each lands on the follower as a HIT with no reaction (Combat.pair_hit). Any other blow on a body
+## that is paired, even one that was not when the frame began (a grab took hold this frame), comes to nothing.
 
 ## Melee's place in each physics frame: after every actor (which run at the default, 0).
 const PRIORITY := 100
 ## The outcomes that stop both fighters for the blow's hit-stop (Actor.freeze) and shove the target
 ## (Actor.push): a blow that landed, was guarded, broke the guard, was turned back or was caught. A WHIFF touched
-## nothing, so it has no weight; a grab is another thing (a paired move, not a blow).
+## nothing, so it has no weight; a grab that takes hold is another thing (a paired move, not a blow).
 const FREEZES: Array[HitResult.Outcome] = [HitResult.Outcome.HIT, HitResult.Outcome.GUARDED,
 		HitResult.Outcome.GUARD_BREAK, HitResult.Outcome.PARRIED, HitResult.Outcome.CAUGHT]
 ## The outcomes that turn a blow back on its attacker, who then takes attacker_posture_damage and recoils.
@@ -60,6 +68,8 @@ class Snapshot extends Node:
 
 var _snapshot: Snapshot
 var _posted: Array[HitEvent] = []
+var _pairs: Array[Pairing] = []  # the paired moves in play
+var _beginning: Array[Pairing] = []  # those begun this frame, whose moves have not started yet
 
 
 func _ready() -> void:
@@ -75,21 +85,49 @@ func post(event: HitEvent) -> void:
 	_posted.append(event)
 
 
+## Takes on `pairing`, a paired move begun this frame (Actor.start_paired): its moves start once every actor has
+## moved, and it is played from then on until it is over.
+func begin_pair(pairing: Pairing) -> void:
+	_beginning.append(pairing)
+
+
 func _physics_process(_delta: float) -> void:
-	if _posted.is_empty():
-		return
+	if not _posted.is_empty():
+		_apply_posted()
+	for pairing in _beginning:
+		pairing.start()
+		_pairs.append(pairing)
+	_beginning.clear()
+	for pairing in _pairs.duplicate():
+		if pairing.tick():
+			pairing.finish()
+			_pairs.erase(pairing)
+
+
+# Judges and applies every blow posted this frame (see the top of this file).
+func _apply_posted() -> void:
 	var events := _posted
 	_posted = []
 	var results: Array[HitResult] = []
-	# body -> [the indices of the blows it took, those of its own blows turned back], the bodies in the order met
-	var bodies := {}
 	for i in events.size():
 		var r := _judge(events[i])
 		if r != null and events[i].target.dead:
 			r = HitResult.new()  # it died since the frame began: the blow comes to nothing
 		results.append(r)
+	# Every grab that took hold starts its pair first, so that whatever order the blows came in, no other blow lands
+	# on a body paired this frame.
+	for i in events.size():
+		if results[i] != null and results[i].outcome == HitResult.Outcome.GRABBED and _grab(events[i]):
+			results[i] = null  # the pair takes it from here
+	# body -> [the indices of the blows it took, those of its own blows turned back], the bodies in the order met
+	var bodies := {}
+	for i in events.size():
+		var r := results[i]
 		if r == null:
 			continue
+		if not events[i].paired and events[i].target.paired_with != null:
+			r = HitResult.new()  # no one else's blow lands on a paired body
+			results[i] = r
 		_note(bodies, events[i].target, 0, i)
 		if TURNED_BACK.has(r.outcome):
 			_note(bodies, events[i].attacker, 1, i)
@@ -130,11 +168,21 @@ func _weigh(e: HitEvent, r: HitResult) -> void:
 	e.target.push(e.direction * e.profile.knockback)
 
 
+# Starts the grab pair of the attacker of `e`, a GRABBED blow, on its target. False if the attacker has none, or it
+# could not start (Actor.start_paired): the blow is then taken as a HIT that staggers.
+static func _grab(e: HitEvent) -> bool:
+	var pair := e.attacker.def.grab_pair
+	return pair != null and e.attacker.start_paired(e.target, pair)
+
+
 # What `e` comes to against its target as it stood when the frame began (as it stands now, for one that was
-# not yet an actor then); null if either side is gone.
+# not yet an actor then), or, for a blow of a paired move, what the pair's blow does (Combat.pair_hit); null if
+# either side is gone.
 func _judge(e: HitEvent) -> HitResult:
 	if not is_instance_valid(e.attacker) or not is_instance_valid(e.target):
 		return null
+	if e.paired:
+		return Combat.pair_hit(e)
 	var d: Defense = _snapshot.defenses.get(e.target)
 	if d == null:
 		d = Defense.of(e.target)

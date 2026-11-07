@@ -184,3 +184,17 @@ func test_sprint_drains_then_stops_when_exhausted() -> void:
 	assert_near(speeds[ran_out + 30], tuning.jog_speed, 1e-6, "he jogs instead")
 	assert_true(sprinting[ran_out + 90], "and sprints again once stamina has climbed back")
 	assert_false(actor.stats.exhausted)
+
+
+func test_a_forced_start_passes_the_stamina_gate() -> void:
+	# A paired move starts whatever the stamina (Actor.start_paired forces both of its moves): the runner's start
+	# refuses an attack to an exhausted actor, and starts it when forced.
+	var run := _spawn([{"frames": 10}])
+	var actor: Actor = run["actor"]
+	await _play_to(actor, 1)
+	actor.stats.spend_stamina(999.0)
+	var jab := Registry.fetch(&"moves", &"palm_jab") as MoveData
+	actor.runner.start(jab)
+	assert_eq(run["started"], [], "refused")
+	actor.runner.start(jab, true)
+	assert_eq(run["started"], [[&"palm_jab", 1]], "forced")

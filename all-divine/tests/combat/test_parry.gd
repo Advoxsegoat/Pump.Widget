@@ -238,9 +238,9 @@ func test_parried_sweep_still_hits() -> void:
 	assert_eq(a.stats.posture, 100.0)
 
 
-func test_a_parry_that_empties_the_posture_staggers_the_attacker() -> void:
-	# a has 8 posture left; the parry takes 8. Its posture breaks, which plays its posture_broken reaction, or until
-	# there is one, its stagger, over `parried`.
+func test_a_parry_that_empties_the_posture_breaks_the_attacker() -> void:
+	# a has 8 posture left; the parry takes 8. Its posture breaks, which plays its posture_broken reaction over
+	# `parried`, and leaves it open to a finisher.
 	var run := _duel(JAB, _tap_guard(6))
 	var a: Actor = run["a"]
 	await _play_to(run, LANDS - 1)
@@ -248,20 +248,22 @@ func test_a_parry_that_empties_the_posture_staggers_the_attacker() -> void:
 	await _play_to(run, LANDS)
 	assert_eq(run["landed"], [["PARRIED", LANDS]])
 	assert_true(a.stats.posture_broken, "broken")
-	assert_eq(_current(a), &"stagger")
+	assert_eq(_current(a), &"posture_broken")
+	assert_true(a.is_in_group(Actor.FINISHABLE_GROUP), "open to a finisher")
 
 
-func test_a_broken_posture_plays_the_defs_posture_broken_when_it_has_one() -> void:
+func test_a_broken_posture_staggers_a_def_without_posture_broken() -> void:
 	var a_def := Duel.def(ActorDef.Team.PLAYER, 5.0)
 	a_def.reactions = a_def.reactions.duplicate()
-	a_def.reactions[&"posture_broken"] = &"guard_break"  # any move will do, until Task 10 brings its own
+	a_def.reactions.erase(&"posture_broken")
 	var run := Duel.make(self, JAB, _tap_guard(6), 1.0, null, a_def)
 	var a: Actor = run["a"]
 	await Duel.play_to(self, a, LANDS - 1)
 	a.stats.damage_posture(92.0)
 	await Duel.play_to(self, a, LANDS)
 	assert_true(a.stats.posture_broken)
-	assert_eq(_current(a), &"guard_break", "the def's posture_broken")
+	assert_eq(_current(a), &"stagger", "the stand-in")
+	assert_true(a.is_in_group(Actor.FINISHABLE_GROUP), "open to a finisher while it staggers")
 
 
 func test_a_blow_turned_back_twice_on_one_frame_is_taken_once_in_either_order() -> void:

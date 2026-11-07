@@ -5,6 +5,7 @@ extends TestCase
 const RIG := "res://actors/abarax/abarax_rig.tscn"
 const DEF := "res://data/actors/abarax.tres"
 const LIB := "res://assets/anim/abarax/library.tres"
+const PAIR := "res://data/pairs/finisher_open_hand.tres"
 const CELL := Vector2i(320, 240)
 ## The top of a cell, where its label is drawn. Everything below it is the picture of the actor.
 const LABEL_BAND := 40
@@ -83,6 +84,30 @@ func test_a_bare_rig_keeps_its_own_materials() -> void:
 	var rose := _palette_pixels(bare, def.palette, [7])
 	assert_true(found["count"] * 4 < _palette_pixels(dressed, def.palette)["count"], "only %d game pixels happen to match his tones" % found["count"])
 	assert_false((rose["slots"] as Dictionary).has(7), "no rose scarf")
+
+
+# A pair's sheet (--pair) shows both of its rigs at the pair's offset, side by side: the lead on the left facing
+# right, the follower on the right facing it, each in its own clip at the same frame. A cell for every frame either
+# clip has a mark on, wider than an actor's.
+func test_a_pair_sheet_draws_both_rigs_side_by_side() -> void:
+	var pair := load(PAIR) as PairedMove
+	var library := load(LIB) as AnimationLibrary
+	var frames := ContactSheet.pair_frames(library.get_animation(&"finisher"), library.get_animation(&"finisher_victim"))
+	assert_eq(frames, PackedInt32Array([5, 10, 35, 40, 50, 55, 70, 75]), "the lead's mark frames and the follower's")
+	var img: Image = await ContactSheet.render_pair(load(DEF), pair)
+	if img == null:
+		fail("the pair sheet rendered")
+		return
+	var cell := ContactSheet.PAIR_CELL * ContactSheet.ZOOM
+	assert_eq(img.get_width(), 6 * cell.x)
+	assert_eq(img.get_height(), ceili(frames.size() / 6.0) * cell.y)
+	for i in frames.size():
+		var corner := Vector2i(i % 6, i / 6) * cell + Vector2i(0, LABEL_BAND)
+		var half := Vector2i(cell.x / 2, cell.y - LABEL_BAND)
+		var left := _drawn(img.get_region(Rect2i(corner, half)))
+		var right := _drawn(img.get_region(Rect2i(corner + Vector2i(half.x, 0), half)))
+		assert_true(left["count"] >= MIN_DRAWN / 2, "cell %d: the lead is on the left (%d pixels)" % [i, left["count"]])
+		assert_true(right["count"] >= MIN_DRAWN / 2, "cell %d: the follower is on the right (%d pixels)" % [i, right["count"]])
 
 
 func test_cells_are_mark_frames_or_six_even_frames() -> void:

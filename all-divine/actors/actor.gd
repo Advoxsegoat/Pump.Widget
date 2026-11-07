@@ -13,9 +13,16 @@ extends CharacterBody3D
 ## defender, and marks its rig's hurtbox with the meta `actor`, which is how a scanner knows whose body it
 ## reached. An enemy also joins the group `lockable` until it dies: the foes the player aims at.
 ##
+## Two actors can play one move together, a paired move (start_paired: a finisher, a grab): each has the other as its
+## paired_with until it is over, no one else's blow lands on either, their brains are ignored, and Melee keeps the
+## two moves in step and the follower in its place (Pairing). A palm pressed with a broken foe in reach (in the group
+## `finishable` while it reels, within the tuning's finisher_range and finisher_arc_deg of the facing) starts the
+## def's finisher on it instead of the jab (start_finisher_on, which the runner asks before starting a pressed move).
+##
 ## Each physics frame, in this order:
 ##   1. frame += 1
-##   2. the brain thinks, giving an Intent (not once the actor is dead: the dead want nothing)
+##   2. the brain thinks, giving an Intent (not once the actor is dead: the dead want nothing; nor while it is in a
+##      paired move, which plays out whatever the brain would want)
 ##   3. the intent's presses go into the input buffer, stamped with this frame's buffer_frame
 ##      Then, if the actor is frozen (hit-stop, see freeze), the frame is over: one frozen frame is counted off and
 ##      steps 4 to 13 do not happen, so its move, locomotion, velocity, stats, rig and scanner all stand still, while
@@ -61,6 +68,9 @@ signal got_hit(result: HitResult, event: HitEvent)
 signal hit_landed(result: HitResult, event: HitEvent)
 ## The actor died (die). Emitted once.
 signal died
+## A paired move began (start_paired): `kind` is its moment, &"finisher" or &"grab". Emitted on both of its fighters,
+## for F4's camera dip and slow-motion beat to hook into.
+signal combat_moment(kind: StringName)
 
 ## The action that, held, sprints.
 const SPRINT_ACTION := &"dodge"
@@ -90,6 +100,10 @@ const GUARD_DROPPED_BY: Array[StringName] = [&"palm", &"heavy"]
 const GUARD_STANCE := &"guard_hold"
 ## The reaction a guarded blow plays: the guard stance stays up through it (HitIntake, hold_guard).
 const GUARD_HIT := &"guard_hit"
+## The action whose press, with a broken foe in reach, starts the def's finisher instead of its own move.
+const FINISHER_ACTION := &"palm"
+## Actors whose posture is broken, while they reel (HitIntake): the foes a finisher can be started on.
+const FINISHABLE_GROUP := &"finishable"
 
 @export var def: ActorDef
 
@@ -120,6 +134,11 @@ var frozen := 0
 ## guard_speed_scale and never sprints, and stamina comes back slower. See is_guarding for whether a guard is up at
 ## all.
 var guarding := false
+## The other fighter of the paired move the actor is in (start_paired), or null. While it is set, no one else's blow
+## lands on the actor (Defense.paired) and its brain is ignored.
+var paired_with: Actor
+## The paired move the actor is in, or null.
+var pair: PairedMove
 
 # The speed the rig's locomotion layer is given. With no move it is locomotion's. A move that starts is laid over
 # that layer in its blend_in, so the layer keeps the speed it had until the move is fully in (dropping it to
@@ -217,6 +236,68 @@ func is_invulnerable() -> bool:
 	return runner.iframes
 
 
+## Starts the paired move `with_pair` with the actor as its lead and `other` as its follower, and returns true; or
+## refuses and returns false, when either of them is dead, already paired or invulnerable (or `other` is the actor
+## itself). Both are paired at once (paired_with, pair): from now on no one else's blow lands on either, their brains
+## are ignored, and what they had pressed is forgotten. Both moves start on this frame, after every actor has moved,
+## whatever the stamina, and Melee plays the pair from there until both have ended (Pairing). combat_moment is
+## emitted on both.
+func start_paired(other: Actor, with_pair: PairedMove) -> bool:
+	if with_pair == null or other == null or other == self:
+		return false
+	for actor: Actor in [self, other]:
+		if actor.dead or actor.paired_with != null or actor.is_invulnerable():
+			return false
+	Melee.begin_pair(Pairing.new(self, other, with_pair))
+	combat_moment.emit(with_pair.moment)
+	other.combat_moment.emit(with_pair.moment)
+	return true
+
+
+## The foe the actor would finish now, for the HUD's prompt and for a palm press: the nearest live, unpaired actor of
+## the other team in the group `finishable` (its posture broken, reeling) within the tuning's finisher_range on the
+## ground and finisher_arc_deg either side of the facing. Null if there is none, or the actor has no finisher, or is
+## dead or paired itself.
+func finishable_target() -> Actor:
+	if def.finisher == null or dead or paired_with != null:
+		return null
+	var best: Actor = null
+	var best_distance := stats.tuning.finisher_range
+	for node in get_tree().get_nodes_in_group(FINISHABLE_GROUP):
+		var foe := node as Actor
+		if foe == null or foe == self or foe.dead or foe.paired_with != null or foe.def.team == def.team:
+			continue
+		var flat := _flat_to(foe.global_position)
+		if flat.length() > best_distance:
+			continue
+		if not flat.is_zero_approx() and absf(angle_difference(locomotion.facing_yaw, Locomotion.yaw_of(flat))) > deg_to_rad(stats.tuning.finisher_arc_deg):
+			continue
+		best = foe
+		best_distance = flat.length()
+	return best
+
+
+## A press of `action` is about to start a move (the runner asks, from rest and in a cancel window): when it is the
+## FINISHER_ACTION and there is a foe to finish (finishable_target), the def's finisher starts on it instead, and this
+## returns true; otherwise false, and the press starts its move.
+func start_finisher_on(action: StringName) -> bool:
+	if action != FINISHER_ACTION:
+		return false
+	var target := finishable_target()
+	return target != null and start_paired(target, def.finisher)
+
+
+## Puts the actor at `at` (facing its +Z) for the frame, as a paired move's follower is kept in its place by the
+## Pairing, after every actor has moved: with none of its own motion left over (velocity, knockback), and locomotion
+## facing that way so that it carries on from there. Unlike place, it keeps its hit-stop and lets physics
+## interpolation smooth the follower's slide into place.
+func hold_at(at: Transform3D) -> void:
+	global_transform = at.orthonormalized()
+	velocity = Vector3.ZERO
+	_push = Vector3.ZERO
+	locomotion.facing_yaw = rotation.y
+
+
 ## True while a guard is up: a move's guard_on mark (guard_raise from its f4), the guard stance (`guarding`), or the
 ## def's guard raise played while guard is held, from its first frame. So a held guard has no gap where a raise
 ## starts: not where one chains onto the last as it ends, nor where guard is pressed again, even when the raise came
@@ -250,16 +331,17 @@ func apply_hits(events: Array[HitEvent], results: Array[HitResult], turned: Arra
 
 ## Kills the actor, once (HitIntake.die): it plays its def's `death` reaction, its hurtbox goes off, what it had
 ## pressed is forgotten and its brain is ignored from then on, and `died` is emitted. When the death clip ends,
-## the body leaves the `actor` layer and lies as the clip left it.
-func die() -> void:
-	intake.die()
+## the body leaves the `actor` layer and lies as the clip left it. One `lying` already (a paired move left it on the
+## ground) plays no death clip: it leaves the layer at once and stays as it lies.
+func die(lying := false) -> void:
+	intake.die(lying)
 
 
 func _physics_process(delta: float) -> void:
 	frame += 1
 	if frozen == 0:
 		buffer_frame += 1
-	var intent: Intent = brain.think(self, delta) if brain != null and not dead else null
+	var intent: Intent = brain.think(self, delta) if brain != null and not dead and paired_with == null else null
 	if intent == null:
 		intent = Intent.new()
 	for action in intent.pressed:

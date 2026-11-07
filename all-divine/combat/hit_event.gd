@@ -18,3 +18,6 @@ var point: Vector3
 ## The way the blow travels, for the target's flinch and any push: on the ground plane, from the attacker
 ## through the target, of length 1.
 var direction: Vector3
+## A blow of a paired move (a lead's pair_hit mark, on its follower): it was found by no scan, and no Defense judges
+## it. It lands as a HIT with no reaction (Combat.pair_hit). `hitbox` is empty.
+var paired := false

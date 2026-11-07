@@ -359,8 +359,10 @@ func test_abarax_is_defined_by_data() -> void:
 	assert_eq(def.team, ActorDef.Team.PLAYER)
 	assert_eq(def.combat, load("res://data/tuning/combat_abarax.tres"))
 	assert_eq(def.reactions, {&"flinch": &"flinch", &"stagger": &"stagger", &"death": &"death", &"guard_hit": &"guard_hit",
-			&"guard_break": &"guard_break", &"parry": &"parry", &"parried": &"parried", &"catch": &"catch", &"caught": &"caught"},
-			"the reactions so far; the others come with the tasks that add their clips")
+			&"guard_break": &"guard_break", &"parry": &"parry", &"parried": &"parried", &"catch": &"catch", &"caught": &"caught",
+			&"posture_broken": &"posture_broken", &"getup": &"getup"}, "every reaction there is a clip for")
+	assert_eq(def.finisher, load("res://data/pairs/finisher_open_hand.tres"), "the Open Hand finisher")
+	assert_eq(def.grab_pair, null, "and no grab")
 	assert_eq(def.surface_sound, &"surface_cloth")
 	assert_eq(def.hurt_voice, &"")
 	var rig := def.rig_scene.instantiate()
@@ -378,6 +380,7 @@ func test_actor_def_defaults() -> void:
 	assert_eq(def.team, ActorDef.Team.PLAYER)
 	assert_eq(def.combat, null)
 	assert_eq(def.reactions, {})
+	assert_eq([def.finisher, def.grab_pair], [null, null])
 	assert_eq(def.surface_sound, &"surface_cloth")
 	assert_eq(def.hurt_voice, &"")
 

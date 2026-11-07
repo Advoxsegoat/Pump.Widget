@@ -9,7 +9,8 @@ extends RefCounted
 ## GUARD_BREAK a guard took it but had too little stamina to pay for it: the guard breaks
 ## PARRIED     a parry turned it back: the attacker loses posture
 ## CAUGHT      a parry caught a thrust: the attacker loses a set amount of posture
-## GRABBED     a grab took hold. Until paired moves exist, it is taken as a HIT that staggers
+## GRABBED     a grab took hold: Melee starts the attacker's grab pair, and the blow itself does nothing more; an
+##             attacker without a grab pair has it taken as a HIT that staggers
 enum Outcome { WHIFF, HIT, GUARDED, GUARD_BREAK, PARRIED, CAUGHT, GRABBED }
 ## The reaction move the target plays: none, its `flinch`, or its longer `stagger`.
 enum Reaction { NONE, FLINCH, STAGGER }
