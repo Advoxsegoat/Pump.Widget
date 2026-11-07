@@ -92,8 +92,16 @@ func test_a_bare_rig_keeps_its_own_materials() -> void:
 func test_a_pair_sheet_draws_both_rigs_side_by_side() -> void:
 	var pair := load(PAIR) as PairedMove
 	var library := load(LIB) as AnimationLibrary
-	var frames := ContactSheet.pair_frames(library.get_animation(&"finisher"), library.get_animation(&"finisher_victim"))
-	assert_eq(frames, PackedInt32Array([5, 10, 35, 40, 50, 55, 70, 75]), "the lead's mark frames and the follower's")
+	var lead := library.get_animation(&"finisher")
+	var follow := library.get_animation(&"finisher_victim")
+	var frames := ContactSheet.pair_frames(lead, follow)
+	var wanted := {}
+	for anim in [lead, follow]:
+		for f in _mark_frames(anim):
+			wanted[f] = true
+	var sorted := PackedInt32Array(wanted.keys())
+	sorted.sort()
+	assert_eq(frames, sorted, "the lead's mark frames and the follower's, each once")
 	var img: Image = await ContactSheet.render_pair(load(DEF), pair)
 	if img == null:
 		fail("the pair sheet rendered")

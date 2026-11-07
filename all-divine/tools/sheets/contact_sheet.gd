@@ -11,10 +11,11 @@ extends SceneTree
 ## taken from the project folder (all-divine/), wherever the command is run from.
 ## Exits 0 when the sheet is written, 1 if it could not be made, 2 for a wrong command line.
 ##
-## --pair draws a paired move (a PairedMove) instead: two of the rig, the lead and the follower at the pair's
-## follow_offset from it, side by side (the lead on the left, facing right), each playing its move's clip at the
-## same frame, in wider cells (PAIR_CELL), one for every frame either clip has a mark on (pair_frames). That is how
-## the two clips are checked against each other: each of the lead's blows should meet the follower's reaction.
+## --pair draws a paired move (a PairedMove) instead: two of the rig, the lead and the follower, standing as the game
+## stands them once aligned (pair_placements: side by side, the lead on the left facing right, the follower starting at
+## the pair's follow_offset, each moved by its own clip's root travel), each playing its move's clip at the same frame,
+## in wider cells (PAIR_CELL), one for every frame either clip has a mark on (pair_frames). That is how the two clips
+## are checked against each other: each of the lead's blows should meet the follower's reaction.
 ##
 ## Each clip gets a cell for every frame that has a mark, or, if it has none, six frames spread evenly
 ## over it. A cell is cut around the actor out of the 640x360 picture of a PixelStage, framed by the
@@ -73,12 +74,7 @@ static func render(def_or_rig: Variant, clips: PackedStringArray, cell := Vector
 ## Renders the sheet of the paired move `pair` (see the top of this file) for the rig in `def_or_rig`, as render
 ## does. Its moves are looked up in the Registry. Returns null, after an error, if they or their clips are missing.
 static func render_pair(def_or_rig: Variant, pair: PairedMove, cell := PAIR_CELL) -> Image:
-	# The lead faces +X, so the two stand across the camera's view, with their middle at the origin.
-	var lead := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3.ZERO)
-	var follower := lead * pair.follow_offset
-	var middle := (lead.origin + follower.origin) / 2.0
-	lead.origin -= middle
-	follower.origin -= middle
+	var start := pair_placements(pair, Animation.new(), Animation.new(), NodePath(), 0)
 	var plan := func(rig: Rig) -> Array:
 		# Looked up now, once the autoloads are ready: a script run with -s is compiled before they are known by name.
 		var registry := (Engine.get_main_loop() as SceneTree).root.get_node(^"Registry")
@@ -89,11 +85,27 @@ static func render_pair(def_or_rig: Variant, pair: PairedMove, cell := PAIR_CELL
 				push_error("ContactSheet: the pair '%s' has no move '%s' with a clip in the rig" % [pair.id, id])
 				return []
 			clips.append(move.clip)
+		var lead := rig.tree.get_animation(clips[0])
+		var follow := rig.tree.get_animation(clips[1])
 		var shots := []
-		for frame in pair_frames(rig.tree.get_animation(clips[0]), rig.tree.get_animation(clips[1])):
-			shots.append([cell_label(clips[0], frame), clips, frame])
+		for frame in pair_frames(lead, follow):
+			shots.append([cell_label(clips[0], frame), clips, frame, pair_placements(pair, lead, follow, rig.tree.root_motion_track, frame)])
 		return shots
-	return await _draw(def_or_rig, [lead, follower], plan, cell)
+	return await _draw(def_or_rig, start, plan, cell)
+
+
+## Where a pair's sheet stands its two rigs at `frame`, as the game does once they are aligned (Pairing): the lead's
+## start facing +X, so the two stand across the camera's view, the follower's start the pair's follow_offset from it,
+## their middle at the origin, and each moved from its start by its own clip's root travel to that frame (`lead` and
+## `follow`, read on the root motion track `root_track`; a clip without one stays put). [lead, follower].
+static func pair_placements(pair: PairedMove, lead: Animation, follow: Animation, root_track: NodePath, frame: int) -> Array[Transform3D]:
+	var lead_start := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3.ZERO)
+	var follow_start := lead_start * pair.follow_offset
+	var middle := (lead_start.origin + follow_start.origin) / 2.0
+	lead_start.origin -= middle
+	follow_start.origin -= middle
+	var placed: Array[Transform3D] = [lead_start * _root_travel(lead, root_track, frame), follow_start * _root_travel(follow, root_track, frame)]
+	return placed
 
 
 ## The frames a pair's sheet gets a cell for: those of the lead's clip and of the follower's (cell_frames), each once
@@ -138,9 +150,21 @@ static func cell_label(clip: StringName, frame: int) -> String:
 
 # --- helpers ---
 
+# How far `anim`'s root has travelled over the ground by `frame`, as a translation in the rig's own space (the root
+# motion track `root_track` holds it, as the runner reads it); none for a clip without that track.
+static func _root_travel(anim: Animation, root_track: NodePath, frame: int) -> Transform3D:
+	var track := anim.find_track(root_track, Animation.TYPE_POSITION_3D) if not root_track.is_empty() else -1
+	if track < 0:
+		return Transform3D.IDENTITY
+	var travel := anim.position_track_interpolate(track, clampf(float(frame) / FRAME_RATE, 0.0, anim.length)) \
+			- anim.position_track_interpolate(track, 0.0)
+	travel.y = 0.0
+	return Transform3D(Basis.IDENTITY, travel)
+
 # Draws a sheet: one rig of `def_or_rig` at each of `placements` (in its palette, if it has one), framed by the
 # gameplay camera around their middle, and a cell for each shot `plan` returns, given the first rig: [label, the clip
-# each rig plays, the frame]. Null, after an error, if there is no rig, no display or nothing to draw.
+# each rig plays, the frame, and optionally where each rig stands for it]. Null, after an error, if there is no rig, no
+# display or nothing to draw.
 static func _draw(def_or_rig: Variant, placements: Array[Transform3D], plan: Callable, cell: Vector2i) -> Image:
 	var scene := _rig_scene(def_or_rig)
 	if scene == null:
@@ -184,6 +208,8 @@ static func _draw(def_or_rig: Variant, placements: Array[Transform3D], plan: Cal
 	for shot: Array in shots:
 		await tree.physics_frame
 		for i in rigs.size():
+			if shot.size() > 3:
+				rigs[i].global_transform = shot[3][i]
 			rigs[i].play_move(shot[1][i], 0.0)
 			rigs[i].set_move_time(float(shot[2]) / FRAME_RATE)
 		for tick in SETTLE_TICKS:
