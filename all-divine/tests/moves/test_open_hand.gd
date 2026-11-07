@@ -114,7 +114,7 @@ func test_every_recovery_takes_a_dodge() -> void:
 	var windows := {&"palm_jab": 20, &"palm_cross": 25, &"palm_hook": 30, &"palm_heavy": 45}
 	for id: StringName in windows:
 		var arena := TestArena.make(self)
-		var steps := [{"frames": windows[id] - 2}, {"frames": 1, "press": [&"dodge"]}, {"frames": 40}]
+		var steps := [{"frames": windows[id] - 2}, {"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0)}, {"frames": 40, "move": Vector2(1, 0)}]
 		var a := TestArena.spawn(arena, load(Duel.ABARAX), ScriptBrain.new(steps))
 		var started := []
 		a.runner.move_started.connect(func(m: MoveData) -> void: started.append([m.id, a.frame]))

@@ -103,7 +103,7 @@ func test_jab_hitbox_active_frames_10_to_14() -> void:
 
 
 func test_roll_iframes_are_13_frames() -> void:
-	var run: Dictionary = await _run([{"frames": 10}, {"frames": 1, "press": [&"dodge"]}], 40)
+	var run: Dictionary = await _run([{"frames": 10}, {"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0)}], 40)
 	var invulnerable := func(s: Dictionary) -> bool: return s["invulnerable"]
 	assert_eq(_move_frames(run, &"dodge_roll", invulnerable), range(3, 16))
 	assert_eq(_count(run, invulnerable), 13, "and at no other time")
@@ -124,7 +124,8 @@ func test_buffered_dodge_comes_out_on_recovery() -> void:
 	# Dodge at jab f14 (frame 25): the f15 window takes only palm, so it waits for the f20 one.
 	var run: Dictionary = await _run([
 		{"frames": 10}, {"frames": 1, "press": [&"palm"]},
-		{"frames": 13}, {"frames": 1, "press": [&"dodge"]},
+		{"frames": 13}, {"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0)},
+		{"frames": 20, "move": Vector2(1, 0)},  # the stick stays pushed until the window opens
 	], 30)
 	assert_eq(run["started"], [[&"palm_jab", 11], [&"dodge_roll", 31]], "the roll at jab f20")
 	assert_eq(run["ended"].front(), [&"palm_jab", 31, true])
@@ -173,9 +174,9 @@ func test_start_fires_the_marks_at_time_zero() -> void:
 
 
 func test_roll_root_motion_matches_clip() -> void:
-	# No stick: the roll goes along the facing the actor already has (here a yaw of 0.7).
+	# The stick pushed the way the actor already faces (here a yaw of 0.7): the roll goes along that facing.
 	var yaw := 0.7
-	var run: Dictionary = await _run([{"frames": 5}, {"frames": 1, "press": [&"dodge"]}], 40, yaw)
+	var run: Dictionary = await _run([{"frames": 5}, {"frames": 1, "press": [&"dodge"], "move": Vector2(sin(yaw), cos(yaw))}], 40, yaw)
 	assert_eq(run["started"], [[&"dodge_roll", 6]])
 	assert_eq(run["ended"], [[&"dodge_roll", 36, false]])
 	var actor: Actor = run["actor"]

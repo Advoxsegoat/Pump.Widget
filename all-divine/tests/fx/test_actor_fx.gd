@@ -127,7 +127,7 @@ func test_a_charge_let_go_early_shows_nothing() -> void:
 
 
 func test_a_roll_sounds_its_cloth_and_landing_and_kicks_up_dust_at_the_feet() -> void:
-	var run := Duel.make(self, [{"frames": 1, "press": [&"dodge"]}, {"frames": 60}], [], 6.0)
+	var run := Duel.make(self, [{"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0)}, {"frames": 60}], [], 6.0)
 	var a: Actor = run["a"]
 	var sounds := await _sounds(a, 30)
 	var heard := []

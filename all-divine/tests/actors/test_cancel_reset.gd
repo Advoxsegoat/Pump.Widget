@@ -100,7 +100,7 @@ func test_jab_cancelled_into_roll_at_its_recovery_window() -> void:
 func test_roll_cancelled_into_jab_clears_iframes_and_the_window() -> void:
 	# Dodge at frame 11 (roll f0), palm at roll f22 (frame 33), where {palm, dodge} opens.
 	var run: Dictionary = await _run([
-		{"frames": 10}, {"frames": 1, "press": [&"dodge"]},
+		{"frames": 10}, {"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0)},
 		{"frames": 21}, {"frames": 1, "press": [&"palm"]},
 		{"frames": 20},
 	], 60)
@@ -135,7 +135,7 @@ func test_jab_forced_into_roll_mid_swing_turns_the_hitbox_off() -> void:
 func test_roll_forced_into_jab_mid_roll_clears_iframes() -> void:
 	# Iframes are on from the roll's f3 to f15: cancel at f5, inside them.
 	var arena := TestArena.make(self)
-	var actor := TestArena.spawn(arena, load(ABARAX), ScriptBrain.new([{"frames": 1, "press": [&"dodge"]}]))
+	var actor := TestArena.spawn(arena, load(ABARAX), ScriptBrain.new([{"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0)}]))
 	while actor.frame < 6:  # the roll starts on frame 1, so frame 6 is its f5
 		await frames(1)
 	assert_eq(actor.runner.current.id, &"dodge_roll")

@@ -32,7 +32,7 @@ var paired := false
 static func of(actor: Actor) -> Defense:
 	var d := Defense.new()
 	d.invulnerable = actor.is_invulnerable()
-	d.airborne = actor.rig.airborne
+	d.airborne = actor.runner.airborne
 	d.hyperarmour = actor.runner.hyperarmour
 	d.guarding = actor.is_guarding()
 	d.parrying = actor.runner.parry_window

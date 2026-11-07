@@ -42,7 +42,7 @@ func test_the_moves_carry_their_costs() -> void:
 
 
 func test_roll_costs_eighteen() -> void:
-	var run := _spawn([{"frames": 1, "press": [&"dodge"]}, {"frames": 10}])
+	var run := _spawn([{"frames": 1, "press": [&"dodge"], "move": EAST}, {"frames": 10}])
 	var actor: Actor = run["actor"]
 	assert_eq(actor.stats.stamina, 100.0, "full before")
 	await _play_to(actor, 1)
@@ -63,7 +63,7 @@ func test_jab_costs_twelve_and_the_cross_it_cancels_into_fourteen() -> void:
 
 
 func test_stamina_comes_back_after_the_wait() -> void:
-	var run := _spawn([{"frames": 1, "press": [&"dodge"]}, {"frames": 100}])
+	var run := _spawn([{"frames": 1, "press": [&"dodge"], "move": EAST}, {"frames": 100}])
 	var actor: Actor = run["actor"]
 	await _play_to(actor, 36)
 	assert_near(actor.stats.stamina, 82.0, 1e-6, "still waiting 0.6 s after the roll")

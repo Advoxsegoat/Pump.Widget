@@ -104,7 +104,8 @@ var foot_planter: FootPlanter
 ## LookTarget: one with no target would turn its bone off the clip's pose. Looking at nothing is their
 ## influence faded to 0 instead.
 var looks: Array[LookAtModifier3D] = []
-## True while a move carries the body through the air (none does in F0): the feet are not planted then.
+## True while a move carries the body through the air (the hop; MoveRunner sets it from the move's airborne marks): the
+## feet are not planted then.
 var airborne := false
 ## The Area3D around the body, on the `hurtbox` layer, that hitboxes find. Its actor marks it with the meta
 ## `actor`, which is how a HitScanner knows whose body it reached.

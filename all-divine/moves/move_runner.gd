@@ -8,6 +8,10 @@ extends Node
 ## An attack or a dodge also needs stamina (Stats.can_act): a press it cannot pay for is used up and nothing starts,
 ## and a move that starts spends its stamina_cost on that frame.
 ##
+## A dodge is the stick's too: a move with a `neutral_variant` (the roll's hop) starts that variant instead when the
+## intent's stick is at rest, from rest and from a cancel window alike. The variant is checked as the move that was
+## asked for (a hop is refused where a roll would be) and spends its own stamina_cost.
+##
 ## A move can be charged. At a charge_hold mark, if the player is holding the mark's action, the clip stops at the
 ## mark (its time stands still, so the pose holds) until the action is let go, or the mark's `frames` have passed:
 ## then the move is charged (`charge_profile` is the mark's `profile`, which every hitbox_on after it uses in place of
@@ -49,6 +53,9 @@ var hyperarmour := false
 var parry_window := false
 ## True between a guard_on and a guard_off mark: the move holds a guard up (guard_raise from its f4).
 var guard_window := false
+## True between an airborne_on and an airborne_off mark: the body is off the ground (the hop), so a LOW blow passes
+## under it (Defense.airborne) and the feet are not planted (Rig.airborne, which this sets).
+var airborne := false
 ## The open cancel window: action -> the id of the move it cancels into. Empty while closed.
 var window := {}
 var in_recovery := false
@@ -118,16 +125,23 @@ func tick(intent: Intent, delta: float) -> Vector3:
 
 # Starts `move`, unless it is an attack or a dodge and the actor cannot act (no stamina, or exhausted): then
 # nothing changes, a move that plays goes on, and the press that asked is gone, since the callers have consumed
-# it. A dodge with the stick pushed (`intent` from this frame, or null) faces the stick at once.
+# it. A dodge with the stick pushed (`intent` from this frame, or null) faces the stick at once. With the stick at
+# rest, a move's neutral variant starts in its place, once the move asked for has passed the stamina gate.
 func _start(move: MoveData, intent: Intent) -> void:
 	if move == null:
 		push_error("MoveRunner: no move to start on '%s'" % actor.name)
 		return
+	if (move.kind == MoveData.Kind.ATTACK or move.kind == MoveData.Kind.DODGE) and not actor.stats.can_act():
+		return
+	if move.neutral_variant != &"" and intent != null and intent.move.length() == 0.0:
+		var variant := _fetch(move.neutral_variant)
+		if variant == null:
+			push_error("MoveRunner: move '%s' has the unknown neutral variant '%s'" % [move.id, move.neutral_variant])
+			return
+		move = variant
 	var rig := actor.rig
 	if not rig.tree.has_animation(move.clip):
 		push_error("MoveRunner: '%s' has no clip '%s' for move '%s'" % [actor.name, move.clip, move.id])
-		return
-	if (move.kind == MoveData.Kind.ATTACK or move.kind == MoveData.Kind.DODGE) and not actor.stats.can_act():
 		return
 	if move.stamina_cost > 0.0:
 		actor.stats.spend_stamina(move.stamina_cost)
@@ -168,6 +182,7 @@ func _end(cancelled: bool) -> void:
 	hyperarmour = false
 	parry_window = false
 	guard_window = false
+	_set_airborne(false)
 	window = {}
 	in_recovery = false
 	current = null
@@ -272,6 +287,10 @@ func _act(kind: StringName, args: Dictionary) -> void:
 			guard_window = true
 		&"guard_off":
 			guard_window = false
+		&"airborne_on":
+			_set_airborne(true)
+		&"airborne_off":
+			_set_airborne(false)
 		&"cancel_open":
 			var into: Variant = args.get("into", {})
 			window = (into as Dictionary).duplicate() if into is Dictionary else {}
@@ -280,6 +299,12 @@ func _act(kind: StringName, args: Dictionary) -> void:
 		&"recovery":
 			in_recovery = true
 	mark.emit(kind, args)
+
+
+# Lifts the body off the ground or sets it down: the runner's flag, and the rig's, which keeps the feet from planting.
+func _set_airborne(value: bool) -> void:
+	airborne = value
+	actor.rig.airborne = value
 
 
 # The root's travel from t0 to t1 of the current clip as a world velocity on the ground plane.
