@@ -1,0 +1,214 @@
+# Tests and builds The All-Divine (the Godot project in all-divine/) on GitHub's runners.
+#   test                the headless suite, the clip checker and the Python tools' tests
+#   render              the suite again with the tests that need a display (xvfb, Compatibility renderer)
+#   render-forward-plus the render tests whose shaders have a Forward+ branch, on a software Vulkan device
+#                       (lavapipe), so Forward+ is checked here and not only on the owner's PC
+#   export              the Linux, Windows and Web builds, uploaded as artifacts, then a self-test of the Linux one
+# The export job waits for the test job (a failing test or clip check fails the build); the others run side by side.
+# See all-divine/STATE.md.
+name: The All-Divine (Godot)
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'all-divine/**'
+      - '.github/workflows/all-divine.yml'
+  pull_request:
+    paths:
+      - 'all-divine/**'
+      - '.github/workflows/all-divine.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: all-divine-${{ github.ref }}
+  cancel-in-progress: true
+
+# The jobs only read the repository.
+permissions:
+  contents: read
+
+env:
+  # Must be the VERSION in all-divine/tools/setup.sh (the first step of each job checks it). It names the caches.
+  GODOT_VERSION: '4.7.2'
+
+defaults:
+  run:
+    shell: bash
+    working-directory: all-divine
+
+jobs:
+  test:
+    name: Tests (headless)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The workflow and setup.sh pin the same Godot
+        run: grep -q "^VERSION=\"$GODOT_VERSION\"\$" tools/setup.sh
+
+      - uses: actions/cache@v4
+        with:
+          path: all-divine/.tools
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      - name: Install Godot
+        run: bash tools/setup.sh
+
+      - name: Test suite
+        run: tools/test.sh
+
+      - name: Clip checker
+        run: tools/godot.sh -s res://tools/clip_check.gd
+
+      - name: Python tools' tests
+        run: |
+          python3 -I -m unittest discover -s tools/assets/tests
+          python3 -I -m unittest discover -s tools/audio/tests
+
+  render:
+    name: Tests (render, Compatibility)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The workflow and setup.sh pin the same Godot
+        run: grep -q "^VERSION=\"$GODOT_VERSION\"\$" tools/setup.sh
+
+      - uses: actions/cache@v4
+        with:
+          path: all-divine/.tools
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      - name: Virtual display and software OpenGL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb mesa-utils libgl1-mesa-dri
+
+      - name: Install Godot
+        run: bash tools/setup.sh
+
+      - name: Test suite with the render tests
+        run: tools/test.sh --render
+
+  render-forward-plus:
+    name: Tests (render, Forward+ on lavapipe)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The workflow and setup.sh pin the same Godot
+        run: grep -q "^VERSION=\"$GODOT_VERSION\"\$" tools/setup.sh
+
+      - uses: actions/cache@v4
+        with:
+          path: all-divine/.tools
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      # lavapipe is Mesa's software Vulkan driver. test.sh --forward-plus fails if the engine ends up on another
+      # renderer, so a runner with no usable Vulkan device fails here instead of passing on Compatibility.
+      - name: Virtual display and software Vulkan
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb libvulkan1 mesa-vulkan-drivers libgl1-mesa-dri
+
+      - name: Install Godot
+        run: bash tools/setup.sh
+
+      # The screen look (and its Forward+ against Compatibility parity test), the toon shader's light maths, and
+      # the toon world shader: the shaders with a Forward+ branch.
+      - name: Screen look
+        run: tools/test.sh --forward-plus --filter=test_screen_post
+
+      - name: Toon palette
+        run: tools/test.sh --forward-plus --filter=test_toon_palette
+
+      - name: Toon world
+        run: tools/test.sh --forward-plus --filter=test_toon_world
+
+  export:
+    name: Builds (Linux, Windows, Web)
+    # The spec: the build fails when the clip checker (or any headless test) fails.
+    needs: [test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The workflow and setup.sh pin the same Godot
+        run: grep -q "^VERSION=\"$GODOT_VERSION\"\$" tools/setup.sh
+
+      - uses: actions/cache@v4
+        with:
+          path: all-divine/.tools
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      # The templates are a 1.3 GB download. What is cached is only what the three presets use.
+      - uses: actions/cache@v4
+        id: templates
+        with:
+          path: ~/.local/share/godot/export_templates/${{ env.GODOT_VERSION }}.stable
+          key: godot-templates-${{ env.GODOT_VERSION }}-linux-windows-web
+
+      - name: Install Godot and the export templates
+        run: bash tools/setup.sh --templates
+
+      - name: Keep only the templates the presets use
+        if: steps.templates.outputs.cache-hit != 'true'
+        run: |
+          dir="$HOME/.local/share/godot/export_templates/$GODOT_VERSION.stable"
+          find "$dir" -maxdepth 1 -type f \
+            ! -name version.txt \
+            ! -name linux_release.x86_64 \
+            ! -name windows_release_x86_64.exe \
+            ! -name windows_release_x86_64_console.exe \
+            ! -name web_nothreads_release.zip \
+            -delete
+          ls -l "$dir"
+
+      - name: Import the project
+        run: tools/godot.sh --import
+
+      - name: Export Linux, Windows and Web
+        run: |
+          mkdir -p out/linux out/windows out/web
+          tools/godot.sh --export-release "Linux" out/linux/all-divine.x86_64
+          tools/godot.sh --export-release "Windows Desktop" out/windows/all-divine.exe
+          tools/godot.sh --export-release "Web" out/web/index.html
+          ls -l out/linux out/windows out/web
+
+      # Uploaded before the Linux build is run, so a failing run check (below) still fails the job but cannot
+      # withhold the Windows and Web builds.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: all-divine-windows
+          path: all-divine/out/windows/all-divine.exe
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: all-divine-linux
+          path: all-divine/out/linux/all-divine.x86_64
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: all-divine-web
+          path: all-divine/out/web/
+          if-no-files-found: error
+
+      # The shipped game boots and walks its scripted circuit without an engine error (exit 0). This is what proves
+      # the build has every script and scene the game needs.
+      - name: Self-test of the Linux build
+        run: out/linux/all-divine.x86_64 --headless -- --selftest
+
+      - name: The Linux build starts and quits cleanly
+        run: |
+          out/linux/all-divine.x86_64 --headless --quit-after 120 2>&1 | tee "$RUNNER_TEMP/boot.log"
+          if grep -E 'ERROR|SCRIPT' "$RUNNER_TEMP/boot.log"; then
+            echo 'the build logged an error while starting' >&2
+            exit 1
+          fi

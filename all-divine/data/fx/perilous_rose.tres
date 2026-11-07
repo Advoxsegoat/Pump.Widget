@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="FxDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://fx/fx_def.gd" id="1_def"]
+[ext_resource type="PackedScene" path="res://fx/perilous_rose.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_def")
+id = &"perilous_rose"
+scene = ExtResource("2_scene")
+bone = &"Head"
+lifetime = 0.6

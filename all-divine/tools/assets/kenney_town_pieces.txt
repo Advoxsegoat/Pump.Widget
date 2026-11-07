@@ -1,0 +1,39 @@
+# Kenney Fantasy Town Kit 2.0 pieces for the courtyard: one name per line, taken from
+# Models/GLB format/<name>.glb. tools/assets/import_kenney.py copies them (and Textures/colormap.png).
+
+# walls
+wall
+wall-corner
+wall-door
+wall-doorway-round
+wall-half
+pillar-stone
+
+# stairs and slopes
+stairs-stone
+stairs-wide-stone
+stairs-stone-handrail
+road-slope
+
+# the fountain and lantern
+fountain-round
+fountain-round-detail
+lantern
+
+# greenery
+tree
+tree-high-round
+hedge
+hedge-large
+
+# the market
+stall-red
+stall-bench
+stall-stool
+banner-red
+banner-green
+cart
+
+# other props
+rock-small
+fence

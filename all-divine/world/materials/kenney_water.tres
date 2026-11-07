@@ -1,0 +1,20 @@
+[gd_resource type="ShaderMaterial" load_steps=4 format=3]
+
+[ext_resource type="Shader" path="res://render/shaders/toon_world.gdshader" id="1_toon"]
+
+[sub_resource type="Gradient" id="water_colour"]
+interpolation_mode = 1
+offsets = PackedFloat32Array(0)
+colors = PackedColorArray(0.3529412, 0.6509804, 0.78431374, 1)
+
+[sub_resource type="GradientTexture2D" id="water"]
+gradient = SubResource("water_colour")
+width = 1
+height = 1
+
+[resource]
+resource_name = "kenney_water"
+shader = ExtResource("1_toon")
+shader_parameter/albedo_tex = SubResource("water")
+shader_parameter/world_uv = false
+shader_parameter/texels_per_metre = 32.0

@@ -1,0 +1,140 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;padding:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Between the Rooms</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* One visual world by choice: the Seams at night, rose-gold trim. */
+:root {
+  --ink: #07080f;
+  --night: #121633;
+  --gilt: #c9a35d;
+  --rose: #e8607e;
+  --cream: #f6ecd4;
+  --dim: #6c739c;
+  --font: ui-monospace, "Cascadia Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: radial-gradient(ellipse at 50% 30%, #1a1f45 0%, var(--ink) 70%);
+  color: var(--cream);
+  font: 12px/1.4 var(--font);
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+#app {
+  position: relative;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-block: 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+#stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#screen {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background: #05060c;
+  box-shadow: 0 0 0 1px #2a2f5a, 0 0 0 3px #0a0c1c, 0 0 0 4px var(--gilt), 0 18px 60px rgba(0, 0, 0, 0.6);
+  outline: none;
+  touch-action: none;
+  max-width: 100%;
+}
+/* The phone controls (spec 9.3): a floating stick on the left, A/B/R in an arc on the right, L and
+   Start at the top corners. Half transparent; each hit area is half as big again as the button.
+   Size, opacity and handedness come from the Settings (--ctl-scale, --ctl-alpha, .left-handed). */
+:root { --ctl-scale: 1; --ctl-alpha: 0.5; --side: calc(124px * var(--ctl-scale)); }
+#controls { display: none; pointer-events: none; }
+.touch #controls { display: block; }
+.btn {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 0;
+  width: calc(var(--s) * var(--ctl-scale));
+  height: calc(var(--s) * var(--ctl-scale));
+  border-radius: 50%;
+  border: 2px solid rgba(246, 236, 212, 0.7);
+  background: rgba(18, 22, 51, 0.6);
+  color: var(--cream);
+  font: bold calc(13px * var(--ctl-scale)) var(--font);
+  opacity: var(--ctl-alpha);
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+.btn::before { content: ""; position: absolute; inset: -25%; border-radius: 50%; }
+.btn.down { background: rgba(201, 163, 93, 0.85); color: var(--ink); opacity: calc(var(--ctl-alpha) + 0.3); }
+.btn.a { --s: 48px; }
+.btn.b, .btn.r { --s: 44px; }
+.btn.l { --s: 40px; }
+.btn.start { --s: 32px; border-radius: 9px; font-size: calc(11px * var(--ctl-scale)); }
+.cluster { position: absolute; width: calc(120px * var(--ctl-scale)); height: calc(140px * var(--ctl-scale)); }
+.cluster .a { right: calc(4px * var(--ctl-scale)); bottom: calc(46px * var(--ctl-scale)); }
+.cluster .b { right: calc(62px * var(--ctl-scale)); bottom: calc(6px * var(--ctl-scale)); }
+.cluster .r { right: calc(58px * var(--ctl-scale)); bottom: calc(88px * var(--ctl-scale)); }
+#stickZone { position: absolute; pointer-events: auto; touch-action: none; }
+.stick {
+  position: absolute; width: 80px; height: 80px; margin: -40px 0 0 -40px; border-radius: 50%;
+  border: 2px solid rgba(246, 236, 212, 0.55); background: rgba(18, 22, 51, 0.35);
+  opacity: 0; pointer-events: none; box-sizing: border-box;
+}
+.stick.on { opacity: calc(var(--ctl-alpha) + 0.2); }
+.knob { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; background: rgba(246, 236, 212, 0.8); }
+/* landscape: the screen in the middle, the controls either side of it */
+@media (orientation: landscape) {
+  .touch #stage { box-sizing: border-box; padding-inline: var(--side); }
+  .touch #controls { position: absolute; inset: 0; }
+  #controls .cluster { right: max(8px, env(safe-area-inset-right, 0px)); bottom: 12px; }
+  #controls .l { left: max(12px, env(safe-area-inset-left, 0px)); top: 12px; }
+  #controls .start { right: max(12px, env(safe-area-inset-right, 0px)); top: 12px; }
+  #stickZone { left: 0; top: 64px; bottom: 0; width: calc(var(--side) + 16px); }
+  .left-handed #controls .cluster { right: auto; left: max(8px, env(safe-area-inset-left, 0px)); }
+  .left-handed #controls .l { left: auto; right: max(12px, env(safe-area-inset-right, 0px)); }
+  .left-handed #controls .start { right: auto; left: max(12px, env(safe-area-inset-left, 0px)); }
+  .left-handed #stickZone { left: auto; right: 0; }
+}
+/* portrait: the screen on top, the controls below it, like a GBA SP */
+@media (orientation: portrait) {
+  .touch #app { justify-content: flex-start; }
+  .touch #stage { flex: 0 0 auto; height: min(58vh, calc((100vw - 32px) * 0.6667 + 8px)); }
+  .touch #controls { position: relative; flex: 1 1 auto; width: 100%; min-height: 0; }
+  #controls .cluster { right: 4px; top: calc(50% - 70px * var(--ctl-scale)); }
+  #controls .l { left: 0; top: 10px; }
+  #controls .start { right: 0; top: 10px; }
+  #stickZone { left: 0; top: 56px; bottom: 0; width: 58%; }
+  .left-handed #controls .cluster { right: auto; left: 4px; }
+  .left-handed #controls .l { left: auto; right: 0; }
+  .left-handed #controls .start { right: auto; left: 0; }
+  .left-handed #stickZone { left: auto; right: 0; }
+}
+/* left-handed: the arc mirrors too, the letters stay readable */
+.left-handed #controls .cluster { transform: scaleX(-1); }
+.left-handed #controls .cluster .btn { transform: scaleX(-1); }
+</style>
+<div id="app">
+  <div id="stage"><canvas id="screen" tabindex="0" aria-label="Between the Rooms"></canvas></div>
+  <div id="controls" aria-hidden="true">
+    <div id="stickZone"><div class="stick"><div class="knob"></div></div></div>
+    <div class="cluster">
+      <button type="button" tabindex="-1" class="btn r" data-btn="r">R</button>
+      <button type="button" tabindex="-1" class="btn b" data-btn="b">B</button>
+      <button type="button" tabindex="-1" class="btn a" data-btn="a">A</button>
+    </div>
+    <button type="button" tabindex="-1" class="btn l" data-btn="l">L</button>
+    <button type="button" tabindex="-1" class="btn start" data-btn="start">&#8801;</button>
+  </div>
+</div>
+<script>

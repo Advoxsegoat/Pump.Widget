@@ -1,0 +1,50 @@
+[gd_resource type="AnimationLibrary" format=3]
+
+[ext_resource type="Animation" path="res://assets/anim/abarax/catch.tres" id="1_bi1kx"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/caught.tres" id="2_6l7io"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/death.tres" id="3_b56rc"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/dodge_roll.tres" id="4_tkyni"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/flinch.tres" id="5_vegkg"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/guard_break.tres" id="6_qn72m"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/guard_hit.tres" id="7_sa6m4"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/guard_hold.tres" id="8_5l8rj"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/guard_raise.tres" id="9_o0xql"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/hop.tres" id="10_6sybs"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/idle.tres" id="11_cwu0h"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/jog.tres" id="12_x8o0f"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/palm_cross.tres" id="13_g46ix"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/palm_heavy.tres" id="14_qnww7"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/palm_hook.tres" id="15_bs34h"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/palm_jab.tres" id="16_4qm5s"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/parried.tres" id="17_jjroq"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/parry.tres" id="18_wok24"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/sprint.tres" id="19_cd30t"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/stagger.tres" id="20_ioucr"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/t_pose.tres" id="21_bujj0"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/walk.tres" id="22_reaq6"]
+
+[resource]
+_data = {
+&"catch": ExtResource("1_bi1kx"),
+&"caught": ExtResource("2_6l7io"),
+&"death": ExtResource("3_b56rc"),
+&"dodge_roll": ExtResource("4_tkyni"),
+&"flinch": ExtResource("5_vegkg"),
+&"guard_break": ExtResource("6_qn72m"),
+&"guard_hit": ExtResource("7_sa6m4"),
+&"guard_hold": ExtResource("8_5l8rj"),
+&"guard_raise": ExtResource("9_o0xql"),
+&"hop": ExtResource("10_6sybs"),
+&"idle": ExtResource("11_cwu0h"),
+&"jog": ExtResource("12_x8o0f"),
+&"palm_cross": ExtResource("13_g46ix"),
+&"palm_heavy": ExtResource("14_qnww7"),
+&"palm_hook": ExtResource("15_bs34h"),
+&"palm_jab": ExtResource("16_4qm5s"),
+&"parried": ExtResource("17_jjroq"),
+&"parry": ExtResource("18_wok24"),
+&"sprint": ExtResource("19_cd30t"),
+&"stagger": ExtResource("20_ioucr"),
+&"t_pose": ExtResource("21_bujj0"),
+&"walk": ExtResource("22_reaq6")
+}

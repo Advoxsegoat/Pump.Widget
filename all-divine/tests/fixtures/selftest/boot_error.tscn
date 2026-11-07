@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://main/main.tscn" id="1_main"]
+[ext_resource type="Script" path="res://tests/fixtures/selftest/boot_error.gd" id="2_boot_error"]
+
+[node name="Main" instance=ExtResource("1_main")]
+
+[node name="BootError" type="Node" parent="."]
+script = ExtResource("2_boot_error")
