@@ -4,12 +4,17 @@ extends SceneTree
 ## picture for reviewing clips and their marks.
 ##
 ##   tools/godot.sh --render -s res://tools/sheets/contact_sheet.gd -- --def res://data/actors/abarax.tres \
-##       --out out/sheets/abarax.png [--clips a,b]
+##       --out out/sheets/abarax.png [--clips a,b | --pair data/pairs/finisher_open_hand.tres]
 ##
 ## Give the actor's definition (--def), or a bare rig scene (--rig <rig.tscn>), not both. Needs a display
 ## (--render): a headless run cannot draw. --clips defaults to every clip of the rig. A relative --out is
 ## taken from the project folder (all-divine/), wherever the command is run from.
 ## Exits 0 when the sheet is written, 1 if it could not be made, 2 for a wrong command line.
+##
+## --pair draws a paired move (a PairedMove) instead: two of the rig, the lead and the follower at the pair's
+## follow_offset from it, side by side (the lead on the left, facing right), each playing its move's clip at the
+## same frame, in wider cells (PAIR_CELL), one for every frame either clip has a mark on (pair_frames). That is how
+## the two clips are checked against each other: each of the lead's blows should meet the follower's reaction.
 ##
 ## Each clip gets a cell for every frame that has a mark, or, if it has none, six frames spread evenly
 ## over it. A cell is cut around the actor out of the 640x360 picture of a PixelStage, framed by the
@@ -38,6 +43,8 @@ const FRAME_RATE := 60
 const BODY_CENTRE := 0.9
 ## How many ticks (at FRAME_RATE) each cell's pose is held before it is drawn: 0.75 s.
 const SETTLE_TICKS := 45
+## The size of a pair's cell in game pixels: wide enough for two actors a metre or so apart.
+const PAIR_CELL := Vector2i(240, 120)
 
 
 func _initialize() -> void:
@@ -50,57 +57,54 @@ func _initialize() -> void:
 ## awaited. Needs a display. Returns null, after an error, if there is no rig, no display or no clip to
 ## draw.
 static func render(def_or_rig: Variant, clips: PackedStringArray, cell := Vector2i(160, 120)) -> Image:
-	var scene := _rig_scene(def_or_rig)
-	if scene == null:
-		push_error("ContactSheet: expected a rig scene or something with a rig_scene, got %s" % [def_or_rig])
-		return null
-	if DisplayServer.get_name() == "headless":
-		push_error("ContactSheet: needs a display; run it with tools/godot.sh --render")
-		return null
-	var tree := Engine.get_main_loop() as SceneTree
-	if not tree.root.is_inside_tree():
-		await tree.process_frame  # Called from a main loop's _initialize, before the root is in the tree.
+	var plan := func(rig: Rig) -> Array:
+		var shots := []
+		var names := clips if not clips.is_empty() else PackedStringArray(rig.tree.get_animation_list())
+		for clip in names:
+			if not rig.tree.has_animation(clip):
+				push_error("ContactSheet: the rig has no clip '%s'" % clip)
+				continue
+			for frame in cell_frames(rig.tree.get_animation(clip)):
+				shots.append([cell_label(clip, frame), [StringName(clip)], frame])
+		return shots
+	return await _draw(def_or_rig, [Transform3D.IDENTITY], plan, cell)
 
-	var stage := PIXEL_STAGE.instantiate() as PixelStage
-	stage.visible = false  # Only its World viewport is wanted, not the upscaled picture in the window.
-	tree.root.add_child(stage)
-	_furnish(stage.world)
-	var rig := scene.instantiate() as Rig
-	stage.world.add_child(rig)
-	var palette := _palette(def_or_rig)
-	if palette != null:
-		rig.apply_palette(palette)
-	var camera := CameraRig.new()
-	camera.target = rig
-	camera.stage = stage
-	stage.world.add_child(camera)
-	camera.snap_now()
-	var centre := camera.camera.unproject_position(rig.global_position + Vector3.UP * BODY_CENTRE)
-	var crop := Rect2i((Vector2i(centre.round()) - cell / 2).clamp(Vector2i.ZERO, PixelStage.WORLD_SIZE - cell), cell)
 
-	var names := clips if not clips.is_empty() else PackedStringArray(rig.tree.get_animation_list())
-	var images: Array[Image] = []
-	var labels := PackedStringArray()
-	await RenderingServer.frame_post_draw  # Let the new World draw once before the first cell.
-	for clip in names:
-		if not rig.tree.has_animation(clip):
-			push_error("ContactSheet: the rig has no clip '%s'" % clip)
-			continue
-		for frame in cell_frames(rig.tree.get_animation(clip)):
-			await tree.physics_frame
-			rig.play_move(clip, 0.0)
-			rig.set_move_time(float(frame) / FRAME_RATE)
-			for i in SETTLE_TICKS:
-				rig.tick(1.0 / FRAME_RATE)
-			# The skin follows the skeleton at the end of the frame, then the frame is drawn.
-			await RenderingServer.frame_post_draw
-			images.append(stage.world.get_texture().get_image().get_region(crop))
-			labels.append(cell_label(clip, frame))
-	stage.queue_free()
-	if images.is_empty():
-		push_error("ContactSheet: none of the clips %s could be drawn" % [names])
-		return null
-	return await _compose(images, labels, cell)
+## Renders the sheet of the paired move `pair` (see the top of this file) for the rig in `def_or_rig`, as render
+## does. Its moves are looked up in the Registry. Returns null, after an error, if they or their clips are missing.
+static func render_pair(def_or_rig: Variant, pair: PairedMove, cell := PAIR_CELL) -> Image:
+	# The lead faces +X, so the two stand across the camera's view, with their middle at the origin.
+	var lead := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3.ZERO)
+	var follower := lead * pair.follow_offset
+	var middle := (lead.origin + follower.origin) / 2.0
+	lead.origin -= middle
+	follower.origin -= middle
+	var plan := func(rig: Rig) -> Array:
+		# Looked up now, once the autoloads are ready: a script run with -s is compiled before they are known by name.
+		var registry := (Engine.get_main_loop() as SceneTree).root.get_node(^"Registry")
+		var clips: Array[StringName] = []
+		for id in [pair.lead_move, pair.follow_move]:
+			var move := registry.fetch(&"moves", id) as MoveData
+			if move == null or not rig.tree.has_animation(move.clip):
+				push_error("ContactSheet: the pair '%s' has no move '%s' with a clip in the rig" % [pair.id, id])
+				return []
+			clips.append(move.clip)
+		var shots := []
+		for frame in pair_frames(rig.tree.get_animation(clips[0]), rig.tree.get_animation(clips[1])):
+			shots.append([cell_label(clips[0], frame), clips, frame])
+		return shots
+	return await _draw(def_or_rig, [lead, follower], plan, cell)
+
+
+## The frames a pair's sheet gets a cell for: those of the lead's clip and of the follower's (cell_frames), each once
+## and in order.
+static func pair_frames(lead: Animation, follow: Animation) -> PackedInt32Array:
+	var frames := cell_frames(lead)
+	for frame in cell_frames(follow):
+		if not frames.has(frame):
+			frames.append(frame)
+	frames.sort()
+	return frames
 
 
 ## The frames (at 60 per second) a clip gets a cell for: each frame that has a mark, once and in order;
@@ -133,6 +137,68 @@ static func cell_label(clip: StringName, frame: int) -> String:
 
 
 # --- helpers ---
+
+# Draws a sheet: one rig of `def_or_rig` at each of `placements` (in its palette, if it has one), framed by the
+# gameplay camera around their middle, and a cell for each shot `plan` returns, given the first rig: [label, the clip
+# each rig plays, the frame]. Null, after an error, if there is no rig, no display or nothing to draw.
+static func _draw(def_or_rig: Variant, placements: Array[Transform3D], plan: Callable, cell: Vector2i) -> Image:
+	var scene := _rig_scene(def_or_rig)
+	if scene == null:
+		push_error("ContactSheet: expected a rig scene or something with a rig_scene, got %s" % [def_or_rig])
+		return null
+	if DisplayServer.get_name() == "headless":
+		push_error("ContactSheet: needs a display; run it with tools/godot.sh --render")
+		return null
+	var tree := Engine.get_main_loop() as SceneTree
+	if not tree.root.is_inside_tree():
+		await tree.process_frame  # Called from a main loop's _initialize, before the root is in the tree.
+
+	var stage := PIXEL_STAGE.instantiate() as PixelStage
+	stage.visible = false  # Only its World viewport is wanted, not the upscaled picture in the window.
+	tree.root.add_child(stage)
+	_furnish(stage.world)
+	var palette := _palette(def_or_rig)
+	var rigs: Array[Rig] = []
+	var middle := Node3D.new()
+	stage.world.add_child(middle)
+	for at in placements:
+		var rig := scene.instantiate() as Rig
+		stage.world.add_child(rig)
+		rig.global_transform = at
+		if palette != null:
+			rig.apply_palette(palette)
+		rigs.append(rig)
+		middle.position += at.origin / placements.size()
+	var camera := CameraRig.new()
+	camera.target = middle
+	camera.stage = stage
+	stage.world.add_child(camera)
+	camera.snap_now()
+	var centre := camera.camera.unproject_position(middle.global_position + Vector3.UP * BODY_CENTRE)
+	var crop := Rect2i((Vector2i(centre.round()) - cell / 2).clamp(Vector2i.ZERO, PixelStage.WORLD_SIZE - cell), cell)
+
+	var shots: Array = plan.call(rigs[0])
+	var images: Array[Image] = []
+	var labels := PackedStringArray()
+	await RenderingServer.frame_post_draw  # Let the new World draw once before the first cell.
+	for shot: Array in shots:
+		await tree.physics_frame
+		for i in rigs.size():
+			rigs[i].play_move(shot[1][i], 0.0)
+			rigs[i].set_move_time(float(shot[2]) / FRAME_RATE)
+		for tick in SETTLE_TICKS:
+			for rig in rigs:
+				rig.tick(1.0 / FRAME_RATE)
+		# The skin follows the skeleton at the end of the frame, then the frame is drawn.
+		await RenderingServer.frame_post_draw
+		images.append(stage.world.get_texture().get_image().get_region(crop))
+		labels.append(shot[0])
+	stage.queue_free()
+	if images.is_empty():
+		push_error("ContactSheet: there was nothing to draw")
+		return null
+	return await _compose(images, labels, cell)
+
 
 static func _rig_scene(def_or_rig: Variant) -> PackedScene:
 	if def_or_rig is PackedScene:
@@ -221,6 +287,7 @@ func _run(args: PackedStringArray) -> int:
 	var def_path := ""
 	var out := ""
 	var clips := PackedStringArray()
+	var pair_path := ""
 	var i := 0
 	while i < args.size():
 		var arg := args[i]
@@ -234,6 +301,8 @@ func _run(args: PackedStringArray) -> int:
 				out = value
 			"--clips":
 				clips = value.split(",", false)
+			"--pair":
+				pair_path = value
 			_:
 				printerr("contact_sheet.gd: unknown argument '%s'" % arg)
 				return _usage()
@@ -241,14 +310,22 @@ func _run(args: PackedStringArray) -> int:
 			printerr("contact_sheet.gd: %s needs a value" % arg)
 			return _usage()
 		i += 2
-	if (rig_path == "") == (def_path == "") or out == "":
+	if (rig_path == "") == (def_path == "") or out == "" or (pair_path != "" and not clips.is_empty()):
 		return _usage()
 	var source_path := def_path if def_path != "" else rig_path
 	var source: Resource = load(source_path) if def_path != "" else (load(source_path) as PackedScene)
 	if source == null:
 		printerr("contact_sheet.gd: cannot load '%s'" % source_path)
 		return 1
-	var sheet: Image = await render(source, clips)
+	var sheet: Image = null
+	if pair_path != "":
+		var pair := load(pair_path if pair_path.begins_with("res://") else "res://" + pair_path) as PairedMove
+		if pair == null:
+			printerr("contact_sheet.gd: '%s' is not a PairedMove" % pair_path)
+			return 1
+		sheet = await render_pair(source, pair)
+	else:
+		sheet = await render(source, clips)
 	if sheet == null:
 		return 1
 	var path := out
@@ -265,5 +342,5 @@ func _run(args: PackedStringArray) -> int:
 
 
 func _usage() -> int:
-	printerr("usage: tools/godot.sh --render -s res://tools/sheets/contact_sheet.gd -- (--def <actor.tres> | --rig <rig.tscn>) --out <file.png> [--clips a,b]")
+	printerr("usage: tools/godot.sh --render -s res://tools/sheets/contact_sheet.gd -- (--def <actor.tres> | --rig <rig.tscn>) --out <file.png> [--clips a,b | --pair <pair.tres>]")
 	return 2
