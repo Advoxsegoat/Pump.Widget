@@ -14,10 +14,11 @@ extends CharacterBody3D
 ## reached. An enemy also joins the group `lockable` until it dies: the foes the player aims at.
 ##
 ## Two actors can play one move together, a paired move (start_paired: a finisher, a grab): each has the other as its
-## paired_with until it is over, no one else's blow lands on either, their brains are ignored, and Melee keeps the
-## two moves in step and the follower in its place (Pairing). A palm pressed with a broken foe in reach (in the group
-## `finishable` while it reels, within the tuning's finisher_range and finisher_arc_deg of the facing) starts the
-## def's finisher on it instead of the jab (start_finisher_on, which the runner asks before starting a pressed move).
+## paired_with while it plays, no one else's blow lands on either, their brains are ignored, and Melee keeps the two
+## moves on one clock and aligns the two before each goes by its own root motion (Pairing). A palm pressed with a
+## broken foe in reach (in the group `finishable` while it reels, within the tuning's finisher_range and
+## finisher_arc_deg of the facing) starts the def's finisher on it instead of the jab (start_finisher_on, which the
+## runner asks before starting a pressed move).
 ##
 ## Each physics frame, in this order:
 ##   1. frame += 1
@@ -240,8 +241,8 @@ func is_invulnerable() -> bool:
 ## refuses and returns false, when either of them is dead, already paired or invulnerable (or `other` is the actor
 ## itself). Both are paired at once (paired_with, pair): from now on no one else's blow lands on either, their brains
 ## are ignored, and what they had pressed is forgotten. Both moves start on this frame, after every actor has moved,
-## whatever the stamina, and Melee plays the pair from there until both have ended (Pairing). combat_moment is
-## emitted on both.
+## whatever the stamina, and Melee plays the pair from there (Pairing): the lead is free again when its move ends, the
+## follower when its own has. combat_moment is emitted on both.
 func start_paired(other: Actor, with_pair: PairedMove) -> bool:
 	if with_pair == null or other == null or other == self:
 		return false
@@ -287,15 +288,15 @@ func start_finisher_on(action: StringName) -> bool:
 	return target != null and start_paired(target, def.finisher)
 
 
-## Puts the actor at `at` (facing its +Z) for the frame, as a paired move's follower is kept in its place by the
-## Pairing, after every actor has moved: with none of its own motion left over (velocity, knockback), and locomotion
-## facing that way so that it carries on from there. Unlike place, it keeps its hit-stop and lets physics
-## interpolation smooth the follower's slide into place.
-func hold_at(at: Transform3D) -> void:
-	global_transform = at.orthonormalized()
-	velocity = Vector3.ZERO
-	_push = Vector3.ZERO
-	locomotion.facing_yaw = rotation.y
+## Moves the actor by `offset` along the ground (its height is left out), stopping at the world as move_and_slide
+## would, and sliding along what it meets: a paired move's lead closing on its follower (Pairing).
+func glide(offset: Vector3) -> void:
+	var motion := Vector3(offset.x, 0.0, offset.z)
+	var hit := move_and_collide(motion)
+	if hit != null:
+		var rest := hit.get_remainder().slide(hit.get_normal())
+		rest.y = 0.0
+		move_and_collide(rest)
 
 
 ## True while a guard is up: a move's guard_on mark (guard_raise from its f4), the guard stance (`guarding`), or the

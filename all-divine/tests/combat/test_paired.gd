@@ -12,14 +12,10 @@ const O := HitResult.Outcome
 const FINISHER := "res://data/pairs/finisher_open_hand.tres"
 
 
-# A pair of the finisher's moves and hits, announced as `moment`.
+# A pair of the finisher's moves, hits and staging, announced as `moment`.
 func _pair(moment := &"grab") -> PairedMove:
-	var pair := PairedMove.new()
+	var pair := (load(FINISHER) as PairedMove).duplicate() as PairedMove
 	pair.id = &"test_pair"
-	pair.lead_move = &"finisher"
-	pair.follow_move = &"finisher_victim"
-	pair.hits = (load(FINISHER) as PairedMove).hits
-	pair.follow_ends_down = true
 	pair.moment = moment
 	return pair
 
@@ -43,7 +39,7 @@ func _jab_on(attacker: Actor, target: Actor) -> HitEvent:
 
 
 # Runs in the middle of every physics frame, as an actor does (after Melee's snapshot, before Melee): first calls
-# `then` once, if it is set, then posts `events` to Melee, every frame.
+# `then` once, if it is set, then posts to Melee those of `events` whose target is paired, every frame.
 class MidFrame extends Node:
 	var then := Callable()
 	var events: Array[HitEvent] = []
@@ -53,7 +49,8 @@ class MidFrame extends Node:
 			then.call()
 			then = Callable()
 		for e in events:
-			Melee.post(e)
+			if e.target.paired_with != null:
+				Melee.post(e)
 
 
 # Presses palm, dodge and guard every frame, holds guard and pushes the stick, and counts how often it is asked.
@@ -98,8 +95,9 @@ func test_cannot_pair_with_the_dead_or_the_already_paired() -> void:
 
 
 func test_paired_actors_are_not_hit_by_others() -> void:
-	# c (PLAYER) jabs b and d (ENEMY) jabs a on every frame of the pair, from the frame it begins (when Melee's snapshot
-	# has them unpaired still): every one of those blows comes to nothing, and only the pair's own blows land on b.
+	# c (PLAYER) jabs b and d (ENEMY) jabs a on every frame each is paired, from the frame the pair begins (when Melee's
+	# snapshot has them unpaired still): every one of those blows comes to nothing, and only the pair's own blows land on
+	# b. a is free once its clip is over; b, once it lies down.
 	var run := Duel.make(self)
 	var a: Actor = run["a"]
 	var b: Actor = run["b"]
@@ -118,10 +116,11 @@ func test_paired_actors_are_not_hit_by_others() -> void:
 	track(mid)
 	await frames(1)
 	assert_eq([outcomes["a"], outcomes["b"]], [["WHIFF"], ["WHIFF"]], "the frame the pair begins")
-	while a.paired_with != null:
+	while a.paired_with != null or b.paired_with != null:
 		await frames(1)
 	mid.events.clear()
-	assert_true(outcomes["a"].size() > 80, "a blow on each, every frame of the pair (%d)" % outcomes["a"].size())
+	assert_true(outcomes["a"].size() > 60, "a blow on a, every frame it was paired (%d)" % outcomes["a"].size())
+	assert_true(outcomes["b"].size() > outcomes["a"].size(), "and on b, for longer (%d)" % outcomes["b"].size())
 	assert_eq(outcomes["a"].filter(func(o: String) -> bool: return o != "WHIFF"), [], "none lands on the lead")
 	assert_eq(outcomes["b"].filter(func(o: String) -> bool: return o != "WHIFF"), [], "none lands on the follower")
 	assert_eq(a.stats.hp, 100.0)
@@ -145,12 +144,17 @@ func test_brains_are_ignored_while_paired() -> void:
 	while a.paired_with != null:
 		await frames(1)
 		guarded = guarded or a.is_guarding() or b.is_guarding()
-	assert_eq(started, [["A", &"finisher"], ["B", &"finisher_victim"], ["B", &"getup"]], "nothing the brains pressed started")
+	assert_eq(started, [["A", &"finisher"], ["B", &"finisher_victim"]], "nothing the brains pressed started")
 	assert_false(guarded, "nor did a guard come up")
 	assert_eq([a_brain.thought, b_brain.thought], [0, 0], "they were not asked")
 	await frames(2)
-	assert_true(a_brain.thought > 0, "after the pair a's brain is asked again")
-	assert_true(started.size() > 3 and started[3][0] == "A", "and its presses start moves: %s" % [started])
+	assert_true(a_brain.thought > 0, "once its clip is over, a's brain is asked again")
+	assert_true(started.size() > 2 and started[2][0] == "A", "and its presses start moves: %s" % [started])
+	assert_eq(b_brain.thought, 0, "while b plays on to the ground, still paired")
+	while b.paired_with != null:
+		await frames(1)
+	assert_eq(started.filter(func(s: Array) -> bool: return s[0] == "B"), [["B", &"finisher_victim"], ["B", &"getup"]],
+			"b only gets up when it is free")
 
 
 func test_grab_connects_into_the_grab_pair() -> void:
@@ -168,7 +172,7 @@ func test_grab_connects_into_the_grab_pair() -> void:
 	assert_eq(run["got"], [], "the grab itself is no blow")
 	assert_eq(abarax.stats.hp, 100.0, "and deals nothing")
 	assert_eq([_current(e), _current(abarax)], [&"finisher", &"finisher_victim"], "the grab pair's moves start on that frame")
-	while e.paired_with != null:
+	while abarax.paired_with != null:
 		await frames(1)
 	assert_eq(run["got"], ["HIT", "HIT", "HIT"], "its three blows land")
 	assert_eq(abarax.stats.hp, 40.0)
@@ -184,6 +188,42 @@ func test_a_grab_with_no_grab_pair_is_a_staggering_hit() -> void:
 	assert_eq(abarax.stats.hp, 92.0, "for the blow's damage")
 	assert_eq(_current(abarax), &"stagger", "and a stagger, as before")
 	assert_eq([e.paired_with, abarax.paired_with], [null, null], "with no pair")
+
+
+func test_walls_hold_abarax_grabbed_and_he_gets_up_in_the_open() -> void:
+	# Abarax as the follower of a grab pair (the finisher's staging), with a wall's face 0.6 m behind him (z 1.6) and
+	# another's 0.4 m to his side (x 0.4): neither capsule ends a frame in a wall, and he gets up in the open.
+	var grabber_def := Duel.def(ActorDef.Team.ENEMY, 5.0)
+	grabber_def.grab_pair = _pair()
+	var run := _grab(grabber_def)
+	var e: Actor = run["grabber"]
+	var abarax: Actor = run["abarax"]
+	var arena: Node3D = run["arena"]
+	for wall: Array in [[Vector3(0, 1.5, 1.6 + 0.25), Vector3(8, 3, 0.5)], [Vector3(0.4 + 0.25, 1.5, 0), Vector3(0.5, 3, 8)]]:
+		var body := StaticBody3D.new()
+		body.collision_layer = Layers.WORLD
+		body.collision_mask = 0
+		var shape := CollisionShape3D.new()
+		shape.shape = BoxShape3D.new()
+		(shape.shape as BoxShape3D).size = wall[1]
+		body.add_child(shape)
+		body.position = wall[0]  # before it is in the tree, so that it is never anywhere else
+		arena.add_child(body)
+	var deepest := -INF
+	var paired := false
+	var got_up := false
+	for i in 260:
+		await frames(1)
+		paired = paired or abarax.paired_with == e
+		got_up = got_up or _current(abarax) == &"getup"
+		for actor: Actor in [e, abarax]:
+			var p := actor.global_position
+			deepest = maxf(deepest, maxf(p.z + 0.35 - 1.6, p.x + 0.35 - 0.4))
+	assert_true(paired, "the grab pairs them")
+	assert_true(got_up, "he gets up")
+	assert_true(deepest <= 0.01, "no capsule ends a frame in a wall (deepest %.3f m)" % deepest)
+	assert_eq([e.paired_with, abarax.paired_with], [null, null], "the pair is over")
+	assert_true(abarax.rig.bone_global(&"Head").y - abarax.global_position.y > 1.4, "and he stands")
 
 
 # An enemy `Grabber` of `grabber_def` at the origin facing +Z that starts a perilous GRAB jab before its first frame

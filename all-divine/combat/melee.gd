@@ -35,7 +35,7 @@ extends Node
 ##
 ## Melee also keeps paired moves (finishers, grabs) in step, since it runs after every actor has moved. A pair that
 ## began this frame (Actor.start_paired, begin_pair) has both its moves started here, after the blows; then every
-## pair in play places its follower and, once both its moves have ended, is finished (see Pairing). A grab that takes
+## pair in play aligns its two fighters and, once the follower's move has ended, is finished (see Pairing). A grab that takes
 ## hold (GRABBED) starts its attacker's grab pair here and comes to nothing more; an attacker without one has it taken
 ## as a HIT that staggers. A pair's own blows (HitEvent.paired, the lead's pair_hit marks) are posted like any other
 ## but not judged: each lands on the follower as a HIT with no reaction (Combat.pair_hit). Any other blow on a body

@@ -7,4 +7,4 @@ script = ExtResource("1_move")
 id = &"finisher_victim"
 kind = 2
 clip = &"finisher_victim"
-root_motion = false
+root_motion = true

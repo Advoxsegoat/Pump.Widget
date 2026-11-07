@@ -30,6 +30,7 @@ script = ExtResource("1_pair")
 id = &"finisher_open_hand"
 lead_move = &"finisher"
 follow_move = &"finisher_victim"
+follow_offset = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 1.02)
 hits = {
 &"f1": SubResource("Resource_f1"),
 &"f2": SubResource("Resource_f2"),
