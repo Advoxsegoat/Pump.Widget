@@ -215,3 +215,52 @@ func test_lock_leans_the_camera_toward_the_target_at_most_three_metres() -> void
 	foe.free()
 	rig.snap_now()
 	assert_vec_near(rig.global_position, base, 1e-3, "a target that is gone leans nothing, and nothing errors")
+
+
+# Runs the rig `n` frames at 60 Hz and returns the biggest step its follow point takes in a frame, in screen pixels
+# (a texel is a pixel), and where it ended.
+func _glide(n: int) -> Dictionary:
+	var peak := 0.0
+	var prev := rig.global_position
+	for i in n:
+		rig._process(1.0 / 60)
+		peak = maxf(peak, (rig.global_position - prev).length() * 32.0)
+		prev = rig.global_position
+	return {"peak": peak, "at": rig.global_position}
+
+
+func _foe_at(at: Vector3) -> Node3D:
+	var foe := Node3D.new()
+	stage.world.add_child(foe)
+	foe.global_position = at
+	return foe
+
+
+func test_the_lean_glides_in_gaining_switching_losing_and_a_death() -> void:
+	var east := _foe_at(Vector3(10, 0, 0))
+	var west := _foe_at(Vector3(-10, 0, 0))
+	rig.snap_now()
+	var base := rig.global_position
+	rig.lock_target = east
+	var gain := _glide(48)
+	print("lean peaks px/frame: gain %.1f" % gain["peak"])
+	assert_true(gain["peak"] <= 10.0, "gaining a lock: at most 10 px a frame (%.1f)" % gain["peak"])
+	assert_true((gain["at"] - (base + Vector3(3, 0, 0))).length() * 32.0 <= 1.0, "settled within 1 px of the lean by 0.8 s")
+	rig.lock_target = west
+	# A 6 m swing cannot both peak under 10 px a frame and settle in 0.8 s, so it gets a second.
+	var swap := _glide(60)
+	print("lean peaks px/frame: switch %.1f" % swap["peak"])
+	assert_true(swap["peak"] <= 10.0, "switching across: at most 10 px a frame (%.1f)" % swap["peak"])
+	assert_true((swap["at"] - (base - Vector3(3, 0, 0))).length() * 32.0 <= 1.0, "switch settled")
+	rig.lock_target = null
+	var lose := _glide(48)
+	print("lean peaks px/frame: loss %.1f" % lose["peak"])
+	assert_true(lose["peak"] <= 10.0, "losing the lock: at most 10 px a frame (%.1f)" % lose["peak"])
+	assert_true((lose["at"] - base).length() * 32.0 <= 1.0, "loss settled")
+	rig.lock_target = east
+	rig.snap_now()
+	east.free()   # the target dies out of the tree under a camera still holding it
+	var death := _glide(48)
+	print("lean peaks px/frame: death %.1f" % death["peak"])
+	assert_true(death["peak"] <= 10.0, "the target going: at most 10 px a frame (%.1f)" % death["peak"])
+	assert_true((death["at"] - base).length() * 32.0 <= 1.0, "death settled")

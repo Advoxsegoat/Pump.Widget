@@ -9,7 +9,9 @@ extends Node3D
 ## interpolated transform, so the picture is smooth at any frame rate.
 ##
 ## Locked on to a foe (lock_target), it leans toward it: the follow goal moves 35% of the way to the foe, at most
-## LOCK_LEAN_MAX metres, so that both of them stay well in the picture.
+## LOCK_LEAN_MAX metres, so that both of them stay well in the picture. The lean is a vector of its own, eased on its
+## own critically damped spring (LEAN_RATE), so that gaining, switching and losing a lock, and a target going, glide
+## instead of jumping the picture by metres.
 ##
 ## A hit shakes it (shake): the offset goes into the place the camera wants to be before that is snapped, so the
 ## picture shakes in whole texels like everything else it does. The rig joins the group `camera_rig`, where whoever
@@ -35,6 +37,12 @@ const LOOK_AHEAD_FULL_SPEED := 4.0
 const LOCK_LEAN := 0.35
 ## ... and the furthest it goes, in metres.
 const LOCK_LEAN_MAX := 3.0
+## The lean's spring, in radians a second: it covers 95% of the way in about 0.4 s and settles within a pixel of a
+## 3 m lean by 0.8 s (a 6 m cross switch takes a second), and its fastest step, in that switch, is under 10 px a frame.
+const LEAN_RATE := 9.0
+## How far in metres, along the camera's right and up, a point may be from the follow point and still be in the
+## picture (the margin lets a foe's feet, or its head, be a little over the edge).
+const ON_SCREEN_MARGIN := 0.75
 const POST_SHADER := preload("res://render/shaders/screen_post.gdshader")
 ## The group the rig joins when it is ready: the one game camera, which hit feel (shake) and sound (Sfx, to find the
 ## world to play in) look for there.
@@ -69,6 +77,8 @@ var camera: Camera3D
 ## The full-screen quad that draws screen_post, in group `post_quad`.
 var post_quad: MeshInstance3D
 
+var _lean := Vector3.ZERO
+var _lean_velocity := Vector3.ZERO
 var _follow := Vector3.ZERO
 var _has_follow := false
 var _shake_time := 0.0  # seconds this camera has shaken in all: where the noise is
@@ -136,6 +146,8 @@ func cursor_ground(screen: Vector2, plane_y: float) -> Variant:
 func snap_now() -> void:
 	if target == null or not target.is_inside_tree() or not is_inside_tree():
 		return
+	_lean = _lean_target(_goal())
+	_lean_velocity = Vector3.ZERO
 	_follow = _goal()
 	_has_follow = true
 	_apply()
@@ -180,6 +192,7 @@ func _process(delta: float) -> void:
 		_shake_time += delta
 	if target == null or not target.is_inside_tree():
 		return
+	_ease_lean(delta)
 	var goal := _goal()
 	if _has_follow:
 		_follow += (goal - _follow) * _spring_factor(delta)
@@ -195,17 +208,53 @@ func _spring_factor(delta: float) -> float:
 	return 1.0 - exp(-delta * SPRING_RATE / smooth_time)
 
 
-# Where the camera wants to look: the target's interpolated position, leaning along its velocity.
+# Where the camera wants to look: the target's interpolated position, leaning along its velocity, and by the lean.
 func _goal() -> Vector3:
+	return _base_goal() + _lean
+
+
+func _base_goal() -> Vector3:
 	var goal := target.get_global_transform_interpolated().origin
 	var velocity: Variant = target.get(&"velocity")
 	if velocity is Vector3:
 		var speed := (velocity as Vector3).length()
 		if speed > 0.0:
 			goal += (velocity as Vector3) / speed * look_ahead * clampf(speed / LOOK_AHEAD_FULL_SPEED, 0.0, 1.0)
-	if is_instance_valid(lock_target) and lock_target.is_inside_tree():
-		goal += ((lock_target.get_global_transform_interpolated().origin - goal) * LOCK_LEAN).limit_length(LOCK_LEAN_MAX)
 	return goal
+
+
+# Where the lean wants to be: LOCK_LEAN of the way from `base` to the lock target, at most LOCK_LEAN_MAX; none with no
+# target, or one that has left the tree or been freed.
+func _lean_target(base: Vector3) -> Vector3:
+	if not is_instance_valid(lock_target) or not lock_target.is_inside_tree():
+		return Vector3.ZERO
+	return ((lock_target.get_global_transform_interpolated().origin - base) * LOCK_LEAN).limit_length(LOCK_LEAN_MAX)
+
+
+# Moves the lean toward its target along a critically damped spring (exact for any step, so a slow frame does not
+# overshoot).
+func _ease_lean(delta: float) -> void:
+	var wanted := _lean_target(_base_goal())
+	var x := LEAN_RATE * delta
+	var damping := 1.0 / (1.0 + x + 0.48 * x * x + 0.235 * x * x * x)
+	var change := _lean - wanted
+	var carry := (_lean_velocity + change * LEAN_RATE) * delta
+	_lean_velocity = (_lean_velocity - carry * LEAN_RATE) * damping
+	_lean = wanted + (change + carry) * damping
+
+
+## Where `world` is on the picture, in metres from its centre along the camera's right (x) and up (y).
+func screen_offset(world: Vector3) -> Vector2:
+	var rel := world - global_position
+	var b := global_basis
+	return Vector2(rel.dot(b.x), rel.dot(b.y))
+
+
+## Whether `world` is in the picture, give or take ON_SCREEN_MARGIN: the 640x360 picture is 20 x 11.25 m.
+func on_screen(world: Vector3) -> bool:
+	var offset := screen_offset(world)
+	var half := Vector2(PixelSnap.INTERNAL) * PixelSnap.TEXEL * 0.5 + Vector2.ONE * ON_SCREEN_MARGIN
+	return absf(offset.x) <= half.x and absf(offset.y) <= half.y
 
 
 func _apply() -> void:
