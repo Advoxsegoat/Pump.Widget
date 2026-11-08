@@ -204,7 +204,9 @@ func test_the_pairs_clips_do_not_pop() -> void:
 		var anim := rig.tree.get_animation(clip)
 		var step := 5 if role == &"lead_move" else 1
 		var limit := LEAD_STEP if role == &"lead_move" else VICTIM_FRAME
+		assert_true(anim.has_meta("joins"), "%s carries its joins (where the hands are held to it)" % clip)
 		var joins: PackedFloat32Array = anim.get_meta("joins", PackedFloat32Array())
+		assert_false(joins.is_empty(), "%s has a join to hold the hands across" % clip)
 		var poses := {}  # frame -> {joint: position, in the rig's space}
 		rig.play_move(clip, 0.0)
 		var f := 0
