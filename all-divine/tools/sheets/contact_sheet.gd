@@ -44,8 +44,9 @@ const FRAME_RATE := 60
 const BODY_CENTRE := 0.9
 ## How many ticks (at FRAME_RATE) each cell's pose is held before it is drawn: 0.75 s.
 const SETTLE_TICKS := 45
-## The size of a pair's cell in game pixels: wide enough for two actors a metre or so apart.
-const PAIR_CELL := Vector2i(240, 120)
+## The size of a pair's cell in game pixels: wide enough for two actors a metre apart, and for one knocked down two
+## metres further off.
+const PAIR_CELL := Vector2i(320, 120)
 
 
 func _initialize() -> void:
