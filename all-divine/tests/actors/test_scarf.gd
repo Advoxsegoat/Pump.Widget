@@ -23,19 +23,14 @@ const CLEARANCE := 0.14
 ## the moment of a jump, which the 12 fps picture changes under anyway.
 const STEPPED_CLEARANCE := 0.06
 ## The least a joint may come to the centre line in a few clips, in place of CLEARANCE or STEPPED_CLEARANCE, where the
-## body folds or lies down further than the scarf's capsules keep it off the line. Each is clear of the chest.
-##   hop              the leap folds the torso over its knees: the scarf hangs 0.115 m off the line at the closest
-##   finisher_victim  the third blow snaps him double over the fist before it knocks him down: 0.115 m, on the one
-##                    frame after the snap (f56)
-##   getup            it starts lying on his back, and played from idle, as here, the scarf whips into that pose and is
-##                    0.127 m off for a few frames (in play it comes from the victim's lying pose, where it lies already)
-##   finisher         played stepped, its overhand's recovery jumps further at each 12 fps step than the heavy palm's:
-##                    0.058 m on the frame of a jump (f75, f80), a hair under STEPPED_CLEARANCE, for the same reason
+## body folds or lies down further than the scarf's capsules keep it off the line. Each is clear of the chest, and each
+## is the clip's measured least less 0.005 m.
+##   hop    the leap folds the torso over its knees: the scarf hangs 0.115 m off the line at the closest
+##   getup  it starts lying on his back, and played from idle, as here, the scarf whips into that pose and is 0.127 m
+##          off for a few frames (in play it comes from the finisher victim's lying pose, where it lies already)
 const CLIP_CLEARANCE := {
 	&"hop": 0.10,
-	&"finisher_victim": 0.10,
-	&"getup": 0.11,
-	&"finisher": 0.055,
+	&"getup": 0.122,
 }
 const TORSO: Array[StringName] = [&"pelvis", &"spine_01", &"spine_02", &"spine_03", &"neck_01"]
 const JOINTS: Array[StringName] = [&"scarf_02", &"scarf_03", &"scarf_04"]

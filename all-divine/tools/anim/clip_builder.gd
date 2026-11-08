@@ -458,8 +458,10 @@ static func check(cfg_path: String, sources: Dictionary, model_path: String) -> 
 ## model at `model_path`; each source's clips are scaled by the model's hip height over the source
 ## skeleton's (see the top of this file), also where `ground_speed_from` measures them (which follows
 ## `then` and `warp` too, on the pack it names). Writes <out_dir>/<name>.tres for every section and
-## <out_dir>/library.tres, and puts the metadata `step_fps` (int) on every clip and `ground_speed` (m/s)
-## where asked for.
+## <out_dir>/library.tres, and puts the metadata `step_fps` (int) on every clip, `ground_speed` (m/s) where asked for,
+## and `joins` (PackedFloat32Array, seconds) on a clip whose `then` has entries written as dictionaries: where in it
+## each join falls (both ends of a fade), for the checks of how a clip moves across its joins. (A clip joined only with
+## plain "Clip" entries is not given it, so the clips made before it stay as they were.)
 ##
 ## If a clip's file already exists, its non-bone tracks (the marks) are merged into the new clip.
 ## Nothing is written unless every clip could be built: the problems with the list (see check) are each
@@ -601,11 +603,75 @@ static func _assemble(env: _Env, cfg: ConfigFile, section: String, key: String) 
 			parts.append(part)
 	if not complete or not _spans_fit(env, section, parts):
 		return null
-	var joined := first if pieces.size() == 1 else join_parts(parts)
+	if pieces.size() == 1:
+		return _timed(cfg, section, first)
+	var joined := join_parts(parts)
+	var played := _timed(cfg, section, joined)
+	if not _written_as_dictionaries(cfg.get_value(section, "then")):
+		return played  # the joins of the plain form are not noted, so the clips made that way stay as they were
+	var joins := PackedFloat32Array()
+	for at in _join_times(parts):
+		for time in _played_at(cfg, section, at, joined.length, played.length):
+			joins.append(time)
+	joins.sort()
+	played.set_meta("joins", joins)
+	return played
+
+
+# `anim` played as the section says: warped, or retimed to `length`, or as it is.
+static func _timed(cfg: ConfigFile, section: String, anim: Animation) -> Animation:
 	if cfg.has_section_key(section, "warp"):
-		return apply_warp(joined, _floats(cfg.get_value(section, "warp")))
+		return apply_warp(anim, _floats(cfg.get_value(section, "warp")))
 	var length := float(cfg.get_value(section, "length", 0.0))
-	return retime(joined, length) if length > 0.0 else joined
+	return retime(anim, length) if length > 0.0 else anim
+
+
+# Whether any entry of a section's `then` is written as a dictionary ({"clip": ..., and maybe a cut or a fade}).
+static func _written_as_dictionaries(then: Variant) -> bool:
+	return then is Array and (then as Array).any(func(entry: Variant) -> bool: return entry is Dictionary)
+
+
+# Where the joins of `parts` (as join_parts takes them) fall in the joined clip, in seconds: where each part begins,
+# and, for one that fades in, where its fade ends too.
+static func _join_times(parts: Array) -> PackedFloat32Array:
+	var times := PackedFloat32Array()
+	var end := 0.0
+	for i in parts.size():
+		var part: Dictionary = parts[i]
+		var anim: Animation = part["anim"]
+		var span := float(part.get("to", anim.length)) - float(part.get("from", 0.0))
+		var fade := float(part.get("fade", 0.0)) if i > 0 else 0.0
+		var start := maxf(end - fade, 0.0)
+		if i > 0:
+			times.append(start)
+			if fade > 0.0:
+				times.append(end)
+		end = start + span
+	return times
+
+
+# The times of the section's played clip (`played` seconds long: the joined clip, `joined` seconds long, warped or
+# retimed) at which the joined clip's time `source` plays: every time a warp passes it (or, where a warp holds it, the
+# start of the hold).
+static func _played_at(cfg: ConfigFile, section: String, source: float, joined: float, played: float) -> PackedFloat32Array:
+	var found := PackedFloat32Array()
+	if not cfg.has_section_key(section, "warp"):
+		found.append(source * played / joined if joined > 0.0 else source)
+		return found
+	var warp := _floats(cfg.get_value(section, "warp"))
+	for i in range(2, warp.size(), 2):
+		var o0 := warp[i - 2]
+		var s0 := warp[i - 1]
+		var o1 := warp[i]
+		var s1 := warp[i + 1]
+		if is_equal_approx(s0, s1):
+			if is_equal_approx(s0, source):
+				found.append(o0)
+		elif source >= minf(s0, s1) - FRAME_EPSILON and source <= maxf(s0, s1) + FRAME_EPSILON:
+			var at := o0 + (source - s0) / (s1 - s0) * (o1 - o0)
+			if found.is_empty() or absf(found[found.size() - 1] - at) > FRAME_EPSILON:
+				found.append(at)
+	return found
 
 
 # `anim` with the layer file at `path` laid over it (see apply_layer), or null with the problems in `env`.

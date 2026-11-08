@@ -1,9 +1,10 @@
 extends TestCase
 ## The Open Hand finisher: a palm pressed with a broken foe (the group `finishable`) within finisher_range (1.6 m)
 ## and finisher_arc_deg (60 degrees) of Abarax's facing starts his def's finisher, the paired move
-## finisher_open_hand, in place of the jab. He plays `finisher` (1 s: a jab, a second jab and a cross) and the foe
-## `finisher_victim` on one clock, the foe 1.02 m in front of him once they are aligned; his three pair_hit marks (f10,
-## f20, f45) do 15, 15 and 30 to it as HITs with no reaction, with their hit-stop (4, 4 and 6 frames). He is free when
+## finisher_open_hand, in place of the jab. He plays `finisher` (0.83 s: a jab, a second jab and a cross, each landing
+## in one 12 fps step) and the foe `finisher_victim` on one clock, the foe 1.02 m in front of him once they are aligned;
+## his three pair_hit marks (f10, f25, f40) do 15, 15 and 30 to it as HITs with no reaction, with their hit-stop (4, 4
+## and 6 frames). He is free when
 ## his clip is over; the foe plays on to the ground, and then its posture is full again, and it dies where it lies if
 ## its HP is gone, or gets up. How the two are staged (reach, contact, skating, alignment, walls) is
 ## test_finisher_staging.gd.
@@ -88,8 +89,8 @@ func test_palm_in_a_cancel_window_starts_the_finisher_too() -> void:
 
 
 func test_the_lead_is_free_when_its_clip_and_its_hit_stop_are_over() -> void:
-	# The lead's clock (the frames it was not frozen) runs its 1 s clip; the three blows' hit-stop (4, 4 and 6 frames)
-	# stops that clock and adds to the time it takes: 74 frames, under the 90 of spec 4.4. The foe plays on, paired.
+	# The lead's clock (the frames it was not frozen) runs its 0.83 s clip; the three blows' hit-stop (4, 4 and 6
+	# frames) stops that clock and adds to the time it takes: 64 frames, under the 90 of spec 4.4. The foe plays on, paired.
 	var run := await _duel([{"frames": 9}, {"frames": 1, "press": [&"palm"]}, {"frames": 200}])
 	var a: Actor = run["a"]
 	var b: Actor = run["b"]

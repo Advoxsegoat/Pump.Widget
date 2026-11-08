@@ -10,8 +10,9 @@ extends TestCase
 ##            0.05 m at most over its plant: each fighter moves by its own clip's root motion
 ##   aligning from the edge of reach (1.59 m, 59 degrees off, the victim facing toward or away): the follower moves
 ##            0.10 m at most and turns 20 degrees at most a frame, and the lead's lunge is 0.6 m at most
-##   clips    the lead's joints (pelvis, head, hands, feet) move 0.25 m at most from one 12 fps step to the next, the
-##            victim's 0.15 m at most from one frame to the next
+##   clips    the lead's pelvis, head and feet move 0.25 m at most from one 12 fps step to the next, the victim's
+##            0.15 m at most from one frame to the next, and the hands too across a join; each strike carries the hand
+##            0.40 m or more in the step it lands on, as palm_jab does (0.47)
 ##   walls    a wall 0.6 m behind the victim and one 0.4 m to its side: neither capsule ends a frame in a wall, the pair
 ##            plays out, and a survivor gets up in the open
 ##
@@ -28,6 +29,7 @@ const ALIGN_TURN_DEG := 20.0
 const LUNGE := 0.6
 const LEAD_STEP := 0.25
 const VICTIM_FRAME := 0.15
+const STRIKE_REACH := 0.40
 const JOINTS: Array[StringName] = [&"pelvis", &"Head", &"hand_l", &"hand_r", &"foot_l", &"foot_r"]
 const FEET: Array[StringName] = [&"foot_l", &"foot_r"]
 const PALM_ON := 10
@@ -191,6 +193,10 @@ func test_alignment_from_the_edge_of_reach() -> void:
 
 
 func test_the_pairs_clips_do_not_pop() -> void:
+	# The pelvis, the head and the feet move LEAD_STEP at most a 12 fps step in the lead's clip and VICTIM_FRAME at most a
+	# frame in the victim's; the hands are held to it only across a join (the clip's `joins` metadata), where a pop would
+	# show, since a strike is a fast hand by design. And every strike lands as palm_jab's does: the step that ends on its
+	# pair_hit carries the striking hand STRIKE_REACH or more.
 	var rig: Rig = track((load(Duel.ABARAX) as ActorDef).rig_scene.instantiate())
 	var pair := load("res://data/pairs/finisher_open_hand.tres") as PairedMove
 	for role in [&"lead_move", &"follow_move"]:
@@ -198,20 +204,39 @@ func test_the_pairs_clips_do_not_pop() -> void:
 		var anim := rig.tree.get_animation(clip)
 		var step := 5 if role == &"lead_move" else 1
 		var limit := LEAD_STEP if role == &"lead_move" else VICTIM_FRAME
-		var last := {}
-		var worst := [0.0, &"", -1]
+		var joins: PackedFloat32Array = anim.get_meta("joins", PackedFloat32Array())
+		var poses := {}  # frame -> {joint: position, in the rig's space}
 		rig.play_move(clip, 0.0)
 		var f := 0
 		while f <= Marks.frame_of(anim.length):
 			rig.set_move_time(f / 60.0)
 			rig.tick(1.0 / 60.0)
+			poses[f] = {}
 			for joint in JOINTS:
-				var at := rig.animated_pose(joint).origin - rig.global_position
-				if last.has(joint) and at.distance_to(last[joint]) > worst[0]:
-					worst = [at.distance_to(last[joint]), joint, f]
-				last[joint] = at
+				poses[f][joint] = rig.animated_pose(joint).origin - rig.global_position
 			f += step
+		var worst := [0.0, &"", -1]
+		for frame: int in poses:
+			if not poses.has(frame - step):
+				continue
+			var across := Array(joins).any(func(t: float) -> bool: return t * 60.0 >= frame - step - 1e-3 and t * 60.0 <= frame + 1e-3)
+			for joint in JOINTS:
+				if (joint == &"hand_l" or joint == &"hand_r") and not across:
+					continue
+				var moved: float = (poses[frame][joint] as Vector3).distance_to(poses[frame - step][joint])
+				if moved > worst[0]:
+					worst = [moved, joint, frame]
 		assert_true(worst[0] <= limit, "%s: the %s moves %.3f m to frame %d (at most %.2f)" % [clip, worst[1], worst[0], worst[2], limit])
+		if role != &"lead_move":
+			continue
+		for m in Marks.read(anim):
+			if m["kind"] != &"pair_hit":
+				continue
+			var hit := Marks.frame_of(m["time"])
+			var reach := 0.0
+			for hand in [&"hand_l", &"hand_r"]:
+				reach = maxf(reach, (poses[hit][hand] as Vector3).distance_to(poses[hit - step][hand]))
+			assert_true(reach >= STRIKE_REACH, "%s: the strike landing on frame %d carries the hand %.3f m in its last step (palm_jab: 0.47)" % [clip, hit, reach])
 
 
 # A wall: a box of `size` whose centre is `at`, on the world layer.

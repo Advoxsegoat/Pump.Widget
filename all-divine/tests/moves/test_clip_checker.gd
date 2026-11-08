@@ -743,7 +743,12 @@ func test_an_actors_pairs_and_their_moves_are_checked() -> void:
 	short.hits.erase(&"f2")
 	def.finisher = short
 	var problems := ClipChecker.new().check_actor(def)
-	assert_true(_has_problem(problems, ["finisher_open_hand", "pair_hit at f20", "unknown profile 'f2'"]), "\n".join(problems))
+	var f2_at := -1  # where the real finisher lands the blow of f2: its clip's marks say
+	for m in Marks.read((load(LIB) as AnimationLibrary).get_animation(&"finisher")):
+		if m["kind"] == &"pair_hit" and m["args"].get("profile") == &"f2":
+			f2_at = Marks.frame_of(m["time"])
+	assert_true(f2_at >= 0, "the finisher lands an f2")
+	assert_true(_has_problem(problems, ["finisher_open_hand", "pair_hit at f%d" % f2_at, "unknown profile 'f2'"]), "\n".join(problems))
 	var lost := _pair()
 	lost.lead_move = &"no_such_lead"
 	def.finisher = null
