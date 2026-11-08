@@ -20,7 +20,7 @@ const BINDINGS_PATH := "user://input.cfg"
 ## The actions that are pressed and let go, as opposed to movement, which is read as a vector.
 const GAMEPLAY: Array[StringName] = [
 	&"palm", &"heavy", &"guard", &"gift", &"dodge", &"item", &"interact", &"lock_on",
-	&"slot_up", &"slot_right", &"slot_down", &"slot_left", &"slot_next", &"slot_prev", &"menu",
+	&"target_left", &"target_right", &"slot_up", &"slot_right", &"slot_down", &"slot_left", &"slot_next", &"slot_prev", &"menu",
 ]
 
 ## How far the mouse must move, added up, to count as a hand on it rather than a bump...

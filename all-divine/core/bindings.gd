@@ -11,12 +11,16 @@ const ACTIONS: Array[StringName] = [
 	&"move_left", &"move_right", &"move_up", &"move_down",
 	&"palm", &"heavy", &"guard", &"gift", &"dodge", &"item", &"interact",
 	&"slot_up", &"slot_right", &"slot_down", &"slot_left", &"slot_next", &"slot_prev",
-	&"lock_on", &"menu",
+	&"lock_on", &"target_left", &"target_right", &"menu",
 ]
 
 ## The actions driven by an analog trigger, which count as pressed past half way.
 const TRIGGER_ACTIONS: Array[StringName] = [&"heavy", &"gift"]
 const TRIGGER_DEADZONE := 0.5
+## The actions that are a flick of the right stick (switching the lock-on target): a high deadzone, so that a flick
+## is one press and a stick resting off centre is none.
+const FLICK_ACTIONS: Array[StringName] = [&"target_left", &"target_right"]
+const FLICK_DEADZONE := 0.6
 ## Every other action keeps the engine's default deadzone.
 const ACTION_DEADZONE := 0.2
 ## The device id of an event that matches input from any device.
@@ -44,6 +48,8 @@ static func defaults() -> Dictionary:
 		&"slot_next": _list([_mouse(MOUSE_BUTTON_WHEEL_DOWN)]),
 		&"slot_prev": _list([_mouse(MOUSE_BUTTON_WHEEL_UP)]),
 		&"lock_on": _list([_button(JOY_BUTTON_RIGHT_STICK), _key(KEY_TAB)]),
+		&"target_left": _list([_axis(JOY_AXIS_RIGHT_X, -1)]),
+		&"target_right": _list([_axis(JOY_AXIS_RIGHT_X, 1)]),
 		&"menu": _list([_button(JOY_BUTTON_START), _key(KEY_ESCAPE)]),
 	}
 
@@ -54,10 +60,16 @@ static func apply(map: Dictionary) -> void:
 	for action: StringName in map:
 		if not InputMap.has_action(action):
 			InputMap.add_action(action)
-		InputMap.action_set_deadzone(action, TRIGGER_DEADZONE if TRIGGER_ACTIONS.has(action) else ACTION_DEADZONE)
+		InputMap.action_set_deadzone(action, _deadzone(action))
 		InputMap.action_erase_events(action)
 		for event: InputEvent in map[action]:
 			InputMap.action_add_event(action, event)
+
+
+static func _deadzone(action: StringName) -> float:
+	if TRIGGER_ACTIONS.has(action):
+		return TRIGGER_DEADZONE
+	return FLICK_DEADZONE if FLICK_ACTIONS.has(action) else ACTION_DEADZONE
 
 
 ## What the InputMap holds now for every action: a copy, in the shape defaults() returns.

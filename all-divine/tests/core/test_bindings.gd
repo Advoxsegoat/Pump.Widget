@@ -24,6 +24,8 @@ func _table() -> Dictionary:
 		&"slot_next": {"pad": [], "kbm": ["mouse %d" % MOUSE_BUTTON_WHEEL_DOWN]},
 		&"slot_prev": {"pad": [], "kbm": ["mouse %d" % MOUSE_BUTTON_WHEEL_UP]},
 		&"lock_on": {"pad": ["button %d" % JOY_BUTTON_RIGHT_STICK], "kbm": ["key %d" % KEY_TAB]},
+		&"target_left": {"pad": ["axis %d -" % JOY_AXIS_RIGHT_X], "kbm": []},
+		&"target_right": {"pad": ["axis %d +" % JOY_AXIS_RIGHT_X], "kbm": []},
 		&"menu": {"pad": ["button %d" % JOY_BUTTON_START], "kbm": ["key %d" % KEY_ESCAPE]},
 	}
 
@@ -71,9 +73,14 @@ func test_every_action_but_wheel_slots_has_pad_and_kbm() -> void:
 		var events: Array = defaults[action]
 		var has_kbm := events.any(func(e): return not _is_pad(e))
 		var has_pad := events.any(_is_pad)
-		assert_true(has_kbm, "%s has keyboard or mouse" % action)
+		if not (action == &"target_left" or action == &"target_right"):
+			assert_true(has_kbm, "%s has keyboard or mouse" % action)
 		if action == &"slot_next" or action == &"slot_prev":
 			assert_false(has_pad, "%s is wheel-only" % action)
+		elif action == &"target_left" or action == &"target_right":
+			assert_false(has_kbm, "%s is the right stick only (Tab and the wheel cover the keyboard)" % action)
+			assert_true(has_pad, "%s has a gamepad binding" % action)
+			continue
 		else:
 			assert_true(has_pad, "%s has a gamepad binding" % action)
 
@@ -128,6 +135,19 @@ func test_trigger_actions_use_a_deadzone_of_half() -> void:
 	assert_near(InputMap.action_get_deadzone(&"heavy"), 0.5, 1e-6)
 	assert_near(InputMap.action_get_deadzone(&"gift"), 0.5, 1e-6)
 	assert_near(InputMap.action_get_deadzone(&"palm"), 0.2, 1e-6)
+
+func test_target_actions_are_right_stick_x_only() -> void:
+	Bindings.apply(Bindings.defaults())
+	var ids := Array(Bindings.ACTIONS)
+	assert_eq(ids.slice(ids.find(&"lock_on"), ids.find(&"lock_on") + 3), [&"lock_on", &"target_left", &"target_right"], "after lock_on")
+	for pair in [[&"target_left", -1.0], [&"target_right", 1.0]]:
+		var events := InputMap.action_get_events(pair[0])
+		assert_eq(events.size(), 1, "%s has one event" % pair[0])
+		var motion := events[0] as InputEventJoypadMotion
+		assert_true(motion != null and motion.axis == JOY_AXIS_RIGHT_X and signf(motion.axis_value) == pair[1], "%s is the right stick's X, %s" % [pair[0], "-" if pair[1] < 0.0 else "+"])
+		assert_near(InputMap.action_get_deadzone(pair[0]), 0.6, 1e-6, "a flick is one press: deadzone 0.6")
+		assert_true(Inputs.GAMEPLAY.has(pair[0]), "%s is a gameplay action" % pair[0])
+	assert_near(InputMap.action_get_deadzone(&"lock_on"), 0.2, 1e-6)
 
 func test_current_reads_back_what_apply_wrote() -> void:
 	var q := InputEventKey.new()
