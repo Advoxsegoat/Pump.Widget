@@ -30,6 +30,22 @@ class LockBrain extends PlayerBrain:
 		return think(actor, 1.0 / 60)
 
 
+## A camera rig that answers cursor_ground with `cursor`.
+class CursorRig extends CameraRig:
+	var cursor: Variant = null
+
+	func cursor_ground(_screen: Vector2, _plane_y: float) -> Variant:
+		return cursor
+
+
+# A camera rig in the arena, following `player`, as the game has.
+func _rig(player: Actor, rig := CameraRig.new()) -> CameraRig:
+	rig.target = player
+	arena.add_child(rig)
+	rig.snap_now()
+	return rig
+
+
 func before_each() -> void:
 	arena = TestArena.make(self)
 	_use(Inputs.Device.GAMEPAD)
@@ -129,53 +145,105 @@ func test_pick_with_no_foes_is_null_and_lock_on_does_nothing() -> void:
 	assert_eq(brain.lock.target, null, "and pressing again toggles nothing")
 
 
-func test_lock_on_picks_along_the_camera_when_the_stick_rests_and_along_the_stick_otherwise() -> void:
+func test_lock_on_picks_along_the_stick_when_it_is_pushed_and_along_his_facing_when_it_rests() -> void:
 	var brain := LockBrain.new()
-	var me := _player(brain)
+	var me := _player(brain)   # facing +Z, toward the bottom of the screen
 	var c := _compass()
 	brain.press(me, &"lock_on")
-	assert_eq(brain.lock.target, c["n"], "along the camera's forward (-Z)")
+	assert_eq(brain.lock.target, c["s"], "at rest: along the way he faces (+Z), not up the screen")
 	brain.press(me, &"lock_on")
 	assert_eq(brain.lock.target, null, "pressed again it lets go")
 	brain.screen = Vector2(1, 0)
 	brain.press(me, &"lock_on")
 	assert_eq(brain.lock.target, c["e"], "stick pushed right: east")
 	brain.press(me, &"lock_on")
-	brain.view_yaw = PI / 2.0
+	me.snap_facing(PI / 2.0)
 	brain.screen = Vector2.ZERO
 	brain.press(me, &"lock_on")
-	assert_eq(brain.lock.target, c["w"], "a camera turned a quarter looks along -X")
+	assert_eq(brain.lock.target, c["e"], "turned to face +X, at rest: east")
 
 
-func test_switch_right_takes_the_clockwise_neighbour() -> void:
-	var player := _player(Brain.new())
-	var c := _compass()
-	var all := _foes(c)
-	assert_eq(LockOn.next(player, c["n"], all, true), c["e"], "seen from above, clockwise from north is east")
-	assert_eq(LockOn.next(player, c["e"], all, true), c["s"])
-	assert_eq(LockOn.next(player, c["w"], all, true), c["n"], "round the back")
-	assert_eq(LockOn.next(player, c["n"], all, false), c["w"], "and counter-clockwise")
-	assert_eq(LockOn.next(player, c["s"], [c["s"]], true), c["s"], "the only foe stays locked")
+func test_lock_on_at_rest_picks_the_foe_in_front_not_the_one_behind() -> void:
+	var brain := LockBrain.new()
+	var me := _player(brain)   # facing +Z
+	var front := _foe(Vector3(0, 0, 3))
+	_foe(Vector3(0, 0, -10))
+	brain.press(me, &"lock_on")
+	assert_eq(brain.lock.target, front)
+
+
+func test_lock_on_on_the_keyboard_and_mouse_picks_toward_the_cursor() -> void:
+	_use(Inputs.Device.KEYBOARD_MOUSE)
 	var brain := LockBrain.new()
 	var me := _player(brain)
+	var rig := CursorRig.new()
+	rig.cursor = Vector3(-6, 0, 0)
+	_rig(me, rig)
+	var c := _compass()
 	brain.press(me, &"lock_on")
-	assert_eq(brain.lock.target, c["n"])
+	assert_eq(brain.lock.target, c["w"], "the cursor is west of him, though he faces south")
+
+
+func test_only_foes_on_the_screen_can_be_picked() -> void:
+	var brain := LockBrain.new()
+	var me := _player(brain)
+	_rig(me)
+	me.snap_facing(PI)   # facing -Z, up the screen
+	_foe(Vector3(0, 0, -12))   # 12 m up the screen is off it
+	var near := _foe(Vector3(0.85, 0, -0.85))
+	brain.press(me, &"lock_on")
+	assert_eq(brain.lock.target, near, "the one in view, though the other is straight ahead")
+
+
+func test_switching_skips_foes_off_the_screen() -> void:
+	var brain := LockBrain.new()
+	var me := _player(brain)
+	_rig(me)
+	var a := _foe(Vector3(0, 0, 3))
+	_foe(Vector3(0.5, 0, -12))   # off the screen, and the nearest to the right of a
+	var b := _foe(Vector3(4, 0, 3))
+	brain.lock.target = a
 	brain.press(me, &"target_right")
-	assert_eq(brain.lock.target, c["e"], "a flick right")
-	brain.press(me, &"target_left")
-	brain.press(me, &"target_left")
-	assert_eq(brain.lock.target, c["w"], "two flicks left")
+	assert_eq(brain.lock.target, b)
 
 
-func test_next_takes_the_nearer_of_foes_in_one_direction_and_skips_the_dead_and_the_far() -> void:
+func test_switch_right_takes_the_foe_to_the_right_on_the_screen() -> void:
+	var player := _player(Brain.new())
+	# Below the player (S) the screen's right is the world's +X too: the camera does not turn.
+	var s := _foe(Vector3(0, 0, 5))
+	var se := _foe(Vector3(3, 0, 5))
+	var sw := _foe(Vector3(-3, 0, 5))
+	var all := [s, se, sw]
+	assert_eq(LockOn.next(player, s, all, true), se, "locked on S, right is the screen-right foe (SE)")
+	assert_eq(LockOn.next(player, s, all, false), sw, "and left is SW")
+	var n := _foe(Vector3(0, 0, -5))
+	var ne := _foe(Vector3(3, 0, -5))
+	var nw := _foe(Vector3(-3, 0, -5))
+	all = [n, ne, nw]
+	assert_eq(LockOn.next(player, n, all, true), ne, "locked on N, right is NE")
+	assert_eq(LockOn.next(player, n, all, false), nw)
+	assert_eq(LockOn.next(player, ne, all, true), ne, "nothing further right: it stays")
+	assert_eq(LockOn.next(player, s, [s], true), s, "the only foe stays locked")
+	var brain := LockBrain.new()
+	var me := _player(brain)
+	brain.lock.target = s
+	brain.press(me, &"target_right")
+	assert_eq(brain.lock.target, se, "a flick right")
+	brain.press(me, &"target_left")
+	brain.press(me, &"target_left")
+	assert_eq(brain.lock.target, sw, "two flicks left")
+
+
+func test_next_takes_the_smallest_step_right_then_the_nearer_and_skips_the_dead_and_the_far() -> void:
 	var player := _player(Brain.new())
 	var n := _foe(Vector3(0, 0, -5))
-	var e_far := _foe(Vector3(8, 0, -0.5))
-	var e_near := _foe(Vector3(3, 0, -0.5))
-	var gone := _foe(Vector3(5, 0, 5))
+	var step_far := _foe(Vector3(3, 0, -8))
+	var step_near := _foe(Vector3(3, 0, -2))
+	var wider := _foe(Vector3(6, 0, -5))
+	var gone := _foe(Vector3(1, 0, 5))
 	gone.die()
-	var away := _foe(Vector3(-4, 0, 19.5))   # 20 m or more off: not a neighbour
-	assert_eq(LockOn.next(player, n, [n, e_far, e_near, gone, away], true), e_near, "same bearing: the nearer one")
+	var away := _foe(Vector3(1.5, 0, 20.5))   # past 20 m: not a neighbour
+	assert_eq(LockOn.next(player, n, [n, wider, step_far, step_near, gone, away], true), step_near, "the smallest step right (3 m), the nearer on a tie")
 
 
 func test_lock_drops_on_death_and_past_twenty_metres() -> void:
@@ -195,9 +263,14 @@ func test_lock_drops_on_death_and_past_twenty_metres() -> void:
 	assert_eq(lock.target, null, "a dead foe is dropped")
 	var gone := _foe(Vector3(0, 0, 3))
 	lock.target = gone
-	gone.free()
+	arena.remove_child(gone)   # out of the tree, though not freed
 	lock.update(player)
-	assert_eq(lock.target, null, "one out of the tree is too, and nothing errors")
+	assert_eq(lock.target, null, "one out of the tree is dropped too, and nothing errors")
+	gone.free()
+	lock.target = _foe(Vector3(0, 0, 3))
+	lock.target.free()
+	lock.update(player)
+	assert_eq(lock.target, null, "and one freed")
 	lock.update(player)
 	assert_eq(lock.target, null, "nothing locked: nothing to do")
 
@@ -248,17 +321,19 @@ func test_locked_strafe_keeps_facing_the_target() -> void:
 func test_wheel_switches_only_while_locked() -> void:
 	var brain := LockBrain.new()
 	var me := _player(brain)
-	var c := _compass()
+	var a := _foe(Vector3(0, 0, 4))
+	var b := _foe(Vector3(3, 0, 4))
+	var c := _foe(Vector3(-3, 0, 4))
 	brain.press(me, &"slot_next")
 	brain.press(me, &"slot_prev")
 	assert_eq(brain.lock.target, null, "the wheel does not lock on")
 	brain.press(me, &"lock_on")
-	assert_eq(brain.lock.target, c["n"])
+	assert_eq(brain.lock.target, a)
 	brain.press(me, &"slot_next")
-	assert_eq(brain.lock.target, c["e"], "wheel down: clockwise")
+	assert_eq(brain.lock.target, b, "wheel down: right")
 	brain.press(me, &"slot_prev")
 	brain.press(me, &"slot_prev")
-	assert_eq(brain.lock.target, c["w"], "wheel up: counter-clockwise")
+	assert_eq(brain.lock.target, c, "wheel up: left")
 
 
 func test_a_palm_finishes_the_locked_foe_rather_than_the_nearest_broken_one() -> void:
@@ -313,3 +388,16 @@ func _two_broken_foes() -> Dictionary:
 	await frames(4)
 	assert_true(near.is_in_group(Actor.FINISHABLE_GROUP) and far.is_in_group(Actor.FINISHABLE_GROUP), "both are broken")
 	return {"player": player, "brain": brain, "near": near, "far": far}
+
+
+func test_the_player_dying_drops_the_lock_and_the_camera_s_lean() -> void:
+	var brain := LockBrain.new()
+	var me := _player(brain)
+	var rig := _rig(me)
+	var foe := _foe(Vector3(0, 0, 3))
+	brain.press(me, &"lock_on")
+	assert_eq(brain.lock.target, foe)
+	assert_eq(rig.lock_target, foe, "the camera leans to it")
+	me.die()
+	assert_eq(brain.lock.target, null, "dead, he holds no lock")
+	assert_eq(rig.lock_target, null, "and the camera stops leaning")

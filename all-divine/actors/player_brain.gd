@@ -11,8 +11,9 @@ extends Brain
 ## and mouse, the cursor's ground point itself, so a swing turns him to where the player points rather than along a
 ## facing that trails the cursor; otherwise (a stick) nothing.
 ##
-## Lock-on (see LockOn): lock_on locks the foe the camera looks at (or the stick points at), or lets go. While
-## locked, target_left and target_right (a flick of the right stick), and the wheel, move to the neighbouring foe, he
+## Lock-on (see LockOn): lock_on locks the foe in the picture that the cursor, the stick or his facing (in that order) points
+## at, or lets go. While locked, target_left and target_right (a flick of the right stick), and the wheel, move to the
+## foe to the right or left of it on the screen, he
 ## faces the foe's head whatever the device, his attacks turn to it and track it through the swing, the camera leans
 ## to it, and a palm that can finish it finishes it. The lock lets go of a foe that dies or goes too far, and nothing
 ## else changes then: a swing under way carries on, and aim assist is back to the stick.
@@ -22,6 +23,8 @@ extends Brain
 var view_yaw := 0.0
 ## Which foe he has locked on to.
 var lock := LockOn.new()
+
+var _watched: Actor
 
 
 func think(actor: Actor, _delta: float) -> Intent:
@@ -57,27 +60,50 @@ func mouse_position(actor: Actor) -> Vector2:
 
 
 # Lock-on: lets go of a lost foe, then follows this frame's presses (toggle, switch), and tells the camera and the
-# intent who is locked.
+# intent who is locked. Only foes in the camera's picture can be picked or switched to. A pick goes along the cursor on
+# the keyboard and mouse, else along the stick, else along the way he faces (the camera is fixed, so its forward is
+# always up the screen, which says nothing about where he looks).
 func _lock(actor: Actor, intent: Intent) -> void:
+	if _watched != actor:
+		_watched = actor
+		actor.died.connect(_on_died, CONNECT_REFERENCE_COUNTED)
 	lock.update(actor)
+	var rig := actor.get_tree().get_first_node_in_group(CameraRig.GROUP) as CameraRig
 	var foes := actor.get_tree().get_nodes_in_group(Actor.LOCKABLE_GROUP)
 	if intent.pressed.has(&"lock_on"):
 		if lock.target != null:
 			lock.target = null
 		else:
-			var along := Vector3(intent.move.x, 0.0, intent.move.y)
-			if along.is_zero_approx():
-				along = Vector3.FORWARD.rotated(Vector3.UP, view_yaw)
-			lock.target = LockOn.pick(actor, foes, along)
+			lock.target = LockOn.pick(actor, foes, _pick_direction(actor, intent), rig)
 	elif lock.target != null:
 		var right := intent.pressed.has(&"target_right") or intent.pressed.has(&"slot_next")
 		var left := intent.pressed.has(&"target_left") or intent.pressed.has(&"slot_prev")
 		if right != left:
-			lock.target = LockOn.next(actor, lock.target, foes, right)
+			lock.target = LockOn.next(actor, lock.target, foes, right, rig)
 	intent.locked = lock.target
-	var rig := actor.get_tree().get_first_node_in_group(CameraRig.GROUP) as CameraRig
 	if rig != null:
 		rig.lock_target = lock.target
+
+
+# The direction a lock-on press looks along, world.
+func _pick_direction(actor: Actor, intent: Intent) -> Vector3:
+	if Inputs.last_device() == Inputs.Device.KEYBOARD_MOUSE:
+		var cursor: Variant = _cursor(actor)
+		if cursor is Vector3:
+			var to := _flat_from(actor, cursor)
+			if not to.is_zero_approx():
+				return Vector3(to.x, 0.0, to.y)
+	var along := Vector3(intent.move.x, 0.0, intent.move.y)
+	return along if not along.is_zero_approx() else actor.facing()
+
+
+# The player died: he holds no lock, and the camera stops leaning to the foe (the dead think no more).
+func _on_died() -> void:
+	lock.target = null
+	if _watched != null and is_instance_valid(_watched) and _watched.is_inside_tree():
+		var rig := _watched.get_tree().get_first_node_in_group(CameraRig.GROUP) as CameraRig
+		if rig != null:
+			rig.lock_target = null
 
 
 # Fills in the intent's aim_target, and, on the keyboard and mouse, its face_target.
