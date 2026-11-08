@@ -115,12 +115,15 @@ func _first_blow_frame(anim: Animation) -> int:
 	return maxi(pair.align_frames, 1)
 
 
-# The lead's move is over: the lead is free again, while the follower plays on, still paired.
+# The lead's move is over: the lead is free again, while the follower plays on, still paired. A lead that has gone
+# on to another pair since (freed by its clip, it started a second finisher in this one's tail) is that pair's, and
+# keeps it.
 func _release_lead() -> void:
 	if not is_instance_valid(lead):
 		return
-	lead.paired_with = null
-	lead.pair = null
+	if _holds(lead, follower):
+		lead.paired_with = null
+		lead.pair = null
 	_disconnect(lead.runner.mark, _on_lead_mark)
 	_disconnect(lead.runner.move_ended, _on_lead_ended)
 
@@ -132,9 +135,11 @@ func finish() -> void:
 	_release_lead()
 	if not is_instance_valid(follower):
 		return
+	_disconnect(follower.runner.move_ended, _on_follow_ended)
+	if not _holds(follower, lead):
+		return
 	follower.paired_with = null
 	follower.pair = null
-	_disconnect(follower.runner.move_ended, _on_follow_ended)
 	if follower.dead:
 		return
 	follower.intake.restore_posture()
@@ -146,6 +151,12 @@ func finish() -> void:
 
 func _both_here() -> bool:
 	return is_instance_valid(lead) and is_instance_valid(follower)
+
+
+# Whether `actor` is still in this pair, with `other` (or with no one left in the game): only then does the pair's end
+# free it.
+func _holds(actor: Actor, other: Actor) -> bool:
+	return actor.pair == pair and (actor.paired_with == other or not is_instance_valid(actor.paired_with))
 
 
 # A pair_hit mark of the lead's move: the blow of the profile it names, on the follower.

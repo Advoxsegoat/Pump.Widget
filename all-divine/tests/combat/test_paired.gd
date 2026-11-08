@@ -39,17 +39,19 @@ func _jab_on(attacker: Actor, target: Actor) -> HitEvent:
 
 
 # Runs in the middle of every physics frame, as an actor does (after Melee's snapshot, before Melee): first calls
-# `then` once, if it is set, then posts to Melee those of `events` whose target is paired, every frame.
+# `then` once, if it is set, then posts to Melee those of `events` whose target is paired (all of them, if `always`),
+# every frame.
 class MidFrame extends Node:
 	var then := Callable()
 	var events: Array[HitEvent] = []
+	var always := false
 
 	func _physics_process(_delta: float) -> void:
 		if then.is_valid():
 			then.call()
 			then = Callable()
 		for e in events:
-			if e.target.paired_with != null:
+			if always or e.target.paired_with != null:
 				Melee.post(e)
 
 
@@ -155,6 +157,51 @@ func test_brains_are_ignored_while_paired() -> void:
 		await frames(1)
 	assert_eq(started.filter(func(s: Array) -> bool: return s[0] == "B"), [["B", &"finisher_victim"], ["B", &"getup"]],
 			"b only gets up when it is free")
+
+
+func test_a_lead_that_chains_a_second_pair_keeps_it_when_the_first_ends() -> void:
+	# a finishes b; two frames after its clip frees it, while b still plays on to the ground, it finishes c with the
+	# same pair. b's pair ends (its follower is down) halfway through a's second clip: a is c's lead, and no one else's
+	# blow lands on it, until that clip is over. d jabs a on every frame of it.
+	var run := Duel.make(self)
+	var a: Actor = run["a"]
+	var b: Actor = run["b"]
+	var arena: Node3D = run["arena"]
+	var c := TestArena.spawn(arena, Duel.def(ActorDef.Team.ENEMY, 5.0), ScriptBrain.new([]), Vector3(4, 0, 0), "C")
+	var d := TestArena.spawn(arena, Duel.def(ActorDef.Team.ENEMY, 5.0), ScriptBrain.new([]), Vector3(-4, 0, 0), "D")
+	var pair := load(FINISHER) as PairedMove
+	await frames(1)
+	assert_true(a.start_paired(b, pair))
+	while a.paired_with == b:
+		await frames(1)
+	assert_eq(b.paired_with, a, "a is free, and b plays on")
+	await frames(2)
+	c.place(Transform3D(Basis(Vector3.UP, -PI / 2.0), a.global_position + Vector3(1.0, 0, 0)))
+	assert_true(a.start_paired(c, pair), "a starts a second pair on c")
+	var outcomes := []
+	a.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void: outcomes.append(O.keys()[r.outcome]))
+	var mid := MidFrame.new()
+	mid.always = true
+	mid.events = [_jab_on(d, a)]
+	track(mid)
+	var unpaired := []
+	var b_freed := -1
+	await frames(1)
+	var second := a.runner.current
+	assert_eq(_current(a), &"finisher", "its second finisher plays")
+	while a.runner.current == second and a.frame < 400:
+		if a.paired_with != c:
+			unpaired.append(a.frame)
+		if b_freed < 0 and b.paired_with == null:
+			b_freed = a.frame
+		await frames(1)
+	mid.events.clear()
+	assert_true(b_freed > 0, "b's pair ended during a's second clip")
+	assert_eq(unpaired, [], "a is c's lead to the end of its clip (b's pair ended on frame %d)" % b_freed)
+	assert_true(outcomes.size() > 40, "d's blow came on every frame (%d)" % outcomes.size())
+	assert_eq(outcomes.filter(func(o: String) -> bool: return o != "WHIFF"), [], "and none landed on a")
+	await frames(2)
+	assert_eq([a.paired_with, a.pair], [null, null], "a is free once its own clip is over")
 
 
 func test_grab_connects_into_the_grab_pair() -> void:
