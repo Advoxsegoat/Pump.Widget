@@ -13,6 +13,13 @@ enum Team { PLAYER, ENEMY }
 @export var rig_scene: PackedScene
 ## The colours the rig is drawn in (see render/palette.gd). None leaves the model's own materials.
 @export var palette: Palette
+## The parts of the model the actor goes without: MeshInstance3Ds under the rig's Model, by name, which the rig hides
+## (Rig.hide_parts). A tier of the Knuckle wears less than the tiers above it (knuckle_1 has no hood and no pauldron).
+@export var hidden_parts := PackedStringArray()
+## How much larger than its model the actor is, about its feet (Rig.set_model_scale): the model, the hitboxes that ride
+## its bones and its hurtbox, and with them its clips' root travel, so its planted feet do not skate. A tier III
+## Knuckle is 1.06. Its look_height is set to match.
+@export var model_scale := 1.0
 ## Input action -> move id, for the moves the actor starts from rest. Moves reached by cancelling into
 ## them are named by their clips' cancel_open marks instead.
 @export var moveset: Dictionary = {}

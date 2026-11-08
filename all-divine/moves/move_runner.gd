@@ -10,6 +10,8 @@ extends Node
 ## actor's finisher instead of the move it asked for (Actor.start_finisher_on), from rest and from a cancel window
 ## alike, so a riposte can finish.
 ##
+## A shared reaction's cancel window (a flinch's) opens only into the actor's own moves (window_of).
+##
 ## A dodge is the stick's too: a move with a `neutral_variant` (the roll's hop) starts that variant instead when the
 ## intent's stick is at rest, from rest and from a cancel window alike. The variant is checked as the move that was
 ## asked for (a hop is refused where a roll would be) and spends its own stamina_cost.
@@ -297,7 +299,7 @@ func _act(kind: StringName, args: Dictionary) -> void:
 			_set_airborne(false)
 		&"cancel_open":
 			var into: Variant = args.get("into", {})
-			window = (into as Dictionary).duplicate() if into is Dictionary else {}
+			window = window_of(current, into, actor.def) if into is Dictionary else {}
 		&"cancel_close":
 			window = {}
 		&"recovery":
@@ -323,6 +325,22 @@ func _root_velocity(t0: float, t1: float, delta: float) -> Vector3:
 	var travel := actor.rig.skeleton.global_basis * ((to - from) * current.root_motion_scale)
 	travel.y = 0.0
 	return travel / delta
+
+
+## The cancel window a cancel_open mark of `move` opens for an actor of `def`, from the mark's `into` (action -> move id).
+## A move the actor plays as one of its reactions (one its def's `reactions` names: a flinch, a stagger, a guard_hit) is
+## shared by every actor, and its clip's windows name the moves of the actor it was made on (Abarax's roll and jab). So
+## such a window opens only for the actions whose move in it is the actor's own for that action (its moveset's): a
+## Knuckle plays out a flinch whose window would roll it with Abarax's roll. Any other move's window is `into` as it is.
+## The clip checker follows cancels by the same rule.
+static func window_of(move: MoveData, into: Dictionary, def: ActorDef) -> Dictionary:
+	if not def.reactions.values().has(move.id):
+		return into.duplicate()
+	var open := {}
+	for action: Variant in into:
+		if def.moveset.get(action, &"") == StringName(str(into[action])):
+			open[action] = into[action]
+	return open
 
 
 func _fetch(id: Variant) -> MoveData:

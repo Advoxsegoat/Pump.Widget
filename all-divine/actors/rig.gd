@@ -46,7 +46,8 @@ extends Node3D
 ## up in _ready, so it must be in the scene tree before anything else is called (apply_palette aside).
 ##
 ## The model is drawn in its palette's colours once apply_palette is called (the actor does, with its
-## def's palette); until then it keeps the materials it was imported with.
+## def's palette); until then it keeps the materials it was imported with. The actor also hides the parts its def goes
+## without (hide_parts) and scales the body by its def's model_scale (set_model_scale).
 
 ## The shader every body is drawn with: the toon light ramp held to the palette.
 const TOON_SHADER := preload("res://render/shaders/toon_character.gdshader")
@@ -201,6 +202,30 @@ func apply_palette(p: Palette) -> void:
 	_flash_left = 0.0
 	for mesh in $Model.find_children("*", "MeshInstance3D", true, false):
 		(mesh as MeshInstance3D).material_override = _material
+
+
+## Hides the MeshInstance3Ds under Model named in `parts` (an actor's hidden_parts: a tier's hood, say) and shows every
+## other. Returns the names in `parts` the model has no mesh of, each an error too (a typo in a def), which change
+## nothing.
+func hide_parts(parts: PackedStringArray) -> PackedStringArray:
+	var unknown := parts.duplicate()
+	for node in $Model.find_children("*", "MeshInstance3D", true, false):
+		var mesh := node as MeshInstance3D
+		var hidden := parts.has(String(mesh.name))
+		mesh.visible = not hidden
+		if hidden:
+			unknown.remove_at(unknown.find(String(mesh.name)))
+	for part in unknown:
+		push_error("Rig: '%s' has no part '%s' to hide" % [name, part])
+	return unknown
+
+
+## Makes the body `s` times its model's size, about the rig's origin (the feet): the Model, and with it the hitboxes that
+## ride its bones and the travel of its clips' root (the move runner reads it through the skeleton's transform), so a
+## larger body strides further and its planted feet do not skate; and the Hurtbox. 1 is the model as built.
+func set_model_scale(s: float) -> void:
+	($Model as Node3D).scale = Vector3.ONE * s
+	hurtbox.scale = Vector3.ONE * s
 
 
 ## Flashes the body `color` for `seconds`: the toon shader mixes `color` over the palette tone, all of it as the

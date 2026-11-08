@@ -29,7 +29,7 @@ extends SceneTree
 ## Rig.tick): outside it the engine's modifiers would aim at where their targets were a frame before.
 ##
 ## Given a def, the actor is drawn in the def's palette, under a white sun of energy 1, so every pixel of
-## him is one of its tones. A bare rig keeps the materials its model was imported with, as an actor
+## him is one of its tones, without the parts the def hides and at its model_scale. A bare rig keeps the materials its model was imported with, as an actor
 ## without a palette does in the game.
 
 const PIXEL_STAGE := preload("res://render/pixel_stage.tscn")
@@ -192,6 +192,7 @@ static func _draw(def_or_rig: Variant, placements: Array[Transform3D], plan: Cal
 		rig.global_transform = at
 		if palette != null:
 			rig.apply_palette(palette)
+		_dress(rig, def_or_rig)
 		rigs.append(rig)
 		middle.position += at.origin / placements.size()
 	var camera := CameraRig.new()
@@ -233,6 +234,15 @@ static func _rig_scene(def_or_rig: Variant) -> PackedScene:
 	if def_or_rig is Object and (def_or_rig as Object).get(&"rig_scene") is PackedScene:
 		return (def_or_rig as Object).get(&"rig_scene")
 	return null
+
+
+# Dresses `rig` as the actor `def_or_rig` is in the game, when it is an actor's definition: without the parts it goes
+# without (hidden_parts), at its model_scale. A bare rig scene shows every part at the model's size.
+static func _dress(rig: Rig, def_or_rig: Variant) -> void:
+	if not def_or_rig is Object or not (def_or_rig as Object).get(&"hidden_parts") is PackedStringArray:
+		return
+	rig.hide_parts((def_or_rig as Object).get(&"hidden_parts"))
+	rig.set_model_scale(float((def_or_rig as Object).get(&"model_scale")))
 
 
 # The palette of `def_or_rig` when it has one (an actor's definition), else null (a rig scene has none).

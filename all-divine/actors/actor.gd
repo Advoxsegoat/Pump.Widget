@@ -167,6 +167,8 @@ func _ready() -> void:
 	add_child(rig)
 	if def.palette != null:
 		rig.apply_palette(def.palette)
+	rig.hide_parts(def.hidden_parts)
+	rig.set_model_scale(def.model_scale)
 	stats = Stats.from_def(def)
 	locomotion = Locomotion.new(def.locomotion)
 	locomotion.facing_yaw = rotation.y

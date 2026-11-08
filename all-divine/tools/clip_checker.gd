@@ -31,8 +31,8 @@ extends RefCounted
 ##   every hit profile of the pair is a HitProfile with hitstop_frames 3 to 6
 ## and per actor (check_actor): each required clip exists and is not a T-pose, the moveset, the reactions and the
 ## pairs (its finisher and its grab_pair) name existing moves, each move the actor can start, react with, cancel
-## into or play in one of its pairs is checked against the actor's rig and team, and each of its pairs is checked
-## with the clips of its rig.
+## into (as the windows open for it: MoveRunner.window_of) or play in one of its pairs is checked against the actor's
+## rig and team, and each of its pairs is checked with the clips of its rig.
 ## check_all runs every actor in the Registry, and reports the moves no actor can reach and the pairs no actor
 ## uses, since those have no rig to be checked against.
 
@@ -377,14 +377,14 @@ func _start_moves(def: ActorDef, move_ids: PackedStringArray, out: PackedStringA
 	return found
 
 
-# The moves one can get to from `move` (whose clip is `anim`) while it plays, as ids: the targets of its
-# cancel windows, and its neutral variant. Only moves that exist; a name that is not one is check_move's
-# problem.
-func _moves_after(move: MoveData, anim: Animation, move_ids: PackedStringArray) -> Array[String]:
+# The moves one can get to from `move` (whose clip is `anim`) while the actor of `def` plays it, as ids: the targets of
+# its cancel windows as they open for that actor (MoveRunner.window_of: a shared reaction's only into the actor's own
+# moves), and its neutral variant. Only moves that exist; a name that is not one is check_move's problem.
+func _moves_after(move: MoveData, anim: Animation, move_ids: PackedStringArray, def: ActorDef) -> Array[String]:
 	var found: Array[String] = []
 	for mark in Marks.read(anim):
 		if mark["kind"] == &"cancel_open" and mark["args"].get("into") is Dictionary:
-			for target in mark["args"]["into"].values():
+			for target in MoveRunner.window_of(move, mark["args"]["into"], def).values():
 				if move_ids.has(String(target)):
 					found.append(String(target))
 	if move_ids.has(String(move.neutral_variant)):
@@ -441,7 +441,7 @@ func _check_actor(def: ActorDef, reached: Dictionary, paired: Dictionary) -> Pac
 		else:
 			var anim := tree.get_animation(move.clip)
 			out.append_array(check_move(move, anim, hitbox_ids, move_ids, def.team, bone_names))
-			queue.append_array(_moves_after(move, anim, move_ids))
+			queue.append_array(_moves_after(move, anim, move_ids, def))
 	for pair in _pairs_of(def):
 		paired[String(pair.id)] = true
 		var clips: Array[Animation] = []
