@@ -6,6 +6,10 @@ extends Node
 ## rebinds one, and saves and loads the player's table. It also keeps which kind of device the player used last
 ## (last_device), since what the game asks of the player's aim depends on it: a pad aims with the stick, and the
 ## keyboard and mouse aim at the cursor.
+##
+## A pad player who bumps the mouse must not find Abarax turned to the cursor, so the mouse alone takes the aim
+## from a pad only by a sweep: MOUSE_SWEEP_PX of motion within MOUSE_SWEEP_SECONDS. A key or mouse button pressed
+## takes it at once, and any pad input takes it back (and forgets the mouse motion so far).
 
 ## Below this much stick deflection the stick is at rest. Past it, the deflection is rescaled to
 ## run from 0 at the edge of the deadzone to 1 at full. The deadzone is round (on the stick's length),
@@ -19,6 +23,11 @@ const GAMEPLAY: Array[StringName] = [
 	&"slot_up", &"slot_right", &"slot_down", &"slot_left", &"slot_next", &"slot_prev", &"menu",
 ]
 
+## How far the mouse must move, added up, to count as a hand on it rather than a bump...
+const MOUSE_SWEEP_PX := 8.0
+## ... and within how long (the sum starts again after a pause this long).
+const MOUSE_SWEEP_SECONDS := 0.25
+
 const _SECTION := "bindings"
 
 ## The kinds of device the player aims with.
@@ -27,7 +36,12 @@ enum Device { GAMEPAD, KEYBOARD_MOUSE }
 ## The file _ready loads. Only a test changes it.
 var bindings_path := BINDINGS_PATH
 
+## Seconds, for timing a mouse sweep. Only a test changes it.
+var clock: Callable = wall_clock
+
 var _device := Device.KEYBOARD_MOUSE
+var _sweep_px := 0.0
+var _sweep_began := 0.0
 
 
 func _ready() -> void:
@@ -46,12 +60,32 @@ func _input(event: InputEvent) -> void:
 		var pushed: bool = event.pressed if event is InputEventJoypadButton else absf(event.axis_value) > DEADZONE
 		if pushed:
 			_device = Device.GAMEPAD
+			_sweep_px = 0.0
 	elif event is InputEventKey or event is InputEventMouseButton:
 		if event.pressed:
 			_device = Device.KEYBOARD_MOUSE
 	elif event is InputEventMouseMotion:
-		if not event.relative.is_zero_approx():
-			_device = Device.KEYBOARD_MOUSE
+		_mouse_moved(event.relative.length())
+
+
+## The seconds since the game began, by the wall clock.
+static func wall_clock() -> float:
+	return Time.get_ticks_msec() / 1000.0
+
+
+# Adds `px` of mouse motion to the sweep going on, which starts over when it is older than MOUSE_SWEEP_SECONDS. Once
+# the sum is MOUSE_SWEEP_PX the mouse is in hand.
+func _mouse_moved(px: float) -> void:
+	if px <= 0.0 or _device == Device.KEYBOARD_MOUSE:
+		return
+	var now: float = clock.call()
+	if _sweep_px <= 0.0 or now - _sweep_began > MOUSE_SWEEP_SECONDS:
+		_sweep_px = 0.0
+		_sweep_began = now
+	_sweep_px += px
+	if _sweep_px >= MOUSE_SWEEP_PX:
+		_device = Device.KEYBOARD_MOUSE
+		_sweep_px = 0.0
 
 
 ## Which kind of device the player used last (Device): the keyboard and mouse until a pad is touched, or from the

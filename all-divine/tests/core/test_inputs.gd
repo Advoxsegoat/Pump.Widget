@@ -2,7 +2,20 @@ extends TestCase
 
 const FILE := "user://test_input.cfg"
 
+var _device_before := 0
+
+func before_each() -> void:
+	_device_before = Inputs.last_device()
+
 func after_each() -> void:
+	# What the device was before the test, so that no test leaves the next one a pad (or a keyboard) it did not ask for.
+	Inputs.clock = Inputs.wall_clock
+	if _device_before == Inputs.Device.GAMEPAD:
+		_pad_button(0, JOY_BUTTON_BACK, true)
+		_pad_button(0, JOY_BUTTON_BACK, false)
+	else:
+		_key_event(KEY_F8, true)
+		_key_event(KEY_F8, false)
 	Bindings.apply(Bindings.defaults())
 	for key in [KEY_W, KEY_A, KEY_S, KEY_D]:
 		_key_event(key, false)
@@ -486,11 +499,66 @@ func test_last_device_follows_the_last_event() -> void:
 	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "a stick that drifts inside the deadzone is not a pad in use")
 	_stick(0, 0.64, 0.0)
 	assert_eq(Inputs.last_device(), Inputs.Device.GAMEPAD, "a stick pushed past the deadzone")
-	_mouse_move(Vector2(4, 1))
-	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "the mouse moved")
+	_mouse_move(Vector2(9, 1))
+	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "the mouse swept")
 	_pad_button(0, JOY_BUTTON_A, true)
 	_mouse_button(MOUSE_BUTTON_LEFT, true)
 	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "a mouse button pressed")
+
+# A fake clock the tests move by hand.
+var _now := 0.0
+
+func _fake_time() -> float:
+	return _now
+
+func test_mouse_jitter_does_not_take_the_aim_from_a_pad() -> void:
+	_pad_button(0, JOY_BUTTON_A, true)
+	for i in 6:
+		_mouse_move(Vector2(3, 0))
+		assert_eq(Inputs.last_device(), Inputs.Device.GAMEPAD, "a bump of the mouse (3 px) is not a hand on it, bump %d" % i)
+		_stick(0, 0.9, 0.0)
+		_stick(0, 0.0, 0.0)
+	_mouse_move(Vector2(3, 0))
+	_mouse_move(Vector2(3, 0))
+	assert_eq(Inputs.last_device(), Inputs.Device.GAMEPAD, "6 px in all is still under the 8")
+
+func test_a_real_mouse_sweep_takes_the_aim() -> void:
+	_pad_button(0, JOY_BUTTON_A, true)
+	_mouse_move(Vector2(5, 0))
+	assert_eq(Inputs.last_device(), Inputs.Device.GAMEPAD, "5 px: not yet")
+	_mouse_move(Vector2(0, 4))
+	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "5 and 4 px, 9 in all, within a moment: the mouse is in hand")
+
+func test_a_slow_drift_of_the_mouse_is_not_a_sweep() -> void:
+	Inputs.clock = _fake_time
+	_now = 10.0
+	_pad_button(0, JOY_BUTTON_A, true)
+	_mouse_move(Vector2(5, 0))
+	_now = 10.3
+	_mouse_move(Vector2(5, 0))
+	assert_eq(Inputs.last_device(), Inputs.Device.GAMEPAD, "10 px, but 0.3 s apart (over 0.25 s)")
+	_now = 10.4
+	_mouse_move(Vector2(5, 0))
+	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "5 px at 0.3 s and 5 more at 0.4 s are within 0.25 s")
+
+func test_a_key_press_takes_the_aim_at_once() -> void:
+	_pad_button(0, JOY_BUTTON_A, true)
+	_key_event(KEY_W, true)
+	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE)
+
+func test_a_mouse_button_takes_the_aim_at_once() -> void:
+	_pad_button(0, JOY_BUTTON_A, true)
+	_mouse_button(MOUSE_BUTTON_LEFT, true)
+	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE)
+
+func test_pad_input_takes_it_back_and_forgets_the_mouse_so_far() -> void:
+	_key_event(KEY_W, true)
+	_pad_button(0, JOY_BUTTON_A, true)
+	assert_eq(Inputs.last_device(), Inputs.Device.GAMEPAD)
+	_mouse_move(Vector2(5, 0))
+	_stick(0, 0.9, 0.0)
+	_mouse_move(Vector2(5, 0))
+	assert_eq(Inputs.last_device(), Inputs.Device.GAMEPAD, "5 px, the pad, 5 px: the pad's touch cleared the first 5")
 
 func test_letting_go_and_standing_still_change_nothing() -> void:
 	_key_event(KEY_W, true)
