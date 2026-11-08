@@ -4,7 +4,7 @@ extends SceneTree
 ## picture for reviewing clips and their marks.
 ##
 ##   tools/godot.sh --render -s res://tools/sheets/contact_sheet.gd -- --def res://data/actors/abarax.tres \
-##       --out out/sheets/abarax.png [--clips a,b | --pair data/pairs/finisher_open_hand.tres]
+##       --out out/sheets/abarax.png [--clips a,b | --pair data/pairs/finisher_open_hand.tres [--follow-def <def.tres>]]
 ##
 ## Give the actor's definition (--def), or a bare rig scene (--rig <rig.tscn>), not both. Needs a display
 ## (--render): a headless run cannot draw. --clips defaults to every clip of the rig. A relative --out is
@@ -15,7 +15,8 @@ extends SceneTree
 ## stands them once aligned (pair_placements: side by side, the lead on the left facing right, the follower starting at
 ## the pair's follow_offset, each moved by its own clip's root travel), each playing its move's clip at the same frame,
 ## in wider cells (PAIR_CELL), one for every frame either clip has a mark on (pair_frames). That is how the two clips
-## are checked against each other: each of the lead's blows should meet the follower's reaction.
+## are checked against each other: each of the lead's blows should meet the follower's reaction. With --follow-def the
+## follower is that actor's rig (a Knuckle's grab holds Abarax), dressed as its def says; otherwise both are --def's.
 ##
 ## Each clip gets a cell for every frame that has a mark, or, if it has none, six frames spread evenly
 ## over it. A cell is cut around the actor out of the 640x360 picture of a PixelStage, framed by the
@@ -74,7 +75,7 @@ static func render(def_or_rig: Variant, clips: PackedStringArray, cell := Vector
 
 ## Renders the sheet of the paired move `pair` (see the top of this file) for the rig in `def_or_rig`, as render
 ## does. Its moves are looked up in the Registry. Returns null, after an error, if they or their clips are missing.
-static func render_pair(def_or_rig: Variant, pair: PairedMove, cell := PAIR_CELL) -> Image:
+static func render_pair(def_or_rig: Variant, pair: PairedMove, cell := PAIR_CELL, follow_def: Variant = null) -> Image:
 	var start := pair_placements(pair, Animation.new(), Animation.new(), NodePath(), 0)
 	var plan := func(rig: Rig) -> Array:
 		# Looked up now, once the autoloads are ready: a script run with -s is compiled before they are known by name.
@@ -92,7 +93,7 @@ static func render_pair(def_or_rig: Variant, pair: PairedMove, cell := PAIR_CELL
 		for frame in pair_frames(lead, follow):
 			shots.append([cell_label(clips[0], frame), clips, frame, pair_placements(pair, lead, follow, rig.tree.root_motion_track, frame)])
 		return shots
-	return await _draw(def_or_rig, start, plan, cell)
+	return await _draw(def_or_rig, start, plan, cell, follow_def)
 
 
 ## Where a pair's sheet stands its two rigs at `frame`, as the game does once they are aligned (Pairing): the lead's
@@ -162,12 +163,15 @@ static func _root_travel(anim: Animation, root_track: NodePath, frame: int) -> T
 	travel.y = 0.0
 	return Transform3D(Basis.IDENTITY, travel)
 
-# Draws a sheet: one rig of `def_or_rig` at each of `placements` (in its palette, if it has one), framed by the
-# gameplay camera around their middle, and a cell for each shot `plan` returns, given the first rig: [label, the clip
-# each rig plays, the frame, and optionally where each rig stands for it]. Null, after an error, if there is no rig, no
-# display or nothing to draw.
-static func _draw(def_or_rig: Variant, placements: Array[Transform3D], plan: Callable, cell: Vector2i) -> Image:
+# Draws a sheet: one rig of `def_or_rig` at each of `placements` (in its palette, if it has one; from the second on, of
+# `others` if it is given), framed by the gameplay camera around their middle, and a cell for each shot `plan` returns,
+# given the first rig: [label, the clip each rig plays, the frame, and optionally where each rig stands for it]. Null,
+# after an error, if there is no rig, no display or nothing to draw.
+static func _draw(def_or_rig: Variant, placements: Array[Transform3D], plan: Callable, cell: Vector2i, others: Variant = null) -> Image:
 	var scene := _rig_scene(def_or_rig)
+	if others != null and _rig_scene(others) == null:
+		push_error("ContactSheet: expected a rig scene or something with a rig_scene for the follower, got %s" % [others])
+		return null
 	if scene == null:
 		push_error("ContactSheet: expected a rig scene or something with a rig_scene, got %s" % [def_or_rig])
 		return null
@@ -182,17 +186,19 @@ static func _draw(def_or_rig: Variant, placements: Array[Transform3D], plan: Cal
 	stage.visible = false  # Only its World viewport is wanted, not the upscaled picture in the window.
 	tree.root.add_child(stage)
 	_furnish(stage.world)
-	var palette := _palette(def_or_rig)
 	var rigs: Array[Rig] = []
 	var middle := Node3D.new()
 	stage.world.add_child(middle)
-	for at in placements:
-		var rig := scene.instantiate() as Rig
+	for i in placements.size():
+		var at := placements[i]
+		var source: Variant = others if i > 0 and others != null else def_or_rig
+		var rig := _rig_scene(source).instantiate() as Rig
 		stage.world.add_child(rig)
 		rig.global_transform = at
+		var palette := _palette(source)
 		if palette != null:
 			rig.apply_palette(palette)
-		_dress(rig, def_or_rig)
+		_dress(rig, source)
 		rigs.append(rig)
 		middle.position += at.origin / placements.size()
 	var camera := CameraRig.new()
@@ -325,6 +331,7 @@ func _run(args: PackedStringArray) -> int:
 	var out := ""
 	var clips := PackedStringArray()
 	var pair_path := ""
+	var follow_path := ""
 	var i := 0
 	while i < args.size():
 		var arg := args[i]
@@ -340,6 +347,8 @@ func _run(args: PackedStringArray) -> int:
 				clips = value.split(",", false)
 			"--pair":
 				pair_path = value
+			"--follow-def":
+				follow_path = value
 			_:
 				printerr("contact_sheet.gd: unknown argument '%s'" % arg)
 				return _usage()
@@ -347,7 +356,7 @@ func _run(args: PackedStringArray) -> int:
 			printerr("contact_sheet.gd: %s needs a value" % arg)
 			return _usage()
 		i += 2
-	if (rig_path == "") == (def_path == "") or out == "" or (pair_path != "" and not clips.is_empty()):
+	if (rig_path == "") == (def_path == "") or out == "" or (pair_path != "" and not clips.is_empty()) or (follow_path != "" and pair_path == ""):
 		return _usage()
 	var source_path := def_path if def_path != "" else rig_path
 	var source: Resource = load(source_path) if def_path != "" else (load(source_path) as PackedScene)
@@ -360,7 +369,13 @@ func _run(args: PackedStringArray) -> int:
 		if pair == null:
 			printerr("contact_sheet.gd: '%s' is not a PairedMove" % pair_path)
 			return 1
-		sheet = await render_pair(source, pair)
+		var follower: Resource = null
+		if follow_path != "":
+			follower = load(follow_path if follow_path.begins_with("res://") else "res://" + follow_path)
+			if follower == null:
+				printerr("contact_sheet.gd: cannot load '%s'" % follow_path)
+				return 1
+		sheet = await render_pair(source, pair, PAIR_CELL, follower)
 	else:
 		sheet = await render(source, clips)
 	if sheet == null:
@@ -379,5 +394,5 @@ func _run(args: PackedStringArray) -> int:
 
 
 func _usage() -> int:
-	printerr("usage: tools/godot.sh --render -s res://tools/sheets/contact_sheet.gd -- (--def <actor.tres> | --rig <rig.tscn>) --out <file.png> [--clips a,b | --pair <pair.tres>]")
+	printerr("usage: tools/godot.sh --render -s res://tools/sheets/contact_sheet.gd -- (--def <actor.tres> | --rig <rig.tscn>) --out <file.png> [--clips a,b | --pair <pair.tres> [--follow-def <def.tres>]]")
 	return 2

@@ -201,3 +201,39 @@ func _palette_pixels(sheet: Image, palette: Palette, slots: Array = range(9)) ->
 					seen[slot] = true
 					break
 	return {"count": count, "slots": seen}
+
+
+# How many pixels of `region` are a tone of `palette` that `other` does not have (8-bit, as the palette texture holds).
+func _own_tones(region: Image, palette: Palette, other: Palette) -> int:
+	var theirs := {}
+	for c in other.tones:
+		theirs[c.to_html(false)] = true
+	var ours := {}
+	for c in palette.tones:
+		if not theirs.has(c.to_html(false)):
+			ours[c.to_html(false)] = true
+	var count := 0
+	for y in range(0, region.get_height(), 2):
+		for x in range(0, region.get_width(), 2):
+			if ours.has(region.get_pixel(x, y).to_html(false)):
+				count += 1
+	return count
+
+
+func test_a_pair_sheet_can_draw_the_follower_as_another_actor() -> void:
+	# The Knuckle's grab holds Abarax: with a follow def, the lead is knuckle_1's rig in its palette and the follower
+	# Abarax's in his.
+	var knuckle := load("res://data/actors/knuckle_1.tres") as ActorDef
+	var abarax := load(DEF) as ActorDef
+	var img: Image = await ContactSheet.render_pair(knuckle, load("res://data/pairs/knuckle_grab.tres") as PairedMove,
+			ContactSheet.PAIR_CELL, abarax)
+	if img == null:
+		fail("the pair sheet rendered")
+		return
+	var cell := ContactSheet.PAIR_CELL * ContactSheet.ZOOM
+	var half := Vector2i(cell.x / 2, cell.y - LABEL_BAND)
+	var left := img.get_region(Rect2i(Vector2i(0, LABEL_BAND), half))
+	var right := img.get_region(Rect2i(Vector2i(half.x, LABEL_BAND), half))
+	assert_true(_own_tones(left, knuckle.palette, abarax.palette) >= 30, "the lead is drawn in the Knuckle's tones (%d)" % _own_tones(left, knuckle.palette, abarax.palette))
+	assert_true(_own_tones(right, abarax.palette, knuckle.palette) >= 30, "the follower in Abarax's (%d)" % _own_tones(right, abarax.palette, knuckle.palette))
+	assert_eq(_own_tones(right, knuckle.palette, abarax.palette), 0, "and none of the Knuckle's on his side")

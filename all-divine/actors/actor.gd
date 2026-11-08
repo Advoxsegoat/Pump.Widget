@@ -18,7 +18,9 @@ extends CharacterBody3D
 ## moves on one clock and aligns the two before each goes by its own root motion (Pairing). A palm pressed with a
 ## broken foe in reach (in the group `finishable` while it reels, within the tuning's finisher_range and
 ## finisher_arc_deg of the facing, facing the actor, with a clear line to it and room to align) starts the def's
-## finisher on it instead of the jab (start_finisher_on, which the runner asks before starting a pressed move).
+## finisher on it instead of the jab (start_finisher_on, which the runner asks before starting a pressed move). A grab
+## of the actor's that takes hold starts its def's grab_pair the same way, if the foe faces it and the pair can be staged
+## (start_grab_on, which Melee asks); otherwise the grab is a HIT that staggers.
 ##
 ## Each physics frame, in this order:
 ##   1. frame += 1
