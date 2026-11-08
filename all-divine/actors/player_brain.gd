@@ -10,10 +10,18 @@ extends Brain
 ## stick, or the way he faces when it rests, or the cursor on the keyboard and mouse); otherwise, on the keyboard
 ## and mouse, the cursor's ground point itself, so a swing turns him to where the player points rather than along a
 ## facing that trails the cursor; otherwise (a stick) nothing.
+##
+## Lock-on (see LockOn): lock_on locks the foe the camera looks at (or the stick points at), or lets go. While
+## locked, target_left and target_right (a flick of the right stick), and the wheel, move to the neighbouring foe, he
+## faces the foe's head whatever the device, his attacks turn to it and track it through the swing, the camera leans
+## to it, and a palm that can finish it finishes it. The lock lets go of a foe that dies or goes too far, and nothing
+## else changes then: a swing under way carries on, and aim assist is back to the stick.
 
 ## The camera's yaw (CameraRig.yaw()). At 0 the camera looks along -Z, so pushing up goes to -Z and
 ## pushing right to +X; a turned camera turns the stick with it.
 var view_yaw := 0.0
+## Which foe he has locked on to.
+var lock := LockOn.new()
 
 
 func think(actor: Actor, _delta: float) -> Intent:
@@ -21,13 +29,19 @@ func think(actor: Actor, _delta: float) -> Intent:
 	var screen := screen_move()
 	var world := Vector3(screen.x, 0.0, screen.y).rotated(Vector3.UP, view_yaw)
 	intent.move = Vector2(world.x, world.z)
-	intent.pressed = Inputs.pressed_this_frame()
+	intent.pressed = pressed_actions()
 	for action in Inputs.GAMEPLAY:
 		if Inputs.held(action):
 			intent.held.append(action)
 	if actor != null:
+		_lock(actor, intent)
 		_aim(actor, intent)
 	return intent
+
+
+## The gameplay actions that went down this frame.
+func pressed_actions() -> Array[StringName]:
+	return Inputs.pressed_this_frame()
 
 
 ## The movement the player asks for on screen: right is +x, up is -y, length 0 to 1, deadzone out.
@@ -42,17 +56,36 @@ func mouse_position(actor: Actor) -> Vector2:
 	return actor.get_tree().root.get_mouse_position()
 
 
-## The foe the player has locked on to, as a world point, or null. Nothing locks yet; F1 Task 11 (lock-on) makes
-## this the lock target, and _aim already puts it ahead of everything else.
-func lock_target(_actor: Actor) -> Variant:
-	return null
+# Lock-on: lets go of a lost foe, then follows this frame's presses (toggle, switch), and tells the camera and the
+# intent who is locked.
+func _lock(actor: Actor, intent: Intent) -> void:
+	lock.update(actor)
+	var foes := actor.get_tree().get_nodes_in_group(Actor.LOCKABLE_GROUP)
+	if intent.pressed.has(&"lock_on"):
+		if lock.target != null:
+			lock.target = null
+		else:
+			var along := Vector3(intent.move.x, 0.0, intent.move.y)
+			if along.is_zero_approx():
+				along = Vector3.FORWARD.rotated(Vector3.UP, view_yaw)
+			lock.target = LockOn.pick(actor, foes, along)
+	elif lock.target != null:
+		var right := intent.pressed.has(&"target_right") or intent.pressed.has(&"slot_next")
+		var left := intent.pressed.has(&"target_left") or intent.pressed.has(&"slot_prev")
+		if right != left:
+			lock.target = LockOn.next(actor, lock.target, foes, right)
+	intent.locked = lock.target
+	var rig := actor.get_tree().get_first_node_in_group(CameraRig.GROUP) as CameraRig
+	if rig != null:
+		rig.lock_target = lock.target
 
 
 # Fills in the intent's aim_target, and, on the keyboard and mouse, its face_target.
 func _aim(actor: Actor, intent: Intent) -> void:
-	var locked: Variant = lock_target(actor)
-	if locked is Vector3:
-		intent.aim_target = locked
+	if lock.target != null:
+		intent.face_target = lock.target.head_point()
+		intent.aim_target = lock.target.global_position
+		intent.track = true
 		return
 	var toward := intent.move
 	var cursor: Variant = null

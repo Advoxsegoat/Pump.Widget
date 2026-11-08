@@ -150,6 +150,7 @@ var pair: PairedMove
 # speed a roll carries on from (locomotion.speed, root motion) never shows as a run under the move.
 var _rig_speed := 0.0
 var _push := Vector3.ZERO  # the knockback still to travel, in m/s on the ground plane (see push)
+var _locked: Actor = null  # the foe the brain had locked on to on the latest frame (Intent.locked)
 var _guard_held := false  # whether the brain held GUARD_ACTION on the latest frame
 var _guard_move_ended := false  # a guard move (the raise, or guard_hit) played out on this frame
 
@@ -264,7 +265,8 @@ func start_paired(other: Actor, with_pair: PairedMove) -> bool:
 	return true
 
 
-## The foe the actor would finish now, for the HUD's prompt and for a palm press: the nearest live, unpaired actor of
+## The foe the actor would finish now, for the HUD's prompt and for a palm press: the one it has locked on to
+## (the intent's `locked`) if it is one it could finish by the rules below, else the nearest live, unpaired actor of
 ## the other team in the group `finishable` (its posture broken, reeling) within the tuning's finisher_range on the
 ## ground and finisher_arc_deg either side of the facing, that faces the actor (within finisher_facing_deg) and can be
 ## staged where the two stand (can_stage_finisher_on: a clear line, and room to align). Null if there is none, or the
@@ -272,24 +274,33 @@ func start_paired(other: Actor, with_pair: PairedMove) -> bool:
 func finishable_target() -> Actor:
 	if def.finisher == null or dead or paired_with != null:
 		return null
+	var reach := stats.tuning.finisher_range
+	if is_instance_valid(_locked) and _locked.is_in_group(FINISHABLE_GROUP) and _can_finish(_locked, reach):
+		return _locked
 	var best: Actor = null
-	var best_distance := stats.tuning.finisher_range
+	var best_distance := reach
 	for node in get_tree().get_nodes_in_group(FINISHABLE_GROUP):
 		var foe := node as Actor
-		if foe == null or foe == self or foe.dead or foe.paired_with != null or foe.def.team == def.team:
-			continue
-		var flat := _flat_to(foe.global_position)
-		if flat.length() > best_distance:
-			continue
-		if not flat.is_zero_approx() and absf(angle_difference(locomotion.facing_yaw, Locomotion.yaw_of(flat))) > deg_to_rad(stats.tuning.finisher_arc_deg):
-			continue
-		if not flat.is_zero_approx() and absf(angle_difference(foe.rotation.y, Locomotion.yaw_of(-flat))) > deg_to_rad(stats.tuning.finisher_facing_deg):
-			continue
-		if not can_stage_finisher_on(foe):
+		if foe == null or not _can_finish(foe, best_distance):
 			continue
 		best = foe
-		best_distance = flat.length()
+		best_distance = _flat_to(foe.global_position).length()
 	return best
+
+
+# Whether `foe` (in the group finishable) is one to finish now: live, unpaired, of the other team, within `reach` on the
+# ground and in the arc of the facing, facing the actor, and able to be staged (can_stage_finisher_on).
+func _can_finish(foe: Actor, reach: float) -> bool:
+	if foe == self or foe.dead or foe.paired_with != null or foe.def.team == def.team:
+		return false
+	var flat := _flat_to(foe.global_position)
+	if flat.length() > reach:
+		return false
+	if not flat.is_zero_approx() and absf(angle_difference(locomotion.facing_yaw, Locomotion.yaw_of(flat))) > deg_to_rad(stats.tuning.finisher_arc_deg):
+		return false
+	if not flat.is_zero_approx() and absf(angle_difference(foe.rotation.y, Locomotion.yaw_of(-flat))) > deg_to_rad(stats.tuning.finisher_facing_deg):
+		return false
+	return can_stage_finisher_on(foe)
 
 
 ## Whether the def's finisher can be staged on `foe` from where the two stand: nothing on the `world` layer between the
@@ -379,6 +390,7 @@ func _physics_process(delta: float) -> void:
 	for action in intent.pressed:
 		buffer.push(action, buffer_frame)
 	_guard_held = intent.held.has(GUARD_ACTION)
+	_locked = intent.locked
 	if frozen > 0:
 		frozen -= 1
 		return
