@@ -5,9 +5,12 @@ extends Brain
 ## It idles until the player is alive and within AGGRO_RANGE, then faces him and walks to him, and attacks by how far
 ## he is, by pressing the actions the Knuckle's moveset maps to its moves (palm: the jab, and in its cancel window the
 ## cross and the hook; heavy: the thrust; gift: the sweep; interact: the grab; dodge: the feint):
-##   within CLOSE_RANGE   a jab, sometimes chained into the cross and the hook, or the grab, or the sweep;
+##   within CLOSE_RANGE   a jab, sometimes chained into the cross and the hook, or the grab;
 ##   FAR_NEAR to FAR_FAR  the thrust or the sweep, which both travel;
 ##   between              it walks closer.
+## The sweep is left out of the close tier on purpose: its clip carries the Knuckle about 6 m and its foot reaches
+## nothing until it is 4 m or so away (the thrust, 3.8 m, reaches from 2.6 to 4 m), so thrown from a metre it flies past.
+## Hence SWEEP_FROM: from there the sweep is a choice, nearer it is the thrust.
 ## Each tier waits INTERVALS seconds between attacks (with jitter), and the second and third sometimes feint first and
 ## follow it with the thrust or a jab. Only one Knuckle attacks at a time: before it starts it asks the director for
 ## the single attack token, and gives it back when its attack is over.
@@ -22,8 +25,10 @@ const AGGRO_LOSE := 16.0
 const CLOSE_RANGE := 1.8
 const WALK_TO := 1.5
 ## A thrust or a sweep is thrown from between these distances.
-const FAR_NEAR := 3.0
+const FAR_NEAR := 2.8
 const FAR_FAR := 5.0
+## Where the sweep starts to reach (a thrust from further off than 4 m falls short).
+const SWEEP_FROM := 3.8
 ## Seconds between attacks, by tier (I, II, III), and how far each wait strays (a fraction either way).
 const INTERVALS: Array[float] = [2.2, 1.8, 1.4]
 const JITTER := 0.25
@@ -108,8 +113,8 @@ func _finish(actor: Actor) -> void:
 		director.release_attack(actor)
 
 
-# Picks an attack for `distance` and presses its first action; false when there is none to pick (too far to hit, too
-# near to throw a sweep, or the token is out).
+# Picks an attack for `distance` and presses its first action; false when there is none to pick (between the tiers, or
+# the token is out).
 func _start_attack(actor: Actor, intent: Intent, distance: float) -> bool:
 	var close := distance <= CLOSE_RANGE
 	var far := distance >= FAR_NEAR and distance <= FAR_FAR
@@ -121,21 +126,22 @@ func _start_attack(actor: Actor, intent: Intent, distance: float) -> bool:
 	var first: StringName
 	if close:
 		var roll := _rng.randf()
-		if roll < 0.6:
+		if roll < 0.7:
 			first = &"palm"
 			var more := _rng.randf()
 			if more < 0.6:
 				chain.append(&"palm")
 			if more < 0.25:
 				chain.append(&"palm")
-		elif roll < 0.8:
-			first = &"interact"
 		else:
-			first = &"gift"
+			first = &"interact"
+	elif distance >= SWEEP_FROM:
+		first = &"heavy" if _rng.randf() < 0.45 else &"gift"
 	else:
-		first = &"heavy" if _rng.randf() < 0.55 else &"gift"
+		first = &"heavy"
 	if _rng.randf() < FEINT_CHANCE[_tier - 1]:
-		# Feint, then the real thing out of the feint's cancel window: the thrust, or a jab up close.
+		# Feint, then the real thing out of the feint's cancel window (a jab up close, the thrust or the sweep further off:
+		# the feint's window takes palm and heavy only, so the sweep is the thrust there).
 		chain.clear()
 		if first != &"interact":
 			chain.append(&"heavy" if far else &"palm")
