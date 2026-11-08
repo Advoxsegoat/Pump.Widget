@@ -1,7 +1,7 @@
 extends TestCase
 ## The Knuckle's moves (data/moves/knuckle_*.tres): their numbers, their tells, and how their clips move. Each attack's
 ## hitbox comes on within one 12 fps step (5 frames) of the frame its striking bone (the hitbox's bone) reaches
-## furthest forward, and no knuckle clip pops (ClipMotion: the pelvis, head and feet 0.25 m a step at most, the hands
+## furthest forward, and no knuckle clip pops (ClipMotion: the pelvis and head 0.25 m a step at most, the hands and feet
 ## across joins), as F1 Task 10 measured its finisher: the owner's first priority is graphics that match the actions.
 
 const RIG := "res://actors/knuckle/knuckle_rig.tscn"
@@ -78,6 +78,8 @@ func test_no_knuckle_clip_pops() -> void:
 	for clip: StringName in clips:
 		var worst: Array = ClipMotion.worst_pop(rig, clip)
 		assert_true(worst[0] <= worst[3], "%s: the %s moves %.3f m to f%d (at most %.2f)" % [clip, worst[1], worst[0], worst[2], worst[3]])
+		var limb: Array = ClipMotion.worst_join(rig, clip)
+		assert_true(limb[0] <= limb[3], "%s: across a join the %s moves %.3f m to f%d (at most %.2f)" % [clip, limb[1], limb[0], limb[2], limb[3]])
 
 
 func test_the_clip_checker_passes_every_tier() -> void:
