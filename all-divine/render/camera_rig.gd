@@ -8,6 +8,9 @@ extends Node3D
 ## Physics interpolation is off here: the rig moves in _process and follows the target's
 ## interpolated transform, so the picture is smooth at any frame rate.
 ##
+## Locked on to a foe (lock_target), it leans toward it: the follow goal moves 35% of the way to the foe, at most
+## LOCK_LEAN_MAX metres, so that both of them stay well in the picture.
+##
 ## A hit shakes it (shake): the offset goes into the place the camera wants to be before that is snapped, so the
 ## picture shakes in whole texels like everything else it does. The rig joins the group `camera_rig`, where whoever
 ## shakes it, and Sfx, find it.
@@ -28,6 +31,10 @@ const ORTHO_SIZE := (PixelSnap.INTERNAL.y + 2 * PixelSnap.MARGIN) * PixelSnap.TE
 const SPRING_RATE := 4.0
 ## A target moving at this speed (m/s) or faster gets the whole `look_ahead`.
 const LOOK_AHEAD_FULL_SPEED := 4.0
+## How much of the way to the lock target the follow goal goes...
+const LOCK_LEAN := 0.35
+## ... and the furthest it goes, in metres.
+const LOCK_LEAN_MAX := 3.0
 const POST_SHADER := preload("res://render/shaders/screen_post.gdshader")
 ## The group the rig joins when it is ready: the one game camera, which hit feel (shake) and sound (Sfx, to find the
 ## world to play in) look for there.
@@ -45,6 +52,9 @@ const SHAKE_SEED := 7
 const PARALLEL := 1e-6
 
 @export var target: Node3D
+## The foe the player is locked on to, or null: the follow leans toward it (see the header). One that has left the
+## tree or been freed leans nothing.
+var lock_target: Node3D
 ## Seconds the follow takes to settle, roughly.
 @export var smooth_time := 0.15
 ## Metres the camera leans along the target's velocity at full speed.
@@ -193,6 +203,8 @@ func _goal() -> Vector3:
 		var speed := (velocity as Vector3).length()
 		if speed > 0.0:
 			goal += (velocity as Vector3) / speed * look_ahead * clampf(speed / LOOK_AHEAD_FULL_SPEED, 0.0, 1.0)
+	if is_instance_valid(lock_target) and lock_target.is_inside_tree():
+		goal += ((lock_target.get_global_transform_interpolated().origin - goal) * LOCK_LEAN).limit_length(LOCK_LEAN_MAX)
 	return goal
 
 

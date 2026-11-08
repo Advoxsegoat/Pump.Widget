@@ -194,3 +194,24 @@ func test_cursor_ground_is_null_without_a_stage() -> void:
 	rig.snap_now()
 	rig.stage = null
 	assert_eq(rig.cursor_ground(Vector2(960, 540), 0.0), null, "with no stage there is no telling how the window maps")
+
+
+func test_lock_leans_the_camera_toward_the_target_at_most_three_metres() -> void:
+	rig.snap_now()
+	var base := rig.global_position
+	var foe := Node3D.new()
+	stage.world.add_child(foe)
+	foe.global_position = Vector3(4, 0, 0)
+	rig.lock_target = foe
+	rig.snap_now()
+	assert_vec_near(rig.global_position - base, Vector3(1.4, 0, 0), 1e-3, "35% of the way to a foe 4 m off")
+	foe.global_position = Vector3(30, 0, 0)
+	rig.snap_now()
+	assert_vec_near(rig.global_position - base, Vector3(3, 0, 0), 1e-3, "but never more than 3 m")
+	rig.lock_target = null
+	rig.snap_now()
+	assert_vec_near(rig.global_position, base, 1e-3, "no lock, no lean")
+	rig.lock_target = foe
+	foe.free()
+	rig.snap_now()
+	assert_vec_near(rig.global_position, base, 1e-3, "a target that is gone leans nothing, and nothing errors")
