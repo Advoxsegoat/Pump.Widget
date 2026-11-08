@@ -154,7 +154,8 @@ func test_tiers_have_their_numbers() -> void:
 
 
 # A flinch on `def`'s actor `victim` from a jab, while its brain presses dodge (with the stick pushed) on every frame
-# from the flinch's f20, when its cancel window is open: the ids of the moves it starts after the flinch.
+# from the flinch's f20, when its cancel window is open: [the ids of the moves it starts, whether the flinch was
+# cancelled].
 func _dodge_out_of_a_flinch(def: ActorDef) -> Array:
 	var steps := [{"frames": 25}]
 	for i in 30:
@@ -163,20 +164,26 @@ func _dodge_out_of_a_flinch(def: ActorDef) -> Array:
 	var victim := TestArena.spawn(arena, def, ScriptBrain.new(steps), Vector3.ZERO, "Victim")
 	await frames(1)
 	var started := []
+	var cancelled := [null]
 	victim.runner.move_started.connect(func(m: MoveData) -> void: started.append(m.id))
+	victim.runner.move_ended.connect(func(m: MoveData, was_cancelled: bool) -> void:
+		if m.id == &"flinch":
+			cancelled[0] = was_cancelled)
 	victim.runner.start(Registry.fetch(&"moves", &"flinch") as MoveData)
 	await frames(50)
-	return started
+	return [started, cancelled[0]]
 
 
 func test_a_shared_reaction_opens_its_window_only_into_the_actors_own_moves() -> void:
 	# The reactions are Abarax's clips, and their cancel windows name his moves: the flinch's takes a dodge into his
 	# roll. Abarax rolls out of it; a Knuckle, whose dodge is its feint, plays it out (it never rolls with his roll, nor
-	# jabs with his jab after).
+	# jabs with his jab after), and its dodge press starts its own feint only once the flinch is over.
 	var abarax: Array = await _dodge_out_of_a_flinch(Duel.def(ActorDef.Team.PLAYER, 10.0))
-	assert_eq(abarax.slice(0, 2), [&"flinch", &"dodge_roll"], "Abarax rolls out of the flinch: %s" % [abarax])
+	assert_eq((abarax[0] as Array).slice(0, 2), [&"flinch", &"dodge_roll"], "Abarax rolls out of the flinch: %s" % [abarax[0]])
+	assert_eq(abarax[1], true, "cutting it short")
 	var knuckle: Array = await _dodge_out_of_a_flinch(load(TIERS[0]) as ActorDef)
-	assert_eq(knuckle, [&"flinch"], "the Knuckle plays it out")
+	assert_eq(knuckle[1], false, "the Knuckle plays the flinch out: %s" % [knuckle[0]])
+	assert_false((knuckle[0] as Array).has(&"dodge_roll"), "and never rolls with Abarax's roll")
 
 
 func test_abaraxs_reaction_windows_are_all_his_own_moves() -> void:

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://moves/move_data.gd" id="1_move"]
+[ext_resource type="Script" path="res://moves/hit_profile.gd" id="2_hit"]
+
+[sub_resource type="Resource" id="Resource_cross"]
+script = ExtResource("2_hit")
+damage = 12.0
+poise_damage = 8.0
+posture_damage = 8.0
+guard_stamina = 12.0
+knockback = 1.5
+hitstop_frames = 4
+
+[resource]
+script = ExtResource("1_move")
+id = &"knuckle_cross"
+clip = &"knuckle_cross"
+hits = {
+&"cross": SubResource("Resource_cross")
+}

@@ -14,7 +14,13 @@ rig_scene = ExtResource("2_rig")
 palette = ExtResource("4_palette")
 hidden_parts = PackedStringArray("Knuckle_Hood", "Knuckle_Pauldron")
 model_scale = 1.0
-moveset = {}
+moveset = {
+&"dodge": &"knuckle_feint",
+&"gift": &"knuckle_sweep",
+&"heavy": &"knuckle_thrust",
+&"interact": &"knuckle_grab",
+&"palm": &"knuckle_jab"
+}
 locomotion = ExtResource("3_tuning")
 combat = ExtResource("5_combat")
 reactions = {
