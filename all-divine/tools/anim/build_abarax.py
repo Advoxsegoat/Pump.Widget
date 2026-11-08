@@ -43,7 +43,10 @@ from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this folder off sys.path
-from bpy_common import export_glb, quiet_gltf, reset_scene  # noqa: E402
+from bpy_common import (  # noqa: E402
+    BuildError, DropMissingImages, active, adopt, decimate, export_glb, finish_mesh, import_gltf, keep_head,
+    one_material, read_slots as read_slots_of, reset_scene, same_rest, tidy_layers, triangles, triangulate, weld,
+    world_coords, write_slots)
 
 # --- inputs (inside the extract folders) ---
 
@@ -70,8 +73,6 @@ ARMATURE = "Armature"
 
 SKIN, HAIR, EYES, MAIN, SEC, PANTS, BOOTS, ROSE, GOLD = range(9)
 SLOT_COUNT = 9
-PALETTE_SIZE = 16
-SLOTS_UV = "slots"  # the second UV layer, exported as TEXCOORD_1 (Godot's UV2)
 SKIN_MATERIAL = "MI_Regular_Male"
 CLOTH_MATERIAL = "MI_Peasant"
 
@@ -88,10 +89,6 @@ SPLIT_LUMA = 0.45
 
 TARGET_TRIANGLES = 3800  # the whole model; the budget is 1,500-4,000
 MIN_TRIANGLES = 12  # per mesh
-
-# --- the head ---
-
-HEAD_BONES = ("Head", "neck_01")  # body faces whose vertices all lean most on these are kept
 
 # --- the scarf ---
 
@@ -111,131 +108,11 @@ MAX_REACH = 0.15  # how far from the neck's axis a surface may be and still shap
 MAX_TILT = 60  # degrees a ribbon bone may lean back from hanging straight down to clear the body
 
 
-class BuildError(Exception):
-    pass
+# The build steps shared with build_knuckle.py (importing, the head, one armature, slots, triangles, one
+# material) are in bpy_common.py.
 
-
-# --- scene helpers ---
-
-class _DropMissingImages(logging.Filter):
-    """The base .gltf names two normal maps (T_Hair_1_Normal_png.png, T_Eye_Normal_png.png) the pack
-    does not ship. No image ends up in the model and the one we read is checked, so that error says
-    nothing; everything else the importer reports still shows."""
-
-    def filter(self, record):
-        return not record.getMessage().startswith("Missing image file")
-
-
-def import_gltf(path, parts):
-    """Imports a .gltf; returns ({part name: object}, [armature objects]) for what it created."""
-    if not path.is_file():
-        raise BuildError(f"missing {path}")
-    before = set(bpy.data.objects)
-    with quiet_gltf():
-        result = bpy.ops.import_scene.gltf(filepath=str(path), bone_heuristic="BLENDER", disable_bone_shape=True,
-                                           merge_vertices=False, import_shading="NORMALS")
-    if result != {"FINISHED"}:
-        raise BuildError(f"could not import {path}")
-    created = sorted((o for o in bpy.data.objects if o not in before), key=lambda o: o.name)
-    armatures = [o for o in created if o.type == "ARMATURE"]
-    found = {}
-    for name, (mesh_name, _) in parts.items():
-        obj = next((o for o in created if o.name == name), None)
-        if obj is None or obj.type != "MESH" or obj.data.name != mesh_name:
-            raise BuildError(f"{path.name}: expected a mesh object {name} (mesh {mesh_name})")
-        found[name] = obj
-    if len(armatures) != 1:
-        raise BuildError(f"{path.name}: expected one armature, found {len(armatures)}")
-    return found, armatures
-
-
-def active(obj):
-    """A context override that makes `obj` the active, only selected object."""
-    return bpy.context.temp_override(object=obj, active_object=obj, selected_objects=[obj],
-                                     selected_editable_objects=[obj])
-
-
-def world_coords(obj):
-    m = obj.matrix_world
-    return [m @ v.co for v in obj.data.vertices]
-
-
-def triangles(obj):
-    return sum(len(p.vertices) - 2 for p in obj.data.polygons)
-
-
-# --- step 2: keep only the head of the base body ---
-
-def strongest_bones(obj):
-    """For each vertex, the name of the bone (vertex group) with the largest weight, or None."""
-    names = {g.index: g.name for g in obj.vertex_groups}
-    found = []
-    for v in obj.data.vertices:
-        best = None
-        for g in v.groups:  # ties keep the first group, so the result is stable
-            if best is None or g.weight > best.weight:
-                best = g
-        found.append(names[best.group] if best is not None else None)
-    return found
-
-
-def keep_head(obj):
-    """Deletes the body faces that have a vertex whose strongest bone is not Head or neck_01."""
-    strongest = strongest_bones(obj)
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    doomed = [f for f in bm.faces if any(strongest[v.index] not in HEAD_BONES for v in f.verts)]
-    bmesh.ops.delete(bm, geom=doomed, context="FACES")
-    bm.to_mesh(obj.data)
-    bm.free()
-    if not obj.data.polygons:
-        raise BuildError("no head faces were left")
-
-
-def weld(obj):
-    """glTF stores a vertex once per UV or normal seam; weld the copies so decimation cannot open
-    cracks along seams. The seams themselves live on in the per-corner UVs."""
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
-    bm.to_mesh(obj.data)
-    bm.free()
-
-
-def tidy_layers(obj):
-    """Keeps the first UV layer (as UVMap) and drops the others and every colour attribute."""
-    me = obj.data
-    while len(me.uv_layers) > 1:
-        me.uv_layers.remove(me.uv_layers[-1])
-    if me.uv_layers:
-        me.uv_layers[0].name = "UVMap"
-    else:
-        me.uv_layers.new(name="UVMap")
-    for colour in list(me.color_attributes):
-        me.color_attributes.remove(colour)
-
-
-# --- step 3: one armature ---
-
-def adopt(objects, armature):
-    """Binds each mesh to `armature` (its vertex groups already carry the bone names)."""
-    for obj in objects:
-        world = obj.matrix_world.copy()
-        obj.parent = armature
-        obj.matrix_world = world
-        mods = [m for m in obj.modifiers if m.type == "ARMATURE"]
-        if len(mods) != 1:
-            raise BuildError(f"{obj.name}: expected one armature modifier, found {len(mods)}")
-        mods[0].object = armature
-
-
-def same_rest(a, b, bones, tolerance=1e-4):
-    """True when armatures `a` and `b` place each of `bones` alike in their rest poses."""
-    for name in bones:
-        rest_a, rest_b = a.data.bones[name].matrix_local, b.data.bones[name].matrix_local
-        if max(abs(x - y) for row_a, row_b in zip(rest_a, rest_b) for x, y in zip(row_a, row_b)) > tolerance:
-            return False
-    return True
+def read_slots(obj):
+    return read_slots_of(obj, SLOT_COUNT)
 
 
 # --- step 4: the scarf ---
@@ -492,54 +369,7 @@ def face_slots(obj, part, luma):
     return slots
 
 
-def slot_u(slot):
-    return (slot + 0.5) / PALETTE_SIZE
-
-
-def write_slots(obj, slots):
-    """Stores one slot per face in the slots UV layer (every corner of a face gets its slot)."""
-    me = obj.data
-    layer = me.uv_layers.get(SLOTS_UV) or me.uv_layers.new(name=SLOTS_UV)
-    per_corner = np.empty(len(me.loops) * 2, dtype=np.float32)
-    for p, slot in zip(me.polygons, slots):
-        per_corner[p.loop_start * 2:(p.loop_start + p.loop_total) * 2] = (slot_u(slot), 0.5) * p.loop_total
-    layer.data.foreach_set("uv", per_corner)
-
-
-def read_slots(obj):
-    """Each face's slot from the slots layer: the slot most of its corners are nearest to (on a tie,
-    the first corner's), so a face only ever gets a slot one of its corners had."""
-    me = obj.data
-    layer = me.uv_layers[SLOTS_UV].data
-    slots = []
-    for p in me.polygons:
-        corners = [min(max(round(layer[i].uv.x * PALETTE_SIZE - 0.5), 0), SLOT_COUNT - 1) for i in p.loop_indices]
-        slots.append(max(corners, key=corners.count))
-    return slots
-
-
 # --- step 6: triangles ---
-
-def triangulate(obj):
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    bmesh.ops.triangulate(bm, faces=bm.faces, quad_method="BEAUTY", ngon_method="BEAUTY")
-    bm.to_mesh(obj.data)
-    bm.free()
-
-
-def decimate(obj, ratio):
-    """Collapse-decimates `obj` to about `ratio` of its triangles, ahead of its armature modifier."""
-    if ratio >= 1.0:
-        return
-    mod = obj.modifiers.new("Decimate", "DECIMATE")
-    mod.decimate_type = "COLLAPSE"
-    mod.ratio = ratio
-    mod.use_collapse_triangulate = True
-    with active(obj):
-        bpy.ops.object.modifier_move_to_index(modifier=mod.name, index=0)
-        bpy.ops.object.modifier_apply(modifier=mod.name)
-
 
 def ratios(objects):
     """Each mesh's decimation ratio. The scarf is built at its final size and is not decimated:
@@ -553,42 +383,11 @@ def ratios(objects):
             for o in objects}
 
 
-def finish_mesh(obj):
-    """Smooth shading from the decimated geometry, and at most four normalized bone weights per vertex."""
-    me = obj.data
-    if "custom_normal" in me.attributes:
-        me.attributes.remove(me.attributes["custom_normal"])
-    me.shade_smooth()
-    with active(obj):
-        bpy.ops.object.vertex_group_clean(group_select_mode="ALL", limit=1e-4)
-        bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
-        bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
-    unweighted = [v.index for v in me.vertices if not any(g.weight > 1e-4 for g in v.groups)]
-    if unweighted:
-        raise BuildError(f"{obj.name}: {len(unweighted)} vertices have no bone weight")
-
-
-# --- step 7: one material, no images ---
-
-def one_material(objects):
-    toon = bpy.data.materials.new("toon")
-    for obj in objects:
-        me = obj.data
-        me.materials.clear()
-        me.materials.append(toon)
-        me.polygons.foreach_set("material_index", [0] * len(me.polygons))
-    for material in list(bpy.data.materials):
-        if material != toon:
-            bpy.data.materials.remove(material)
-    for image in list(bpy.data.images):
-        bpy.data.images.remove(image)
-
-
 # --- the build ---
 
 def build(ubc, outfits, out):
     reset_scene()
-    logging.getLogger("glTFImporter_errors").addFilter(_DropMissingImages())
+    logging.getLogger("glTFImporter_errors").addFilter(DropMissingImages())
 
     # 1. import
     base, base_armatures = import_gltf(Path(ubc) / BASE_GLTF, BASE_PARTS)
