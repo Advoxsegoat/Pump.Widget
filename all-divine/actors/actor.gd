@@ -17,8 +17,8 @@ extends CharacterBody3D
 ## paired_with while it plays, no one else's blow lands on either, their brains are ignored, and Melee keeps the two
 ## moves on one clock and aligns the two before each goes by its own root motion (Pairing). A palm pressed with a
 ## broken foe in reach (in the group `finishable` while it reels, within the tuning's finisher_range and
-## finisher_arc_deg of the facing, and facing the actor) starts the def's finisher on it instead of the jab
-## (start_finisher_on, which the runner asks before starting a pressed move).
+## finisher_arc_deg of the facing, facing the actor, with a clear line to it and room to align) starts the def's
+## finisher on it instead of the jab (start_finisher_on, which the runner asks before starting a pressed move).
 ##
 ## Each physics frame, in this order:
 ##   1. frame += 1
@@ -105,6 +105,9 @@ const GUARD_HIT := &"guard_hit"
 const FINISHER_ACTION := &"palm"
 ## Actors whose posture is broken, while they reel (HitIntake): the foes a finisher can be started on.
 const FINISHABLE_GROUP := &"finishable"
+## How far short of where its pair puts it a finisher's lunge may end (a wall in the way) and the finisher still start:
+## further, and the palm is the jab (can_stage_finisher_on).
+const FINISHER_STANCE_SLACK := 0.05
 
 @export var def: ActorDef
 
@@ -215,6 +218,12 @@ func head_point() -> Vector3:
 	return global_position + Vector3.UP * def.look_height
 
 
+## The actor's chest, in the world: Pairing.HIT_HEIGHT of its look_height above its feet. A finisher's line is drawn
+## from the chest of the one finishing to the foe's (can_stage_finisher_on).
+func chest_point() -> Vector3:
+	return global_position + Vector3.UP * def.look_height * Pairing.HIT_HEIGHT
+
+
 ## Hit-stop: the actor stands still for `frames` physics frames (a blow that lands freezes both fighters; Melee
 ## does it). Frozen, its move runner, locomotion, velocity and rig do not tick, so everything holds the pose of
 ## the frame the blow landed on; its brain still thinks and its presses are buffered, so one made while frozen
@@ -257,8 +266,9 @@ func start_paired(other: Actor, with_pair: PairedMove) -> bool:
 
 ## The foe the actor would finish now, for the HUD's prompt and for a palm press: the nearest live, unpaired actor of
 ## the other team in the group `finishable` (its posture broken, reeling) within the tuning's finisher_range on the
-## ground and finisher_arc_deg either side of the facing, that faces the actor (within finisher_facing_deg: Pairing
-## turns it to face him). Null if there is none, or the actor has no finisher, or is dead or paired itself.
+## ground and finisher_arc_deg either side of the facing, that faces the actor (within finisher_facing_deg) and can be
+## staged where the two stand (can_stage_finisher_on: a clear line, and room to align). Null if there is none, or the
+## actor has no finisher, or is dead or paired itself.
 func finishable_target() -> Actor:
 	if def.finisher == null or dead or paired_with != null:
 		return null
@@ -275,9 +285,32 @@ func finishable_target() -> Actor:
 			continue
 		if not flat.is_zero_approx() and absf(angle_difference(foe.rotation.y, Locomotion.yaw_of(-flat))) > deg_to_rad(stats.tuning.finisher_facing_deg):
 			continue
+		if not can_stage_finisher_on(foe):
+			continue
 		best = foe
 		best_distance = flat.length()
 	return best
+
+
+## Whether the def's finisher can be staged on `foe` from where the two stand: nothing on the `world` layer between the
+## actor's chest and the foe's, and the lunge that aligns them (Pairing: the actor closing, or backing off, to where the
+## pair's follow_offset puts it, gliding with collision in align_frames steps as it will) ending within
+## FINISHER_STANCE_SLACK of that spot. A wall between them, or one that would stop the lunge short, makes a palm the
+## jab.
+func can_stage_finisher_on(foe: Actor) -> bool:
+	if def.finisher == null:
+		return false
+	var space := get_world_3d().direct_space_state
+	var line := PhysicsRayQueryParameters3D.create(chest_point(), foe.chest_point(), Layers.WORLD, [get_rid(), foe.get_rid()])
+	if not space.intersect_ray(line).is_empty():
+		return false
+	var goal := Pairing.follower_faced(global_position, foe, Pairing.feet_middle(foe)) * def.finisher.follow_offset.affine_inverse()
+	var lunge := goal.origin - global_position
+	var steps := maxi(def.finisher.align_frames, 1)
+	var at := global_transform
+	for i in steps:
+		at = _glided(at, lunge / steps)
+	return Vector2(at.origin.x - goal.origin.x, at.origin.z - goal.origin.z).length() <= FINISHER_STANCE_SLACK
 
 
 ## A press of `action` is about to start a move (the runner asks, from rest and in a cancel window): when it is the
@@ -291,15 +324,10 @@ func start_finisher_on(action: StringName) -> bool:
 
 
 ## Moves the actor by `offset` along the ground (its height is left out), stopping at the world as move_and_slide
-## would, and sliding along what it meets: a paired move's lead closing on its follower, and the follower turning
+## would, and sliding once along what it meets: a paired move's lead closing on its follower, and the follower turning
 ## about its feet (Pairing).
 func glide(offset: Vector3) -> void:
-	var motion := Vector3(offset.x, 0.0, offset.z)
-	var hit := move_and_collide(motion)
-	if hit != null:
-		var rest := hit.get_remainder().slide(hit.get_normal())
-		rest.y = 0.0
-		move_and_collide(rest)
+	global_transform = _glided(global_transform, offset)
 
 
 ## True while a guard is up: a move's guard_on mark (guard_raise from its f4), the guard stance (`guarding`), or the
@@ -388,6 +416,21 @@ func _physics_process(delta: float) -> void:
 	rig.tick(delta)
 	for e in scanner.scan(self):
 		Melee.post(e)
+
+
+# Where glide(offset) would leave the actor if it stood at `from`, found without moving it: the motion is tried
+# (test_move), and what is left of it where it meets the world is slid along what it met and tried once more.
+func _glided(from: Transform3D, offset: Vector3) -> Transform3D:
+	var motion := Vector3(offset.x, 0.0, offset.z)
+	var hit := KinematicCollision3D.new()
+	if not test_move(from, motion, hit):
+		return from.translated(motion)
+	var at := from.translated(hit.get_travel())
+	var rest := hit.get_remainder().slide(hit.get_normal())
+	rest.y = 0.0
+	if not test_move(at, rest, hit):
+		return at.translated(rest)
+	return at.translated(hit.get_travel())
 
 
 # The guard stance for this frame, once the runner has ticked: up when a guard move played out on this frame with

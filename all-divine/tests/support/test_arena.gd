@@ -48,6 +48,22 @@ static func spawn(arena: Node3D, def: ActorDef, brain: Brain, at := Vector3.ZERO
 	return actor
 
 
+## A wall in `arena`: a box of `size` whose centre is `at`, on the `world` layer. It is put there before it is in the
+## tree, so it is never anywhere else for a frame (where it would shove an actor aside).
+static func wall(arena: Node3D, at: Vector3, size: Vector3) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.collision_layer = Layers.WORLD
+	body.collision_mask = 0
+	var box := BoxShape3D.new()
+	box.size = size
+	var shape := CollisionShape3D.new()
+	shape.shape = box
+	body.add_child(shape)
+	body.position = at
+	arena.add_child(body)
+	return body
+
+
 ## The collision bit of the 3D physics layer named `layer_name` in project.godot (Layers.bit), reporting a
 ## name that is not one: in a test that is a typo, not a layer to leave out.
 static func layer_bit(layer_name: String) -> int:

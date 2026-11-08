@@ -1,7 +1,8 @@
 extends TestCase
 ## The Open Hand finisher: a palm pressed with a broken foe (the group `finishable`) within finisher_range (1.6 m)
-## and finisher_arc_deg (60 degrees) of Abarax's facing, facing him (within finisher_facing_deg, 30 degrees), starts
-## his def's finisher, the paired move finisher_open_hand, in place of the jab. He plays `finisher` (0.83 s: a jab, a second jab and a cross, each landing
+## and finisher_arc_deg (60 degrees) of Abarax's facing, facing him (within finisher_facing_deg, 30 degrees), with
+## nothing of the world between their chests and room for him to align, starts his def's finisher, the paired move
+## finisher_open_hand, in place of the jab. He plays `finisher` (0.83 s: a jab, a second jab and a cross, each landing
 ## in one 12 fps step) and the foe `finisher_victim` on one clock, the foe 1.02 m in front of him once they are aligned;
 ## his three pair_hit marks (f10, f25, f40) do 15, 15 and 30 to it as HITs with no reaction, with their hit-stop (4, 4
 ## and 6 frames). He is free when
@@ -182,6 +183,36 @@ func test_a_broken_foe_turned_from_a_is_a_jab() -> void:
 		await Duel.play_to(self, a, 10)
 		assert_eq(_current(a), &"palm_jab", "the palm is a jab (%s)" % spot[0])
 		assert_eq(a.paired_with, null, spot[0])
+		(run["arena"] as Node).free()
+
+
+func test_a_wall_between_or_no_room_to_align_is_a_jab() -> void:
+	# The finisher needs a clear line from a's chest to b's and room for a's lunge to end within 5 cm of where the pair
+	# puts him (1.02 m from b). b 1.5 m off in the open is finished. A thin wall between them (its near face 0.93 m from
+	# a, past where his lunge ends) makes the palm a jab, with no pair and no damage through the wall. So does b 0.55 m
+	# off with a wall 0.05 m behind a, who would have to back off 0.47 m.
+	var cases := [
+		["open, 1.5 m", 1.5, [], &"finisher"],
+		["a thin wall between, 1.5 m", 1.5, [[Vector3(0, 1.5, 0.955), Vector3(4, 3, 0.05)]], &"palm_jab"],
+		["0.55 m, a wall 0.05 m behind a", 0.55, [[Vector3(0, 1.5, -0.4 - 0.25), Vector3(4, 3, 0.5)]], &"palm_jab"],
+	]
+	for case: Array in cases:
+		var run := await _duel([{"frames": 9}, {"frames": 1, "press": [&"palm"]}, {"frames": 60}])
+		var a: Actor = run["a"]
+		var b: Actor = run["b"]
+		b.place(Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, case[1])))
+		for w: Array in case[2]:
+			TestArena.wall(run["arena"], w[0], w[1])
+		await Duel.play_to(self, a, 9)
+		assert_eq(a.finishable_target() == b, case[3] == &"finisher", "b is %sone to finish (%s)" % ["" if case[3] == &"finisher" else "no ", case[0]])
+		await Duel.play_to(self, a, 10)
+		assert_eq(_current(a), case[3], case[0])
+		assert_eq(a.paired_with, b if case[3] == &"finisher" else null, case[0])
+		if case[3] != &"finisher":
+			await Duel.play_to(self, a, 50)
+			if case[1] > 1.0:
+				assert_eq(b.stats.hp, 60.0, "nothing reaches b through the wall (%s)" % case[0])
+			assert_eq(b.paired_with, null, case[0])
 		(run["arena"] as Node).free()
 
 

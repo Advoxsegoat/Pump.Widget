@@ -208,7 +208,7 @@ func _on_lead_mark(kind: StringName, args: Dictionary) -> void:
 	if flat.is_zero_approx():
 		flat = Vector3(lead.facing().x, 0.0, lead.facing().z)
 	e.direction = flat.normalized()
-	e.point = follower.global_position + Vector3.UP * follower.def.look_height * HIT_HEIGHT - e.direction * HIT_SKIN
+	e.point = follower.chest_point() - e.direction * HIT_SKIN
 	Melee.post(e)
 
 
