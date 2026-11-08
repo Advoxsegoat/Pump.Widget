@@ -300,30 +300,46 @@ func _can_finish(foe: Actor, reach: float) -> bool:
 		return false
 	if not flat.is_zero_approx() and absf(angle_difference(locomotion.facing_yaw, Locomotion.yaw_of(flat))) > deg_to_rad(stats.tuning.finisher_arc_deg):
 		return false
-	if not flat.is_zero_approx() and absf(angle_difference(foe.rotation.y, Locomotion.yaw_of(-flat))) > deg_to_rad(stats.tuning.finisher_facing_deg):
-		return false
-	return can_stage_finisher_on(foe)
+	return faces_me(foe) and can_stage_finisher_on(foe)
 
 
-## Whether the def's finisher can be staged on `foe` from where the two stand: nothing on the `world` layer between the
-## actor's chest and the foe's, and the lunge that aligns them (Pairing: the actor closing, or backing off, to where the
-## pair's follow_offset puts it, gliding with collision in align_frames steps as it will) ending within
-## FINISHER_STANCE_SLACK of that spot. A wall between them, or one that would stop the lunge short, makes a palm the
-## jab.
+## Whether `foe` faces the actor, within the tuning's finisher_facing_deg: a paired move's follower turns to face its
+## lead about the middle of its feet as the pair begins (Pairing), and turned further its planted feet would slide.
+func faces_me(foe: Actor) -> bool:
+	var flat := _flat_to(foe.global_position)
+	return flat.is_zero_approx() or absf(angle_difference(foe.rotation.y, Locomotion.yaw_of(-flat))) <= deg_to_rad(stats.tuning.finisher_facing_deg)
+
+
+## Whether the def's finisher can be staged on `foe` from where the two stand (can_stage_pair_on). A wall between them,
+## or one that would stop the lunge short, makes a palm the jab.
 func can_stage_finisher_on(foe: Actor) -> bool:
-	if def.finisher == null:
-		return false
+	return def.finisher != null and can_stage_pair_on(foe, def.finisher)
+
+
+## Whether the paired move `with_pair` can be staged with the actor as its lead and `foe` as its follower from where the
+## two stand: nothing on the `world` layer between the actor's chest and the foe's, and the lunge that aligns them
+## (Pairing: the actor closing, or backing off, to where the pair's offset puts it, Pairing.offset_of, gliding with
+## collision in align_frames steps as it will) ending within FINISHER_STANCE_SLACK of that spot.
+func can_stage_pair_on(foe: Actor, with_pair: PairedMove) -> bool:
 	var space := get_world_3d().direct_space_state
 	var line := PhysicsRayQueryParameters3D.create(chest_point(), foe.chest_point(), Layers.WORLD, [get_rid(), foe.get_rid()])
 	if not space.intersect_ray(line).is_empty():
 		return false
-	var goal := Pairing.follower_faced(global_position, foe, Pairing.feet_middle(foe)) * def.finisher.follow_offset.affine_inverse()
+	var goal := Pairing.follower_faced(global_position, foe, Pairing.feet_middle(foe)) * Pairing.offset_of(with_pair, self).affine_inverse()
 	var lunge := goal.origin - global_position
-	var steps := maxi(def.finisher.align_frames, 1)
+	var steps := maxi(with_pair.align_frames, 1)
 	var at := global_transform
 	for i in steps:
 		at = _glided(at, lunge / steps)
 	return Vector2(at.origin.x - goal.origin.x, at.origin.z - goal.origin.z).length() <= FINISHER_STANCE_SLACK
+
+
+## A grab of the actor's has taken hold of `foe` (a GRABBED blow; Melee asks): when the def has a grab_pair and it can be
+## staged as the finisher can (the foe faces the actor, faces_me; a clear line and room, can_stage_pair_on), it starts
+## (start_paired) and this returns true; otherwise false, and the grab is taken as a HIT that staggers.
+func start_grab_on(foe: Actor) -> bool:
+	var pair := def.grab_pair
+	return pair != null and faces_me(foe) and can_stage_pair_on(foe, pair) and start_paired(foe, pair)
 
 
 ## A press of `action` is about to start a move (the runner asks, from rest and in a cancel window): when it is the

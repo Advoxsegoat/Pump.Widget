@@ -169,10 +169,10 @@ func _weigh(e: HitEvent, r: HitResult) -> void:
 
 
 # Starts the grab pair of the attacker of `e`, a GRABBED blow, on its target. False if the attacker has none, or it
-# could not start (Actor.start_paired): the blow is then taken as a HIT that staggers.
+# cannot be staged where the two stand (the target turned away, a wall between them, no room to align) or could not
+# start (Actor.start_grab_on): the blow is then taken as a HIT that staggers.
 static func _grab(e: HitEvent) -> bool:
-	var pair := e.attacker.def.grab_pair
-	return pair != null and e.attacker.start_paired(e.target, pair)
+	return e.attacker.start_grab_on(e.target)
 
 
 # What `e` comes to against its target as it stood when the frame began (as it stands now, for one that was

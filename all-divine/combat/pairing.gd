@@ -69,7 +69,7 @@ func start() -> void:
 	follower.runner.move_ended.connect(_on_follow_ended)
 	_pivot = feet_middle(follower)
 	var faced := follower_faced(lead.global_position, follower, _pivot)
-	var lead_goal := faced * pair.follow_offset.affine_inverse()
+	var lead_goal := faced * offset_of(pair, lead).affine_inverse()
 	_lunge = lead_goal.origin - lead.global_position
 	_lunge.y = 0.0
 	_lead_turn = angle_difference(lead.rotation.y, lead_goal.basis.get_euler().y)
@@ -109,6 +109,15 @@ func tick() -> bool:
 			follower.snap_facing(follower.rotation.y + step)
 			_turned = turned
 	return _follow_done
+
+
+## Where `pair` puts its follower in its lead's space for the lead `lead_actor`: its follow_offset, the distance scaled by
+## the lead's model_scale. The two clips are one scene authored for a lead of the model's size; a larger lead (a tier III
+## Knuckle) reaches further, and stands that much further off for its blows to land as authored.
+static func offset_of(pair: PairedMove, lead_actor: Actor) -> Transform3D:
+	var offset := pair.follow_offset
+	offset.origin *= lead_actor.def.model_scale
+	return offset
 
 
 ## The middle of `actor`'s feet on the ground (Actor.FEET, in the pose it shows), at the height of its body: where it
