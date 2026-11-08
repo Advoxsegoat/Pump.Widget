@@ -203,3 +203,30 @@ func test_abaraxs_reaction_windows_are_all_his_own_moves() -> void:
 					foreign.append([move.id, action, into[action]])
 			assert_eq(MoveRunner.window_of(move, into, abarax), into, "%s's window is all open for Abarax" % move.id)
 	assert_eq(foreign, [])
+
+
+func test_a_broken_knuckle_1_is_finished() -> void:
+	# A knuckle_1 (60 HP) whose posture breaks reels in the shared posture_broken and is open to Abarax's finisher: his
+	# palm on frame 10 pairs them, the three blows (15, 15 and 30) kill it, and it dies once, where it lies, with no
+	# death clip.
+	var abarax := (load(Duel.ABARAX) as ActorDef)
+	var run := Duel.make(self, [{"frames": 9}, {"frames": 1, "press": [&"palm"]}, {"frames": 200}], [], 1.0,
+			load(TIERS[0]) as ActorDef, abarax)
+	var a: Actor = run["a"]
+	var k: Actor = run["b"]
+	track(PostureBreaker.make(a, k))
+	await Duel.play_to(self, k, 1)
+	assert_true(k.stats.posture_broken, "the knuckle's posture is broken")
+	assert_eq(k.runner.current.id if k.runner.current != null else &"", &"posture_broken", "it reels")
+	assert_true(k.is_in_group(Actor.FINISHABLE_GROUP), "and is finishable")
+	var died := [0]
+	k.died.connect(func() -> void: died[0] += 1)
+	await Duel.play_to(self, a, 10)
+	assert_eq([a.paired_with, k.paired_with], [k, a], "the palm starts the finisher on it")
+	assert_eq(a.runner.current.id, &"finisher")
+	while a.paired_with != null or k.paired_with != null:
+		await frames(1)
+	assert_eq(died[0], 1, "the finisher kills it, once")
+	assert_eq(k.stats.hp, 0.0)
+	assert_ne(k.runner.current.id if k.runner.current != null else &"", &"death", "without the death clip")
+	assert_true(k.rig.bone_global(&"Head").y - k.global_position.y < 0.4, "it lies where the finisher left it")
