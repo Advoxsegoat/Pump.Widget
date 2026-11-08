@@ -40,6 +40,9 @@ var bindings_path := BINDINGS_PATH
 var clock: Callable = wall_clock
 
 var _device := Device.KEYBOARD_MOUSE
+var _latched: Dictionary = {}  # flick action -> true while it is down
+var _flicks_frame := -1
+var _flicks: Array[StringName] = []
 var _sweep_px := 0.0
 var _sweep_began := 0.0
 
@@ -133,13 +136,36 @@ func move_vector(devices: Array[int] = Input.get_connected_joypads()) -> Vector2
 	return combine(analog, digital)
 
 
-## The gameplay actions that went down this frame.
+## The gameplay actions that went down this frame. A flick action (Bindings.FLICK_RELEASE) goes down past its deadzone
+## and stays down until its strength falls below its release, so a stick dwelling at the threshold presses once.
 func pressed_this_frame() -> Array[StringName]:
 	var pressed: Array[StringName] = []
+	var flicks := _flicks_this_frame()
 	for action in GAMEPLAY:
-		if Input.is_action_just_pressed(action):
+		if Bindings.FLICK_RELEASE.has(action):
+			if flicks.has(action):
+				pressed.append(action)
+		elif Input.is_action_just_pressed(action):
 			pressed.append(action)
 	return pressed
+
+
+# The flick actions that went down this physics frame (worked out once a frame, however often it is asked).
+func _flicks_this_frame() -> Array[StringName]:
+	var frame := Engine.get_physics_frames()
+	if frame == _flicks_frame:
+		return _flicks
+	_flicks_frame = frame
+	_flicks = []
+	for action: StringName in Bindings.FLICK_RELEASE:
+		var strength := Input.get_action_raw_strength(action)
+		if _latched.get(action, false):
+			if strength < Bindings.FLICK_RELEASE[action]:
+				_latched[action] = false
+		elif strength >= InputMap.action_get_deadzone(action) and strength > 0.0:
+			_latched[action] = true
+			_flicks.append(action)
+	return _flicks
 
 
 ## True while the action is down.

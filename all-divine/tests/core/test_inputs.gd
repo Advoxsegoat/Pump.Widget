@@ -296,6 +296,28 @@ func test_pressed_this_frame_ignores_movement_actions() -> void:
 	assert_false(Inputs.pressed_this_frame().has(&"move_left"))
 	Input.action_release(&"move_left")
 
+func test_a_stick_dwelling_at_the_flick_threshold_is_one_press() -> void:
+	var presses := 0
+	for i in 60:
+		_axis(0, JOY_AXIS_RIGHT_X, 0.6 + (0.02 if i % 2 == 0 else -0.02))
+		await frames(1)
+		if Inputs.pressed_this_frame().has(&"target_right"):
+			presses += 1
+	assert_eq(presses, 1, "pressed past 0.6, let go only below 0.35")
+	_axis(0, JOY_AXIS_RIGHT_X, 0.0)
+	await frames(1)
+	Inputs.pressed_this_frame()
+	var flick := 0
+	for v in [0.3, 0.7, 1.0, 0.8, 0.4, 0.0, 0.7, 0.0]:
+		_axis(0, JOY_AXIS_RIGHT_X, v)
+		await frames(1)
+		if Inputs.pressed_this_frame().has(&"target_right"):
+			flick += 1
+	assert_eq(flick, 2, "two flicks, each let go below 0.35, are two presses")
+	_axis(0, JOY_AXIS_RIGHT_X, 0.0)
+	await frames(1)
+	assert_false(Inputs.pressed_this_frame().has(&"target_right"))
+
 func test_held_follows_the_action() -> void:
 	assert_false(Inputs.held(&"palm"))
 	Input.action_press(&"palm")

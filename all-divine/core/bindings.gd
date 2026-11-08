@@ -17,9 +17,10 @@ const ACTIONS: Array[StringName] = [
 ## The actions driven by an analog trigger, which count as pressed past half way.
 const TRIGGER_ACTIONS: Array[StringName] = [&"heavy", &"gift"]
 const TRIGGER_DEADZONE := 0.5
-## The actions that are a flick of the right stick (switching the lock-on target): a high deadzone, so that a flick
-## is one press and a stick resting off centre is none.
-const FLICK_ACTIONS: Array[StringName] = [&"target_left", &"target_right"]
+## The actions that are a flick of the right stick (switching the lock-on target), with the strength each lets go
+## below. They press past FLICK_DEADZONE and are down until the stick falls below this, so that a thumb dwelling at the
+## threshold is one press, not a stutter of them (Inputs.pressed_this_frame does the latching).
+const FLICK_RELEASE := {&"target_left": 0.35, &"target_right": 0.35}
 const FLICK_DEADZONE := 0.6
 ## Every other action keeps the engine's default deadzone.
 const ACTION_DEADZONE := 0.2
@@ -69,7 +70,7 @@ static func apply(map: Dictionary) -> void:
 static func _deadzone(action: StringName) -> float:
 	if TRIGGER_ACTIONS.has(action):
 		return TRIGGER_DEADZONE
-	return FLICK_DEADZONE if FLICK_ACTIONS.has(action) else ACTION_DEADZONE
+	return FLICK_DEADZONE if FLICK_RELEASE.has(action) else ACTION_DEADZONE
 
 
 ## What the InputMap holds now for every action: a copy, in the shape defaults() returns.
