@@ -12,7 +12,9 @@ extends RefCounted
 ##   a REACTION other than the death has exactly one recovery
 ##   every move has at least one sfx and one fx
 ##   every fx names an FxDef in the Registry kind `fx` and every sfx a SoundCue in the kind `sounds` (a mark with
-##       no name, or one the data does not have, is reported), and an fx's optional `bone` is a bone of the rig
+##       no name, or one the data does not have, is reported), and the bone each effect rides is a bone of the rig:
+##       an fx's own `bone`, else its FxDef's, and the FxDef's of a tell (glint, perilous_rose) and of a charge_hold
+##       (charge_glow), as ActorFx shows them, so an effect made for another rig is not shown at an actor's feet
 ##   every hit profile of a move is a HitProfile with hitstop_frames 3 to 6
 ##   parry_on/parry_off, guard_on/guard_off, airborne_on/airborne_off and hyperarmour_on/hyperarmour_off come as
 ##       on-then-off pairs
@@ -207,11 +209,17 @@ func _check_mark(id: String, mark: Dictionary, anim: Animation, step_fps: int, h
 				out.append("%s: %s names the unknown %s '%s' (data/%s/ has %s)" % [id, where, looked_up[1], named, looked_up[0], ", ".join(Registry.ids(looked_up[0]))])
 			if kind == &"fx" and args.has("bone") and not bone_names.is_empty() and not bone_names.has(String(args["bone"])):
 				out.append("%s: %s rides the bone '%s', which the rig does not have" % [id, where, args["bone"]])
+			elif kind == &"fx" and not args.has("bone"):
+				_check_fx_bone(id, where, StringName(named), bone_names, out)
 		&"tell":
 			if not args.has("kind"):
 				out.append("%s: %s has no kind (glint or perilous)" % [id, where])
 			elif not TELL_KINDS.has(StringName(str(args["kind"]))):
 				out.append("%s: %s has the kind '%s', not glint or perilous" % [id, where, args["kind"]])
+			else:
+				_check_fx_bone(id, where, ActorFx.TELL_FX[StringName(str(args["kind"]))], bone_names, out)
+		&"charge_hold":
+			_check_fx_bone(id, where, ActorFx.CHARGE_FX, bone_names, out)
 		&"cancel_open":
 			var into: Variant = args.get("into")
 			if not into is Dictionary or (into as Dictionary).is_empty():
@@ -220,6 +228,16 @@ func _check_mark(id: String, mark: Dictionary, anim: Animation, step_fps: int, h
 				for action in into:
 					if not move_ids.has(String(into[action])):
 						out.append("%s: %s goes into unknown move '%s' (on %s)" % [id, where, into[action], action])
+
+
+# The effect `effect` that a mark shows (an fx mark with no bone of its own, a tell, a charge) rides the bone its FxDef
+# names: that bone is one of the rig's `bone_names` (none: not checked), or the effect would show at the actor's feet.
+func _check_fx_bone(id: String, where: String, effect: StringName, bone_names: PackedStringArray, out: PackedStringArray) -> void:
+	if bone_names.is_empty() or not Registry.ids(&"fx").has(String(effect)):
+		return
+	var def := Registry.fetch(&"fx", effect) as FxDef
+	if def != null and def.bone != &"" and not bone_names.has(String(def.bone)):
+		out.append("%s: %s shows the effect '%s', which rides the bone '%s' the rig does not have" % [id, where, effect, def.bone])
 
 
 # What is wrong with a move's `hits`, whatever its kind: each is a HitProfile, and its hit-stop is in range.

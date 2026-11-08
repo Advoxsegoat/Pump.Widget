@@ -38,9 +38,16 @@ const ANSWER_SOUNDS := {
 	HitResult.Outcome.PARRIED: &"parry_ring",
 	HitResult.Outcome.CAUGHT: &"catch_snap",
 }
+## The effect each kind of tell shows, and the one a full charge shows (the clip checker checks the bones they ride).
+const TELL_FX := {&"glint": &"glint", &"perilous": &"perilous_rose"}
+const CHARGE_FX := &"charge_glow"
 ## A perilous attack's tell flashes it rose, #e8607e, for a quarter of a second.
 const PERILOUS_FLASH := Color("e8607e")
 const PERILOUS_FLASH_SECONDS := 0.25
+
+## The bones effects were asked to ride that the actor's skeleton lacks, each once, in the order met: each was warned of
+## once (show_fx), however often it was asked for after, and the effect was shown at the actor's feet instead.
+var missing_bones: Array[StringName] = []
 
 var _actor: Actor
 
@@ -76,17 +83,17 @@ func _on_mark(kind: StringName, args: Dictionary) -> void:
 
 
 func _on_charged(_move: MoveData) -> void:
-	show_fx(&"charge_glow")
+	show_fx(CHARGE_FX)
 	Sfx.play(&"charge_hum", _actor.global_position)
 
 
 func _tell(kind: StringName) -> void:
 	match kind:
 		&"glint":
-			show_fx(&"glint")
+			show_fx(TELL_FX[kind])
 			Sfx.play(&"tell_glint", _actor.global_position)
 		&"perilous":
-			show_fx(&"perilous_rose")
+			show_fx(TELL_FX[kind])
 			Sfx.play(&"perilous_sting", _actor.global_position)
 			_actor.rig.flash(PERILOUS_FLASH, PERILOUS_FLASH_SECONDS)
 
@@ -109,7 +116,8 @@ func _on_got_hit(result: HitResult, event: HitEvent) -> void:
 
 ## Shows the effect of the FxDef `id` and returns it (null if there is none, which warns). `at` is a point in
 ## the world to show it at; without one, it rides `bone` (else the def's bone) or, with no bone, is at the actor's
-## origin.
+## origin. A bone the actor's skeleton lacks (an effect made for another rig) is shown at the origin too, and warned of
+## the first time only (missing_bones).
 func show_fx(id: StringName, at: Variant = null, bone := &"") -> Node3D:
 	if not Registry.ids(&"fx").has(String(id)):
 		push_warning("ActorFx: no effect '%s' (on '%s')" % [id, _actor.name])
@@ -121,8 +129,13 @@ func show_fx(id: StringName, at: Variant = null, bone := &"") -> Node3D:
 	node.add_to_group(GROUP)
 	node.set_meta(&"fx", id)
 	var riding := bone if bone != &"" else def.bone
+	if at == null and riding != &"" and (_actor.rig.skeleton == null or _actor.rig.skeleton.find_bone(riding) < 0):
+		if not missing_bones.has(riding):
+			missing_bones.append(riding)
+			push_warning("ActorFx: '%s' has no bone '%s' for the effect '%s'; it shows at its feet" % [_actor.name, riding, id])
+		riding = &""
 	var holder: Node = node
-	if at == null and riding != &"" and _actor.rig.skeleton != null and _actor.rig.skeleton.find_bone(riding) >= 0:
+	if at == null and riding != &"":
 		var attachment := BoneAttachment3D.new()
 		attachment.name = "Fx_%s" % id
 		attachment.bone_name = riding

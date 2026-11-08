@@ -837,3 +837,17 @@ func _skeleton() -> Skeleton3D:
 	skeleton.get_parent().remove_child(skeleton)
 	rig.free()
 	return skeleton
+
+
+func test_the_bone_an_effect_rides_by_its_data_is_checked_against_the_rig() -> void:
+	# An fx mark without a bone rides its FxDef's (palm_trail: hand_l), a glint tell the glint's (hand_r) and a perilous
+	# tell the perilous rose's (Head): each is a bone the rig must have, as a bone a mark names is.
+	var move := _move(&"palm_jab", MoveData.Kind.ATTACK)
+	var checker := ClipChecker.new()
+	var marks := _jab_marks([], [_m(5, &"tell", {"kind": &"glint"}), _m(15, &"tell", {"kind": &"perilous"})])
+	assert_eq(checker.check_move(move, _anim(35, 12, marks), HITBOXES, MOVES, ActorDef.Team.PLAYER, BONES), PackedStringArray(),
+			"Abarax's bones have them all")
+	var problems := checker.check_move(move, _anim(35, 12, marks), HITBOXES, MOVES, ActorDef.Team.PLAYER, PackedStringArray(["pelvis"]))
+	assert_true(_has_problem(problems, ["fx at f10", "hand_l", "palm_trail"]), "\n".join(problems))
+	assert_true(_has_problem(problems, ["tell at f5", "hand_r", "glint"]), "\n".join(problems))
+	assert_true(_has_problem(problems, ["tell at f15", "Head", "perilous_rose"]), "\n".join(problems))

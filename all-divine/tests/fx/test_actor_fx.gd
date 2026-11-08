@@ -274,3 +274,21 @@ func test_a_name_no_data_has_warns_and_shows_nothing() -> void:
 	assert_eq(Sfx.last_unknown(), [&"no_such_cue"] as Array, "the sound is recorded as one no cue has")
 	var shown: Variant = quietly(func() -> Variant: return (a.get_node("ActorFx") as ActorFx).show_fx(&"no_such_fx"))
 	assert_eq(shown, null, "and asking for the effect gives nothing back")
+
+
+func test_an_effect_on_a_bone_the_rig_lacks_warns_once_per_bone_and_shows_at_the_feet() -> void:
+	# A rig without the bone an effect rides (another actor's skeleton, a typo in a mark) shows it at the actor's feet,
+	# and warns once for each such bone, not every time it is asked (a mark passed every swing, a tell every attack).
+	var run := Duel.make(self, [], [], 6.0)
+	var a: Actor = run["a"]
+	await frames(1)
+	var fx := a.get_node("ActorFx") as ActorFx
+	var shown: Array = quietly(func() -> Array:
+		return [fx.show_fx(&"palm_trail", null, &"tail_01"), fx.show_fx(&"palm_trail", null, &"tail_01"), fx.show_fx(&"glint", null, &"wing_r")])
+	for node: Variant in shown:
+		assert_ne(node, null, "the effect is shown")
+		if node != null:
+			assert_vec_near((node as Node3D).global_position, a.global_position, 1e-4, "at the actor's feet")
+			assert_false((node as Node).get_parent() is BoneAttachment3D, "riding no bone")
+	assert_eq(fx.missing_bones, [&"tail_01", &"wing_r"] as Array[StringName], "each missing bone is warned of once")
+	assert_eq(quietly(func() -> int: fx.show_fx(&"palm_trail"); return fx.missing_bones.size()), 2, "a bone the rig has warns of nothing")
