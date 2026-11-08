@@ -13,7 +13,7 @@ team = 1
 rig_scene = ExtResource("2_rig")
 palette = ExtResource("4_palette")
 hidden_parts = PackedStringArray()
-model_scale = 1.06
+model_scale = 1.04
 moveset = {
 &"dodge": &"knuckle_feint",
 &"gift": &"knuckle_sweep",
@@ -40,5 +40,5 @@ max_hp = 130.0
 max_stamina = 100.0
 max_posture = 100.0
 poise = 20.0
-look_height = 1.696
+look_height = 1.664
 required_clips = PackedStringArray("idle", "walk", "jog", "sprint")

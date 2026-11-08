@@ -1,7 +1,7 @@
 extends TestCase
 ## The Knuckle of the Hand: its rig (actors/knuckle/knuckle_rig.tscn, the model tools/anim/build_knuckle.py builds) plays
 ## Abarax's clip library, and its three tiers (data/actors/knuckle_{1,2,3}.tres) are drawn and numbered as the brief
-## says: tier I without the hood and pauldron, tier II without the pauldron, tier III with both, 6% larger.
+## says: tier I without the hood and pauldron, tier II without the pauldron, tier III with both, 4% larger.
 
 const RIG := "res://actors/knuckle/knuckle_rig.tscn"
 const TIERS := ["res://data/actors/knuckle_1.tres", "res://data/actors/knuckle_2.tres", "res://data/actors/knuckle_3.tres"]
@@ -9,7 +9,7 @@ const PARTS: PackedStringArray = ["Knuckle_Head", "Knuckle_Hair", "Knuckle_Beard
 		"Knuckle_Arms", "Knuckle_Boots", "Knuckle_Hood", "Knuckle_Pauldron"]
 ## What each tier hides, and how much larger it is.
 const HIDDEN := [["Knuckle_Hood", "Knuckle_Pauldron"], ["Knuckle_Pauldron"], []]
-const SCALES := [1.0, 1.0, 1.06]
+const SCALES := [1.0, 1.0, 1.04]
 ## HP, poise and posture of each tier.
 const NUMBERS := [[60.0, 5.0, 60.0], [90.0, 10.0, 80.0], [130.0, 20.0, 100.0]]
 ## The tiers' main colours: the hood of tier II and the metal of tier III (palette slots 7 and 8).
@@ -104,12 +104,12 @@ func test_tiers_hide_their_parts_and_scale() -> void:
 		heads.append(actor.rig.animated_pose(&"Head").origin.y - actor.global_position.y)
 		var hurtbox := actor.rig.hurtbox.get_node(^"shape") as CollisionShape3D
 		assert_near(hurtbox.global_basis.get_scale().y, SCALES[i], 1e-4, "%s's hurtbox is scaled with it" % def.id)
-	assert_near(heads[2] / heads[0], 1.06, 1e-3, "tier III's head stands 6%% higher (%.3f m against %.3f m)" % [heads[2], heads[0]])
+	assert_near(heads[2] / heads[0], 1.04, 1e-3, "tier III's head stands 4%% higher (%.3f m against %.3f m)" % [heads[2], heads[0]])
 	assert_near(heads[1], heads[0], 1e-4, "tier II's as tier I's")
 
 
 func test_a_larger_tier_travels_further_by_root_motion() -> void:
-	# Its clips' root travel grows with it, so its planted feet do not skate: knuckle_3 (1.06) goes 6% further on the
+	# Its clips' root travel grows with it, so its planted feet do not skate: knuckle_3 (1.04) goes 4% further on the
 	# same root-motion move as knuckle_1.
 	var arena := TestArena.make(self)
 	var travel: Array[float] = []
@@ -122,7 +122,7 @@ func test_a_larger_tier_travels_further_by_root_motion() -> void:
 			await frames(1)
 		travel.append(Vector2(actor.global_position.x - from.x, actor.global_position.z - from.z).length())
 	assert_true(travel[0] > 1.0, "the roll travels (%.3f m)" % travel[0])
-	assert_near(travel[1] / travel[0], 1.06, 0.01, "%.3f m against %.3f m" % [travel[1], travel[0]])
+	assert_near(travel[1] / travel[0], 1.04, 0.01, "%.3f m against %.3f m" % [travel[1], travel[0]])
 
 
 func test_a_hidden_part_the_model_lacks_is_reported() -> void:

@@ -18,7 +18,7 @@ enum Team { PLAYER, ENEMY }
 @export var hidden_parts := PackedStringArray()
 ## How much larger than its model the actor is, about its feet (Rig.set_model_scale): the model, the hitboxes that ride
 ## its bones and its hurtbox, and with them its clips' root travel, so its planted feet do not skate. A tier III
-## Knuckle is 1.06. Its look_height is set to match.
+## Knuckle is 1.04. Its look_height is set to match.
 @export var model_scale := 1.0
 ## Input action -> move id, for the moves the actor starts from rest. Moves reached by cancelling into
 ## them are named by their clips' cancel_open marks instead.
