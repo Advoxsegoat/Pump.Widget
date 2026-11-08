@@ -46,6 +46,9 @@ extends Resource
 @export var finisher_range := 1.6
 ## Degrees either side of the facing within which a broken target can be finished.
 @export var finisher_arc_deg := 60.0
+## Degrees within which a broken target must face the one finishing it: it turns to face him as the finisher begins,
+## about the middle of its feet (Pairing), and further than this its planted feet would slide more than 0.15 m.
+@export var finisher_facing_deg := 30.0
 
 # --- aim assist ---
 ## Degrees either side of the aim within which an attack that starts is turned onto a target.

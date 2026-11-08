@@ -8,10 +8,12 @@ extends RefCounted
 ##     stand at time 0 and advance together from the next frame on; a hit-stop freezes both alike, since each of the
 ##     pair's blows freezes its attacker and its target for the same frames
 ##   - it aligns them, on the lead's clock (frames of its clip, so a hit-stop holds it too): the lead turns to the
-##     follower and closes to where the pair's follow_offset puts the follower where it stands (a lunge, over
-##     align_frames, gliding with collision, so a wall stops it), and the follower only turns to face the lead, over the
-##     frames up to the lead's first blow. After that neither is moved: each goes by its own clip's root motion, with
-##     collision, as every move does, so feet stay planted and a wall stops a knocked-down body
+##     follower and closes to where the pair's follow_offset puts the follower once it has turned (a lunge, over
+##     align_frames, gliding with collision, so a wall stops it), and the follower turns to face the lead about the
+##     middle of its feet, over the frames up to the lead's first blow, so each planted foot moves as little as the turn
+##     allows (half the stance on the turn's chord: Actor.finishable_target only offers a foe turned little enough).
+##     After that neither is moved: each goes by its own clip's root motion, with collision, as every move does, so feet
+##     stay planted and a wall stops a knocked-down body
 ##   - each pair_hit mark the lead's move passes becomes a blow on the follower (HitEvent.paired), posted to Melee
 ##     like any other, so it has a blow's weight and feel: hit-stop, spark, sound, shake
 ##   - when the lead's move ends, the lead is free again (its brain is asked, blows land on it), while the follower
@@ -37,6 +39,7 @@ var _follow_turn := 0.0  # how far the follower turns
 var _turn_frames := 1  # the frames of the lead's clip the follower turns over: up to its first blow
 var _lunged := 0.0  # the share of the lunge and of the lead's turn done so far
 var _turned := 0.0  # the share of the follower's turn done so far
+var _pivot := Vector3.ZERO  # where the follower turns about: the middle of its feet as the pair began
 
 
 ## Pairs `lead_actor` and `follower_actor` in `paired_move`: each has the other as its paired_with and the move as
@@ -53,9 +56,9 @@ func _init(lead_actor: Actor, follower_actor: Actor, paired_move: PairedMove) ->
 
 
 ## Starts both moves, forced past the stamina gate (Melee does it after every actor has moved), and works out the
-## alignment: the follower turned to face the lead where it stands, and the lead where the pair's follow_offset puts
-## the follower there, facing it. If either fighter has been frozen by a blow this frame, both are frozen for the
-## longer, so they keep one clock. A move that cannot start counts as over at once.
+## alignment: the follower turned about the middle of its feet to face the lead (follower_faced), and the lead where
+## the pair's follow_offset puts the follower there, facing it. If either fighter has been frozen by a blow this frame,
+## both are frozen for the longer, so they keep one clock. A move that cannot start counts as over at once.
 func start() -> void:
 	if not _both_here():
 		return
@@ -64,11 +67,8 @@ func start() -> void:
 	lead.runner.mark.connect(_on_lead_mark)
 	lead.runner.move_ended.connect(_on_lead_ended)
 	follower.runner.move_ended.connect(_on_follow_ended)
-	var to_lead := lead.global_position - follower.global_position
-	to_lead.y = 0.0
-	if to_lead.is_zero_approx():
-		to_lead = -lead.facing()
-	var faced := Transform3D(Basis(Vector3.UP, atan2(to_lead.x, to_lead.z)), follower.global_position)
+	_pivot = feet_middle(follower)
+	var faced := follower_faced(lead.global_position, follower, _pivot)
 	var lead_goal := faced * pair.follow_offset.affine_inverse()
 	_lunge = lead_goal.origin - lead.global_position
 	_lunge.y = 0.0
@@ -102,9 +102,39 @@ func tick() -> bool:
 			_lunged = lunged
 		var turned := clampf(played / float(_turn_frames), 0.0, 1.0)
 		if turned > _turned:
-			follower.snap_facing(follower.rotation.y + _follow_turn * (turned - _turned))
+			var step := _follow_turn * (turned - _turned)
+			var at := follower.global_position
+			var to := _pivot + Basis(Vector3.UP, step) * (at - _pivot)
+			follower.glide(to - at)
+			follower.snap_facing(follower.rotation.y + step)
 			_turned = turned
 	return _follow_done
+
+
+## The middle of `actor`'s feet on the ground (Actor.FEET, in the pose it shows), at the height of its body: where it
+## turns about to face its lead, so that each planted foot moves as little as the turn allows (half the stance, on
+## the chord of the turn).
+static func feet_middle(actor: Actor) -> Vector3:
+	var middle := Vector3.ZERO
+	for foot in Actor.FEET:
+		middle += actor.rig.bone_global(foot)
+	middle /= Actor.FEET.size()
+	middle.y = actor.global_position.y
+	return middle
+
+
+## Where `follower` ends its turn to face a lead at `lead_at`, turning about `pivot` (feet_middle): facing the lead from
+## where the turn takes it (which the turn moves a little, so it is found in a few goes).
+static func follower_faced(lead_at: Vector3, follower: Actor, pivot: Vector3) -> Transform3D:
+	var turn := 0.0
+	var at := follower.global_position
+	for i in 3:
+		var to_lead := lead_at - at
+		to_lead.y = 0.0
+		if not to_lead.is_zero_approx():
+			turn = angle_difference(follower.rotation.y, atan2(to_lead.x, to_lead.z))
+		at = pivot + Basis(Vector3.UP, turn) * (follower.global_position - pivot)
+	return Transform3D(Basis(Vector3.UP, follower.rotation.y + turn), at)
 
 
 # The frame of the first pair_hit mark of `anim`, the lead's clip (at least 1); align_frames if it has none.

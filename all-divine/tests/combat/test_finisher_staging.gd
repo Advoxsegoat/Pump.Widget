@@ -8,8 +8,10 @@ extends TestCase
 ##   contact  no part of either body is more than 0.05 m inside the other's, on any frame
 ##   skating  after alignment (from the first blow), each planted foot of the follower (ankle 0.10 m or lower) moves
 ##            0.05 m at most over its plant: each fighter moves by its own clip's root motion
-##   aligning from the edge of reach (1.59 m, 59 degrees off, the victim facing toward or away): the follower moves
-##            0.10 m at most and turns 20 degrees at most a frame, and the lead's lunge is 0.6 m at most
+##   aligning from the edge of reach (1.59 m, 59 degrees off, the victim facing the lead or turned to the edge of the
+##            facing gate, finisher_facing_deg, either way): the follower moves 0.10 m at most and turns 20 degrees at
+##            most a frame, each of its planted feet stays within 0.15 m of its plant up to the first blow, and the
+##            lead's lunge is 0.6 m at most
 ##   clips    the lead's pelvis, head and feet move 0.25 m at most from one 12 fps step to the next, the victim's
 ##            0.15 m at most from one frame to the next, and the hands too across a join; each strike carries the hand
 ##            0.40 m or more in the step it lands on, as palm_jab does (0.47)
@@ -26,6 +28,7 @@ const SKATE := 0.05
 const PLANTED := 0.10
 const ALIGN_SHIFT := 0.10
 const ALIGN_TURN_DEG := 20.0
+const ALIGN_FOOT := 0.15
 const LUNGE := 0.6
 const LEAD_STEP := 0.25
 const VICTIM_FRAME := 0.15
@@ -86,6 +89,27 @@ func _play(run: Dictionary, limit := 300) -> Array:
 		rows.append({"frame": a.frame, "a": a.global_position, "b": b.global_position, "b_yaw": b.rotation.y,
 				"overlap": Bodies.overlap(a_caps, b_caps), "hit": hit, "feet": feet})
 	return rows
+
+
+# How far b's `foot` slides over the ground from where it was planted, at most, from the first of `rows` through frame
+# `last`, and on which frame: [metres, frame]. A foot is planted while its ankle is PLANTED high or lower; one that
+# lifts is planted afresh where it comes down.
+func _slide_to(rows: Array, foot: StringName, last: int) -> Array:
+	var plant: Variant = null
+	var worst := [0.0, -1]
+	for row: Dictionary in rows:
+		if row["frame"] > last:
+			break
+		var at: Vector3 = row["feet"][foot]
+		if at.y > PLANTED:
+			plant = null
+			continue
+		if plant == null:
+			plant = at
+		var slide := Vector2(at.x - plant.x, at.z - plant.z).length()
+		if slide > worst[0]:
+			worst = [slide, row["frame"]]
+	return worst
 
 
 func _hits(rows: Array) -> Array:
@@ -158,13 +182,14 @@ func test_the_follower_does_not_skate() -> void:
 
 
 func test_alignment_from_the_edge_of_reach() -> void:
+	var gate := (load(Duel.ABARAX) as ActorDef).combat.finisher_facing_deg - 0.1
 	for side: float in [1.0, -1.0]:
-		for away: bool in [false, true]:
+		for turned: float in [0.0, gate, -gate]:
 			var off := deg_to_rad(59.0) * side
 			var at := Vector3(sin(off), 0.0, cos(off)) * 1.59
 			var toward_a := atan2(-at.x, -at.z)
-			var b_at := Transform3D(Basis(Vector3.UP, toward_a + (PI if away else 0.0)), at)
-			var label := "%s side, facing %s" % ["left" if side > 0 else "right", "away" if away else "toward"]
+			var b_at := Transform3D(Basis(Vector3.UP, toward_a + deg_to_rad(turned)), at)
+			var label := "%s side, turned %.1f degrees from a" % ["left" if side > 0 else "right", turned]
 			var run: Dictionary = await _duel(60.0, b_at)
 			var rows: Array = await _play(run)
 			var hits := _hits(rows)
@@ -183,6 +208,9 @@ func test_alignment_from_the_edge_of_reach() -> void:
 				if row["frame"] <= first:
 					b_shift = maxf(b_shift, Vector2(row["b"].x - at.x, row["b"].z - at.z).length())
 					lunge = maxf(lunge, Vector2(row["a"].x, row["a"].z).length())
+			for foot in FEET:
+				var slide := _slide_to(rows, foot, first)
+				assert_true(slide[0] <= ALIGN_FOOT, "b's %s slides %.3f m from its plant up to the first blow (frame %d, %s)" % [foot, slide[0], slide[1], label])
 			assert_true(b_shift <= ALIGN_SHIFT, "b moves %.3f m while aligning (%s)" % [b_shift, label])
 			assert_true(turn <= ALIGN_TURN_DEG, "b turns %.1f degrees in a frame at most (%s)" % [turn, label])
 			assert_true(lunge <= LUNGE, "a lunges %.3f m (%s)" % [lunge, label])

@@ -341,7 +341,7 @@ func test_combat_tuning_numbers() -> void:
 	assert_eq([t.posture_regen_delay, t.posture_regen_rate, t.broken_time], [1.5, 20.0, 2.0])
 	assert_eq([t.guard_arc_deg, t.guard_speed_scale, t.parry_posture_scale, t.catch_posture], [75.0, 0.45, 2.0, 50.0])
 	assert_eq(t.parry_refresh_frames, 20)
-	assert_eq([t.finisher_range, t.finisher_arc_deg], [1.6, 60.0])
+	assert_eq([t.finisher_range, t.finisher_arc_deg, t.finisher_facing_deg], [1.6, 60.0, 30.0])
 	assert_eq([t.aim_assist_deg, t.aim_assist_range, t.aim_turn_rate_deg], [30.0, 3.5, 540.0])
 	assert_eq(t.knockback_decay, 10.0)
 

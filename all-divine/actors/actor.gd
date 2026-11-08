@@ -17,8 +17,8 @@ extends CharacterBody3D
 ## paired_with while it plays, no one else's blow lands on either, their brains are ignored, and Melee keeps the two
 ## moves on one clock and aligns the two before each goes by its own root motion (Pairing). A palm pressed with a
 ## broken foe in reach (in the group `finishable` while it reels, within the tuning's finisher_range and
-## finisher_arc_deg of the facing) starts the def's finisher on it instead of the jab (start_finisher_on, which the
-## runner asks before starting a pressed move).
+## finisher_arc_deg of the facing, and facing the actor) starts the def's finisher on it instead of the jab
+## (start_finisher_on, which the runner asks before starting a pressed move).
 ##
 ## Each physics frame, in this order:
 ##   1. frame += 1
@@ -257,8 +257,8 @@ func start_paired(other: Actor, with_pair: PairedMove) -> bool:
 
 ## The foe the actor would finish now, for the HUD's prompt and for a palm press: the nearest live, unpaired actor of
 ## the other team in the group `finishable` (its posture broken, reeling) within the tuning's finisher_range on the
-## ground and finisher_arc_deg either side of the facing. Null if there is none, or the actor has no finisher, or is
-## dead or paired itself.
+## ground and finisher_arc_deg either side of the facing, that faces the actor (within finisher_facing_deg: Pairing
+## turns it to face him). Null if there is none, or the actor has no finisher, or is dead or paired itself.
 func finishable_target() -> Actor:
 	if def.finisher == null or dead or paired_with != null:
 		return null
@@ -272,6 +272,8 @@ func finishable_target() -> Actor:
 		if flat.length() > best_distance:
 			continue
 		if not flat.is_zero_approx() and absf(angle_difference(locomotion.facing_yaw, Locomotion.yaw_of(flat))) > deg_to_rad(stats.tuning.finisher_arc_deg):
+			continue
+		if not flat.is_zero_approx() and absf(angle_difference(foe.rotation.y, Locomotion.yaw_of(-flat))) > deg_to_rad(stats.tuning.finisher_facing_deg):
 			continue
 		best = foe
 		best_distance = flat.length()
@@ -289,7 +291,8 @@ func start_finisher_on(action: StringName) -> bool:
 
 
 ## Moves the actor by `offset` along the ground (its height is left out), stopping at the world as move_and_slide
-## would, and sliding along what it meets: a paired move's lead closing on its follower (Pairing).
+## would, and sliding along what it meets: a paired move's lead closing on its follower, and the follower turning
+## about its feet (Pairing).
 func glide(offset: Vector3) -> void:
 	var motion := Vector3(offset.x, 0.0, offset.z)
 	var hit := move_and_collide(motion)

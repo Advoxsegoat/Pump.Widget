@@ -1,7 +1,7 @@
 extends TestCase
 ## The Open Hand finisher: a palm pressed with a broken foe (the group `finishable`) within finisher_range (1.6 m)
-## and finisher_arc_deg (60 degrees) of Abarax's facing starts his def's finisher, the paired move
-## finisher_open_hand, in place of the jab. He plays `finisher` (0.83 s: a jab, a second jab and a cross, each landing
+## and finisher_arc_deg (60 degrees) of Abarax's facing, facing him (within finisher_facing_deg, 30 degrees), starts
+## his def's finisher, the paired move finisher_open_hand, in place of the jab. He plays `finisher` (0.83 s: a jab, a second jab and a cross, each landing
 ## in one 12 fps step) and the foe `finisher_victim` on one clock, the foe 1.02 m in front of him once they are aligned;
 ## his three pair_hit marks (f10, f25, f40) do 15, 15 and 30 to it as HITs with no reaction, with their hit-stop (4, 4
 ## and 6 frames). He is free when
@@ -162,6 +162,23 @@ func test_palm_behind_or_far_from_a_broken_foe_is_a_jab() -> void:
 		b.place(Transform3D(Basis(Vector3.UP, PI), spot[1]))
 		await Duel.play_to(self, a, 9)
 		assert_eq(a.finishable_target(), null, "no one to finish %s" % spot[0])
+		await Duel.play_to(self, a, 10)
+		assert_eq(_current(a), &"palm_jab", "the palm is a jab (%s)" % spot[0])
+		assert_eq(a.paired_with, null, spot[0])
+		(run["arena"] as Node).free()
+
+
+func test_a_broken_foe_turned_from_a_is_a_jab() -> void:
+	# The finisher stages a foe that faces a, within finisher_facing_deg (30 degrees) of facing him: one turned further
+	# would have to spin on its feet to take the blows. b a metre in front, facing away or turned 40 degrees either way,
+	# takes the jab.
+	for spot: Array in [["facing away", PI], ["turned 40 degrees left", deg_to_rad(40.0)], ["turned 40 degrees right", deg_to_rad(-40.0)]]:
+		var run := await _duel([{"frames": 9}, {"frames": 1, "press": [&"palm"]}, {"frames": 60}])
+		var a: Actor = run["a"]
+		var b: Actor = run["b"]
+		b.place(Transform3D(Basis(Vector3.UP, PI + spot[1]), Vector3(0, 0, 1.0)))
+		await Duel.play_to(self, a, 9)
+		assert_eq(a.finishable_target(), null, "no one to finish (%s)" % spot[0])
 		await Duel.play_to(self, a, 10)
 		assert_eq(_current(a), &"palm_jab", "the palm is a jab (%s)" % spot[0])
 		assert_eq(a.paired_with, null, spot[0])
