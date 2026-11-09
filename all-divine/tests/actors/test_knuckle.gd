@@ -230,3 +230,19 @@ func test_a_broken_knuckle_1_is_finished() -> void:
 	assert_eq(k.stats.hp, 0.0)
 	assert_ne(k.runner.current.id if k.runner.current != null else &"", &"death", "without the death clip")
 	assert_true(k.rig.bone_global(&"Head").y - k.global_position.y < 0.4, "it lies where the finisher left it")
+
+
+func test_a_part_named_twice_is_hidden_and_not_reported() -> void:
+	var rig := _rig(RIG)
+	var unknown: PackedStringArray = quietly(func() -> PackedStringArray: return rig.hide_parts(PackedStringArray(["Knuckle_Hood", "Knuckle_Hood"])))
+	assert_eq(unknown, PackedStringArray(), "a name given twice is still one the model has")
+	assert_false((rig.get_node(^"Model").find_child("Knuckle_Hood", true, false) as MeshInstance3D).visible, "and it is hidden")
+
+
+func test_model_scale_is_held_to_a_sane_range() -> void:
+	for property in ActorDef.new().get_property_list():
+		if property["name"] == "model_scale":
+			assert_eq(property["hint"], PROPERTY_HINT_RANGE, "model_scale is a range")
+			assert_eq(String(property["hint_string"]).split(",").slice(0, 2), PackedStringArray(["0.5", "1.5"]), "from 0.5 to 1.5")
+			return
+	fail("ActorDef has no model_scale")

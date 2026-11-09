@@ -205,16 +205,18 @@ func apply_palette(p: Palette) -> void:
 
 
 ## Hides the MeshInstance3Ds under Model named in `parts` (an actor's hidden_parts: a tier's hood, say) and shows every
-## other. Returns the names in `parts` the model has no mesh of, each an error too (a typo in a def), which change
-## nothing.
+## other. Returns the names in `parts` the model has no mesh of, each once and each an error too (a typo in a def), which
+## change nothing; a name given twice is hidden as given once.
 func hide_parts(parts: PackedStringArray) -> PackedStringArray:
-	var unknown := parts.duplicate()
+	var meshes := PackedStringArray()
 	for node in $Model.find_children("*", "MeshInstance3D", true, false):
 		var mesh := node as MeshInstance3D
-		var hidden := parts.has(String(mesh.name))
-		mesh.visible = not hidden
-		if hidden:
-			unknown.remove_at(unknown.find(String(mesh.name)))
+		mesh.visible = not parts.has(String(mesh.name))
+		meshes.append(String(mesh.name))
+	var unknown := PackedStringArray()
+	for part in parts:
+		if meshes.find(part) < 0 and unknown.find(part) < 0:
+			unknown.append(part)
 	for part in unknown:
 		push_error("Rig: '%s' has no part '%s' to hide" % [name, part])
 	return unknown

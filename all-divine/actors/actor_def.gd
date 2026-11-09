@@ -17,9 +17,10 @@ enum Team { PLAYER, ENEMY }
 ## (Rig.hide_parts). A tier of the Knuckle wears less than the tiers above it (knuckle_1 has no hood and no pauldron).
 @export var hidden_parts := PackedStringArray()
 ## How much larger than its model the actor is, about its feet (Rig.set_model_scale): the model, the hitboxes that ride
-## its bones and its hurtbox, and with them its clips' root travel, so its planted feet do not skate. A tier III
-## Knuckle is 1.04. Its look_height is set to match.
-@export var model_scale := 1.0
+## its bones and its hurtbox, and with them its clips' root travel, so its planted feet do not skate, and the distance
+## its paired moves stand their follower off (Pairing.offset_of). A tier III Knuckle is 1.04. Its look_height is set to
+## match. The body's capsule (actor.tscn, 0.35 m in radius) does not scale: at 1.04 it is 1.4 cm narrower than the body.
+@export_range(0.5, 1.5) var model_scale := 1.0
 ## Input action -> move id, for the moves the actor starts from rest. Moves reached by cancelling into
 ## them are named by their clips' cancel_open marks instead.
 @export var moveset: Dictionary = {}
