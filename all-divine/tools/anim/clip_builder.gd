@@ -459,9 +459,8 @@ static func check(cfg_path: String, sources: Dictionary, model_path: String) -> 
 ## skeleton's (see the top of this file), also where `ground_speed_from` measures them (which follows
 ## `then` and `warp` too, on the pack it names). Writes <out_dir>/<name>.tres for every section and
 ## <out_dir>/library.tres, and puts the metadata `step_fps` (int) on every clip, `ground_speed` (m/s) where asked for,
-## and `joins` (PackedFloat32Array, seconds) on a clip whose `then` has entries written as dictionaries: where in it
-## each join falls (both ends of a fade), for the checks of how a clip moves across its joins. (A clip joined only with
-## plain "Clip" entries is not given it, so the clips made before it stay as they were.)
+## and `joins` (PackedFloat32Array, seconds) on every clip with a `then`, plain or written as dictionaries: where in it
+## each join falls (both ends of a fade), for the checks of how a clip moves across its joins.
 ##
 ## If a clip's file already exists, its non-bone tracks (the marks) are merged into the new clip.
 ## Nothing is written unless every clip could be built: the problems with the list (see check) are each
@@ -607,8 +606,6 @@ static func _assemble(env: _Env, cfg: ConfigFile, section: String, key: String) 
 		return _timed(cfg, section, first)
 	var joined := join_parts(parts)
 	var played := _timed(cfg, section, joined)
-	if not _written_as_dictionaries(cfg.get_value(section, "then")):
-		return played  # the joins of the plain form are not noted, so the clips made that way stay as they were
 	var joins := PackedFloat32Array()
 	for at in _join_times(parts):
 		for time in _played_at(cfg, section, at, joined.length, played.length):
@@ -624,11 +621,6 @@ static func _timed(cfg: ConfigFile, section: String, anim: Animation) -> Animati
 		return apply_warp(anim, _floats(cfg.get_value(section, "warp")))
 	var length := float(cfg.get_value(section, "length", 0.0))
 	return retime(anim, length) if length > 0.0 else anim
-
-
-# Whether any entry of a section's `then` is written as a dictionary ({"clip": ..., and maybe a cut or a fade}).
-static func _written_as_dictionaries(then: Variant) -> bool:
-	return then is Array and (then as Array).any(func(entry: Variant) -> bool: return entry is Dictionary)
 
 
 # Where the joins of `parts` (as join_parts takes them) fall in the joined clip, in seconds: where each part begins,

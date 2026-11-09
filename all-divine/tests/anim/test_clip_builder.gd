@@ -810,11 +810,13 @@ func test_build_lays_the_layer_on_after_the_warp() -> void:
 
 
 func test_build_notes_where_its_joins_fall_on_the_clip_it_plays() -> void:
-	# Run (1 s) then Roll (2 s), the entry written as a dictionary: the join is at 1 s; retimed to 1.5 s, at 0.5 s; warped
-	# so 1 s of output plays 2 s of source, at 0.5 s; a fade of 0.25 s is a span, both of its ends noted. A clip with
-	# nothing joined, or joined only with plain "Clip" entries (as every clip made before this is), notes nothing.
+	# Run (1 s) then Roll (2 s), the entry written as a dictionary or plain: the join is at 1 s; retimed to 1.5 s, at
+	# 0.5 s; warped so 1 s of output plays 2 s of source, at 0.5 s; a fade of 0.25 s is a span, both of its ends noted. A
+	# clip with nothing joined notes nothing.
 	var cases := {
 		"then=[{\"clip\": \"Roll\"}]\n": [1.0],
+		"then=[\"Roll\"]\n": [1.0],
+		"then=\"Roll\"\nlength=1.5\n": [0.5],
 		"then=[{\"clip\": \"Roll\"}]\nlength=1.5\n": [0.5],
 		"then=[{\"clip\": \"Roll\"}]\nwarp=[0, 0, 1.0, 2.0, 2.0, 3.0]\n": [0.5],
 		"then=[{\"clip\": \"Roll\", \"fade\": 0.25}]\n": [0.75, 1.0],
@@ -828,11 +830,10 @@ func test_build_notes_where_its_joins_fall_on_the_clip_it_plays() -> void:
 		assert_eq(joins.size(), (cases[extra] as Array).size(), "%s: %s" % [extra, joins])
 		for i in mini(joins.size(), (cases[extra] as Array).size()):
 			assert_near(joins[i], cases[extra][i], 1e-3, extra)
-	for plain: String in ["[alone]\nsource=\"pack_rm\"\nclip=\"Run\"\n", "[alone]\nsource=\"pack_rm\"\nclip=\"Run\"\nthen=[\"Roll\"]\n"]:
-		var run := _build_setup()
-		_write_text(run["cfg"], plain)
-		assert_eq(ClipBuilder.build(run["cfg"], run["sources"], run["out"], MODEL), OK)
-		assert_false((_load(run["out"] + "/alone.tres") as Animation).has_meta("joins"), "nothing noted: %s" % plain)
+	var run := _build_setup()
+	_write_text(run["cfg"], "[alone]\nsource=\"pack_rm\"\nclip=\"Run\"\n")
+	assert_eq(ClipBuilder.build(run["cfg"], run["sources"], run["out"], MODEL), OK)
+	assert_false((_load(run["out"] + "/alone.tres") as Animation).has_meta("joins"), "nothing joined, nothing noted")
 
 
 func test_build_measures_the_ground_speed_of_the_clip_it_plays() -> void:

@@ -429,4 +429,5 @@ tracks/57/keys = {
 "method": &"fx"
 }]
 }
+metadata/joins = PackedFloat32Array(0.33913043)
 metadata/step_fps = 0

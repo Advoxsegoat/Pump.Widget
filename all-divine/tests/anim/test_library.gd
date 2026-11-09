@@ -190,3 +190,24 @@ func test_the_stagger_stays_on_its_feet_and_ends_where_idle_begins() -> void:
 	for bone: StringName in end:
 		var off: float = (end[bone] as Vector3).distance_to(r.bone_global(bone))
 		assert_true(off < 0.1, "%s ends %.3f m from where idle begins" % [bone, off])
+
+
+func test_every_joined_clip_notes_where_its_joins_fall() -> void:
+	# A clip made of more than one source clip (clips.cfg `then`, in the plain form or as dictionaries) carries `joins`:
+	# where each join falls, so the pop checks can hold the hands and feet across it (ClipMotion). One time per join at
+	# least (a crossfade notes both its ends).
+	var cfg := ConfigFile.new()
+	cfg.load(CONFIG)
+	var joined := 0
+	for section in cfg.get_sections():
+		if not cfg.has_section_key(section, "then"):
+			continue
+		var then: Variant = cfg.get_value(section, "then")
+		var parts := (then as Array).size() if then is Array else 1
+		var anim := load("res://assets/anim/abarax/%s.tres" % section) as Animation
+		var joins: PackedFloat32Array = anim.get_meta(&"joins", PackedFloat32Array())
+		assert_true(joins.size() >= parts, "%s notes its %d join(s): %s" % [section, parts, joins])
+		for t in joins:
+			assert_true(t > 0.0 and t < anim.length, "%s: a join at %.3f s lies inside its %.3f s" % [section, t, anim.length])
+		joined += 1
+	assert_true(joined >= 12, "the joined clips (%d)" % joined)

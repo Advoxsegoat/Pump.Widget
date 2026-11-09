@@ -456,4 +456,5 @@ tracks/58/keys = {
 "method": &"cancel_open"
 }]
 }
+metadata/joins = PackedFloat32Array(0.328125)
 metadata/step_fps = 12
