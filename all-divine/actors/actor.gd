@@ -48,7 +48,8 @@ extends CharacterBody3D
 ##      slower while a guard is up)
 ##   7. move_and_slide, with gravity when off the floor, and with the knockback added (see push), which the
 ##      move and locomotion know nothing of; first its ground motion is cut where it would take the body into another
-##      actor's (BodySpacing.keep_apart), so bodies do not pass through each other
+##      actor's (BodySpacing.keep_apart), so bodies do not pass through each other, and after it the body settles out of
+##      any it slid deeper into along a wall (BodySpacing.settle)
 ##   8. the body turns to locomotion's facing
 ##   9. the rig is given the strafe (the way the body goes against the way it faces, when it keeps facing a
 ##      target), which says whether locomotion plays backward, then the speed (see _rig_speed: while a move
@@ -448,7 +449,9 @@ func _physics_process(delta: float) -> void:
 		fall += get_gravity().y * delta
 	var shove := _next_push(delta)
 	velocity = spacing.keep_apart(Vector3(planar.x + shove.x, fall, planar.z + shove.z), delta)
+	var before := global_position
 	move_and_slide()
+	spacing.settle(before)
 	rotation.y = locomotion.facing_yaw
 	var back := rig.set_strafe(_strafe_angle(intent, planar))
 	rig.set_locomotion(_next_rig_speed(delta), back)

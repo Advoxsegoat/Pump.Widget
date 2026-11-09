@@ -143,3 +143,56 @@ func test_the_dead_and_the_two_fighters_of_a_pair_are_not_kept_apart() -> void:
 	knuckle.paired_with = null
 	knuckle.dead = true
 	assert_vec_near(abarax.spacing.keep_apart(forward, dt), forward, 1e-9, "a corpse is no wall")
+
+
+# The deepest any two of `actors` are inside each other over `frames_to_play` frames, on frames neither is airborne.
+func _deepest_of(actors: Array[Actor], frames_to_play: int) -> Array:
+	var deepest := [0.0, ""]
+	for f in frames_to_play:
+		await frames(1)
+		for i in actors.size():
+			for j in range(i + 1, actors.size()):
+				var a := actors[i]
+				var b := actors[j]
+				if a.runner.airborne or b.runner.airborne:
+					continue
+				var depth := -_clearance(a, b)
+				if depth > deepest[0]:
+					deepest = [depth, "frame %d, %s and %s" % [a.frame, a.name, b.name]]
+	return deepest
+
+
+# A Knuckle (tier I, HP to spare) at `at` facing `yaw`, pressing `steps`.
+func _knuckle(arena: Node3D, at: Vector3, yaw: float, steps: Array, actor_name: String) -> Actor:
+	var k := TestArena.spawn(arena, _tough(KNUCKLE_1), ScriptBrain.new(steps), at, actor_name)
+	k.place(Transform3D(Basis(Vector3.UP, yaw), at))
+	return k
+
+
+func test_two_closing_bodies_and_a_third_never_overlap() -> void:
+	var thrust := [{"frames": 1, "press": [&"heavy"]}, {"frames": 120}]
+	# Head on: two thrusts at each other.
+	var arena := TestArena.make(self)
+	var a := _knuckle(arena, Vector3(-2.2, 0, 0), PI * 0.5, thrust, "A")
+	var b := _knuckle(arena, Vector3(2.2, 0, 0), -PI * 0.5, thrust, "B")
+	var head_on: Array = await _deepest_of([a, b] as Array[Actor], 110)
+	assert_true(head_on[0] <= SLACK, "two thrusts head on: %.3f m inside each other (%s)" % head_on)
+	arena.queue_free()
+	await frames(1)
+	# Three: two thrusts converging on Abarax from either side.
+	arena = TestArena.make(self)
+	var abarax := TestArena.spawn(arena, _tough(ABARAX), Brain.new(), Vector3.ZERO, "Abarax")
+	a = _knuckle(arena, Vector3(-3.0, 0, 0.3), PI * 0.5, thrust, "A")
+	b = _knuckle(arena, Vector3(3.0, 0, -0.3), -PI * 0.5, thrust, "B")
+	var three: Array = await _deepest_of([abarax, a, b] as Array[Actor], 110)
+	assert_true(three[0] <= SLACK, "two thrusts on Abarax from either side: %.3f m (%s)" % three)
+	arena.queue_free()
+	await frames(1)
+	# Along a wall: a thrust down a wall into a Knuckle standing half in its path (the wall's slide must not carry it in).
+	arena = TestArena.make(self)
+	TestArena.wall(arena, Vector3(0, 1.0, -0.45), Vector3(12.0, 2.0, 0.3))
+	abarax = TestArena.spawn(arena, _tough(ABARAX), Brain.new(), Vector3(-2.5, 0, 0.05), "Abarax")
+	var stand := _knuckle(arena, Vector3(-0.3, 0, 0.62), PI * 0.5, [{"frames": 120}], "Standing")
+	var thruster := _knuckle(arena, Vector3(3.0, 0, 0.05), -PI * 0.5, thrust, "Thruster")
+	var wall: Array = await _deepest_of([abarax, stand, thruster] as Array[Actor], 110)
+	assert_true(wall[0] <= SLACK, "a thrust along a wall into a body: %.3f m (%s)" % wall)
