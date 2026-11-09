@@ -10,19 +10,20 @@ extends Brain
 ##               their heads), or within hearing_range while it sprints or attacks, whichever way it faces
 ##   NOTICING    it turns to look. Perceived for notice_time in all (losing sight of it counts back down), it engages;
 ##               counted all the way back down, it is IDLE again
-##   ENGAGED     it faces the target and keeps preferred_range ± range_tolerance from it, walking in or backing off,
-##               and circles it at circle_speed while it is there. When its spacing has got no nearer for reangle_after
+##   ENGAGED     it faces the target and keeps preferred_range ± range_tolerance from it: once out of that range it
+##               walks in or backs off until it is SETTLE_WITHIN of preferred_range, and within it it circles at
+##               circle_speed, easing toward preferred_range as it goes. When its spacing has got no nearer for reangle_after
 ##               seconds (Review Focus 5), or it has been blocked outright for BLOCKED_AFTER (a body or a wall in the
 ##               way: the stick pushed, the body going nowhere), it tries another angle: the circling turns the other
 ##               way and its heading swings 60 degrees that way, until it is back in its range. Circling that is blocked
 ##               turns the other way.
 ##               Off its rest (attack_rest after its last attack), it chooses an attack: it takes one of the target's
 ##               attack tokens (AttackTokens; none needed by a squad that ignores them, or for an option that needs
-##               none), picks by weight among the options off cooldown that it may throw, and then closes or backs off
-##               into that option's range (where the move really lands: AttackOption) and throws it once it is there
-##               and square enough to the target (max_angle_deg), checking both again at the press. It jogs in (the
-##               attack starts as it arrives) and backs off at a jog, walking the last of it. One that cannot reach its
-##               range in twice reangle_after gives it up
+##               none), picks by weight among the options off cooldown that it may throw and that are on the menu at
+##               this range (it would back up no more than the option's back_up_margin: on_menu), and then closes or
+##               backs off into that option's range (where the move really lands: AttackOption) and throws it once it
+##               is there and square enough to the target (max_angle_deg), checking both again at the press. It jogs in
+##               and backs up at a walk. One that cannot reach its range in twice reangle_after gives it up
 ##   ATTACKING   it presses the option's combo, each action as the cancel window that takes it opens; each blow is warped
 ##               toward the target (Intent.warp, MoveData.strike_distance), and when the target will stand beyond the
 ##               next blow's warped reach, or inside it (he stepped in and smothers it), the combo ends there rather
@@ -47,10 +48,12 @@ const REANGLE_DEG := 60.0
 const JOG_PUSH := 1.0
 const WALK_PUSH := 0.45
 ## Within this many metres of where it is going it walks rather than jogs (so it does not run past a narrow range).
-## Closing in to throw an attack it jogs all the way (the attack starts as it arrives, which stops it); backing off into
-## one, it walks the last BACK_WALK_WITHIN metres.
 const WALK_WITHIN := 1.5
-const BACK_WALK_WITHIN := 0.8
+## How strongly circling eases toward preferred_range, against going round (at the edge of its range: 1 is as much in as
+## round).
+const DRIFT := 0.5
+## Out of its range, it goes back until it is this near preferred_range (metres), and only then circles.
+const SETTLE_WITHIN := 0.15
 ## How far beyond a warped blow's strike_distance and MoveRunner.MAX_WARP the target may stand when it lands and the combo
 ## go on: every Knuckle blow still lands at least this far past where it was made to meet it.
 const WARP_SLACK := 0.1
@@ -86,6 +89,7 @@ var _swing := 0.0  # radians its heading is swung by, after re-angling
 var _failing := 0.0  # seconds its spacing (or approach) has got no nearer
 var _best_error := INF  # the nearest it has come to its range since it last got nearer
 var _blocked := 0.0  # seconds it has pushed the stick without getting anywhere
+var _settling := false  # out of its range, going back to preferred_range
 var _last_at := Vector3.INF  # where its actor stood when it last thought
 var _speed := 0.0  # how fast its actor really went on the ground since then, m/s
 var _plan: AttackOption  # the attack chosen, while it closes in and throws it
@@ -167,6 +171,12 @@ func think(actor: Actor, delta: float) -> Intent:
 	else:
 		_space(actor, intent, delta)
 	return intent
+
+
+## Whether `option` may be chosen with the target `distance` metres away: by range, on the near side only. The actor would
+## have to back up no more than the option's back_up_margin to throw it; from further out it can always walk in.
+func on_menu(option: AttackOption, distance: float) -> bool:
+	return option.min_range - distance <= option.back_up_margin
 
 
 ## The attack it has chosen and is closing in to throw or throwing, or null.
@@ -254,14 +264,18 @@ func _space(actor: Actor, intent: Intent, delta: float) -> void:
 		return
 	var toward := to / distance
 	var error := absf(distance - def.preferred_range)
-	if error <= def.range_tolerance:
+	if error <= (SETTLE_WITHIN if _settling else def.range_tolerance):
+		_settling = false
 		_reset_spacing()
-		intent.move = toward.rotated(_circle * PI * 0.5) * def.circle_speed
+		# Round it, easing toward the middle of its range as it goes (it settles at preferred_range, not at an edge).
+		var ease := clampf((distance - def.preferred_range) / def.range_tolerance, -1.0, 1.0) * DRIFT
+		intent.move = (toward.rotated(_circle * PI * 0.5) + toward * ease).normalized() * def.circle_speed
 		if _watch_blocked(actor, intent, delta):
 			_circle = -_circle
 		return
-	_track_progress(error - def.range_tolerance, delta)
-	_head(intent, toward if distance > def.preferred_range else -toward, error - def.range_tolerance)
+	_settling = true  # out of its range: it goes back to preferred_range itself, not to the edge of its range
+	_track_progress(error - SETTLE_WITHIN, delta)
+	_head(intent, toward if distance > def.preferred_range else -toward, error - SETTLE_WITHIN)
 	if _watch_blocked(actor, intent, delta):
 		_reangle()
 
@@ -313,7 +327,8 @@ func _watch_blocked(actor: Actor, intent: Intent, delta: float) -> bool:
 
 # --- choosing and throwing an attack ---
 
-# Takes a token, picks an option by weight among those it may throw now, and rolls its tier's dice for it.
+# Takes a token, picks an option by weight among those it may throw now (off cooldown, on the menu at this range: on_menu),
+# and rolls its tier's dice for it.
 func _choose(actor: Actor) -> void:
 	if target.paired_with != null or def.attacks.is_empty():
 		return
@@ -322,8 +337,11 @@ func _choose(actor: Actor) -> void:
 		token = AttackTokens.take_for(actor, target)
 	var open: Array[AttackOption] = []
 	var total := 0.0
+	var distance := _flat(actor, target.global_position).length()
 	for option in def.attacks:
 		if _cooldowns.get(option, 0.0) > 0.0 or option.weight <= 0.0 or (option.needs_token and not token):
+			continue
+		if not on_menu(option, distance):
 			continue
 		open.append(option)
 		total += option.weight
@@ -378,7 +396,7 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 	if distance > hi:
 		intent.move = (to / distance).rotated(_swing) * JOG_PUSH
 	else:
-		intent.move = (-to / distance).rotated(_swing) * (JOG_PUSH if lo - distance > BACK_WALK_WITHIN else WALK_PUSH)
+		intent.move = (-to / distance).rotated(_swing) * WALK_PUSH  # a back-up within the option's margin, at a walk
 	if _watch_blocked(actor, intent, delta):
 		_reangle()
 

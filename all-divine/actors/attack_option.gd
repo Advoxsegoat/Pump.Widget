@@ -21,6 +21,10 @@ extends Resource
 @export var cooldown := 1.5
 ## How likely it is to be chosen against the other options that can be: its share of their weights.
 @export var weight := 1.0
+## How far (metres) the brain may back up to throw it: it is on the menu only when the actor stands no more than this short
+## of min_range. Walking in to it from further out is always allowed. A travelling attack thrown from close would need a
+## long back-up first; with a margin it is chosen only from out where it belongs (the sweep closes a gap).
+@export var back_up_margin := 1.0
 ## Whether it needs one of the target's attack tokens (AttackTokens) to be thrown.
 @export var needs_token := true
 ## Actions pressed in turn after `action`, each as the cancel window that takes it opens: ["palm", "palm"] after the

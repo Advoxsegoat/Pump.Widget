@@ -23,6 +23,7 @@ script = ExtResource("1_02iyf")
 action = &"heavy"
 min_range = 3.7
 max_range = 4.1
+back_up_margin = 1.5
 cooldown = 3.0
 weight = 0.5
 combo = PackedStringArray()

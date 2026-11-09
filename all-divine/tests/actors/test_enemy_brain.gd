@@ -299,6 +299,64 @@ static func _root_travel(actor: Actor, move: MoveData) -> float:
 	return (actor.rig.skeleton.global_basis * travel).length()
 
 
+func test_it_backs_up_to_an_attack_no_further_than_its_margin_and_at_a_walk() -> void:
+	# Choice is by range on the near side: an attack is on the menu only when the Knuckle would back up no more than its
+	# back_up_margin to throw it (walking in to one is always allowed), and what back-up is left is a walk.
+	var backups := []  # [tier, action, metres backed up, its margin, peak m/s]
+	for tier in [1, 2, 3]:
+		for seed_value in [5, 21]:
+			var strafer := Strafer.new()
+			var run := _fight(_brain_def(BRAINS[tier - 1]), Vector3(0, 0, 4.0), PI, strafer, tier, seed_value)
+			var knuckle: Actor = run["knuckle"]
+			var abarax: Actor = run["abarax"]
+			var brain: EnemyBrain = run["brain"]
+			strafer.foe = knuckle
+			var plan: AttackOption = null
+			var nearest := 0.0
+			var furthest := 0.0
+			var peak := 0.0
+			var last_gap := _gap(knuckle, abarax)
+			var last := knuckle.global_position
+			for i in 60 * 25:
+				await frames(1)
+				var gap := _gap(knuckle, abarax)
+				var speed := Vector2(knuckle.global_position.x - last.x, knuckle.global_position.z - last.z).length() * 60.0
+				last = knuckle.global_position
+				if brain.plan() != null and brain.mode == EnemyBrain.Mode.ENGAGED:
+					if plan != brain.plan():
+						plan = brain.plan()
+						nearest = gap
+						furthest = gap
+						peak = 0.0
+					furthest = maxf(furthest, gap)
+					if gap > last_gap + 0.001:
+						peak = maxf(peak, speed)  # backing off from him
+				elif plan != null:
+					backups.append([tier, plan.action, furthest - nearest, plan.back_up_margin, peak])
+					plan = null
+				last_gap = gap
+			(run["arena"] as Node).queue_free()
+			await frames(1)
+	for tier in [2, 3]:
+		var thrusts := backups.filter(func(b: Array) -> bool: return b[0] == tier and b[1] == &"heavy")
+		assert_false(thrusts.is_empty(), "knuckle_%d still throws its thrust from its spacing (%s)" % [tier, backups])
+	for b: Array in backups:
+		assert_true(b[2] <= b[3] + 0.15, "knuckle_%d %s backed up %.2f m, its margin %.1f" % [b[0], b[1], b[2], b[3]])
+		assert_true(b[4] <= 1.2, "knuckle_%d %s backed up at a walk: %.2f m/s at most 1.2" % [b[0], b[1], b[4]])
+
+
+func test_the_thrust_is_on_the_menu_inside_each_tiers_spacing_band() -> void:
+	for tier in [2, 3]:
+		var def := load(BRAINS[tier - 1]) as BrainDef
+		var thrust: AttackOption = def.attacks.filter(func(o: AttackOption) -> bool: return o.action == &"heavy")[0]
+		var brain := EnemyBrain.new(def, 1)
+		var outer := def.preferred_range + def.range_tolerance
+		assert_true(brain.on_menu(thrust, outer), "knuckle_%d can choose its thrust from %.1f m, the outer edge of its band" % [tier, outer])
+		assert_true(brain.on_menu(thrust, thrust.max_range + 2.0), "and from any further out (it walks in)")
+		var sweep: AttackOption = def.attacks.filter(func(o: AttackOption) -> bool: return o.action == &"gift")[0]
+		assert_false(brain.on_menu(sweep, outer), "but not its sweep, which needs room it would have to back up for")
+
+
 # Fires `action` and then `combo` (each as the window takes it) from a Knuckle of `tier` `gap` metres from a standing
 # Abarax, aiming at him, and returns how many blows connected (a grab that takes hold counts once).
 func _fire(tier: int, action: StringName, combo: PackedStringArray, gap: float) -> int:
