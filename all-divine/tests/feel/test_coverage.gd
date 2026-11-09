@@ -1,8 +1,9 @@
 extends TestCase
 ## Animation coverage (spec §8, feel metrics): every actor has every clip it needs, and none of them leaves the body in
 ## its bind pose. For every actor def in the Registry: its required clips, the clip of every reaction move, of every
-## moveset move and of every move those cancel into (as the windows open for it: MoveRunner.window_of), and of both
-## moves of each of its pairs. (The attacks of an enemy's brain join them in F1 Task 13.)
+## moveset move and of every move those cancel into (as the windows open for it: MoveRunner.window_of), of both
+## moves of each of its pairs, and of the move each attack of its brain starts (a brain's combos go by the windows,
+## so their moves are among those).
 
 
 ## What `def` needs and its rig lacks or shows as a T-pose: one line each.
@@ -23,6 +24,12 @@ static func gaps(def: ActorDef) -> PackedStringArray:
 		if pair != null:
 			queue.append(pair.lead_move)
 			queue.append(pair.follow_move)
+	if def.brain != null:
+		for option in def.brain.attacks:
+			if def.moveset.has(option.action):
+				queue.append(def.moveset[option.action])
+			else:
+				out.append("%s: brain attack '%s' presses an action its moveset lacks" % [def.id, option.action])
 	var seen := {}
 	while not queue.is_empty():
 		var id: StringName = queue.pop_front()
@@ -63,3 +70,13 @@ func test_a_missing_clip_is_a_gap() -> void:
 	var def := (load(Duel.ABARAX) as ActorDef).duplicate() as ActorDef
 	def.required_clips = PackedStringArray(["idle", "no_such_clip"])
 	assert_eq(gaps(def), PackedStringArray(["abarax: required needs the clip 'no_such_clip', which the rig lacks"]))
+
+
+func test_a_brain_attack_whose_action_starts_no_move_is_a_gap() -> void:
+	var def := (load("res://data/actors/knuckle_1.tres") as ActorDef).duplicate() as ActorDef
+	var kick := AttackOption.new()
+	kick.action = &"kick"
+	var brain := BrainDef.new()
+	brain.attacks.assign([kick])
+	def.brain = brain
+	assert_eq(gaps(def), PackedStringArray(["knuckle_1: brain attack 'kick' presses an action its moveset lacks"]))

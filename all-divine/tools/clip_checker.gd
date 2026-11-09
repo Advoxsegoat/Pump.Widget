@@ -34,7 +34,9 @@ extends RefCounted
 ## and per actor (check_actor): each required clip exists and is not a T-pose, the moveset, the reactions and the
 ## pairs (its finisher and its grab_pair) name existing moves, each move the actor can start, react with, cancel
 ## into (as the windows open for it: MoveRunner.window_of) or play in one of its pairs is checked against the actor's
-## rig and team, and each of its pairs is checked with the clips of its rig.
+## rig and team, and each of its pairs is checked with the clips of its rig. An enemy's brain (ActorDef.brain) presses
+## only actions of the moveset (each attack's own, and the feint's when it feints), and every press of an attack's
+## combo, with the extra blow when the brain extends combos, is taken by a cancel window of the move before it.
 ## check_all runs every actor in the Registry, and reports the moves no actor can reach and the pairs no actor
 ## uses, since those have no rig to be checked against.
 
@@ -368,11 +370,19 @@ static func _pairs_of(def: ActorDef) -> Array[PairedMove]:
 	return found
 
 
-# The moves `def` can start with no move before them, as ids: its moveset, its reactions and both moves of each of
-# its pairs. A name that is not a move is a problem in `out`. Further sources of reachable moves (the attacks of its
-# brain, F1 Task 13) are added here.
+# The moves `def` can start with no move before them, as ids: its moveset, its reactions, both moves of each of its
+# pairs, and the move each attack of its brain starts. A name that is not a move, or a brain attack whose action the
+# moveset lacks, is a problem in `out`.
 func _start_moves(def: ActorDef, move_ids: PackedStringArray, out: PackedStringArray) -> Array[String]:
 	var found: Array[String] = []
+	if def.brain != null:
+		for option in def.brain.attacks:
+			if option != null and def.moveset.has(option.action):
+				found.append(String(def.moveset[option.action]))
+			else:
+				out.append("%s: brain attack presses '%s', which its moveset lacks" % [def.id, option.action if option != null else &""])
+		if def.brain.feint_chance > 0.0 and not def.moveset.has(EnemyBrain.FEINT_ACTION):
+			out.append("%s: brain feints, but its moveset has no feint ('%s')" % [def.id, EnemyBrain.FEINT_ACTION])
 	for action in def.moveset:
 		var move_id := String(def.moveset[action])
 		if move_ids.has(move_id):
@@ -408,6 +418,41 @@ func _moves_after(move: MoveData, anim: Animation, move_ids: PackedStringArray, 
 	if move_ids.has(String(move.neutral_variant)):
 		found.append(String(move.neutral_variant))
 	return found
+
+
+# The problems of the combos of `def`'s brain: each press of an attack's combo (and, when the brain extends combos, its
+# last press once more) must be taken by a cancel window of the move before it, as the windows open for this actor
+# (MoveRunner.window_of; any of the move's windows will do). A press no window takes is reported once, and the rest of
+# that combo is not followed.
+func _check_combos(def: ActorDef, tree: AnimationTree, move_ids: PackedStringArray) -> PackedStringArray:
+	var out := PackedStringArray()
+	if def.brain == null:
+		return out
+	for option in def.brain.attacks:
+		if option == null or not def.moveset.has(option.action):
+			continue  # reported with the start moves
+		var chains: Array[PackedStringArray] = [option.combo]
+		if def.brain.extend_combo_chance > 0.0 and not option.combo.is_empty():
+			var longer := option.combo.duplicate()
+			longer.append(option.combo[option.combo.size() - 1])
+			chains.append(longer)
+		for chain in chains:
+			var move_id := String(def.moveset[option.action])
+			for i in chain.size():
+				var move := Registry.fetch(&"moves", StringName(move_id)) as MoveData if move_ids.has(move_id) else null
+				if move == null or not tree.has_animation(move.clip):
+					break  # reported where the move is checked
+				var takes := {}
+				for mark in Marks.read(tree.get_animation(move.clip)):
+					if mark["kind"] == &"cancel_open" and mark["args"].get("into") is Dictionary:
+						takes.merge(MoveRunner.window_of(move, mark["args"]["into"], def))
+				if not takes.has(StringName(chain[i])) and not takes.has(String(chain[i])):
+					var problem := "%s: brain attack '%s' presses '%s' after '%s', which no cancel window of it takes" % [def.id, option.action, chain[i], move_id]
+					if not out.has(problem):
+						out.append(problem)
+					break
+				move_id = String(takes.get(StringName(chain[i]), takes.get(String(chain[i]))))
+	return out
 
 
 # check_actor, also noting in `reached` (move id -> true) every move it checked, and in `paired` (pair id -> true)
@@ -460,6 +505,7 @@ func _check_actor(def: ActorDef, reached: Dictionary, paired: Dictionary) -> Pac
 			var anim := tree.get_animation(move.clip)
 			out.append_array(check_move(move, anim, hitbox_ids, move_ids, def.team, bone_names))
 			queue.append_array(_moves_after(move, anim, move_ids, def))
+	out.append_array(_check_combos(def, tree, move_ids))
 	for pair in _pairs_of(def):
 		paired[String(pair.id)] = true
 		var clips: Array[Animation] = []
