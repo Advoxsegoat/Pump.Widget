@@ -5,7 +5,8 @@ extends Node
 ## attack at once.
 ##
 ## It spawns the three Knuckles (knuckle_1 to knuckle_3), spread 6 to 9 m from Abarax's spawn and facing him, each
-## thinking with the enemy brain its def names (EnemyBrain, which Actor gives it, seeded from its name); spawns the three
+## thinking with the enemy brain its def names (EnemyBrain, which Actor gives it, seeded from its name and the round, so
+## each respawn and each reload rolls new dice); spawns the three
 ## again RESPAWN_DELAY seconds after the last one dies; and reloads the scene RELOAD_DELAY seconds after Abarax dies.
 ## With --selftest (the game's self-test, which runs the courtyard's own circuit) it spawns nothing, so the self-test
 ## behaves as it does on the plain main scene.
@@ -38,6 +39,10 @@ var _region: Region
 var _knuckles: Array[Actor] = []
 var _respawn_in := -1.0
 var _reload_in := -1.0
+
+## How many rounds of Knuckles have been sent since the game started: it outlives a reload of the scene, and each round's
+## Knuckles take it as their spawn_count, so every respawn and every reload rolls new dice.
+static var _rounds := 0
 
 
 func _init() -> void:
@@ -98,11 +103,13 @@ func _spawn_all() -> void:
 		var knuckle := ACTOR.instantiate() as Actor
 		knuckle.name = "Knuckle%d" % (i + 1)
 		knuckle.def = def
+		knuckle.spawn_count = _rounds
 		_world.add_child(knuckle)
 		var toward := Vector2(origin.x - at.x, origin.z - at.z)
 		knuckle.place(Transform3D(Basis(Vector3.UP, Locomotion.yaw_of(toward)), at))
 		knuckle.died.connect(_on_knuckle_died)
 		_knuckles.append(knuckle)
+	_rounds += 1
 
 
 func _on_knuckle_died() -> void:
@@ -114,3 +121,8 @@ func _on_knuckle_died() -> void:
 
 func _on_player_died() -> void:
 	_reload_in = reload_delay
+
+
+## Starts the count of rounds sent again from 0, so the Knuckles roll the dice of the first round (for tests).
+static func reset_spawns() -> void:
+	_rounds = 0

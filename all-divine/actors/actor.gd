@@ -119,6 +119,9 @@ const FINISHABLE_GROUP := &"finishable"
 const FINISHER_STANCE_SLACK := 0.05
 
 @export var def: ActorDef
+## Which spawn of its name the actor is (0 for the first), set before it is ready by whoever spawns it (DemoDirector):
+## the dice of the EnemyBrain it gets from its def are seeded from its name and this.
+@export var spawn_count := 0
 
 var brain: Brain = Brain.new()
 var stats: Stats
@@ -197,10 +200,10 @@ func _ready() -> void:
 	# breathe in step. The hash is stirred (rand_from_seed) first: names that end in different characters,
 	# like Knuckle2 and Knuckle3, hash to neighbours, which alone would put them a thousandth of a radian apart.
 	rig.set_breath_phase(float(rand_from_seed(hash(name))[0] % 6283) / 1000.0)
-	# An enemy left to itself thinks with the brain its def names, its dice seeded from its name (a fight goes the same
-	# way every time).
+	# An enemy left to itself thinks with the brain its def names, its dice seeded from its name and spawn_count (a fight
+	# goes the same way every time it is played from the same start, and a respawned foe rolls new dice).
 	if not _brain_given and def.team == ActorDef.Team.ENEMY and def.brain != null:
-		set_brain(EnemyBrain.new(def.brain, hash(String(name))))
+		set_brain(EnemyBrain.new(def.brain, hash("%s#%d" % [name, spawn_count])))
 
 
 ## Hands the actor to `b` from the next frame on. One handed it before it is ready is kept: the def's brain (an enemy's)

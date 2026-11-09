@@ -15,6 +15,7 @@ var _saved_bindings := {}
 func before_each() -> void:
 	_saved_bindings = Bindings.current()
 	Game.reset()
+	DemoDirector.reset_spawns()
 
 
 func after_each() -> void:
@@ -180,6 +181,39 @@ func test_the_knuckles_respawn_after_all_three_fall() -> void:
 		assert_false(first.has(knuckle), "new ones")
 		assert_true(knuckle.brain is EnemyBrain, "with brains")
 	assert_eq(DemoDirector.RESPAWN_DELAY, 4.0, "after four seconds in the game")
+
+
+# The dice each Knuckle of `yard` was seeded with, in tier order.
+func _seeds(yard: Main) -> Array:
+	return _director(yard).knuckles().map(func(k: Actor) -> int: return (k.brain as EnemyBrain).rng.seed)
+
+
+func test_respawned_and_reloaded_knuckles_roll_new_dice() -> void:
+	var yard := _yard()
+	var director := _director(yard)
+	director.respawn_delay = 0.1
+	await frames(2)
+	var first := _seeds(yard)
+	for knuckle in director.knuckles():
+		knuckle.die()
+	await frames(15)
+	var again := _seeds(yard)
+	assert_eq(again.size(), 3)
+	for i in 3:
+		assert_ne(again[i], first[i], "a respawned Knuckle rolls new dice")
+	yard.queue_free()
+	await frames(1)
+	var reloaded := _yard()  # what a reload builds
+	await frames(2)
+	var third := _seeds(reloaded)
+	for i in 3:
+		assert_false(third[i] == first[i] or third[i] == again[i], "and so does one after a reload")
+	reloaded.queue_free()
+	await frames(1)
+	DemoDirector.reset_spawns()
+	var fresh := _yard()
+	await frames(2)
+	assert_eq(_seeds(fresh), first, "from the same start, the same dice: a run can be reproduced")
 
 
 func test_the_scene_reloads_after_abarax_dies() -> void:
