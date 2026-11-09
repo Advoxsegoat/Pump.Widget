@@ -172,9 +172,13 @@ func test_attacks_only_in_range_and_angle_and_off_cooldown() -> void:
 	jab.max_angle_deg = 20.0
 	var def := _brain_def(BRAINS[0], [jab])
 	def.attack_rest = 0.0
-	var run := _fight(def, Vector3(0, 0, 3.0), PI + deg_to_rad(50.0))  # 3 m off, 50 degrees off facing him
+	var run := _fight(def, Vector3(0, 0, 3.0), PI + deg_to_rad(55.0))  # 3 m off, 55 degrees off facing him
 	var knuckle: Actor = run["knuckle"]
 	var abarax: Actor = run["abarax"]
+	# It turns slowly (10 degrees a second), so it reaches its range still turned away: only the angle holds the press.
+	var slow := (knuckle.def.locomotion as LocomotionTuning).duplicate() as LocomotionTuning
+	slow.turn_rate_deg = 10.0
+	knuckle.locomotion.tuning = slow
 	var starts := []  # [frame, gap, degrees off the facing]
 	var ends := []
 	knuckle.runner.move_started.connect(func(m: MoveData) -> void:
@@ -183,7 +187,7 @@ func test_attacks_only_in_range_and_angle_and_off_cooldown() -> void:
 	knuckle.runner.move_ended.connect(func(m: MoveData, _c: bool) -> void:
 		if m.id == &"knuckle_jab":
 			ends.append(knuckle.frame))
-	await frames(60 * 8)
+	await frames(60 * 10)
 	assert_true(starts.size() >= 2, "it jabbed (%s)" % [starts])
 	for s: Array in starts:
 		assert_true(s[1] >= jab.min_range and s[1] <= jab.max_range, "only in range: %.2f m" % s[1])
