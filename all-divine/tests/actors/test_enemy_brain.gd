@@ -599,6 +599,32 @@ func test_stands_down_when_its_target_dies() -> void:
 	assert_eq(run["brain"].mode, EnemyBrain.Mode.IDLE)
 
 
+func test_standing_down_forgets_a_back_off_and_a_retreat() -> void:
+	var def := _brain_def(BRAINS[0], [])
+	def.retreat_below = 0.5
+	var run := _fight(def, Vector3(0, 0, 2.2))
+	var knuckle: Actor = run["knuckle"]
+	var brain: EnemyBrain = run["brain"]
+	await frames(60)
+	knuckle.runner.start(Registry.fetch(&"moves", &"stagger") as MoveData)
+	await frames(5)
+	(run["abarax"] as Actor).die()  # its target dies while it reels
+	await frames(5)
+	assert_eq(brain.mode, EnemyBrain.Mode.IDLE, "with no one to fight it stands down")
+	assert_false(brain._back_off_due or brain._backing, "and forgets the back-off it owed")
+	assert_eq(brain._retreat_left, 0.0, "and any retreat")
+	while knuckle.runner.busy():
+		await frames(1)
+	var other := TestArena.spawn(run["arena"], _tough(ABARAX), Brain.new(), Vector3(0, 0, 0.5), "Another")
+	other.place(Transform3D(Basis(Vector3.UP, 0.0), Vector3(0, 0, 0.5)))
+	var backed := false
+	for i in 90:
+		await frames(1)
+		backed = backed or brain._backing
+	assert_eq(brain.mode, EnemyBrain.Mode.ENGAGED, "a new foe engages it")
+	assert_false(backed, "without the old stagger's back-off")
+
+
 # --- the actor ---
 
 func test_an_enemy_def_with_a_brain_thinks_with_it() -> void:

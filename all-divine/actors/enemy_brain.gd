@@ -120,17 +120,13 @@ func think(actor: Actor, delta: float) -> Intent:
 		_cooldowns[option] = maxf(_cooldowns[option] - delta, 0.0)
 	_find_target(actor)
 	if target == null:
-		_stand_down(actor)
-		mode = Mode.IDLE
-		_noticed = 0.0
+		_go_idle(actor)
 		return intent
 	if mode == Mode.IDLE or mode == Mode.NOTICING:
 		_perceive(actor, delta, intent)
 		return intent
 	if _flat(actor, target.global_position).length() > def.sight_range * LOSE_FACTOR:
-		_stand_down(actor)
-		mode = Mode.IDLE
-		_noticed = 0.0
+		_go_idle(actor)
 		return intent
 	_face(intent)
 	if _reacting(actor):
@@ -496,6 +492,19 @@ func _stand_down(actor: Actor) -> void:
 		_give_back(actor)
 		if mode == Mode.ATTACKING:
 			mode = Mode.ENGAGED
+
+
+# No one to fight (the target is gone, dead or too far): it stands down and forgets what it owed the fight it was in, a
+# back-off, a retreat, its spacing, so a new foe meets it fresh.
+func _go_idle(actor: Actor) -> void:
+	_stand_down(actor)
+	mode = Mode.IDLE
+	_noticed = 0.0
+	_backing = false
+	_back_off_due = false
+	_retreat_left = 0.0
+	_blocked = 0.0
+	_reset_spacing()
 
 
 func _give_back(actor: Actor) -> void:
