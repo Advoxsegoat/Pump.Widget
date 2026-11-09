@@ -13,6 +13,8 @@ const KNUCKLES := ["res://data/actors/knuckle_1.tres", "res://data/actors/knuckl
 const BRAINS := ["res://data/brains/knuckle_1.tres", "res://data/brains/knuckle_2.tres", "res://data/brains/knuckle_3.tres"]
 ## The closest two bodies stand: two capsules of 0.35 m touching.
 const CONTACT := 0.7
+## The share of its travel a travelling attack (the thrust, the sweep) keeps before the bodies touch, at its min_range.
+const TRAVEL_KEPT := 0.75
 ## What counts as a blow that connected: it landed, or a guard took it, or a grab took hold.
 const CONNECTED: Array[int] = [HitResult.Outcome.HIT, HitResult.Outcome.GUARDED, HitResult.Outcome.GUARD_BREAK,
 		HitResult.Outcome.GRABBED]
@@ -261,6 +263,36 @@ func test_every_option_lands_at_both_ends_of_its_range() -> void:
 	# The jab's combo is where the range is narrow: just outside it a blow misses.
 	var jab := (load(BRAINS[0]) as BrainDef).attacks[0]
 	assert_true(await _fire(1, jab.action, jab.combo, jab.max_range + 0.2) < 1 + jab.combo.size(), "0.2 m beyond its range the combo does not all land")
+
+
+func test_travelling_attacks_keep_their_travel() -> void:
+	# Thrown from closer, the stop-at-body clamp would cut the slide or the thrust short while its clip slid on in place:
+	# a travelling attack's min_range lets it keep at least TRAVEL_KEPT of its travel before the bodies touch.
+	var arena := TestArena.make(self)
+	var travelling := 0
+	for tier in [1, 2, 3]:
+		var knuckle := TestArena.spawn(arena, load(KNUCKLES[tier - 1]), Brain.new(), Vector3(tier * 5.0, 0, 0))
+		var brain := (load(KNUCKLES[tier - 1]) as ActorDef).brain
+		for option: AttackOption in brain.attacks:
+			var move := Registry.fetch(&"moves", knuckle.def.moveset[option.action]) as MoveData
+			var travel := _root_travel(knuckle, move)
+			if travel < 1.0:
+				continue
+			travelling += 1
+			var least := CONTACT + TRAVEL_KEPT * travel
+			assert_true(option.min_range >= least - 0.01,
+					"knuckle_%d %s travels %.2f m: thrown from %.2f m at least (min_range %.2f)" % [tier, move.id, travel, least, option.min_range])
+	assert_true(travelling >= 5, "the sweeps and thrusts were checked (%d)" % travelling)
+
+
+# How far `move`'s clip carries `actor` on the ground (its root travel, scaled as the actor plays it).
+static func _root_travel(actor: Actor, move: MoveData) -> float:
+	var anim := actor.rig.tree.get_animation(move.clip)
+	var track := anim.find_track(actor.rig.tree.root_motion_track, Animation.TYPE_POSITION_3D)
+	if track < 0 or not move.root_motion:
+		return 0.0
+	var travel := (anim.position_track_interpolate(track, anim.length) - anim.position_track_interpolate(track, 0.0)) * move.root_motion_scale
+	return (actor.rig.skeleton.global_basis * travel).length()
 
 
 # Fires `action` and then `combo` (each as the window takes it) from a Knuckle of `tier` `gap` metres from a standing
