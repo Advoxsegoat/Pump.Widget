@@ -229,3 +229,35 @@ func test_sprint_after_held_roll() -> void:
 	var released := _at(run, 136)
 	assert_false(released["sprinting"])
 	assert_near(released["speed"], tuning.jog_speed, 1e-6, "let go: jog")
+
+
+## Aims every attack at `target`, warping it (Intent.warp), and presses nothing.
+class Warper extends Brain:
+	var target: Actor
+
+	func think(_actor: Actor, _delta: float) -> Intent:
+		var intent := Intent.new()
+		intent.aim_target = target.global_position
+		intent.warp = true
+		return intent
+
+
+func test_a_warp_never_passes_max_warp_however_far_its_move_travels() -> void:
+	# A made-up blow on the thrust's clip, which carries the body 2.25 m by its hitbox: started 1.5 m from its target, its
+	# own travel overshoots contact by 1.45 m. The warp may hold it back by MAX_WARP, no more.
+	var arena := TestArena.make(self)
+	var target := TestArena.spawn(arena, load(ABARAX), Brain.new(), Vector3.ZERO, "Target")
+	var warper := Warper.new()
+	warper.target = target
+	var knuckle := TestArena.spawn(arena, load("res://data/actors/knuckle_1.tres"), warper, Vector3(0, 0, 1.5), "Knuckle")
+	knuckle.place(Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, 1.5)))
+	await frames(1)
+	var blow := (Registry.fetch(&"moves", &"knuckle_thrust") as MoveData).duplicate() as MoveData
+	blow.strike_distance = 1.0
+	var intent := warper.think(knuckle, DT)
+	knuckle.runner._start(blow, intent)
+	var deepest := 0.0
+	for i in 50:
+		await frames(1)
+		deepest = minf(deepest, knuckle.runner._warp)
+	assert_true(deepest >= -MoveRunner.MAX_WARP - 1e-6, "the warp held it back %.2f m, at most %.2f" % [-deepest, MoveRunner.MAX_WARP])

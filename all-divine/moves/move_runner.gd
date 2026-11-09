@@ -372,8 +372,8 @@ func _warp_velocity(intent: Intent, t0: float, t1: float, delta: float) -> Vecto
 	var distance := Vector2(point.x - actor.global_position.x, point.z - actor.global_position.z).length()
 	var own_left := _own_travel(t0, _aim_until)
 	var contact := actor.spacing.radius() * 2.0 if actor.spacing != null else 0.0
-	var wanted := clampf(_warp + distance - own_left - _strike_at_hit, -MAX_WARP, MAX_WARP)
-	wanted = minf(wanted, _warp + distance - own_left - contact)
+	var wanted := minf(_warp + distance - own_left - _strike_at_hit, _warp + distance - own_left - contact)
+	wanted = clampf(wanted, -MAX_WARP, MAX_WARP)  # after the contact clause, which can ask for more than MAX_WARP back
 	var step := (wanted - _warp) * (minf(t1, _aim_until) - t0) / (_aim_until - t0)
 	_warp += step
 	var facing := actor.facing()
