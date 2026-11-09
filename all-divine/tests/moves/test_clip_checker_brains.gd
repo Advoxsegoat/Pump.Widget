@@ -5,6 +5,7 @@ extends TestCase
 ## for that actor (MoveRunner.window_of); a brain that feints needs the moveset's feint action. The real Knuckles pass.
 
 const KNUCKLE_1 := "res://data/actors/knuckle_1.tres"
+const KNUCKLES := ["res://data/actors/knuckle_1.tres", "res://data/actors/knuckle_2.tres", "res://data/actors/knuckle_3.tres"]
 
 
 # A copy of knuckle_1 thinking with a brain of one attack: `action`, then `combo`, extended if `extend`; feinting if
@@ -30,10 +31,10 @@ static func _has_problem(problems: PackedStringArray, fragments: Array) -> bool:
 
 
 func test_the_knuckles_brains_are_clean() -> void:
-	for i in [1, 2, 3]:
-		var def := load("res://data/actors/knuckle_%d.tres" % i) as ActorDef
-		assert_true(def.brain != null and not def.brain.attacks.is_empty(), "knuckle_%d has a brain with attacks" % i)
-		assert_eq(ClipChecker.new().check_actor(def), PackedStringArray(), "knuckle_%d" % i)
+	for path: String in KNUCKLES:
+		var def := load(path) as ActorDef
+		assert_true(def.brain != null and not def.brain.attacks.is_empty(), "%s has a brain with attacks" % def.id)
+		assert_eq(ClipChecker.new().check_actor(def), PackedStringArray(), String(def.id))
 
 
 func test_a_brains_attack_must_press_an_action_of_the_moveset() -> void:
