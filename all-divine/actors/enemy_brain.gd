@@ -24,8 +24,9 @@ extends Brain
 ##               attack starts as it arrives) and backs off at a jog, walking the last of it. One that cannot reach its
 ##               range in twice reangle_after gives it up
 ##   ATTACKING   it presses the option's combo, each action as the cancel window that takes it opens; each blow is warped
-##               toward the target (Intent.warp, MoveData.strike_distance), and when the target stands beyond the next
-##               blow's warped reach the combo ends there rather than swing at air. Its tier rolls,
+##               toward the target (Intent.warp, MoveData.strike_distance), and when the target will stand beyond the
+##               next blow's warped reach, or inside it (he stepped in and smothers it), the combo ends there rather
+##               than swing at air. Its tier rolls,
 ##               when it chooses: a feint (dodge first, then the attack into the feint's window, if that window takes
 ##               it), a delayed swing (it holds the attack's action through its move's charge_hold for some of
 ##               delay_frames), one blow more (the combo's last action again). Its swings aim at the target through
@@ -53,6 +54,9 @@ const BACK_WALK_WITHIN := 0.8
 ## How far beyond a warped blow's strike_distance and MoveRunner.MAX_WARP the target may stand when it lands and the combo
 ## go on: every Knuckle blow still lands at least this far past where it was made to meet it.
 const WARP_SLACK := 0.1
+## How much nearer than a warped blow's strike_distance less MoveRunner.MAX_WARP the target may stand when it lands and the
+## combo go on (the hook still meets a target that much inside its warp; nearer, it swings past him).
+const SMOTHER_SLACK := 0.25
 ## How hard it backs off after a stagger, a parry or a catch (a walk backward, 1 m/s: a jog would slingshot it out of
 ## the reach of the player who has just earned the opening), and how long it may take at most.
 const BACK_OFF_PUSH := 0.5
@@ -420,20 +424,24 @@ func _follow_through(actor: Actor, intent: Intent) -> void:
 		_press(actor, intent, _presses.pop_front())
 
 
-# Whether the target will stand within reach of the move `move_id` once warped, when its blow lands: no further than its
-# strike_distance (for the actor's size), MoveRunner.MAX_WARP and WARP_SLACK, counting how far the target walks away from
-# the actor over the move's wind-up at the speed it goes now. A move that is never warped is always within reach.
+# Whether the target will stand within reach of the move `move_id` once warped, when its blow lands, counting how far it
+# goes toward or away from the actor over the move's wind-up at the speed it goes now: no further than its strike_distance
+# (for the actor's size), MoveRunner.MAX_WARP and WARP_SLACK, and no nearer than its strike_distance less MAX_WARP and
+# SMOTHER_SLACK (a player who steps inside a blow smothers it: the hook would swing past his body). The jab and the cross
+# are made to land at body contact, so only the far side ever ends them. A move that is never warped is always within reach.
 func _within_warp(actor: Actor, move_id: StringName) -> bool:
 	var move := Registry.fetch(&"moves", move_id) as MoveData if Registry.ids(&"moves").has(String(move_id)) else null
 	if move == null or move.strike_distance <= 0.0:
 		return true
 	var to := _flat(actor, target.global_position)
-	var away := 0.0
+	var going := 0.0  # the target's speed away from the actor (toward it: below 0)
 	if not to.is_zero_approx():
-		var going := target.get_real_velocity()
-		away = maxf(Vector2(going.x, going.z).dot(to.normalized()), 0.0)
-	var reach := move.strike_distance * actor.def.model_scale + MoveRunner.MAX_WARP + WARP_SLACK
-	return to.length() + away * _wind_up(actor, move) <= reach
+		# Where it means to go (a knockback slowing its walk in is over in a moment); while a move plays, where it goes.
+		var velocity := target.get_real_velocity() if target.runner.busy() else target.locomotion.velocity()
+		going = Vector2(velocity.x, velocity.z).dot(to.normalized())
+	var at_blow := to.length() + going * _wind_up(actor, move)
+	var strike := move.strike_distance * actor.def.model_scale
+	return at_blow <= strike + MoveRunner.MAX_WARP + WARP_SLACK and at_blow >= strike - MoveRunner.MAX_WARP - SMOTHER_SLACK
 
 
 # Seconds from the start of `move` to its first hitbox_on (its wind-up), read from its clip once; 0 if it has none.

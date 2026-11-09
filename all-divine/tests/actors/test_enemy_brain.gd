@@ -408,6 +408,65 @@ func test_its_combo_lands_on_a_slow_strafe() -> void:
 	assert_true(full >= ceili(combos * 0.85), "against a 0.7 m/s strafe all three blows land in %d of %d combos (%s)" % [full, combos, log])
 
 
+## Abarax for the step-in test: whenever the Knuckle is attacking he walks straight in at it, 0.7 m/s, facing it.
+class Crowder extends Brain:
+	var foe: Actor
+
+	func think(actor: Actor, _delta: float) -> Intent:
+		var intent := Intent.new()
+		if foe == null:
+			return intent
+		var to := Vector2(foe.global_position.x - actor.global_position.x, foe.global_position.z - actor.global_position.z)
+		intent.face_target = foe.global_position
+		if not to.is_zero_approx() and foe.runner.current != null and foe.runner.current.kind == MoveData.Kind.ATTACK:
+			intent.move = to.normalized() * 0.35
+		return intent
+
+
+func test_a_target_that_steps_in_smothers_the_combo() -> void:
+	# A player who steps inside a blow smothers it: the combo ends before a blow he would be too close for, rather than
+	# swing it past his body, and the Knuckle goes back to its spacing smoothly.
+	var air := []
+	var combos := 0
+	var stutter := 0
+	for case: Array in [[1, 9], [3, 5]]:
+		var crowder := Crowder.new()
+		var run := _fight(_jab_only(case[0]), Vector3(0, 0, 4.0), PI, crowder, case[0], case[1])
+		var knuckle: Actor = run["knuckle"]
+		var abarax: Actor = run["abarax"]
+		crowder.foe = knuckle
+		var reached := {}  # blow (its start frame) -> whether any of its hits reached him, landed or not
+		var blows := []  # [start frame, move id]
+		knuckle.runner.move_started.connect(func(m: MoveData) -> void:
+			if m.kind == MoveData.Kind.ATTACK:
+				blows.append([knuckle.frame, m.id]))
+		abarax.got_hit.connect(func(_r: HitResult, e: HitEvent) -> void:
+			if not blows.is_empty() and e.move.id == blows.back()[1]:
+				reached[blows.back()[0]] = true)
+		var last_step := Vector2.ZERO
+		var last := knuckle.global_position
+		var last_turn := -100  # the frame its steps last turned back on themselves
+		for i in 60 * 20:
+			await frames(1)
+			var step := Vector2(knuckle.global_position.x - last.x, knuckle.global_position.z - last.z)
+			last = knuckle.global_position
+			if not knuckle.runner.busy() and step.length() > 0.002 and last_step.length() > 0.002 and step.dot(last_step) < 0.0:
+				if knuckle.frame - last_turn <= 10:
+					stutter += 1  # back and forth within a sixth of a second: a stutter, not a change of plan
+				last_turn = knuckle.frame
+			last_step = step if not knuckle.runner.busy() else Vector2.ZERO
+		for b: Array in blows:
+			if b[1] == &"knuckle_jab":
+				combos += 1
+			elif not reached.has(b[0]) and b[0] < knuckle.frame - 60:
+				air.append("tier %d %s at frame %d" % [case[0], b[1], b[0]])
+		(run["arena"] as Node).queue_free()
+		await frames(1)
+	assert_true(combos >= 8, "it threw its combo (%d times)" % combos)
+	assert_eq(air, [], "no cross or hook swung past a target that stepped in")
+	assert_eq(stutter, 0, "and it goes back to its spacing smoothly, with no back-and-forth stutter")
+
+
 func test_a_target_that_rolls_out_of_reach_ends_the_combo() -> void:
 	var dodger := Roller.new()
 	var run := _fight(_jab_only(1), Vector3(0, 0, 2.2), PI, dodger)

@@ -63,6 +63,12 @@ func carry(velocity: Vector3) -> void:
 	sprinting = false
 
 
+## The velocity locomotion moves the body at now, on the ground plane (m/s): where its stick means it to go, with no
+## knockback in it.
+func velocity() -> Vector3:
+	return Vector3(_heading.x, 0.0, _heading.y) * speed
+
+
 ## The yaw that faces `dir`, a world (x, z) direction: atan2(x, z), so +Z is 0 and +X is PI / 2.
 static func yaw_of(dir: Vector2) -> float:
 	return atan2(dir.x, dir.y)
