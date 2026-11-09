@@ -49,6 +49,31 @@ static func worst_join(rig: Rig, clip: StringName) -> Array:
 	return _worst(rig, clip)[1]
 
 
+## Every step of `clip` the pop rule flags: [frame, joint, metres, the most allowed], in frame order (a pelvis or head
+## move over its limit on any step, a hand or foot over POP_STEP on a join step).
+static func violations(rig: Rig, clip: StringName) -> Array:
+	var anim := rig.tree.get_animation(clip)
+	var step := step_of(anim)
+	var joins: PackedFloat32Array = anim.get_meta(&"joins", PackedFloat32Array())
+	var at := poses(rig, clip, BODY + LIMBS)
+	var limit := POP_STEP if step > 1 else POP_FRAME
+	var found := []
+	var frames := at.keys()
+	frames.sort()
+	for frame: int in frames:
+		if not at.has(frame - step):
+			continue
+		var across := Array(joins).any(func(t: float) -> bool: return t * 60.0 >= frame - step - 1e-3 and t * 60.0 <= frame + 1e-3)
+		for joint in BODY + LIMBS:
+			var allowed := limit if BODY.has(joint) else POP_STEP
+			if LIMBS.has(joint) and not across:
+				continue
+			var moved: float = (at[frame][joint] as Vector3).distance_to(at[frame - step][joint])
+			if moved > allowed:
+				found.append([frame, joint, moved, allowed])
+	return found
+
+
 # [worst_pop, worst_join] of `clip`.
 static func _worst(rig: Rig, clip: StringName) -> Array:
 	var anim := rig.tree.get_animation(clip)
@@ -75,7 +100,8 @@ static func _worst(rig: Rig, clip: StringName) -> Array:
 
 
 ## The frame `bone` reaches furthest forward in `clip` (see the top of this file), and how far: [frame, metres along +Z].
-static func reach_peak(rig: Rig, clip: StringName, bone: StringName) -> Array:
+## `tie` is how near its furthest a step must come to count (REACH_TIE; PLATEAU_TIE finds where a held extension begins).
+static func reach_peak(rig: Rig, clip: StringName, bone: StringName, tie := REACH_TIE) -> Array:
 	var at := poses(rig, clip, [bone])
 	var furthest := -INF
 	for frame: int in at:
@@ -83,6 +109,6 @@ static func reach_peak(rig: Rig, clip: StringName, bone: StringName) -> Array:
 	var frames := at.keys()
 	frames.sort()
 	for frame: int in frames:
-		if (at[frame][bone] as Vector3).z >= furthest - REACH_TIE:
+		if (at[frame][bone] as Vector3).z >= furthest - tie:
 			return [frame, furthest]
 	return [-1, furthest]

@@ -1,16 +1,17 @@
 extends TestCase
 ## The hop: the dodge button with the stick at rest. The roll's neutral variant is `hop`, a short jump on the spot
-## whose marks (airborne_on f2, airborne_off f26) take the body off the ground, so a LOW sweep passes under it
+## whose marks (airborne_on f2, airborne_off f28) take the body off the ground, so a LOW sweep passes under it
 ## (Combat.resolve, rule 2) while a MID blow still lands. The hop has no iframes, costs 12 stamina, and is
 ## refused where a roll would be (an actor that cannot act).
 ##
-## The hop's airborne marks are on the frames its feet are really off the ground (f2 to f26: it leaps at once, hangs
-## at the apex and is down on f26; the tail of the clip is the landing crouch), not at the f6 and f26 the plan first
+## The hop's airborne marks are on the frames its feet are really off the ground (f2 to f28: it leaps at once, hangs
+## at the apex and comes down over four frames to f28, as F1 Task 12's fix round re-timed it so the landing does not
+## drop the body 0.3 m in one frame; the tail of the clip is the landing crouch), not at the f6 and f26 the plan first
 ## guessed. The hang is what lets it out-last a 20-frame sweep.
 ##
 ## A frame is the actor's: the first it lives is 1. A dodge pressed on frame 1 starts its move there (its f0), so
-## the hop's airborne marks are on frames 3 and 27, and a blow is judged against the airborne state as it stood
-## when the frame began: airborne for the blows of frames 4 to 27. The sweep fixture is the jab's clip with its
+## the hop's airborne marks are on frames 3 and 29, and a blow is judged against the airborne state as it stood
+## when the frame began: airborne for the blows of frames 4 to 29. The sweep fixture is the jab's clip with its
 ## palm_l live from f10 to f50 (frames 10 to 50: the move starts before the sweeper's first frame), 0.6 m in front of the sweeper (the hand draws back, so it stays in reach), which started on frame 1 too (live from frame 11).
 
 const ABARAX := "res://data/actors/abarax.tres"
@@ -81,7 +82,7 @@ func test_airborne_follows_the_marks() -> void:
 	var run := _solo([{"frames": 1, "press": [&"dodge"]}, {"frames": 40}])
 	var actor: Actor = run["actor"]
 	await _play_to(run, 45)
-	assert_eq(run["airborne"], range(3, 27), "from airborne_on at f2 to airborne_off at f26 (frames 3 to 26)")
+	assert_eq(run["airborne"], range(3, 29), "from airborne_on at f2 to airborne_off at f28 (frames 3 to 28)")
 	assert_false(actor.rig.airborne)
 	assert_false(actor.runner.airborne)
 	assert_eq(run["iframes"], [], "a hop has no iframes")
@@ -166,9 +167,9 @@ func test_low_sweep_through_the_airborne_frames_whiffs() -> void:
 	var whiffs := got.filter(func(g: Array) -> bool: return g[0] == "WHIFF")
 	var hits := got.filter(func(g: Array) -> bool: return g[0] == "HIT")
 	assert_eq(run["started"].front(), [&"hop", 1])
-	assert_eq(whiffs.map(func(g: Array) -> int: return g[1]), range(10, 28), "every blow under him whiffs: %s" % [got])
+	assert_eq(whiffs.map(func(g: Array) -> int: return g[1]), range(10, 30), "every blow under him whiffs: %s" % [got])
 	assert_eq(hits.size(), 1, "and one lands once he is down: %s" % [got])
-	assert_eq(hits[0][1], 28, "the first frame judged against him on the ground (he came down on frame 27)")
+	assert_eq(hits[0][1], 30, "the first frame judged against him on the ground (he came down on frame 29)")
 	assert_eq((run["actor"] as Actor).stats.hp, 92.0, "the sweep did its 8")
 
 

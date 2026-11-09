@@ -27,14 +27,16 @@ const TABLE := {
 		[25, &"recovery", {}],
 		[25, &"cancel_open", {"into": {&"palm": &"palm_hook", &"dodge": &"dodge_roll"}}],
 	],
-	# The hook and the heavy palm's contact frames are where their clips show full extension (F1 Task 7's sheet).
+	# The hook and the heavy palm's contact frames are where their clips show full extension (F1 Task 7's sheet). The hook
+	# was re-timed in F1 Task 12's fix round (Melee_Hook's lunge spread over four steps, so the head does not jump 0.8 m in
+	# one): its hand arrives at f40.
 	&"palm_hook": [
-		[5, &"sfx", {"name": &"palm_whoosh"}],
-		[15, &"hitbox_on", {"id": &"palm_r", "profile": &"hook"}],
-		[15, &"fx", {"name": &"palm_trail", "bone": &"hand_r"}],
-		[20, &"hitbox_off", {"id": &"palm_r"}],
-		[30, &"recovery", {}],
-		[30, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dodge_roll"}}],
+		[30, &"sfx", {"name": &"palm_whoosh"}],
+		[40, &"hitbox_on", {"id": &"palm_r", "profile": &"hook"}],
+		[40, &"fx", {"name": &"palm_trail", "bone": &"hand_r"}],
+		[45, &"hitbox_off", {"id": &"palm_r"}],
+		[55, &"recovery", {}],
+		[55, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dodge_roll"}}],
 	],
 	&"palm_heavy": [
 		[10, &"hyperarmour_on", {}],
@@ -57,7 +59,7 @@ const TABLE := {
 		[22, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dodge_roll"}}],
 	],
 }
-const LENGTHS := {&"palm_jab": 35, &"palm_cross": 40, &"palm_hook": 45, &"palm_heavy": 57, &"dodge_roll": 30}
+const LENGTHS := {&"palm_jab": 35, &"palm_cross": 40, &"palm_hook": 82, &"palm_heavy": 57, &"dodge_roll": 30}
 const STEPS := {&"palm_jab": 12, &"palm_cross": 12, &"palm_hook": 12, &"palm_heavy": 12, &"dodge_roll": 0}
 # The reactions every actor shares (F1 Tasks 5 and 8): [length in frames, whether the move takes the clip's root
 # motion, then its marks as in TABLE]. Each is smooth. The death's thud and dust are on the frame its hips

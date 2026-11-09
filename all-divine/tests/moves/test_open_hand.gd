@@ -7,7 +7,8 @@ extends TestCase
 ## 1 is at its f0 there, so on frame k it is at f(k - 1). Marks, from the clips:
 ##   palm_jab    hitbox f10 to f15; opens {palm: palm_cross} at f15 and {palm, dodge} at f20
 ##   palm_cross  hitbox f15 to f20; opens {palm: palm_hook} at f20 and {palm, dodge} at f25
-##   palm_hook   hitbox f15 to f20; opens {palm: palm_jab, dodge} at f30
+##   palm_hook   hitbox f40 to f45; opens {palm: palm_jab, dodge} at f55 (F1 Task 12's fix round re-timed it: UAL2
+##               Melee_Hook's lunge spread over four 12 fps steps, its contact measured where the hand arrives)
 ##   palm_heavy  armour from f10 to f20; waits for a hold at f10; hitbox f15 to f20; opens {palm: palm_jab, dodge} at f45
 ## Held, the heavy's clip stands still at f10 for up to 40 frames; a full charge makes its blow the profile `charged`
 ## (34 HP and a stagger) in place of `heavy` (22 HP and a stagger).
@@ -101,17 +102,17 @@ func test_the_chain_has_no_idle_frame() -> void:
 
 
 func test_the_hook_goes_back_to_the_jab() -> void:
-	# The hook's window (f30, frame 66) takes palm into the jab. This press is a frame early.
-	var steps := CHAIN.slice(0, 5) + [{"frames": 29}, {"frames": 1, "press": [&"palm"]}, {"frames": 40}]
-	var run := await _run(steps, 100, OUT_OF_REACH)
+	# The hook's window (f55, frame 91) takes palm into the jab. This press is a frame early.
+	var steps := CHAIN.slice(0, 5) + [{"frames": 54}, {"frames": 1, "press": [&"palm"]}, {"frames": 40}]
+	var run := await _run(steps, 120, OUT_OF_REACH)
 	assert_eq(run["started"].map(func(s: Array) -> StringName: return s[0]), [&"palm_jab", &"palm_cross", &"palm_hook", &"palm_jab"])
-	assert_eq(run["started"][3][1], 66, "at the hook's f30")
+	assert_eq(run["started"][3][1], 91, "at the hook's f55")
 
 
 func test_every_recovery_takes_a_dodge() -> void:
 	# Each move is started before frame 1 (so it is at f(k) on frame k) and a dodge is pressed a frame before the
 	# window that carries it opens: it rolls on the window's first frame, out of the move.
-	var windows := {&"palm_jab": 20, &"palm_cross": 25, &"palm_hook": 30, &"palm_heavy": 45}
+	var windows := {&"palm_jab": 20, &"palm_cross": 25, &"palm_hook": 55, &"palm_heavy": 45}
 	for id: StringName in windows:
 		var arena := TestArena.make(self)
 		var steps := [{"frames": windows[id] - 2}, {"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0)}, {"frames": 40, "move": Vector2(1, 0)}]

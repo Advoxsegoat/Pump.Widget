@@ -4,16 +4,18 @@ extends TestCase
 ## across a join or a crossfade the hands and feet move POP_STEP at most too. The rule is for discontinuities, the owner's
 ## first priority; a strike or a kick away from a join is a fast limb by design.
 ##
-## REPORTED holds the clips the rule flags away from any join: fast motion in the source itself, reported to the owner
-## (F1 Task 12) rather than re-timed, each held to what it measured so it cannot grow:
-##   palm_hook   UAL2 Melee_Hook's lunge drops the head 0.79 m between f5 and f10 (source 0.20-0.27 s; its join with
-##               Melee_Hook_Rec is at f20)
-##   palm_heavy  UAL2 OverhandThrow's throw swings the head 0.79 m into f15
-##   dodge_roll  UAL1 Roll at 2.9 times its speed tumbles the head 0.38 m in a frame
-##   hop         its warp plays NinjaJump_Start's first 0.12 s in two frames, 0.44 m at f1 (the move fades in over it)
+## REPORTED holds the steps the rule flags that are confirmed artifacts of the source, each at the one frame it was
+## measured on (frame -> the most any joint may move to it): a second pop anywhere else in the clip is still caught.
+##   palm_heavy  UAL2 OverhandThrow's throw swings the head 0.79 m in the 12 fps step that lands the blow (f15)
+##   dodge_roll  UAL1 Roll at 2.9 times its speed tumbles the head and pelvis up to 0.38 m a frame, continuously, over
+##               its first 17 frames
 
 const RIG := "res://actors/abarax/abarax_rig.tscn"
-const REPORTED := {&"palm_hook": 0.794, &"palm_heavy": 0.787, &"dodge_roll": 0.385, &"hop": 0.438}
+const REPORTED := {
+	&"palm_heavy": {15: 0.787},
+	&"dodge_roll": {1: 0.172, 2: 0.243, 7: 0.251, 8: 0.385, 9: 0.372, 10: 0.311, 11: 0.273, 13: 0.224, 14: 0.206,
+			15: 0.302, 16: 0.212, 17: 0.154},
+}
 
 
 func test_no_clip_of_the_library_pops() -> void:
@@ -21,8 +23,23 @@ func test_no_clip_of_the_library_pops() -> void:
 	var clips := Array(rig.tree.get_animation_list()).filter(func(c: StringName) -> bool: return c != Rig.SNAPSHOT_CLIP)
 	assert_true(clips.size() >= 35, "the library (%d clips)" % clips.size())
 	for clip: StringName in clips:
-		var body: Array = ClipMotion.worst_pop(rig, clip)
-		var allowed: float = REPORTED.get(clip, body[3])
-		assert_true(body[0] <= allowed, "%s: the %s moves %.3f m to f%d (at most %.3f)" % [clip, body[1], body[0], body[2], allowed])
-		var limb: Array = ClipMotion.worst_join(rig, clip)
-		assert_true(limb[0] <= limb[3], "%s: across a join the %s moves %.3f m to f%d (at most %.2f)" % [clip, limb[1], limb[0], limb[2], limb[3]])
+		var excepted: Dictionary = REPORTED.get(clip, {})
+		for v: Array in ClipMotion.violations(rig, clip):
+			var frame: int = v[0]
+			if excepted.has(frame) and v[2] <= excepted[frame]:
+				continue
+			var at_join := ClipMotion.LIMBS.has(v[1])
+			fail("%s: %sthe %s moves %.3f m to f%d (at most %.3f)" % [clip, "across a join " if at_join else "", v[1], v[2], frame,
+					excepted.get(frame, v[3])])
+
+
+func test_each_reported_step_is_still_there() -> void:
+	# An exception that no longer fires (the source re-cut, the clip re-timed) is dropped from REPORTED, not left to excuse
+	# a pop that may come back on its frame.
+	var rig: Rig = track((load(RIG) as PackedScene).instantiate())
+	for clip: StringName in REPORTED:
+		var flagged := {}
+		for v: Array in ClipMotion.violations(rig, clip):
+			flagged[v[0]] = true
+		for frame: int in REPORTED[clip]:
+			assert_true(flagged.has(frame), "%s: the step to f%d still breaks the rule, so it is still an exception" % [clip, frame])
