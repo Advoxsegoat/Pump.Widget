@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://actors/actor_def.gd" id="1_def"]
 [ext_resource type="PackedScene" path="res://actors/knuckle/knuckle_rig.tscn" id="2_rig"]
-[ext_resource type="Resource" path="res://data/tuning/abarax_locomotion.tres" id="3_tuning"]
+[ext_resource type="Resource" path="res://data/tuning/knuckle_locomotion.tres" id="3_tuning"]
 [ext_resource type="Resource" path="res://data/palettes/knuckle_2.tres" id="4_palette"]
 [ext_resource type="Resource" path="res://data/tuning/combat_knuckle.tres" id="5_combat"]
 [ext_resource type="Resource" path="res://data/pairs/knuckle_grab.tres" id="6_grab"]

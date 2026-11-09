@@ -521,6 +521,26 @@ func test_tier_three_tracks_a_roll() -> void:
 	assert_true(turned[1] < 1.0, "one that does not track stops turning as the hook goes live (%.1f degrees)" % turned[1])
 
 
+func test_it_turns_back_to_its_target_no_faster_than_six_degrees_a_frame() -> void:
+	# He rolls past its side during its hook, so when the hook is over he stands well round to its side.
+	var def := _brain_def(BRAINS[0], [_option(&"palm", 0.0, 1.35, PackedStringArray(["palm", "palm"]))])
+	def.preferred_range = 1.0
+	var dodger := Dodger.new()
+	var run := _fight(def, Vector3(0, 0, 1.6), PI, dodger)
+	var knuckle: Actor = run["knuckle"]
+	dodger.watch = knuckle
+	var worst := 0.0
+	var last := knuckle.rotation.y
+	for i in 60 * 5:
+		await frames(1)
+		var turn := rad_to_deg(absf(angle_difference(last, knuckle.rotation.y)))
+		last = knuckle.rotation.y
+		if not knuckle.runner.busy() and knuckle.frozen == 0:
+			worst = maxf(worst, turn)
+	assert_true(dodger.rolled, "he rolled round its side")
+	assert_true(worst <= 6.1, "it turns back to him at 6 degrees a frame at most (%.1f)" % worst)
+
+
 ## Abarax for the tracking test: he stands until `watch`'s hook starts, then rolls to his right, past its side, timed so
 ## he is rolling through its active frames (from the hook's f35: invulnerable from its f38, so the hook whiffs).
 class Dodger extends Brain:
