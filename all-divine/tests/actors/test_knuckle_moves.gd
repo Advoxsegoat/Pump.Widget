@@ -1,7 +1,7 @@
 extends TestCase
 ## The Knuckle's moves (data/moves/knuckle_*.tres): their numbers, their tells, and how their clips move. Each attack's
-## hitbox comes on within one 12 fps step (5 frames) of the frame its striking bone (the hitbox's bone) reaches
-## furthest forward, and no knuckle clip pops (ClipMotion: the pelvis and head 0.25 m a step at most, the hands and feet
+## hitbox comes on within one 12 fps step (5 frames) of the frame its striking bone (the hitbox's bone) arrives at its
+## furthest forward reach (within PLATEAU_TIE of it), and no knuckle clip pops (ClipMotion: the pelvis and head 0.25 m a step at most, the hands and feet
 ## across joins), as F1 Task 10 measured its finisher: the owner's first priority is graphics that match the actions.
 
 const RIG := "res://actors/knuckle/knuckle_rig.tscn"
@@ -21,8 +21,11 @@ const MOVES := {
 	&"knuckle_grab": [O.ATTACK, [0.0, 0.0, 0.0, 0.0, 4, HitProfile.Height.MID, P.GRAB]],
 	&"knuckle_feint": [O.OTHER, []],
 }
-## The step a hitbox may come on either side of its bone's furthest reach.
+## The step a hitbox may come on either side of the frame its bone arrives.
 const CONTACT_SLACK := 5
+## A striking bone has arrived once it is this near its furthest reach: a held extension (the sweep's foot, a thrust)
+## counts from where it gets there.
+const PLATEAU_TIE := 0.06
 
 
 func _rig() -> Rig:
@@ -51,7 +54,9 @@ func test_the_tiers_share_the_moveset() -> void:
 		assert_eq((load(path) as ActorDef).moveset, MOVESET, "%s's moveset" % path)
 
 
-func test_every_knuckle_attack_strikes_at_its_furthest_reach() -> void:
+func test_every_knuckle_attack_strikes_as_its_bone_arrives() -> void:
+	# The hitbox comes on within a step (5 frames) of the first frame its bone comes within PLATEAU_TIE of its furthest
+	# reach: not long after it is out (sweeping through a foe it does not touch), nor long before it gets there.
 	var rig := _rig()
 	var checked := 0
 	for id: StringName in MOVES:
@@ -63,10 +68,10 @@ func test_every_knuckle_attack_strikes_at_its_furthest_reach() -> void:
 				continue
 			var hitbox := StringName(m["args"]["id"])
 			var bone := StringName((rig.get_node(NodePath("Hitboxes/%s" % hitbox)) as BoneAttachment3D).bone_name)
-			var peak: Array = ClipMotion.reach_peak(rig, move.clip, bone)
+			var arrives: Array = ClipMotion.reach_peak(rig, move.clip, bone, PLATEAU_TIE)
 			var on := Marks.frame_of(m["time"])
-			assert_true(absi(on - peak[0]) <= CONTACT_SLACK, "%s: %s comes on at f%d, its %s reaches furthest (%.2f m) at f%d"
-					% [id, hitbox, on, bone, peak[1], peak[0]])
+			assert_true(absi(on - arrives[0]) <= CONTACT_SLACK, "%s: %s comes on at f%d, its %s is out (within %.2f m of its %.2f m) from f%d"
+					% [id, hitbox, on, bone, PLATEAU_TIE, arrives[1], arrives[0]])
 			checked += 1
 	assert_eq(checked, 7, "every attack's hitbox was checked")
 
