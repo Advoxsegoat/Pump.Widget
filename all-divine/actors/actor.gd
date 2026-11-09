@@ -1,9 +1,10 @@
 class_name Actor
 extends CharacterBody3D
-## Anyone who moves and fights: Abarax, and later his foes. This CharacterBody3D is the body (a capsule
+## Anyone who moves and fights: Abarax and his foes. This CharacterBody3D is the body (a capsule
 ## on the `actor` layer that collides with `world`); its Rig, made from the def's rig_scene and drawn in
-## the def's palette, is how it looks; its Brain says what it wants (player, script, later an AI), and
-## can be swapped at any time; its MoveRunner plays its moves, and Locomotion moves it when no move does.
+## the def's palette, is how it looks; its Brain says what it wants (the player, a script, an enemy's EnemyBrain, which
+## an enemy whose def names a brain gets by itself), and can be swapped at any time; its MoveRunner plays its moves, and
+## Locomotion moves it when no move does. Its body stops at other actors' (BodySpacing).
 ##
 ## It fights through its HitScanner, which finds what its hitboxes strike, and Melee, which judges every hit of
 ## a frame once all actors have moved and hands each target its blow (apply_hit) and each attacker the result
