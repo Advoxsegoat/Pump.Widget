@@ -158,6 +158,7 @@ var _push := Vector3.ZERO  # the knockback still to travel, in m/s on the ground
 var _locked: Actor = null  # the foe the brain had locked on to on the latest frame (Intent.locked)
 var _guard_held := false  # whether the brain held GUARD_ACTION on the latest frame
 var _guard_move_ended := false  # a guard move (the raise, or guard_hit) played out on this frame
+var _brain_given := false  # set_brain was called: the def's brain does not replace it when the actor is ready
 
 @onready var runner: MoveRunner = $MoveRunner
 
@@ -190,11 +191,17 @@ func _ready() -> void:
 	# breathe in step. The hash is stirred (rand_from_seed) first: names that end in different characters,
 	# like Knuckle2 and Knuckle3, hash to neighbours, which alone would put them a thousandth of a radian apart.
 	rig.set_breath_phase(float(rand_from_seed(hash(name))[0] % 6283) / 1000.0)
+	# An enemy left to itself thinks with the brain its def names, its dice seeded from its name (a fight goes the same
+	# way every time).
+	if not _brain_given and def.team == ActorDef.Team.ENEMY and def.brain != null:
+		set_brain(EnemyBrain.new(def.brain, hash(String(name))))
 
 
-## Hands the actor to `b` from the next frame on.
+## Hands the actor to `b` from the next frame on. One handed it before it is ready is kept: the def's brain (an enemy's)
+## does not replace it.
 func set_brain(b: Brain) -> void:
 	brain = b
+	_brain_given = true
 	brain_changed.emit(b)
 
 

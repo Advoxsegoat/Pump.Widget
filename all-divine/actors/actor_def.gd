@@ -38,6 +38,9 @@ enum Team { PLAYER, ENEMY }
 ## The paired move a grab of the actor's starts once it takes hold (a GRABBED blow); none: the grab lands as a HIT
 ## that staggers.
 @export var grab_pair: PairedMove
+## What an enemy thinks with (data/brains/): an actor of team ENEMY whose def names one gets an EnemyBrain of it when it is
+## ready, unless it was handed a brain before (Actor.set_brain). None: it thinks with whatever it is given.
+@export var brain: BrainDef
 @export var max_hp := 100.0
 @export var max_stamina := 100.0
 @export var max_posture := 100.0
