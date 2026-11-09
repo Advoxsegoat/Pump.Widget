@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="PackedScene" path="res://main/main.tscn" id="1_main"]
 [ext_resource type="Script" path="res://demo/demo_director.gd" id="2_director"]
 [ext_resource type="Script" path="res://demo/demo_hud.gd" id="3_hud"]
+[ext_resource type="Script" path="res://combat/attack_tokens.gd" id="4_tokens"]
 
 [node name="Main" instance=ExtResource("1_main")]
 
@@ -11,3 +12,6 @@ script = ExtResource("2_director")
 
 [node name="Hud" type="CanvasLayer" parent="." index="4"]
 script = ExtResource("3_hud")
+
+[node name="AttackTokens" type="Node" parent="." index="5"]
+script = ExtResource("4_tokens")

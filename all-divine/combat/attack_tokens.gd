@@ -25,6 +25,11 @@ var _held := {}  # attacker (Actor) -> [target (Actor), seconds since last taken
 var _watching := {}  # attacker (Actor) -> the Callables connected to its signals
 
 
+func _init() -> void:
+	# Its clock is the fight's: it stands still while the game is paused, even under a root that runs while paused.
+	process_mode = Node.PROCESS_MODE_PAUSABLE
+
+
 func _enter_tree() -> void:
 	add_to_group(GROUP)
 

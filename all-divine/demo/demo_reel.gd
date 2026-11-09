@@ -1,10 +1,10 @@
 class_name DemoReel
 extends Main
-## The preview reel: the demo yard with only a Knuckle (tier II), and Abarax played by a ScriptBrain choreography
-## instead of a person, so that the same fight can be recorded again and again (Movie Maker, see the STATE.md note).
-## A stand-in like the rest of demo/.
+## The preview reel: the demo yard with only a Knuckle (tier II), and both of them played by ScriptBrain choreographies
+## instead of a person and the enemy brain, so that the same fight can be recorded again and again (Movie Maker, see the
+## STATE.md note). A stand-in like the rest of demo/.
 ##
-## The Knuckle throws three scripted attacks (a jab, the perilous sweep, the perilous thrust) at fixed times, facing
+## The Knuckle (FOE_BEATS) throws three attacks (a jab, the perilous sweep, the perilous thrust) at fixed times, facing
 ## Abarax the rest of the time; Abarax's presses are timed against them (BEATS), and in order he walks in and locks
 ## on, lands the jab, cross and hook, parries the Knuckle's jab and ripostes, hops over the sweep, rolls through the
 ## thrust, lands a charged heavy, breaks the Knuckle's posture and finishes it with the Open Hand.
@@ -23,17 +23,33 @@ const KNUCKLE_AT := Vector3(-7.4, 0.0, 7.0)
 const REEL_HP := 140.0
 const REEL_POSTURE := 40.0
 const WEST := Vector2(-1, 0)
-
-## The Knuckle's attacks: [seconds into the reel, the action it presses, how far from Abarax it stands for it]. The
-## distances are the ones each move reaches from: the jab only up close, the thrust (which carries it 3.8 m) from 2.6
-## to 4 m, the sweep (6 m) from 4 m. An entry with no action only says where to stand for what follows.
-const FOE_BEATS := [
-	[6.5, &"palm", 0.95],
-	[10.3, &"gift", 4.2],
-	[13.3, &"heavy", 3.4],
-	[14.5, &"", 1.0],
-]
 const EAST := Vector2(1, 0)
+## The Knuckle's choreography, played by a ScriptBrain as Abarax's is (see BEATS for the keys): it walks in as he comes,
+## keeps its distance to him, and throws three attacks at fixed times, the jab from 0.95 m (it only lands that close),
+## the sweep from 4.2 m and the thrust from 3.4 m; every step faces, looks at and aims at him, wherever he is.
+const FOE_BEATS := [
+	{t = 0.0},
+	{t = 2.6, move = EAST * 1.0},
+	{t = 2.7, move = EAST * 0.45},
+	{t = 3.13},
+	{t = 3.85, move = EAST * 0.45},
+	{t = 4.12},
+	{t = 5.03, move = WEST * 0.45},
+	{t = 5.07},
+	{t = 6.48, press = [&"palm"]},
+	{t = 7.53, move = WEST * 1.0},
+	{t = 8.1, move = WEST * 0.45},
+	{t = 8.33},
+	{t = 10.28, press = [&"gift"]},
+	{t = 11.9, move = EAST * 1.0},
+	{t = 12.0, move = EAST * 0.45},
+	{t = 12.3},
+	{t = 13.28, press = [&"heavy"]},
+	{t = 14.68, move = EAST * 0.45},
+	{t = 14.92},
+	{t = 16.47, move = WEST * 0.45},
+	{t = 16.97},
+]
 ## Abarax's choreography: from `t` seconds on (until the next beat) the stick is at `move`, `press` is pressed on the
 ## beat's first frame and `hold` is held throughout. Each press is timed against the Knuckle's (FOE_BEATS): the guard a
 ## quarter of a second after its jab starts (so the parry is open when the blow lands), the hop 0.6 s after its sweep
@@ -78,7 +94,12 @@ func _ready() -> void:
 	foe = (load("res://actors/actor.tscn") as PackedScene).instantiate() as Actor
 	foe.name = "Knuckle"
 	foe.def = def
-	foe.set_brain(Foe.new(player, FOE_BEATS))
+	var foe_steps := steps_of(FOE_BEATS)
+	for step: Dictionary in foe_steps:
+		step["face_target"] = player
+		step["look_target"] = player
+		step["aim_target"] = player
+	foe.set_brain(ScriptBrain.new(foe_steps))
 	player.get_parent().add_child(foe)
 	foe.place(Transform3D(Basis(Vector3.UP, PI / 2.0), KNUCKLE_AT))
 	var beats := BEATS
@@ -143,45 +164,6 @@ func _log_events() -> void:
 
 func _clock() -> float:
 	return float(Engine.get_physics_frames()) / Engine.physics_ticks_per_second
-
-
-## The Knuckle of the reel: presses its scripted attacks at their times, and between them faces Abarax and keeps HOLD
-## metres from him (walking in, or backing off), so that his blows and its own reach each other whatever its last attack
-## did to where it stands (its sweep and thrust carry it metres).
-class Foe extends Brain:
-	## How far from its mark the Knuckle may stand before it moves.
-	const SLACK := 0.12
-	## The Knuckle stays where it was put until then (seconds), while Abarax walks up to it.
-	const STAND_UNTIL := 2.6
-	var _target: Actor
-	var _beats: Array
-	var _frame := 0
-
-	func _init(target: Actor, beats: Array) -> void:
-		_target = target
-		_beats = beats
-
-	func think(actor: Actor, _delta: float) -> Intent:
-		var intent := Intent.new()
-		_frame += 1
-		intent.face_target = _target.global_position
-		intent.look_target = _target.head_point()
-		intent.aim_target = _target.global_position
-		var hold := -1.0
-		for beat: Array in _beats:
-			var at := roundi(float(beat[0]) * Engine.physics_ticks_per_second)
-			if _frame == at and beat[1] != &"":
-				intent.pressed.append(beat[1])
-			if hold < 0.0 and _frame <= at:
-				hold = beat[2]
-		if hold < 0.0:
-			hold = _beats.back()[2]
-		var away := Vector2(actor.global_position.x - _target.global_position.x, actor.global_position.z - _target.global_position.z)
-		var error := away.length() - hold
-		if _frame > STAND_UNTIL * Engine.physics_ticks_per_second and absf(error) > SLACK and not actor.runner.busy() and not away.is_zero_approx():
-			var push := 1.0 if absf(error) > 0.8 else 0.45
-			intent.move = -away.normalized() * push * signf(error)
-		return intent
 
 
 ## Abarax's hands in the reel: the player's brain (so that lock-on, aim and the camera's lean work as they do in play)

@@ -1,7 +1,8 @@
 extends TestCase
-## The preview demo (demo/): the yard the builds boot into, its three Knuckles driven by DemoBrain, the director that
-## hands out their one attack token and respawns and reloads, and the HUD of plain labels. Stand-ins for Task 13's
-## brain and Task 14's yard and HUD, so these tests say only what the demo promises a player.
+## The preview demo (demo/): the yard the builds boot into, its three Knuckles thinking with the enemy brain their defs
+## name (EnemyBrain), the yard's AttackTokens that let two of them commit at once, the director that respawns them and
+## reloads the scene, and the HUD of plain labels. The director and HUD are stand-ins for Task 14's yard and HUD, so
+## these tests say only what the demo promises a player.
 
 const YARD := "res://demo/demo_yard.tscn"
 const KNUCKLES: Array[String] = ["knuckle_1", "knuckle_2", "knuckle_3"]
@@ -54,14 +55,17 @@ func _attacking(actor: Actor) -> bool:
 
 
 # A flat arena with Abarax (idle, at the origin facing +Z) and one Knuckle of `def_path` `gap` metres off along +Z,
-# driven by a DemoBrain with no director. Returns {abarax, knuckle}.
+# facing him and thinking with the brain its def names, as the yard's do. Returns {abarax, knuckle}.
 func _duel(gap: float, def_path := KNUCKLE_2) -> Dictionary:
 	var arena := TestArena.make(self)
 	var abarax := TestArena.spawn(arena, load(ABARAX) as ActorDef, Brain.new(), Vector3.ZERO, "Abarax")
 	abarax.stats.hp = 100000.0
 	abarax.stats.max_hp = 100000.0
 	var at := Vector3(0, 0, gap)
-	var knuckle := TestArena.spawn(arena, load(def_path) as ActorDef, DemoBrain.new(abarax, null, 7), at, "Knuckle")
+	var knuckle := (load(TestArena.ACTOR) as PackedScene).instantiate() as Actor
+	knuckle.name = "Knuckle"
+	knuckle.def = load(def_path) as ActorDef
+	arena.add_child(knuckle)
 	knuckle.place(Transform3D(Basis(Vector3.UP, PI), at))
 	return {"abarax": abarax, "knuckle": knuckle}
 
@@ -86,8 +90,10 @@ func test_the_yard_boots_with_three_knuckles_and_abarax() -> void:
 	ids.sort()
 	assert_eq(ids, KNUCKLES, "tiers I, II and III")
 	var spawn := (yard.get_node("PixelStage/World/Region") as Region).spawn().origin
+	assert_true(yard.get_node_or_null("AttackTokens") is AttackTokens, "the yard hands out attack tokens")
 	for knuckle in knuckles:
-		assert_true(knuckle.brain is DemoBrain, "%s thinks with a DemoBrain" % knuckle.def.id)
+		assert_true(knuckle.brain is EnemyBrain, "%s thinks with the enemy brain" % knuckle.def.id)
+		assert_eq((knuckle.brain as EnemyBrain).def, knuckle.def.brain, "the one its def names")
 		var gap := Vector2(knuckle.global_position.x - spawn.x, knuckle.global_position.z - spawn.z).length()
 		assert_true(gap >= 6.0 and gap <= 9.0, "%s stands %.1f m from Abarax's spawn" % [knuckle.def.id, gap])
 		var to_him := (spawn - knuckle.global_position)
@@ -127,7 +133,7 @@ func test_a_knuckle_stops_attacking_when_abarax_is_dead() -> void:
 	assert_eq(attacks[0], 0, "no attack on the dead")
 
 
-func test_two_knuckles_never_attack_at_once() -> void:
+func test_no_more_than_two_knuckles_attack_at_once() -> void:
 	var yard := _yard()
 	var player := _player(yard)
 	player.stats.hp = 100000.0
@@ -151,7 +157,7 @@ func test_two_knuckles_never_attack_at_once() -> void:
 				now += 1
 		most = maxi(most, now)
 	assert_true(started[0] >= 4, "they did attack (%d attack moves in 15 s)" % started[0])
-	assert_eq(most, 1, "never more than one at a time")
+	assert_eq(most, AttackTokens.PER_TARGET, "two at a time, never more")
 
 
 func test_the_knuckles_respawn_after_all_three_fall() -> void:
@@ -172,7 +178,7 @@ func test_the_knuckles_respawn_after_all_three_fall() -> void:
 	assert_eq(again.size(), 3, "three again")
 	for knuckle in again:
 		assert_false(first.has(knuckle), "new ones")
-		assert_true(knuckle.brain is DemoBrain, "with brains")
+		assert_true(knuckle.brain is EnemyBrain, "with brains")
 	assert_eq(DemoDirector.RESPAWN_DELAY, 4.0, "after four seconds in the game")
 
 
