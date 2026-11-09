@@ -34,7 +34,7 @@ extends Brain
 ##   RETREATING  below retreat_below of its max HP (once each time it drops below) it turns and runs from the target for
 ##               regroup_time, then engages again
 ## A reaction (a flinch, a stagger, a parried or caught recoil) cuts its attack off: the token goes back. After a
-## stagger, a parry or a catch it backs off one preferred_range before it does anything else.
+## stagger, a parry or a catch it walks back one preferred_range before it does anything else.
 ##
 ## It is not asked while its actor is paired or dead (Actor), and it attacks no target that is dead or paired.
 
@@ -53,9 +53,10 @@ const BACK_WALK_WITHIN := 0.8
 ## How far beyond a warped blow's strike_distance and MoveRunner.MAX_WARP the target may stand when it lands and the combo
 ## go on: every Knuckle blow still lands at least this far past where it was made to meet it.
 const WARP_SLACK := 0.1
-## How hard it backs off after a stagger, a parry or a catch (a quick jog backward), and how long it may take at most.
-const BACK_OFF_PUSH := 0.6
-const BACK_OFF_LIMIT := 2.0
+## How hard it backs off after a stagger, a parry or a catch (a walk backward, 1 m/s: a jog would slingshot it out of
+## the reach of the player who has just earned the opening), and how long it may take at most.
+const BACK_OFF_PUSH := 0.5
+const BACK_OFF_LIMIT := 2.6
 ## Its spacing counts as getting somewhere while the distance to its range shrinks by this much at least.
 const PROGRESS := 0.05
 ## Going slower than this (m/s) with the stick pushed is being blocked (a body or a wall in the way): blocked for

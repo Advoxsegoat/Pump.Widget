@@ -507,19 +507,28 @@ class Dodger extends Brain:
 
 # --- reactions ---
 
-func test_backs_off_after_a_stagger() -> void:
-	var def := _brain_def(BRAINS[0], [])
-	var run := _fight(def, Vector3(0, 0, 2.2))
-	var knuckle: Actor = run["knuckle"]
-	await frames(60)
-	assert_eq(run["brain"].mode, EnemyBrain.Mode.ENGAGED)
-	knuckle.runner.start(Registry.fetch(&"moves", &"stagger") as MoveData)
-	while knuckle.runner.busy():
+func test_backs_off_after_a_stagger_or_a_parry_at_a_walk() -> void:
+	for reaction: StringName in [&"stagger", &"parried"]:
+		var def := _brain_def(BRAINS[0], [])
+		var run := _fight(def, Vector3(0, 0, 1.2))
+		var knuckle: Actor = run["knuckle"]
+		await frames(60)
+		assert_eq(run["brain"].mode, EnemyBrain.Mode.ENGAGED)
+		knuckle.runner.start(Registry.fetch(&"moves", reaction) as MoveData)
+		while knuckle.runner.busy():
+			await frames(1)
+		var from := _gap(run["abarax"], knuckle)
+		var peak := 0.0
+		var last := knuckle.global_position
+		for i in 90:
+			await frames(1)
+			peak = maxf(peak, Vector2(knuckle.global_position.x - last.x, knuckle.global_position.z - last.z).length() * 60.0)
+			last = knuckle.global_position
+		var gone := _gap(run["abarax"], knuckle) - from
+		assert_true(gone >= 0.8, "after its %s it backs away from him (%.2f m in 1.5 s)" % [reaction, gone])
+		assert_true(peak <= 1.2, "at a walk, so the moment lands: at most 1.2 m/s (%.2f)" % peak)
+		(run["arena"] as Node).queue_free()
 		await frames(1)
-	var from := _gap(run["abarax"], knuckle)
-	await frames(60)
-	assert_true(_gap(run["abarax"], knuckle) >= from + def.preferred_range * 0.5,
-			"staggered, it backs away from him (%.2f m to %.2f m)" % [from, _gap(run["abarax"], knuckle)])
 
 
 func test_retreats_when_hurt_then_comes_back() -> void:
