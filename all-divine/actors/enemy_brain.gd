@@ -12,8 +12,10 @@ extends Brain
 ##               counted all the way back down, it is IDLE again
 ##   ENGAGED     it faces the target and keeps preferred_range ± range_tolerance from it, walking in or backing off,
 ##               and circles it at circle_speed while it is there. When its spacing has got no nearer for reangle_after
-##               seconds (a wall in the way: Review Focus 5) it tries another angle: the circling turns the other way
-##               and its heading swings 60 degrees that way, until it is back in its range.
+##               seconds (Review Focus 5), or it has been blocked outright for BLOCKED_AFTER (a body or a wall in the
+##               way: the stick pushed, the body going nowhere), it tries another angle: the circling turns the other
+##               way and its heading swings 60 degrees that way, until it is back in its range. Circling that is blocked
+##               turns the other way.
 ##               Off its rest (attack_rest after its last attack), it chooses an attack: it takes one of the target's
 ##               attack tokens (AttackTokens; none needed by a squad that ignores them, or for an option that needs
 ##               none), picks by weight among the options off cooldown that it may throw, and then closes or backs off
@@ -47,9 +49,10 @@ const BACK_OFF_PUSH := 0.6
 const BACK_OFF_LIMIT := 2.0
 ## Its spacing counts as getting somewhere while the distance to its range shrinks by this much at least.
 const PROGRESS := 0.05
-## Circling slower than this (m/s) for CIRCLE_STALL seconds (a wall at its side) turns the circling the other way.
+## Going slower than this (m/s) with the stick pushed is being blocked (a body or a wall in the way): blocked for
+## BLOCKED_AFTER seconds, circling turns the other way, and walking in or backing off tries another angle (re-angles).
 const STALL_SPEED := 0.2
-const CIRCLE_STALL := 1.0
+const BLOCKED_AFTER := 0.75
 ## Past this share of its sight_range it lets an engaged target go.
 const LOSE_FACTOR := 2.0
 ## The reactions after which it backs off.
@@ -68,7 +71,9 @@ var _circle := 1.0  # which way it circles: 1 or -1
 var _swing := 0.0  # radians its heading is swung by, after re-angling
 var _failing := 0.0  # seconds its spacing (or approach) has got no nearer
 var _best_error := INF  # the nearest it has come to its range since it last got nearer
-var _stalled := 0.0  # seconds it has circled without getting anywhere
+var _blocked := 0.0  # seconds it has pushed the stick without getting anywhere
+var _last_at := Vector3.INF  # where its actor stood when it last thought
+var _speed := 0.0  # how fast its actor really went on the ground since then, m/s
 var _plan: AttackOption  # the attack chosen, while it closes in and throws it
 var _approach := 0.0  # seconds spent getting into its range
 var _feint := false  # this attack starts with a feint
@@ -97,6 +102,9 @@ func _init(brain_def: BrainDef, seed_value: int) -> void:
 
 func think(actor: Actor, delta: float) -> Intent:
 	var intent := Intent.new()
+	if _last_at != Vector3.INF and delta > 0.0:
+		_speed = _flat(actor, _last_at).length() / delta
+	_last_at = actor.global_position
 	for option: AttackOption in _cooldowns.keys():
 		_cooldowns[option] = maxf(_cooldowns[option] - delta, 0.0)
 	_find_target(actor)
@@ -236,10 +244,13 @@ func _space(actor: Actor, intent: Intent, delta: float) -> void:
 	if error <= def.range_tolerance:
 		_reset_spacing()
 		intent.move = toward.rotated(_circle * PI * 0.5) * def.circle_speed
-		_watch_circling(actor, delta)
+		if _watch_blocked(actor, intent, delta):
+			_circle = -_circle
 		return
 	_track_progress(error - def.range_tolerance, delta)
 	_head(intent, toward if distance > def.preferred_range else -toward, error - def.range_tolerance)
+	if _watch_blocked(actor, intent, delta):
+		_reangle()
 
 
 # Sets the stick toward `heading` (swung by any re-angling), jogging while more than WALK_WITHIN from where it is going.
@@ -256,10 +267,16 @@ func _track_progress(error: float, delta: float) -> void:
 		return
 	_failing += delta
 	if _failing >= def.reangle_after:
-		_circle = -_circle
-		_swing = _circle * deg_to_rad(REANGLE_DEG)
-		_failing = 0.0
+		_reangle()
 		_best_error = error
+
+
+# Tries another angle: the circling turns the other way and the heading swings REANGLE_DEG that way.
+func _reangle() -> void:
+	_circle = -_circle
+	_swing = _circle * deg_to_rad(REANGLE_DEG)
+	_failing = 0.0
+	_blocked = 0.0
 
 
 func _reset_spacing() -> void:
@@ -268,15 +285,17 @@ func _reset_spacing() -> void:
 	_best_error = INF
 
 
-# Circling that gets nowhere (a wall beside it) for CIRCLE_STALL turns the other way.
-func _watch_circling(actor: Actor, delta: float) -> void:
-	if Vector2(actor.velocity.x, actor.velocity.z).length() < STALL_SPEED:
-		_stalled += delta
-		if _stalled >= CIRCLE_STALL:
-			_circle = -_circle
-			_stalled = 0.0
-	else:
-		_stalled = 0.0
+# Counts the time the stick (`intent`'s) has been pushed while the actor got nowhere (a body or a wall in the way; not a
+# hit-stop or a move); true, and the count starts again, once it reaches BLOCKED_AFTER.
+func _watch_blocked(actor: Actor, intent: Intent, delta: float) -> bool:
+	if intent.move.length() < 0.01 or actor.frozen > 0 or actor.runner.busy() or _speed >= STALL_SPEED:
+		_blocked = 0.0
+		return false
+	_blocked += delta
+	if _blocked < BLOCKED_AFTER:
+		return false
+	_blocked = 0.0
+	return true
 
 
 # --- choosing and throwing an attack ---
@@ -344,6 +363,8 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 	var error := absf(distance - goal)
 	_track_progress(maxf(distance - hi, lo - distance), delta)
 	_head(intent, to / distance if distance > hi else -to / distance, error)
+	if _watch_blocked(actor, intent, delta):
+		_reangle()
 
 
 # Presses the attack: the feint first, if it feints, else the option's action (held for a delayed swing). Its token is
@@ -491,7 +512,9 @@ func _back_off(actor: Actor, intent: Intent, delta: float) -> void:
 		_backing = false
 		_rest = maxf(_rest, def.attack_rest * 0.5)
 		return
-	intent.move = away.normalized() * BACK_OFF_PUSH
+	intent.move = away.normalized().rotated(_swing) * BACK_OFF_PUSH
+	if _watch_blocked(actor, intent, delta):
+		_reangle()
 
 
 # Whether it is hurt enough to retreat, and has not already retreated since its HP dropped below retreat_below.

@@ -132,16 +132,32 @@ func test_holds_its_preferred_range() -> void:
 
 
 func test_reangles_when_its_spacing_fails_near_a_wall() -> void:
-	# The Knuckle has its back to a wall, Abarax a metre in front of it: it backs off into the wall and gets nowhere.
+	# The Knuckle has its back to a wall, Abarax a metre in front of it: it backs off into the wall and gets nowhere. Its
+	# legs stop with its body (no walking in place), and once it has been blocked for about 0.75 s it tries another angle,
+	# along the wall, and so reaches its range.
 	var def := _brain_def(BRAINS[0], [])
 	var run := _fight(def, Vector3(0, 0, 1.0))
 	TestArena.wall(run["arena"], Vector3(0, 1.0, 1.75), Vector3(8.0, 2.0, 0.3))
 	var knuckle: Actor = run["knuckle"]
-	await frames(roundi(60 * (def.notice_time + def.reangle_after)) - 20)
-	assert_true(absf(knuckle.global_position.x) < 0.2, "pinned against the wall it gets nowhere (x %.2f)" % knuckle.global_position.x)
-	assert_true(_gap(run["abarax"], knuckle) < def.preferred_range - def.range_tolerance, "short of its range")
-	await frames(60 * 3)
-	assert_true(absf(knuckle.global_position.x) > 0.8, "after %.0f s it tries another angle, along the wall (x %.2f)" % [def.reangle_after, knuckle.global_position.x])
+	var blocked_from := -1
+	var turned_at := -1
+	var in_place := 0
+	var last := knuckle.global_position
+	for i in 60 * 5:
+		await frames(1)
+		var speed := Vector2(knuckle.global_position.x - last.x, knuckle.global_position.z - last.z).length() * 60.0
+		last = knuckle.global_position
+		if knuckle._rig_speed > 0.3 and speed < knuckle._rig_speed * 0.5:
+			in_place += 1
+		if blocked_from < 0 and run["brain"].mode == EnemyBrain.Mode.ENGAGED and knuckle.global_position.z > 1.2 and speed < 0.05:
+			blocked_from = knuckle.frame
+		if blocked_from > 0 and turned_at < 0 and run["brain"]._swing != 0.0:
+			turned_at = knuckle.frame
+	assert_true(blocked_from > 0, "it backed into the wall and was stopped there")
+	assert_true(turned_at > 0 and turned_at - blocked_from <= 50,
+			"blocked, it tries another angle after about 0.75 s (%d frames)" % (turned_at - blocked_from))
+	assert_eq(in_place, 0, "its legs never walk while its body cannot")
+	assert_true(absf(knuckle.global_position.x) > 0.8, "along the wall (x %.2f)" % knuckle.global_position.x)
 	assert_true(knuckle.global_position.z < 1.75, "on its side of the wall")
 	assert_true(_gap(run["abarax"], knuckle) >= def.preferred_range - def.range_tolerance - 0.05,
 			"and so reaches its range (%.2f)" % _gap(run["abarax"], knuckle))

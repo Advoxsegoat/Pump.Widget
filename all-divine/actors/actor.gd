@@ -50,8 +50,10 @@ extends CharacterBody3D
 ##      move and locomotion know nothing of; first its ground motion is cut where it would take the body into another
 ##      actor's (BodySpacing.keep_apart), so bodies do not pass through each other, and after it the body settles out of
 ##      any it slid deeper into along a wall (BodySpacing.settle)
-##   8. the body turns to locomotion's facing
-##   9. the rig is given the strafe (the way the body goes against the way it faces, when it keeps facing a
+##   8. the body turns to locomotion's facing. Locomotion's speed is held to the speed the body was let go on the ground
+##      (what the spacing and the settle left of it, or, against a wall, what it really went; less the knockback): a body
+##      blocked by another or by a wall does not keep its legs going, nor build up speed it never had
+##   9. the rig is given the strafe (the way the body really went against the way it faces, when it keeps facing a
 ##      target), which says whether locomotion plays backward, then the speed (see _rig_speed: while a move
 ##      plays it is not the speed the move carries, which would show as a run under it), and its exertion
 ##      while sprinting
@@ -82,6 +84,8 @@ signal combat_moment(kind: StringName)
 const SPRINT_ACTION := &"dodge"
 ## Below this ground speed, in m/s, the body is not going anywhere, so it has no strafe.
 const STRAFE_MIN_SPEED := 0.1
+## How much slower (m/s) than locomotion's speed the body may go before the legs are slowed to match it.
+const LEG_SLACK := 0.25
 ## The feet the rig plants, and the probe under each (on the ik_surface layer, the visible ground, steps and
 ## all): from PROBE_UP above the foot, PROBE_LENGTH down.
 const FEET: Array[StringName] = [&"foot_l", &"foot_r"]
@@ -448,12 +452,18 @@ func _physics_process(delta: float) -> void:
 	if not is_on_floor():
 		fall += get_gravity().y * delta
 	var shove := _next_push(delta)
-	velocity = spacing.keep_apart(Vector3(planar.x + shove.x, fall, planar.z + shove.z), delta)
+	var spaced := spacing.keep_apart(Vector3(planar.x + shove.x, fall, planar.z + shove.z), delta)
+	velocity = spaced
 	var before := global_position
 	move_and_slide()
-	spacing.settle(before)
+	var kept := spacing.settle(before)
+	# How fast the body went on the ground, less the knockback: other bodies (the spacing and the settle) and walls
+	# block it; a floor's slope does not (going up a ramp is slower on the ground plane, and is no block).
+	var walked := _walked(before, shove, delta) if is_on_wall() else Vector3(spaced.x - shove.x, 0.0, spaced.z - shove.z) * kept
+	if walked.length() < locomotion.speed - LEG_SLACK:
+		locomotion.speed = walked.length()  # blocked: the legs go no faster than the body did
 	rotation.y = locomotion.facing_yaw
-	var back := rig.set_strafe(_strafe_angle(intent, planar))
+	var back := rig.set_strafe(_strafe_angle(intent, walked))
 	rig.set_locomotion(_next_rig_speed(delta), back)
 	if locomotion.sprinting:
 		rig.set_exertion(1.0)
@@ -579,6 +589,14 @@ func _choose_look_target(intent: Intent) -> Variant:
 # Whether the body keeps facing the intent's face_target: it has one, and is not sprinting.
 func _keeps_facing(intent: Intent) -> bool:
 	return intent.face_target is Vector3 and not locomotion.sprinting
+
+
+# The velocity the body really went on the ground this frame (from `before` to where it stands now, over `delta`), less
+# the knockback (`shove`) it was given.
+func _walked(before: Vector3, shove: Vector3, delta: float) -> Vector3:
+	if delta <= 0.0:
+		return Vector3.ZERO
+	return Vector3((global_position.x - before.x) / delta - shove.x, 0.0, (global_position.z - before.z) / delta - shove.z)
 
 
 # The way the body goes (`planar`, its ground velocity) against the way it faces, in radians about up, while

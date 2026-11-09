@@ -196,3 +196,32 @@ func test_two_closing_bodies_and_a_third_never_overlap() -> void:
 	var thruster := _knuckle(arena, Vector3(3.0, 0, 0.05), -PI * 0.5, thrust, "Thruster")
 	var wall: Array = await _deepest_of([abarax, stand, thruster] as Array[Actor], 110)
 	assert_true(wall[0] <= SLACK, "a thrust along a wall into a body: %.3f m (%s)" % wall)
+
+
+# How many of `frames_to_play` frames `actor`'s legs walk (its rig's locomotion speed over 0.5 m/s) while its body goes
+# less than half that fast.
+func _walking_in_place(actor: Actor, frames_to_play: int) -> int:
+	var count := 0
+	var last := actor.global_position
+	for i in frames_to_play:
+		await frames(1)
+		var speed := Vector2(actor.global_position.x - last.x, actor.global_position.z - last.z).length() * 60.0
+		last = actor.global_position
+		if not actor.runner.busy() and actor._rig_speed > 0.5 and speed < actor._rig_speed * 0.5:
+			count += 1
+	return count
+
+
+func test_legs_stop_with_a_body_that_is_blocked() -> void:
+	var jog := [{"frames": 90, "move": Vector2(0, 1)}]
+	var run := _pair(1.6, [{"frames": 90}], jog, KNUCKLE_1)  # Abarax jogs into a Knuckle standing in his way
+	var into_body: int = await _walking_in_place(run["abarax"], 90)
+	assert_eq(into_body, 0, "jogging into a body, his legs stop when he does")
+	(run["abarax"] as Actor).get_parent().queue_free()
+	await frames(1)
+	var arena := TestArena.make(self)
+	TestArena.wall(arena, Vector3(0, 1.0, 1.5), Vector3(4.0, 2.0, 0.3))
+	var abarax := TestArena.spawn(arena, _tough(ABARAX), ScriptBrain.new(jog), Vector3.ZERO, "Abarax")
+	var into_wall: int = await _walking_in_place(abarax, 90)
+	assert_eq(into_wall, 0, "and jogging into a wall")
+	assert_true(abarax.global_position.z > 0.9, "he did get there (z %.2f)" % abarax.global_position.z)
