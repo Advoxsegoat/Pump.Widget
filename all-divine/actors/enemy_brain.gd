@@ -22,8 +22,9 @@ extends Brain
 ##               none), picks by weight among the options off cooldown that it may throw and that are on the menu at
 ##               this range (it would back up no more than the option's back_up_margin: on_menu), and then closes or
 ##               backs off into that option's range (where the move really lands: AttackOption) and throws it once it
-##               is there and square enough to the target (max_angle_deg), checking both again at the press. It jogs in
-##               and backs up at a walk. One that cannot reach its range in twice reangle_after gives it up
+##               is there, square enough to the target (max_angle_deg) and slowed to a walk (PRESS_SPEED), checking
+##               all three again at the press. It jogs in, braking to a walk over the last of it, and backs up at a
+##               walk. One that cannot reach its range in twice reangle_after gives it up
 ##   ATTACKING   it presses the option's combo, each action as the cancel window that takes it opens; each blow is warped
 ##               toward the target (Intent.warp, MoveData.strike_distance), and when the target will stand beyond the
 ##               next blow's warped reach, or inside it (he stepped in and smothers it), the combo ends there rather
@@ -54,6 +55,10 @@ const WALK_WITHIN := 1.5
 const DRIFT := 0.5
 ## Out of its range, it goes back until it is this near preferred_range (metres), and only then circles.
 const SETTLE_WITHIN := 0.15
+## Closing in to an attack it brakes to a walk this much (metres) before its stopping distance says it must, and it
+## presses only at this speed (m/s) or slower: a move stops the body dead, so one started from a jog slides its feet.
+const BRAKE_MARGIN := 0.1
+const PRESS_SPEED := 1.2
 ## How far beyond a warped blow's strike_distance and MoveRunner.MAX_WARP the target may stand when it lands and the combo
 ## go on: every Knuckle blow still lands at least this far past where it was made to meet it.
 const WARP_SLACK := 0.1
@@ -385,7 +390,9 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 	if distance >= lo and distance <= hi and not _within_warp(actor, actor.def.moveset.get(_plan.action, &"")):
 		hi = distance - 0.01  # in range, but the target is walking out of the first blow's reach: keep closing
 	if distance >= lo and distance <= hi:
-		if _off_facing(actor, to) <= _plan.max_angle_deg and actor.frozen == 0:
+		if actor.locomotion.speed > PRESS_SPEED:
+			intent.move = (to / distance) * WALK_PUSH  # still slowing to a walk: no attack starts from a jog
+		elif _off_facing(actor, to) <= _plan.max_angle_deg and actor.frozen == 0:
 			_fire(actor, intent)
 		return  # in range: it stands and turns to face the target (or waits out a hit-stop)
 	_approach += delta
@@ -394,7 +401,13 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 		return
 	_track_progress(maxf(distance - hi, lo - distance), delta)
 	if distance > hi:
-		intent.move = (to / distance).rotated(_swing) * JOG_PUSH
+		# Jogs in, braking to a walk over the last of it: from where slowing down to a walk at the tuning's decel only just
+		# takes it to the edge of the range (BRAKE_MARGIN before).
+		var tuning := actor.locomotion.tuning
+		var speed := actor.locomotion.speed
+		var braking := maxf(speed * speed - tuning.walk_speed * tuning.walk_speed, 0.0) / (2.0 * maxf(tuning.decel, 0.01))
+		var push := WALK_PUSH if distance - hi <= braking + BRAKE_MARGIN else JOG_PUSH
+		intent.move = (to / distance).rotated(_swing) * push
 	else:
 		intent.move = (-to / distance).rotated(_swing) * WALK_PUSH  # a back-up within the option's margin, at a walk
 	if _watch_blocked(actor, intent, delta):

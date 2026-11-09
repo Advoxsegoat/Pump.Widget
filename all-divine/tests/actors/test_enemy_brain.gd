@@ -559,6 +559,26 @@ class Roller extends Brain:
 		return intent
 
 
+func test_it_brakes_to_a_walk_before_it_presses() -> void:
+	# A move stops the body dead: one pressed from a jog would slide its planted feet. Approaching from 2 to 6 m, every
+	# attack starts with the body at a walk.
+	var presses := []  # [tier, start, move id, m/s]
+	for tier in [1, 2]:
+		for start in [2.0, 3.0, 4.0, 6.0]:
+			var def := _jab_only(1) if tier == 1 else _brain_def(BRAINS[1])
+			var run := _fight(def, Vector3(0, 0, start), PI, null, tier, 3)
+			var knuckle: Actor = run["knuckle"]
+			knuckle.runner.move_started.connect(func(m: MoveData) -> void:
+				if m.kind == MoveData.Kind.ATTACK or m.id == &"knuckle_feint":
+					presses.append([tier, start, m.id, Vector2(knuckle.velocity.x, knuckle.velocity.z).length()]))
+			await frames(60 * 4)
+			(run["arena"] as Node).queue_free()
+			await frames(1)
+	assert_true(presses.size() >= 8, "they attacked (%s)" % [presses])
+	for p: Array in presses:
+		assert_true(p[3] <= 1.2, "knuckle_%d from %.0f m pressed %s at %.2f m/s (at most a walk, 1.2)" % p)
+
+
 func test_it_steps_in_from_its_preferred_range_quickly() -> void:
 	var def := _jab_only(1)
 	var run := _fight(def, Vector3(0, 0, def.preferred_range))
