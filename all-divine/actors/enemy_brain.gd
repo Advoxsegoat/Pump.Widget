@@ -59,6 +59,8 @@ const SETTLE_WITHIN := 0.15
 ## presses only at this speed (m/s) or slower: a move stops the body dead, so one started from a jog slides its feet.
 const BRAKE_MARGIN := 0.1
 const PRESS_SPEED := 1.2
+## How much further than an attack's back_up_margin (metres) a back-up may go before the attack is given up.
+const BACK_UP_SPARE := 0.1
 ## How far beyond a warped blow's strike_distance and MoveRunner.MAX_WARP the target may stand when it lands and the combo
 ## go on: every Knuckle blow still lands at least this far past where it was made to meet it.
 const WARP_SLACK := 0.1
@@ -95,6 +97,8 @@ var _failing := 0.0  # seconds its spacing (or approach) has got no nearer
 var _best_error := INF  # the nearest it has come to its range since it last got nearer
 var _blocked := 0.0  # seconds it has pushed the stick without getting anywhere
 var _settling := false  # out of its range, going back to preferred_range
+var _backed_up := 0.0  # metres it has backed up toward the chosen attack's range
+var _backing_up_for := 0.0  # seconds it has done so
 var _last_at := Vector3.INF  # where its actor stood when it last thought
 var _speed := 0.0  # how fast its actor really went on the ground since then, m/s
 var _plan: AttackOption  # the attack chosen, while it closes in and throws it
@@ -364,6 +368,8 @@ func _choose(actor: Actor) -> void:
 		_give_back(actor)
 	_plan = chosen
 	_approach = 0.0
+	_backed_up = 0.0
+	_backing_up_for = 0.0
 	_reset_spacing()
 	_feint = rng.randf() < def.feint_chance and _feint_takes(actor, chosen.action)
 	var delay_roll := rng.randf()
@@ -409,7 +415,15 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 		var push := WALK_PUSH if distance - hi <= braking + BRAKE_MARGIN else JOG_PUSH
 		intent.move = (to / distance).rotated(_swing) * push
 	else:
-		intent.move = (-to / distance).rotated(_swing) * WALK_PUSH  # a back-up within the option's margin, at a walk
+		# A back-up within the option's margin, at a walk; one the target keeps following it through is given up once it
+		# has gone the margin, or taken that long at a walk and a second more.
+		_backed_up += _speed * delta
+		_backing_up_for += delta
+		var walk := actor.locomotion.target_speed(WALK_PUSH, false)
+		if _backed_up > _plan.back_up_margin + BACK_UP_SPARE or _backing_up_for > _plan.back_up_margin / maxf(walk, 0.1) + 1.0:
+			_drop_plan(actor)
+			return
+		intent.move = (-to / distance).rotated(_swing) * WALK_PUSH
 	if _watch_blocked(actor, intent, delta):
 		_reangle()
 

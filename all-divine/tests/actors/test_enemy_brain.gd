@@ -302,47 +302,52 @@ static func _root_travel(actor: Actor, move: MoveData) -> float:
 func test_it_backs_up_to_an_attack_no_further_than_its_margin_and_at_a_walk() -> void:
 	# Choice is by range on the near side: an attack is on the menu only when the Knuckle would back up no more than its
 	# back_up_margin to throw it (walking in to one is always allowed), and what back-up is left is a walk.
-	var backups := []  # [tier, action, metres backed up, its margin, peak m/s]
-	for tier in [1, 2, 3]:
-		for seed_value in [5, 21]:
-			var strafer := Strafer.new()
-			var run := _fight(_brain_def(BRAINS[tier - 1]), Vector3(0, 0, 4.0), PI, strafer, tier, seed_value)
-			var knuckle: Actor = run["knuckle"]
-			var abarax: Actor = run["abarax"]
-			var brain: EnemyBrain = run["brain"]
-			strafer.foe = knuckle
-			var plan: AttackOption = null
-			var nearest := 0.0
-			var furthest := 0.0
-			var peak := 0.0
-			var last_gap := _gap(knuckle, abarax)
-			var last := knuckle.global_position
-			for i in 60 * 25:
-				await frames(1)
-				var gap := _gap(knuckle, abarax)
-				var speed := Vector2(knuckle.global_position.x - last.x, knuckle.global_position.z - last.z).length() * 60.0
-				last = knuckle.global_position
-				if brain.plan() != null and brain.mode == EnemyBrain.Mode.ENGAGED:
-					if plan != brain.plan():
-						plan = brain.plan()
-						nearest = gap
-						furthest = gap
-						peak = 0.0
-					furthest = maxf(furthest, gap)
-					if gap > last_gap + 0.001:
-						peak = maxf(peak, speed)  # backing off from him
-				elif plan != null:
-					backups.append([tier, plan.action, furthest - nearest, plan.back_up_margin, peak])
-					plan = null
-				last_gap = gap
-			(run["arena"] as Node).queue_free()
+	var backups := []  # [tier, action, metres backed up, its margin, peak m/s, frames backing up]
+	for case: Array in [[1, 5, "circle"], [1, 21, "circle"], [2, 5, "circle"], [2, 21, "circle"], [3, 5, "circle"],
+			[3, 21, "circle"], [2, 21, "world"]]:
+		var tier: int = case[0]
+		var strafer := Strafer.new()
+		var run := _fight(_brain_def(BRAINS[tier - 1]), Vector3(0, 0, 4.0), PI, strafer, tier, case[1])
+		var knuckle: Actor = run["knuckle"]
+		var abarax: Actor = run["abarax"]
+		var brain: EnemyBrain = run["brain"]
+		strafer.foe = knuckle
+		if case[2] == "world":
+			abarax.set_brain(ScriptBrain.new(_world_strafe(knuckle)))
+		var plan: AttackOption = null
+		var backed := 0.0  # how far the Knuckle itself has gone away from him while it closes in on this plan
+		var peak := 0.0
+		var backing_frames := 0
+		var last := knuckle.global_position
+		for i in 60 * 25:
 			await frames(1)
+			var step := Vector2(knuckle.global_position.x - last.x, knuckle.global_position.z - last.z)
+			var from_him := Vector2(last.x - abarax.global_position.x, last.z - abarax.global_position.z).normalized()
+			last = knuckle.global_position
+			var away := step.dot(from_him)  # its own step away from him (his roll or walk is not its back-up)
+			if brain.plan() != null and brain.mode == EnemyBrain.Mode.ENGAGED:
+				if plan != brain.plan():
+					plan = brain.plan()
+					backed = 0.0
+					peak = 0.0
+					backing_frames = 0
+				if away > 0.001:
+					backed += away
+					peak = maxf(peak, away * 60.0)
+					backing_frames += 1
+			elif plan != null:
+				backups.append([tier, plan.action, backed, plan.back_up_margin, peak, backing_frames])
+				plan = null
+		(run["arena"] as Node).queue_free()
+		await frames(1)
 	for tier in [2, 3]:
 		var thrusts := backups.filter(func(b: Array) -> bool: return b[0] == tier and b[1] == &"heavy")
 		assert_false(thrusts.is_empty(), "knuckle_%d still throws its thrust from its spacing (%s)" % [tier, backups])
 	for b: Array in backups:
 		assert_true(b[2] <= b[3] + 0.15, "knuckle_%d %s backed up %.2f m, its margin %.1f" % [b[0], b[1], b[2], b[3]])
 		assert_true(b[4] <= 1.2, "knuckle_%d %s backed up at a walk: %.2f m/s at most 1.2" % [b[0], b[1], b[4]])
+		var longest := roundi((b[3] / 0.9 + 1.0) * 60.0)  # its margin at a walk, and a second to spare
+		assert_true(b[5] <= longest, "knuckle_%d %s backed up for %d frames, at most %d" % [b[0], b[1], b[5], longest])
 
 
 func test_the_thrust_is_on_the_menu_inside_each_tiers_spacing_band() -> void:
@@ -422,6 +427,23 @@ class Strafer extends Brain:
 			var side := 1.0 if (_frame / 90) % 2 == 0 else -1.0
 			intent.move = to.normalized().rotated(side * PI * 0.5) * 0.35
 		return intent
+
+
+# Abarax's steps for a strafe along the world's axes (the review's): across and back, a roll each way now and then, a
+# step in and out, facing the Knuckle throughout.
+static func _world_strafe(knuckle: Node3D, push := 0.35) -> Array:
+	var steps := []
+	for i in 6:
+		steps.append({"frames": 90, "move": Vector2(push, 0), "face_target": knuckle})
+		steps.append({"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0), "face_target": knuckle})
+		steps.append({"frames": 40, "face_target": knuckle})
+		steps.append({"frames": 90, "move": Vector2(-push, 0), "face_target": knuckle})
+		steps.append({"frames": 40, "move": Vector2(0, push), "face_target": knuckle})
+		if i % 2 == 1:
+			steps.append({"frames": 1, "press": [&"dodge"], "move": Vector2(-1, 0), "face_target": knuckle})
+			steps.append({"frames": 40, "face_target": knuckle})
+		steps.append({"frames": 40, "move": Vector2(0, -push), "face_target": knuckle})
+	return steps
 
 
 # The tier's brain with only its jab (and its combo).
