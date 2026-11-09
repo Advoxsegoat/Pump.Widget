@@ -130,3 +130,25 @@ func test_squads_that_ignore_tokens_take_none() -> void:
 	assert_eq(seen[1], 0, "a squad takes no tokens")
 	assert_true(seen[2] >= 6, "and attacks all the same (%d attack moves in 10 s)" % seen[2])
 	assert_true(seen[0] >= 3, "more than two of it at once (%d)" % seen[0])
+
+
+func test_a_holder_freed_or_taken_out_of_the_tree_gives_its_token_back() -> void:
+	var run := _ring(4, func(_i: int) -> Brain: return Brain.new())
+	var tokens: AttackTokens = run["tokens"]
+	var abarax: Actor = run["abarax"]
+	var k: Array[Actor] = run["knuckles"]
+	await frames(1)
+	assert_true(tokens.take(k[0], abarax))
+	assert_true(tokens.take(k[1], abarax))
+	k[0].queue_free()  # gone without dying
+	await frames(3)
+	assert_eq(tokens.count(abarax), 1, "a holder freed without dying gives its token back")
+	assert_true(tokens.take(k[2], abarax), "so another may take it")
+	assert_false(tokens.take(k[3], abarax), "and the limit still holds")
+	k[1].get_parent().remove_child(k[1])  # out of the tree, not freed
+	assert_false(tokens.holds(k[1]), "a holder taken out of the tree gives its token back at once")
+	assert_true(tokens.take(k[3], abarax))
+	await frames(2)
+	k[1].free()
+	await frames(2)
+	assert_eq(tokens.count(abarax), 2, "nothing is lost or doubled when it is freed after")

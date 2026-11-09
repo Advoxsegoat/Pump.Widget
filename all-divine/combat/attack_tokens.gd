@@ -5,7 +5,7 @@ extends Node
 ## gives it back when the attack is over (give_back); a target has PER_TARGET of them. A token also comes back by itself:
 ##   - when its attacker's move is over: a move that plays out (the attacker is free again), or one a reaction cuts
 ##     short (a flinch, a stagger, a parried recoil); a combo's cancels from one blow into the next keep it
-##   - when its attacker dies
+##   - when its attacker dies, or leaves the tree (freed, or taken out of it)
 ##   - TIMEOUT seconds after it was last taken, in case an attack never comes (a brain that holds one takes it again at
 ##     each press, which keeps it)
 ## Gank squads ignore the rule: their brains never take one (BrainDef.ignores_tokens).
@@ -38,7 +38,7 @@ func _enter_tree() -> void:
 ## TIMEOUT again), false while PER_TARGET others hold them. An attacker holds one token at a time: taking one for
 ## another target gives back the first.
 func take(attacker: Actor, target: Actor) -> bool:
-	if attacker == null or target == null:
+	if attacker == null or target == null or not attacker.is_inside_tree():
 		return false
 	if _held.has(attacker):
 		if _held[attacker][0] == target:
@@ -68,8 +68,8 @@ func holds(attacker: Actor) -> bool:
 ## How many of `target`'s tokens are held.
 func count(target: Actor) -> int:
 	var n := 0
-	for attacker: Actor in _held:
-		if _held[attacker][0] == target:
+	for key: Variant in _held:  # untyped: a holder freed under us must not be assigned to a typed variable
+		if is_instance_valid(key) and _held[key][0] == target:
 			n += 1
 	return n
 
@@ -95,19 +95,22 @@ static func give_back_for(attacker: Actor) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	for attacker: Actor in _held.keys():
-		if not is_instance_valid(attacker) or attacker.dead or not is_instance_valid(_held[attacker][0]):
-			_held.erase(attacker)
-			_watching.erase(attacker)
+	for key: Variant in _held.keys():
+		if not is_instance_valid(key) or (key as Actor).dead or not is_instance_valid(_held[key][0]):
+			_held.erase(key)
+			_watching.erase(key)
 			continue
-		_held[attacker][1] += delta
-		if _held[attacker][1] >= TIMEOUT - 1e-6:
-			give_back(attacker)
+		_held[key][1] += delta
+		if _held[key][1] >= TIMEOUT - 1e-6:
+			give_back(key as Actor)
 
 
 func _exit_tree() -> void:
-	for attacker: Actor in _held.keys():
-		give_back(attacker)
+	for key: Variant in _held.keys():
+		if is_instance_valid(key):
+			give_back(key as Actor)
+	_held.clear()
+	_watching.clear()
 
 
 func _watch(attacker: Actor) -> void:
@@ -123,6 +126,7 @@ func _watch(attacker: Actor) -> void:
 	attacker.runner.move_ended.connect(ended)
 	attacker.runner.move_started.connect(started)
 	attacker.died.connect(died)
+	attacker.tree_exiting.connect(died)  # freed or taken out of the tree: it attacks no more
 	_watching[attacker] = [ended, started, died]
 
 
@@ -137,3 +141,5 @@ func _unwatch(attacker: Actor) -> void:
 		attacker.runner.move_started.disconnect(callables[1])
 	if attacker.died.is_connected(callables[2]):
 		attacker.died.disconnect(callables[2])
+	if attacker.tree_exiting.is_connected(callables[2]):
+		attacker.tree_exiting.disconnect(callables[2])
