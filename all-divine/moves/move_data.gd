@@ -22,6 +22,10 @@ enum Kind { ATTACK, DODGE, OTHER, REACTION }
 @export var hits: Dictionary = {}
 ## Whether the body turns toward the intent's aim target during the wind-up (aim assist and lock-on).
 @export var aim := true
+## Where the blow lands as it was made: how far (metres, root to root on the ground, for an actor of model_scale 1) the
+## target stands when the move starts for its blow to meet it squarely. A move started with the intent's `warp` has its
+## wind-up's root travel changed so the target stands there (MoveRunner). 0: the move is never warped.
+@export var strike_distance := 0.0
 ## The move started instead of this one when the stick is at rest (a standing jab, say, in place of a
 ## stepping one). None means this move is started either way.
 @export var neutral_variant: StringName

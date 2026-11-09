@@ -17,6 +17,7 @@ shake = 0.3
 script = ExtResource("1_move")
 id = &"knuckle_hook"
 clip = &"knuckle_hook"
+strike_distance = 1.4
 hits = {
 &"hook": SubResource("Resource_hook")
 }

@@ -16,6 +16,7 @@ hitstop_frames = 3
 script = ExtResource("1_move")
 id = &"knuckle_jab"
 clip = &"knuckle_jab"
+strike_distance = 1.0
 hits = {
 &"jab": SubResource("Resource_jab")
 }

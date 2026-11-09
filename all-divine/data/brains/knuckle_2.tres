@@ -6,8 +6,7 @@
 [sub_resource type="Resource" id="Resource_wocad"]
 script = ExtResource("1_m6at2")
 action = &"palm"
-min_range = 0.86
-max_range = 0.98
+max_range = 1.35
 combo = PackedStringArray("palm", "palm")
 
 [sub_resource type="Resource" id="Resource_mdl6w"]

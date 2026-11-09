@@ -20,9 +20,12 @@ extends Brain
 ##               attack tokens (AttackTokens; none needed by a squad that ignores them, or for an option that needs
 ##               none), picks by weight among the options off cooldown that it may throw, and then closes or backs off
 ##               into that option's range (where the move really lands: AttackOption) and throws it once it is there
-##               and square enough to the target (max_angle_deg), checking both again at the press. One that cannot
-##               reach its range in twice reangle_after gives it up
-##   ATTACKING   it presses the option's combo, each action as the cancel window that takes it opens. Its tier rolls,
+##               and square enough to the target (max_angle_deg), checking both again at the press. It jogs in (the
+##               attack starts as it arrives) and backs off at a jog, walking the last of it. One that cannot reach its
+##               range in twice reangle_after gives it up
+##   ATTACKING   it presses the option's combo, each action as the cancel window that takes it opens; each blow is warped
+##               toward the target (Intent.warp, MoveData.strike_distance), and when the target stands beyond the next
+##               blow's warped reach the combo ends there rather than swing at air. Its tier rolls,
 ##               when it chooses: a feint (dodge first, then the attack into the feint's window, if that window takes
 ##               it), a delayed swing (it holds the attack's action through its move's charge_hold for some of
 ##               delay_frames), one blow more (the combo's last action again). Its swings aim at the target through
@@ -43,7 +46,13 @@ const REANGLE_DEG := 60.0
 const JOG_PUSH := 1.0
 const WALK_PUSH := 0.45
 ## Within this many metres of where it is going it walks rather than jogs (so it does not run past a narrow range).
+## Closing in to throw an attack it jogs all the way (the attack starts as it arrives, which stops it); backing off into
+## one, it walks the last BACK_WALK_WITHIN metres.
 const WALK_WITHIN := 1.5
+const BACK_WALK_WITHIN := 0.8
+## How far beyond a warped blow's strike_distance and MoveRunner.MAX_WARP the target may stand when it lands and the combo
+## go on: every Knuckle blow still lands at least this far past where it was made to meet it.
+const WARP_SLACK := 0.1
 ## How hard it backs off after a stagger, a parry or a catch (a quick jog backward), and how long it may take at most.
 const BACK_OFF_PUSH := 0.6
 const BACK_OFF_LIMIT := 2.0
@@ -93,6 +102,7 @@ var _retreat_left := 0.0
 var _retreated := false  # it retreated since its HP last went below retreat_below
 var _feint_window := {}  # action -> whether the feint's window takes it (read from its clip once)
 var _charge_holds := {}  # action -> whether its moveset move has a charge_hold on it (read from its clip once)
+var _wind_ups := {}  # move id -> seconds to its first hitbox_on (read from its clip once)
 
 
 func _init(brain_def: BrainDef, seed_value: int) -> void:
@@ -225,12 +235,14 @@ func _hears(actor: Actor) -> bool:
 
 # --- engaged ---
 
-# Faces the target, looks at its head and aims every swing at it (through the active frames with track_dodges).
+# Faces the target, looks at its head and aims every swing at it (through the active frames with track_dodges), its combo
+# blows warped toward it (Intent.warp).
 func _face(intent: Intent) -> void:
 	intent.face_target = target.global_position
 	intent.look_target = target.head_point()
 	intent.aim_target = target.global_position
 	intent.track = def.track_dodges
+	intent.warp = true
 
 
 # Keeps preferred_range ± range_tolerance: in, out, or round (see the top).
@@ -351,6 +363,8 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 	var distance := to.length()
 	var lo := _plan.min_range
 	var hi := _plan.max_range
+	if distance >= lo and distance <= hi and not _within_warp(actor, actor.def.moveset.get(_plan.action, &"")):
+		hi = distance - 0.01  # in range, but the target is walking out of the first blow's reach: keep closing
 	if distance >= lo and distance <= hi:
 		if _off_facing(actor, to) <= _plan.max_angle_deg and actor.frozen == 0:
 			_fire(actor, intent)
@@ -359,10 +373,11 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 	if _approach > def.reangle_after * 2.0:
 		_drop_plan(actor)
 		return
-	var goal := (lo + hi) * 0.5
-	var error := absf(distance - goal)
 	_track_progress(maxf(distance - hi, lo - distance), delta)
-	_head(intent, to / distance if distance > hi else -to / distance, error)
+	if distance > hi:
+		intent.move = (to / distance).rotated(_swing) * JOG_PUSH
+	else:
+		intent.move = (-to / distance).rotated(_swing) * (JOG_PUSH if lo - distance > BACK_WALK_WITHIN else WALK_PUSH)
 	if _watch_blocked(actor, intent, delta):
 		_reangle()
 
@@ -402,7 +417,39 @@ func _follow_through(actor: Actor, intent: Intent) -> void:
 		_finish(actor)
 		return
 	if not _presses.is_empty() and actor.runner.window.has(_presses[0]):
+		if not _within_warp(actor, StringName(actor.runner.window[_presses[0]])):
+			_presses.clear()  # the target is out of the next blow's reach: the combo ends rather than swing at air
+			return
 		_press(actor, intent, _presses.pop_front())
+
+
+# Whether the target will stand within reach of the move `move_id` once warped, when its blow lands: no further than its
+# strike_distance (for the actor's size), MoveRunner.MAX_WARP and WARP_SLACK, counting how far the target walks away from
+# the actor over the move's wind-up at the speed it goes now. A move that is never warped is always within reach.
+func _within_warp(actor: Actor, move_id: StringName) -> bool:
+	var move := Registry.fetch(&"moves", move_id) as MoveData if Registry.ids(&"moves").has(String(move_id)) else null
+	if move == null or move.strike_distance <= 0.0:
+		return true
+	var to := _flat(actor, target.global_position)
+	var away := 0.0
+	if not to.is_zero_approx():
+		var going := target.get_real_velocity()
+		away = maxf(Vector2(going.x, going.z).dot(to.normalized()), 0.0)
+	var reach := move.strike_distance * actor.def.model_scale + MoveRunner.MAX_WARP + WARP_SLACK
+	return to.length() + away * _wind_up(actor, move) <= reach
+
+
+# Seconds from the start of `move` to its first hitbox_on (its wind-up), read from its clip once; 0 if it has none.
+func _wind_up(actor: Actor, move: MoveData) -> float:
+	if not _wind_ups.has(move.id):
+		var at := 0.0
+		if actor.rig.tree.has_animation(move.clip):
+			for m in Marks.read(actor.rig.tree.get_animation(move.clip)):
+				if m["kind"] == &"hitbox_on":
+					at = m["time"]
+					break
+		_wind_ups[move.id] = at
+	return _wind_ups[move.id]
 
 
 # Holds the delayed swing's action until the clip has stood at its charge for the rolled frames.

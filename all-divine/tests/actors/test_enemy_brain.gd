@@ -285,7 +285,8 @@ func _fire(tier: int, action: StringName, combo: PackedStringArray, gap: float) 
 	return blows[0]
 
 
-## Presses an attack and its combo as the windows open, aiming at `target`: what the brain does, without the choosing.
+## Presses an attack and its combo as the windows open, aiming at `target` and warping toward it: what the brain does,
+## without the choosing (nor ending the combo when the target is out of reach).
 class Firer extends Brain:
 	var _target: Actor
 	var _first: StringName
@@ -302,11 +303,128 @@ class Firer extends Brain:
 		var intent := Intent.new()
 		_frame += 1
 		intent.aim_target = _target.global_position
+		intent.warp = true
 		if _frame == 1:
 			intent.pressed.append(_first)
 		elif not _then.is_empty() and actor.frozen == 0 and actor.runner.window.has(_then[0]):
 			intent.pressed.append(_then.pop_front())
 		return intent
+
+
+## Abarax for the strafe test: he strafes slowly round the Knuckle, sideways to it and facing it, the stick at 0.35 (a
+## 0.7 m/s walk), turning back the other way every 1.5 s.
+class Strafer extends Brain:
+	var foe: Actor
+	var _frame := 0
+
+	func think(actor: Actor, _delta: float) -> Intent:
+		var intent := Intent.new()
+		_frame += 1
+		if foe == null:
+			return intent
+		var to := Vector2(foe.global_position.x - actor.global_position.x, foe.global_position.z - actor.global_position.z)
+		intent.face_target = foe.global_position
+		if not to.is_zero_approx():
+			var side := 1.0 if (_frame / 90) % 2 == 0 else -1.0
+			intent.move = to.normalized().rotated(side * PI * 0.5) * 0.35
+		return intent
+
+
+# The tier's brain with only its jab (and its combo).
+static func _jab_only(tier: int) -> BrainDef:
+	var def := _brain_def(BRAINS[tier - 1])
+	def.attacks.assign(def.attacks.filter(func(o: AttackOption) -> bool: return o.action == &"palm"))
+	return def
+
+
+func test_its_combo_lands_on_a_slow_strafe() -> void:
+	var combos := 0
+	var full := 0
+	var log := []
+	for case: Array in [[1, 9], [2, 7], [3, 5]]:
+		var strafer := Strafer.new()
+		var run := _fight(_jab_only(case[0]), Vector3(0, 0, 4.0), PI, strafer, case[0], case[1])
+		var knuckle: Actor = run["knuckle"]
+		var abarax: Actor = run["abarax"]
+		strafer.foe = knuckle
+		var current := [{}]
+		var all := []
+		knuckle.runner.move_started.connect(func(m: MoveData) -> void:
+			if m.id == &"knuckle_jab":
+				current[0] = {&"knuckle_jab": false, &"knuckle_cross": false, &"knuckle_hook": false, "at": knuckle.frame}
+				all.append(current[0]))
+		abarax.got_hit.connect(func(r: HitResult, e: HitEvent) -> void:
+			if CONNECTED.has(r.outcome) and current[0].has(e.move.id):
+				current[0][e.move.id] = true)
+		await frames(60 * 30)
+		var marks := ""
+		for c: Dictionary in all:
+			if c["at"] > knuckle.frame - 150:
+				continue  # cut off by the end of the fight
+			combos += 1
+			var landed: bool = c[&"knuckle_jab"] and c[&"knuckle_cross"] and c[&"knuckle_hook"]
+			full += 1 if landed else 0
+			marks += " " + ("X" if c[&"knuckle_jab"] else ".") + ("X" if c[&"knuckle_cross"] else ".") + ("X" if c[&"knuckle_hook"] else ".")
+		log.append("tier %d:%s" % [case[0], marks])
+		(run["arena"] as Node).queue_free()
+		await frames(1)
+	assert_true(combos >= 15, "it threw its combo (%d times)" % combos)
+	assert_true(full >= ceili(combos * 0.85), "against a 0.7 m/s strafe all three blows land in %d of %d combos (%s)" % [full, combos, log])
+
+
+func test_a_target_that_rolls_out_of_reach_ends_the_combo() -> void:
+	var dodger := Roller.new()
+	var run := _fight(_jab_only(1), Vector3(0, 0, 2.2), PI, dodger)
+	var knuckle: Actor = run["knuckle"]
+	dodger.watch = knuckle
+	var after := []
+	knuckle.runner.move_started.connect(func(m: MoveData) -> void:
+		if dodger.rolled and m.kind == MoveData.Kind.ATTACK:
+			after.append([knuckle.frame, m.id]))
+	var rolled_at := -1
+	for i in 60 * 5:
+		await frames(1)
+		if dodger.rolled and rolled_at < 0:
+			rolled_at = knuckle.frame
+	assert_true(dodger.rolled, "he rolled away as the jab came")
+	var swings := after.filter(func(e: Array) -> bool: return e[0] <= rolled_at + 60)
+	assert_eq(swings, [], "out of its reach, the combo ends: no cross, no hook swung at the air")
+
+
+## Abarax for the out-of-reach test: he stands until `watch`'s first jab starts, then rolls straight back, away from it.
+class Roller extends Brain:
+	var watch: Actor
+	var rolled := false
+
+	func think(actor: Actor, _delta: float) -> Intent:
+		var intent := Intent.new()
+		if not rolled and watch != null and watch.runner.current != null and watch.runner.current.id == &"knuckle_jab" and watch.runner.time >= 5.0 / 60.0:
+			var away := Vector2(actor.global_position.x - watch.global_position.x, actor.global_position.z - watch.global_position.z)
+			intent.pressed.append(&"dodge")
+			intent.move = away.normalized()
+			rolled = true
+		return intent
+
+
+func test_it_steps_in_from_its_preferred_range_quickly() -> void:
+	var def := _jab_only(1)
+	var run := _fight(def, Vector3(0, 0, def.preferred_range))
+	var knuckle: Actor = run["knuckle"]
+	var brain: EnemyBrain = run["brain"]
+	var walk_ins := []
+	var chosen_at := -1
+	var gap_then := 0.0
+	for i in 60 * 12:
+		await frames(1)
+		if chosen_at < 0 and brain.plan() != null and brain.mode == EnemyBrain.Mode.ENGAGED:
+			chosen_at = knuckle.frame
+			gap_then = _gap(knuckle, run["abarax"])
+		if chosen_at >= 0 and brain.mode == EnemyBrain.Mode.ATTACKING:
+			walk_ins.append([knuckle.frame - chosen_at, snappedf(gap_then, 0.01)])
+			chosen_at = -1
+	assert_true(walk_ins.size() >= 3, "it attacked again and again (%s)" % [walk_ins])
+	for w: Array in walk_ins:
+		assert_true(w[0] <= 36, "from choosing its jab at %.2f m to pressing it: %d frames (at most 0.6 s)" % [w[1], w[0]])
 
 
 # --- tiers ---

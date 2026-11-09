@@ -6,8 +6,7 @@
 [sub_resource type="Resource" id="Resource_uh4q3"]
 script = ExtResource("1_02iyf")
 action = &"palm"
-min_range = 0.94
-max_range = 1.0
+max_range = 1.38
 combo = PackedStringArray("palm", "palm")
 
 [sub_resource type="Resource" id="Resource_0s5eo"]

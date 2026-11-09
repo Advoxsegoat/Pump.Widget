@@ -20,6 +20,10 @@ var aim_target: Variant = null
 ## Whether the turn toward aim_target goes on through the attack's active frames too (lock-on tracks its foe
 ## through a swing; aim assist turns him only in the wind-up).
 var track := false
+## Whether an attack that starts now is warped toward aim_target: its root travel over the wind-up is stretched or
+## shrunk (by MoveRunner.MAX_WARP at most) so the target stands at the move's strike_distance when it lands. An enemy's
+## combo blows home in on their target this way; the player's never do.
+var warp := false
 ## The foe the player has locked on to, or null. A palm pressed while it is one to finish (Actor.finishable_target)
 ## finishes it, rather than the nearest broken foe.
 var locked: Actor = null

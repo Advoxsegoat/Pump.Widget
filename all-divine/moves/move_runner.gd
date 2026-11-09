@@ -12,6 +12,13 @@ extends Node
 ##
 ## A shared reaction's cancel window (a flinch's) opens only into the actor's own moves (window_of).
 ##
+## A move with a strike_distance started with the intent's `warp` (an enemy's combo blow) is warped toward the intent's
+## aim_target: over its wind-up (up to its first hitbox_on) it travels further or less along its facing than its clip's
+## own root travel, so that the target stands where the blow was made to meet it (strike_distance from where it started,
+## less its own travel by the blow). The warp is aimed again on every tick of the wind-up at where the target stands then,
+## the rest of it spread over the wind-up left, so a target that walks in or out meanwhile is met too; in all it is
+## MAX_WARP at most either way, and never so far that the body would pass the target's (BodySpacing still stops it).
+##
 ## A dodge is the stick's too: a move with a `neutral_variant` (the roll's hop) starts that variant instead when the
 ## intent's stick is at rest, from rest and from a cancel window alike. The variant is checked as the move that was
 ## asked for (a hop is refused where a roll would be) and spends its own stamina_cost.
@@ -42,6 +49,8 @@ signal mark(kind: StringName, args: Dictionary)
 ## The first pass over a move's marks starts here, below 0, so the marks at time 0 are met
 ## (Marks.between is half-open: it leaves out its start).
 const BEFORE_START := -1.0
+## How far (metres) a warped move may travel further or less than its clip's own root travel.
+const MAX_WARP := 0.3
 
 var actor: Actor
 
@@ -79,6 +88,9 @@ var _aim_until := -1.0  # the time of the current move's first hitbox_on, where 
 var _track_until := -1.0  # the time of its last hitbox_off, where a lock-on's tracking stops
 var _parry_started := -1  # the actor's buffer_frame when the last move with a parry window started; -1 before any
 var _parry_fresh := true  # whether the current move's parry_on opens its window (see parry_window)
+var _warp := 0.0  # the extra travel along the facing the current move has made so far in its wind-up (metres; see the top)
+var _warping := false  # whether the current move is warped
+var _strike_at_hit := 0.0  # where the target should stand from the body when the warped blow lands (metres)
 
 
 ## True while a move plays.
@@ -111,7 +123,7 @@ func tick(intent: Intent, delta: float) -> Vector3:
 			var hold := _hold_between(before, time, intent)
 			if not hold.is_empty():
 				time = hold["time"]
-			velocity = _root_velocity(before, time, delta)
+			velocity = _root_velocity(before, time, delta) + _warp_velocity(intent, before, time, delta)
 			actor.rig.set_move_time(time)
 			_pass_marks(before, time)
 			if not hold.is_empty() and current == move:
@@ -168,6 +180,7 @@ func _start(move: MoveData, intent: Intent, force := false) -> void:
 			_aim_until = m["time"]
 		elif m["kind"] == &"hitbox_off":
 			_track_until = m["time"]
+	_begin_warp(move, intent)
 	rig.play_move(move.clip, move.blend_in)
 	if move.kind == MoveData.Kind.DODGE and intent != null and intent.move.length() > 0.0:
 		actor.snap_facing(Locomotion.yaw_of(intent.move))
@@ -198,6 +211,8 @@ func _end(cancelled: bool) -> void:
 	_root_track = -1
 	_aim_until = -1.0
 	_track_until = -1.0
+	_warp = 0.0
+	_warping = false
 	charging = false
 	charge_profile = &""
 	_charge_args = {}
@@ -317,6 +332,11 @@ func _set_airborne(value: bool) -> void:
 func _root_velocity(t0: float, t1: float, delta: float) -> Vector3:
 	if _root_track < 0 or delta <= 0.0:
 		return Vector3.ZERO
+	return _root_travel(t0, t1) / delta
+
+
+# The current clip's root travel from t0 to t1, in the world on the ground plane (times the move's root_motion_scale).
+func _root_travel(t0: float, t1: float) -> Vector3:
 	var length := _anim.length
 	var from := _anim.position_track_interpolate(_root_track, clampf(t0, 0.0, length))
 	var to := _anim.position_track_interpolate(_root_track, clampf(t1, 0.0, length))
@@ -324,7 +344,40 @@ func _root_velocity(t0: float, t1: float, delta: float) -> Vector3:
 	# placement under it, which is none for Abarax).
 	var travel := actor.rig.skeleton.global_basis * ((to - from) * current.root_motion_scale)
 	travel.y = 0.0
-	return travel / delta
+	return travel
+
+
+# The clip's own root travel from t0 to t1 toward where the body faces (metres; 0 for a move without root motion).
+func _own_travel(t0: float, t1: float) -> float:
+	if _root_track < 0:
+		return 0.0
+	var facing := actor.facing()
+	return _root_travel(t0, t1).dot(Vector3(facing.x, 0.0, facing.z).normalized())
+
+
+# Whether `move` started with `intent` is warped (see the top), and where the target should stand when its blow lands.
+func _begin_warp(move: MoveData, intent: Intent) -> void:
+	_warp = 0.0
+	_warping = intent != null and intent.warp and move.strike_distance > 0.0 and _aim_until > 0.0
+	if _warping:
+		_strike_at_hit = move.strike_distance * actor.def.model_scale - _own_travel(0.0, _aim_until)
+
+
+# The warp's travel over t0 to t1 of the wind-up as a world velocity (see the top): the rest of the warp the target needs
+# now, kept within MAX_WARP in all and short of body contact, spread over what is left of the wind-up.
+func _warp_velocity(intent: Intent, t0: float, t1: float, delta: float) -> Vector3:
+	if not _warping or delta <= 0.0 or t0 >= _aim_until - Marks.EPSILON or not intent.aim_target is Vector3:
+		return Vector3.ZERO
+	var point: Vector3 = intent.aim_target
+	var distance := Vector2(point.x - actor.global_position.x, point.z - actor.global_position.z).length()
+	var own_left := _own_travel(t0, _aim_until)
+	var contact := actor.spacing.radius() * 2.0 if actor.spacing != null else 0.0
+	var wanted := clampf(_warp + distance - own_left - _strike_at_hit, -MAX_WARP, MAX_WARP)
+	wanted = minf(wanted, _warp + distance - own_left - contact)
+	var step := (wanted - _warp) * (minf(t1, _aim_until) - t0) / (_aim_until - t0)
+	_warp += step
+	var facing := actor.facing()
+	return Vector3(facing.x, 0.0, facing.z).normalized() * step / delta
 
 
 ## The cancel window a cancel_open mark of `move` opens for an actor of `def`, from the mark's `into` (action -> move id).
