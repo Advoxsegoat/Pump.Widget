@@ -7,7 +7,8 @@ extends Brain
 ##   press                       actions pressed on the step's first frame only (default: none)
 ##   hold                        actions held on every frame of the step (default: none); a pressed
 ##                               action is held only if it is listed here too
-##   face_target, look_target    a Vector3 or null (default: null)
+##   face_target, look_target,   a Vector3, or a Node3D followed as it moves (where it stands; an Actor looked at is
+##   aim_target                  looked at in the head), or null (default: null)
 ## After the last step it wants nothing.
 
 var _steps: Array
@@ -31,8 +32,9 @@ func think(_actor: Actor, _delta: float) -> Intent:
 			intent.pressed.append(StringName(action))
 	for action in step.get("hold", []):
 		intent.held.append(StringName(action))
-	intent.face_target = step.get("face_target")
-	intent.look_target = step.get("look_target")
+	intent.face_target = _point(step.get("face_target"), false)
+	intent.look_target = _point(step.get("look_target"), true)
+	intent.aim_target = _point(step.get("aim_target"), false)
 	_frame += 1
 	return intent
 
@@ -41,6 +43,18 @@ func think(_actor: Actor, _delta: float) -> Intent:
 func done() -> bool:
 	_skip_played()
 	return _step >= _steps.size()
+
+
+# A step's target as a world point: a Vector3 as it is; a Node3D where it stands now (an Actor's head when `head`); null
+# for anything else, or a node that is gone.
+static func _point(target: Variant, head: bool) -> Variant:
+	if target is Vector3:
+		return target
+	if is_instance_valid(target) and target is Node3D and (target as Node3D).is_inside_tree():
+		if head and target is Actor:
+			return (target as Actor).head_point()
+		return (target as Node3D).global_position
+	return null
 
 
 # Moves past the steps whose frames have all been played (and those of 0 frames).

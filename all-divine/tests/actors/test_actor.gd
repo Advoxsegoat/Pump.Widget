@@ -287,6 +287,21 @@ func test_script_brain_plays_its_steps() -> void:
 	assert_true(ScriptBrain.new([]).done())
 
 
+func test_script_brain_follows_a_node_and_aims() -> void:
+	var arena := TestArena.make(self)
+	var mark := Node3D.new()
+	arena.add_child(mark)
+	mark.position = Vector3(1, 0, 2)
+	var foe := TestArena.spawn(arena, load("res://data/actors/abarax.tres"), Brain.new(), Vector3(3, 0, 0))
+	var brain := ScriptBrain.new([{"frames": 2, "face_target": mark, "look_target": foe, "aim_target": Vector3(7, 0, 7)}])
+	var a := brain.think(null, DT)
+	assert_eq(a.face_target, Vector3(1, 0, 2), "a node to face: where it stands")
+	assert_eq(a.look_target, foe.head_point(), "an actor to look at: its head")
+	assert_eq(a.aim_target, Vector3(7, 0, 7), "and a point to aim at")
+	mark.position = Vector3(-4, 0, 0)
+	assert_eq(brain.think(null, DT).face_target, Vector3(-4, 0, 0), "followed as it moves")
+
+
 func test_brain_wants_nothing() -> void:
 	var intent := Brain.new().think(null, DT)
 	assert_eq(intent.move, Vector2.ZERO)
