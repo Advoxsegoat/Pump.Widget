@@ -46,7 +46,8 @@ extends CharacterBody3D
 ##   6. a sprint spends sprint_stamina a second, and the stats are ticked: stamina and posture come back (stamina
 ##      slower while a guard is up)
 ##   7. move_and_slide, with gravity when off the floor, and with the knockback added (see push), which the
-##      move and locomotion know nothing of
+##      move and locomotion know nothing of; first its ground motion is cut where it would take the body into another
+##      actor's (BodySpacing.keep_apart), so bodies do not pass through each other
 ##   8. the body turns to locomotion's facing
 ##   9. the rig is given the strafe (the way the body goes against the way it faces, when it keeps facing a
 ##      target), which says whether locomotion plays backward, then the speed (see _rig_speed: while a move
@@ -145,6 +146,8 @@ var guarding := false
 var paired_with: Actor
 ## The paired move the actor is in, or null.
 var pair: PairedMove
+## Keeps its body out of other actors' (step 7): its motion on the ground stops at their capsules.
+var spacing: BodySpacing
 
 # The speed the rig's locomotion layer is given. With no move it is locomotion's. A move that starts is laid over
 # that layer in its blend_in, so the layer keeps the speed it had until the move is fully in (dropping it to
@@ -178,6 +181,7 @@ func _ready() -> void:
 	runner.move_started.connect(_on_move_started)
 	runner.move_ended.connect(_on_move_ended)
 	intake = HitIntake.new(self)
+	spacing = BodySpacing.new(self, get_node_or_null(^"Body") as CollisionShape3D)
 	rig.hurtbox.set_meta(&"actor", self)
 	add_to_group(GROUP)
 	if def.team == ActorDef.Team.ENEMY:
@@ -435,7 +439,7 @@ func _physics_process(delta: float) -> void:
 	if not is_on_floor():
 		fall += get_gravity().y * delta
 	var shove := _next_push(delta)
-	velocity = Vector3(planar.x + shove.x, fall, planar.z + shove.z)
+	velocity = spacing.keep_apart(Vector3(planar.x + shove.x, fall, planar.z + shove.z), delta)
 	move_and_slide()
 	rotation.y = locomotion.facing_yaw
 	var back := rig.set_strafe(_strafe_angle(intent, planar))
