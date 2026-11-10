@@ -45,11 +45,12 @@ const FOE_POSTURE_HEIGHT := 2
 const FOE_ABOVE := 12
 ## A foe shows its bars this many physics frames after a blow reached it (3 s).
 const FOE_SHOWN_FRAMES := 180
-## The stamina bar's blink: lit for this many physics frames, dark for as many, twice.
-const BLINK_FRAMES := 2
+## The stamina bar's blink at a refused press: lit and then dark, this many times, over ActorFx.REFUSAL_FRAMES physics
+## frames in all (2 frames lit and 2 dark, twice). That one number is also how seldom a refused press starts the blink,
+## and sounds (ActorFx): a blink is never cut short by the next.
 const BLINKS := 2
-## A refused press blinks the bar (and sounds) at most once in this many physics frames: the length of a blink.
-const REFUSAL_FRAMES := 2 * BLINKS * BLINK_FRAMES
+@warning_ignore("integer_division")
+const BLINK_FRAMES := ActorFx.REFUSAL_FRAMES / (2 * BLINKS)
 ## The wave pips: each this square, this far apart, this far from the top.
 const PIP := 5
 const PIP_GAP := 3
@@ -172,7 +173,7 @@ func posture_rect() -> Rect2i:
 ## counted from the frame the press was refused on.
 func stamina_blink_on() -> bool:
 	var since := Engine.get_physics_frames() - _refused_at
-	return since >= 0 and since < 2 * BLINKS * BLINK_FRAMES and (since / BLINK_FRAMES) % 2 == 0
+	return since >= 0 and since < ActorFx.REFUSAL_FRAMES and (since / BLINK_FRAMES) % 2 == 0
 
 
 ## The foes whose bars show now (locked on, or hit in the last FOE_SHOWN_FRAMES) as {actor, hp, posture}: the two fills in
@@ -473,7 +474,7 @@ func _on_foe_hit(result: HitResult, _event: HitEvent, foe: Actor) -> void:
 
 
 func _on_refused(_move: MoveData, _reason: StringName) -> void:
-	# A press mashed while the bar blinks does not restart it: one blink (and one cue) every 8 frames at most.
+	# A press mashed while the bar blinks does not restart it: one blink (and one cue) every ActorFx.REFUSAL_FRAMES at most.
 	var now := Engine.get_physics_frames()
-	if now - _refused_at >= REFUSAL_FRAMES:
+	if now - _refused_at >= ActorFx.REFUSAL_FRAMES:
 		_refused_at = now

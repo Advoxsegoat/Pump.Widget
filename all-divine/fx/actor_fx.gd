@@ -54,9 +54,10 @@ const CHARGE_FX := &"charge_glow"
 const TUNING := preload("res://data/tuning/readability.tres")
 ## Marks within this many seconds of the clock's time are the ones that have passed (a clip saved to disk keeps its times a
 ## little off the frame).
-## The refusal cue sounds once in this many physics frames at most.
-const REFUSAL_CUE_FRAMES := 8
 const MARKS_EPSILON := 1e-4
+## A refused press says so once in this many physics frames at most, however fast it is mashed: the cue here, and the
+## Hud's blink of the stamina bar, which lasts exactly this long (the Hud works its blink out from this number).
+const REFUSAL_FRAMES := 8
 
 ## The bones effects were asked to ride that the actor's skeleton lacks, each once, in the order met: each was warned of
 ## once (show_fx), however often it was asked for after, and the effect was shown at the actor's feet instead.
@@ -116,9 +117,9 @@ func _on_mark(kind: StringName, args: Dictionary) -> void:
 
 
 func _on_move_refused(_move: MoveData, _reason: StringName) -> void:
-	# One cue in REFUSAL_CUE_FRAMES at most, however fast the press is mashed (the Hud blinks as seldom).
+	# One cue in REFUSAL_FRAMES at most, however fast the press is mashed (the Hud blinks as seldom).
 	var now := Engine.get_physics_frames()
-	if _actor.def.team == ActorDef.Team.PLAYER and now - _refused_cue_at >= REFUSAL_CUE_FRAMES:
+	if _actor.def.team == ActorDef.Team.PLAYER and now - _refused_cue_at >= REFUSAL_FRAMES:
 		_refused_cue_at = now
 		Sfx.play(&"stamina_refused")
 
