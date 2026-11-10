@@ -232,8 +232,9 @@ func _rim_passes(actor: Actor) -> Array[ShaderMaterial]:
 
 # A rim's shaders are built the first time something is drawn with them, which made the first frame of a tell twice as
 # long as the next. So a region that loads has Abarax wear the passes of the first RimMarks.WARM marks, unseen, for its
-# first frames (Rig.warm_rim): after that, taking any of them makes no shader. tests/render/test_rim_first_frame.gd
-# times the frames.
+# first frames (Rig.warm_rim): after that, taking any of them makes no shader. The frames themselves are not timed in
+# the suite: a wall-clock bound failed 3 to 7 runs of 20 under bursty outside load, as CI runners have. Measured by
+# hand, a warmed rim's first frame is within 13% of its second, an unwarmed one 33% to 92% longer.
 func test_a_region_that_loads_warms_the_rims_a_fight_will_light() -> void:
 	RimMarks.forget()
 	var main := _main()
