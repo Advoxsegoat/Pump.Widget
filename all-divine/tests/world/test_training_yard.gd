@@ -51,6 +51,29 @@ func test_the_yard_is_a_region_with_the_arena_script_and_the_night_grade() -> vo
 	assert_true(region.grade.fog_color.b > region.grade.fog_color.r, "the fog is a cool blue")
 
 
+# Between the lantern pools the night's own light is dim, and a fighter lit by it alone is a dark shape on a dark floor.
+# The yard has a moon: a light for the bodies only, which casts no shadow; and its sun, the night's dim light on the
+# ground and the walls, leaves the bodies to the moon (two lights on a body would add up) but still casts their shadows.
+func test_a_moon_lights_the_bodies_and_the_sun_leaves_them_to_it() -> void:
+	var region := _yard()
+	var moon := region.get_node_or_null("Moon") as DirectionalLight3D
+	var sun := region.get_node_or_null("Sun") as DirectionalLight3D
+	assert_true(moon != null and sun != null, "a Moon and a Sun")
+	if moon == null or sun == null:
+		return
+	assert_eq(moon.light_cull_mask, Layers.RENDER_BODIES, "the moon lights the bodies and nothing else")
+	assert_false(moon.shadow_enabled, "and casts no shadow")
+	assert_true(moon.light_color.b > moon.light_color.r, "it is cool (%s)" % moon.light_color.to_html(false))
+	assert_true(moon.light_energy >= 1.0 and moon.light_energy <= 1.3, "near a body's own colours, not past them (energy %.2f): white cloth keeps its tones" % moon.light_energy)
+	assert_true(moon.global_basis.z.z > 0.5 and moon.global_basis.z.y > 0.3, "it shines from the camera's side and above, onto the faces the player sees (%s)" % (-moon.global_basis.z))
+	assert_eq(sun.light_cull_mask & Layers.RENDER_BODIES, 0, "the sun leaves the bodies out")
+	assert_true(sun.light_cull_mask & Layers.RENDER_WORLD != 0, "and lights the world")
+	assert_true(sun.shadow_enabled and sun.shadow_caster_mask & Layers.RENDER_BODIES != 0, "but still casts their shadows")
+	# The lanterns light both.
+	for lamp: OmniLight3D in region.find_children("Lamp", "OmniLight3D", true, false):
+		assert_true(lamp.light_cull_mask & Layers.RENDER_BODIES != 0 and lamp.light_cull_mask & Layers.RENDER_WORLD != 0, "a lantern lights bodies and world")
+
+
 func test_spawns_and_pois_exist() -> void:
 	var region := _yard()
 	var spawn := region.get_node_or_null("Spawn") as Marker3D

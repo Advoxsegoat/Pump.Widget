@@ -50,7 +50,8 @@ static func grown(mask: Dictionary, r: int, by := Vector2i.ZERO) -> Dictionary:
 ## the pixels that differ between a picture of the body in one flat colour and one without it, both drawn without the
 ## screen look. Hiding the body as it is dressed would miss a dark coat on a dark floor; and the look's blur and outlines
 ## reach a pixel or two past a body, onto the ground and the wall behind it, which are not the body. The world must stand
-## still while this draws its four frames; the body and the look are put back as they were.
+## still while this draws its frames; the body and the look are put back as they were, and the picture drawn again so,
+## before it returns.
 static func silhouette(main: Main, actor: Actor, box: Rect2i) -> Dictionary:
 	var flat := StandardMaterial3D.new()
 	flat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -74,4 +75,6 @@ static func silhouette(main: Main, actor: Actor, box: Rect2i) -> Dictionary:
 	look.visible = look_was
 	for i in meshes.size():
 		(meshes[i] as MeshInstance3D).material_override = worn[i]
+	for i in 2:
+		await RenderingServer.frame_post_draw
 	return diff(shown, hidden, box)

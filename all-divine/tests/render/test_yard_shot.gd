@@ -191,3 +191,68 @@ func test_the_lantern_lit_ground_is_warm() -> void:
 	assert_true(lit.h * 360.0 >= 20.0 and lit.h * 360.0 <= 50.0, "the lantern-lit ground is warm: hue %.0f (want 20 to 50), colour %s" % [lit.h * 360.0, lit.to_html(false)])
 	assert_true(lit.s > 0.15, "and not grey (saturation %.2f)" % lit.s)
 	assert_true(dark.h * 360.0 > 190.0 and dark.h * 360.0 < 250.0, "while the dark ground stays a cool blue (hue %.0f)" % (dark.h * 360.0))
+
+
+# The Rec. 709 luma of a colour as stored in the picture, 0 to 255.
+func _luma(c: Color) -> float:
+	return 255.0 * (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b)
+
+
+# How `actor`'s body stands out in the World picture `img`: {body, ground, spread}. `body` is the mean luma of its pixels
+# (its silhouette less the outermost pixel, which the screen look draws as an outline); `ground` the median luma of the
+# ground beside it, 3 to 8 pixels from its silhouette, off `other`'s body (the median leaves out its own shadow and the
+# lines between the stones); `spread` how far apart the body's lit and dark sides are, its 90th less its 10th percentile.
+func _standing_out(main: Main, img: Image, actor: Actor, other: Actor) -> Dictionary:
+	var feet := Vector2i(main.camera_rig.camera.unproject_position(actor.global_position).round())
+	var box := Rect2i(feet.x - 40, feet.y - 80, 80, 100).intersection(Rect2i(Vector2i.ZERO, img.get_size()))
+	var body := await ShotMasks.silhouette(main, actor, box)
+	var other_body := await ShotMasks.silhouette(main, other, box)
+	var inner: Array[float] = []
+	for p: Vector2i in ShotMasks.eroded(body, 1):
+		inner.append(_luma(img.get_pixelv(p)))
+	inner.sort()
+	var near := ShotMasks.grown(body, 2)
+	var beside: Array[float] = []
+	for p: Vector2i in ShotMasks.grown(body, 8):
+		if not near.has(p) and not other_body.has(p) and box.has_point(p):
+			beside.append(_luma(img.get_pixelv(p)))
+	beside.sort()
+	var sum := 0.0
+	for l in inner:
+		sum += l
+	return {body = sum / maxf(inner.size(), 1.0), ground = beside[beside.size() / 2], pixels = inner.size(),
+			spread = inner[inner.size() * 9 / 10] - inner[inner.size() / 10]}
+
+
+# Between the lantern pools the fighters must not sink into the floor: the outfits are the first thing to see. Mid-yard,
+# where no lamp reaches, a Knuckle's and Abarax's bodies each differ from the ground beside them by 30 luma or more in the
+# World picture, and still have a lit and a dark side (the toon shading is not flattened into one tone).
+func test_the_fighters_stand_out_between_the_lantern_pools() -> void:
+	Game.reset()
+	Arena.reset_spawn_counts()
+	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
+	main.arena().automatic = false
+	var foe := main.arena().enemies()[0]
+	foe.set_brain(Brain.new())
+	main.player.set_brain(Brain.new())
+	foe.place(Transform3D(Basis.IDENTITY, DARK + Vector3(-1.2, 0.0, 0.0)))
+	main.player.place(Transform3D(Basis.IDENTITY, DARK + Vector3(1.2, 0.0, 0.0)))
+	main.camera_rig.snap_now()
+	await frames(30)
+	foe.freeze(100000000)
+	main.player.freeze(100000000)
+	main.camera_rig.snap_now()
+	for i in 3:
+		await RenderingServer.frame_post_draw
+	var img := main.stage.world.get_texture().get_image()
+	var path := ProjectSettings.globalize_path("res://").path_join("out/shots/yard_between_pools.png")
+	assert_eq(get_viewport().get_texture().get_image().save_png(path), OK)
+	var world_640 := img.get_region(Rect2i(PixelSnap.MARGIN, PixelSnap.MARGIN, 640, 360))
+	assert_eq(world_640.save_png(path.replace(".png", "_640.png")), OK)
+	for pair: Array in [["the Knuckle", foe, main.player], ["Abarax", main.player, foe]]:
+		var seen := await _standing_out(main, img, pair[1], pair[2])
+		assert_true(seen.pixels > 200, "%s shows (%d pixels)" % [pair[0], seen.pixels])
+		assert_true(absf(seen.body - seen.ground) >= 30.0, "%s differs from the ground beside by 30 luma or more: body %.1f, ground %.1f (%+.1f)" % [
+				pair[0], seen.body, seen.ground, seen.body - seen.ground])
+		assert_true(seen.body > seen.ground, "%s is the brighter of the two: an outfit to see, not a dark shape" % pair[0])
+		assert_true(seen.spread >= 30.0, "%s has a lit side and a dark side still (its luma spreads over %.1f)" % [pair[0], seen.spread])

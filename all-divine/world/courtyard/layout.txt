@@ -40,6 +40,9 @@
 #   marker NAME X Z [YAW]           a Marker3D (the way it faces is its +Z, as an actor's)
 #   poi NAME X Z UP                 a Marker3D UP metres above the ground, in the group poi: a thing to glance at
 #   sun PITCH YAW COLOUR ENERGY     the DirectionalLight3D, with shadows
+#   moon PITCH YAW COLOUR ENERGY    a second DirectionalLight3D that lights only the bodies of actors and casts no
+#                                   shadows (a night's fill, so that fighters show between the lamps); the sun then
+#                                   leaves the bodies to it, and still casts their shadows
 #   sky COLOUR                      the background
 #   ambient COLOUR ENERGY           the ambient light
 #   grade PATH                      the region's GradeProfile

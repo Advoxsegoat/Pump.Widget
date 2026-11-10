@@ -41,7 +41,7 @@ const SOLID_DEPTH := 1.0
 const WALK_RAMP_THICKNESS := 0.5
 ## The render layer of the lanterns' meshes (set in their import), which their own lamps' shadows leave out:
 ## a lamp sits inside its lantern's housing, which would otherwise shade everything from it.
-const LANTERN_LAYER := 1 << 1
+const LANTERN_LAYER := LAYERS.RENDER_LANTERNS
 ## The sun's shadows reach this far from the camera (the camera is 20 m from what it looks at).
 const SUN_SHADOW_DISTANCE := 40.0
 ## The four ways, as world (x, z).
@@ -208,6 +208,12 @@ class Builder:
 					_sun(n[0], n[1], Color(args[2]), n[2])
 				else:
 					_problem("sun needs PITCH YAW COLOUR ENERGY")
+			"moon":
+				var n := _numbers(args.slice(0, 2) + args.slice(3), 3, 3)
+				if args.size() == 4 and n.size() == 3:
+					_moon(n[0], n[1], Color(args[2]), n[2])
+				else:
+					_problem("moon needs PITCH YAW COLOUR ENERGY")
 			"sky":
 				if args.size() == 1:
 					_environment().background_color = Color(args[0])
@@ -422,6 +428,28 @@ class Builder:
 		sun.shadow_enabled = true
 		sun.directional_shadow_max_distance = SUN_SHADOW_DISTANCE
 		_root.add_child(sun)
+		_share_the_bodies()
+
+	# The moon: a light for the bodies of actors only (the render layer `bodies`), with no shadows. A night's own light is
+	# too dim to show a fighter's outfit between the lantern pools; this fills the bodies and leaves the ground dark.
+	func _moon(pitch: float, yaw: float, colour: Color, energy: float) -> void:
+		var moon := DirectionalLight3D.new()
+		moon.name = "Moon"
+		moon.rotation_degrees = Vector3(pitch, yaw, 0)
+		moon.light_color = colour
+		moon.light_energy = energy
+		moon.shadow_enabled = false
+		moon.light_cull_mask = LAYERS.RENDER_BODIES
+		_root.add_child(moon)
+		_share_the_bodies()
+
+	# In a region with a moon, the sun leaves the bodies to it: it lights everything else, and still casts the bodies'
+	# shadows (its shadow_caster_mask stays whole). Two directional lights on a body would not show the brighter of the two
+	# in Compatibility, where a light that casts shadows is drawn in a pass of its own and added to the rest.
+	func _share_the_bodies() -> void:
+		var sun := _root.get_node_or_null(^"Sun") as DirectionalLight3D
+		if sun != null and _root.has_node(^"Moon"):
+			sun.light_cull_mask = 0xFFFFFFFF & ~LAYERS.RENDER_BODIES
 
 	# The region's Environment, made the first time it is asked for: the look's colour maths needs the linear
 	# tonemapper at exposure 1 and no glow, SSAO or colour adjustments (render/shaders/display_colour.gdshaderinc).

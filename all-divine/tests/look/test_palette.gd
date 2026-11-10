@@ -161,6 +161,16 @@ func test_rig_wears_one_shared_toon_material() -> void:
 		assert_true(mi.material_override == after, "%s still shares one material" % mi.name)
 
 
+# A region lights bodies apart from the world (a night's moon fills them and its sun leaves them to it): every mesh of a
+# body is drawn on the render layer `bodies`, and on that alone.
+func test_a_bodys_meshes_are_on_the_bodies_render_layer() -> void:
+	var rig := track(load(RIG).instantiate()) as Rig
+	var meshes := rig.get_node("Model").find_children("*", "MeshInstance3D", true, false)
+	assert_eq(meshes.size(), 9)
+	for mi: MeshInstance3D in meshes:
+		assert_eq(mi.layers, Layers.RENDER_BODIES, "%s is drawn on `bodies` only" % mi.name)
+
+
 func test_actor_wears_its_def_palette() -> void:
 	var def := load(ABARAX_DEF) as ActorDef
 	assert_eq(def.palette, load(ABARAX) as Palette)

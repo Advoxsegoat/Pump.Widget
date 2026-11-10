@@ -23,8 +23,13 @@
 script res://world/arena.gd
 floor 48 48
 sky #0b1020
-ambient #3a4c80 0.12
-sun -50 35 #5870b0 0.18
+# The night's own light, on the ground and the walls, is dim, so that the lanterns' pools are what is lit. It is too dim
+# for the fighters: between the pools a body lit by it alone is a dark shape on a dark floor. So the bodies have a light
+# of their own, the moon: cool, from the camera's side and above (it lights the faces the player sees, and the far sides
+# stay in shade), and little past a body's own colours (white cloth keeps its tones).
+ambient #3a4c80 0.055
+sun -50 35 #5870b0 0.08
+moon -35 25 #e6edff 1.3
 grade res://data/render/grades/training_yard.tres
 
 # The walls, and a pillar at each corner and each side of the gate.

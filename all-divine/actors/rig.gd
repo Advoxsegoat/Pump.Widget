@@ -205,6 +205,7 @@ func _ready() -> void:
 	for attachment in $Hitboxes.get_children():
 		_hitboxes[StringName(attachment.name)] = attachment.get_node("zone/shape") as CollisionShape3D
 	hurtbox = $Hurtbox
+	_body_meshes()
 	_look_target = get_node_or_null(^"LookTarget") as Marker3D
 	for look in looks:
 		_look_influence.append(look.influence)
@@ -707,12 +708,16 @@ func _filter_upper_body() -> void:
 
 # The body's meshes: every MeshInstance3D under Model as the rig was built, found the first time they are asked for and
 # kept (the palette, the hidden parts and the rim all go over them, the rim every frame of a tell). One that joins the
-# model later (an effect riding a bone) is no part of the body.
+# model later (an effect riding a bone) is no part of the body. Each is put on the render layer `bodies`, and on that
+# alone, so that a region can light the bodies apart from the world (a night's moon fills them, and its sun leaves them
+# to it: the training yard).
 func _body_meshes() -> Array[MeshInstance3D]:
 	if not _meshes_found:
 		_meshes_found = true
 		for node in $Model.find_children("*", "MeshInstance3D", true, false):
-			_meshes.append(node as MeshInstance3D)
+			var mesh := node as MeshInstance3D
+			mesh.layers = Layers.RENDER_BODIES
+			_meshes.append(mesh)
 	return _meshes
 
 
