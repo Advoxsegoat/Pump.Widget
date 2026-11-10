@@ -1,5 +1,5 @@
 extends TestCase
-## The self-test: `godot -- --selftest` runs the main scene's scripted circuit of the courtyard and quits 0 when
+## The self-test: `godot -- --selftest` runs the main scene's scripted fight in the training yard and quits 0 when
 ## no engine error was logged from startup to its end, else 1; and it always quits. The command-line runs are
 ## child Godots (their errors are printed in their output, which is captured here), each stopped if it is still
 ## running after CHILD_LIMIT seconds, so a self-test that never ends fails this test instead of hanging the run.
@@ -35,31 +35,38 @@ func _run_child(before: Array[String], after: Array[String]) -> Dictionary:
 	return {code = code, text = str(output[0]) if not output.is_empty() else ""}
 
 
-# The circuit, here in this process: in 600 frames Abarax walks to the fountain, rolls, jabs and climbs the
-# stairs, ending at StairsTop.
-func test_selftest_circuit_walks_rolls_jabs_and_climbs() -> void:
+# The circuit, here in this process: in 600 frames Abarax approaches the tier I Knuckle the yard sends, and fights it:
+# a jab, a cross and a hook, a roll, a guard and a heavy, trading blows with it.
+func test_selftest_circuit_fights_a_knuckle_in_the_yard() -> void:
 	Game.reset()
+	Arena.reset_spawn_counts()  # the Knuckle's dice as in a fresh game, which --selftest is
 	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
 	var player := main.get_node("PixelStage/World/Player") as Actor
+	var arena := main.arena()
+	assert_true(arena != null, "the region is the yard")
+	var foe := arena.enemies()[0]
+	assert_eq(foe.def.id, &"knuckle_1", "one tier I")
 	var started: Array[StringName] = []
 	player.runner.move_started.connect(func(move: MoveData) -> void: started.append(move.id))
+	var landed := [0]
+	player.hit_landed.connect(func(r: HitResult, _e: HitEvent) -> void:
+		if r.outcome == HitResult.Outcome.HIT:
+			landed[0] += 1)
 	player.set_brain(ScriptBrain.new(main.selftest_circuit()))
-	var closest_to_fountain := INF
-	for i in Main.SELFTEST_FRAMES:
-		await frames(1)
-		closest_to_fountain = minf(closest_to_fountain, Vector2(player.global_position.x, player.global_position.z).length())
-	var top := (main.get_node("PixelStage/World/Region/StairsTop") as Marker3D).global_position
-	assert_true(closest_to_fountain < 5.0, "he comes to the fountain (%.2f m from its centre at the closest)" % closest_to_fountain)
-	assert_eq(started, [&"dodge_roll", &"palm_jab"] as Array[StringName], "he rolls, then jabs")
-	assert_true(player.global_position.distance_to(top) < 1.0, "he ends at StairsTop (%.2f m off, at %s)" % [player.global_position.distance_to(top), player.global_position])
+	await frames(Main.SELFTEST_FRAMES)
+	for move in [&"palm_jab", &"palm_cross", &"palm_hook", &"dodge_roll", &"guard_raise", &"palm_heavy"]:
+		assert_true(started.has(move), "he played %s (%s)" % [move, started])
+	assert_true(landed[0] >= 1, "and landed a blow on it (%d)" % landed[0])
+	assert_true(foe.stats.hp < foe.stats.max_hp, "it is hurt")
 
 
-# The real thing: the main scene runs its circuit for 600 frames, nothing prints an error, and it quits 0.
-func test_selftest_exits_zero() -> void:
+# The real thing: the main scene runs its circuit for 600 frames in the yard, nothing prints an error, and it quits 0.
+func test_selftest_fights_in_the_yard_and_exits_zero() -> void:
 	var run := _run_child([], ["--selftest"])
 	assert_ne(run.code, 124, "the self-test was still running after %d s:\n%s" % [CHILD_LIMIT, run.text])
 	assert_eq(run.code, 0, run.text)
 	assert_true((run.text as String).contains("selftest: 600 frames, 0 errors"), run.text)
+	assert_true((run.text as String).contains("Knuckle at"), "it fought a Knuckle:\n%s" % run.text)
 	assert_false((run.text as String).contains("ERROR"), "the self-test printed an error:\n%s" % run.text)
 
 

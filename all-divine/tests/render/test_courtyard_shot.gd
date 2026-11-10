@@ -10,6 +10,7 @@ extends TestCase
 ## (courtyard_dusk; render/shaders/screen_final.gdshader).
 
 const MAIN := "res://main/main.tscn"
+const COURTYARD := "res://world/courtyard/courtyard.tscn"
 ## Where the shot goes, under the project folder (out/ is git-ignored, and Godot skips it).
 const SHOT := "out/shots/courtyard.png"
 const SIZE := Vector2i(1920, 1080)
@@ -43,6 +44,8 @@ func after_each() -> void:
 func test_courtyard_shot() -> void:
 	Game.reset()
 	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
+	main.switch_region()  # F5: the game boots into the training yard; this is the courtyard's picture
+	assert_eq(main.region.scene_file_path, COURTYARD, "the courtyard")
 	# Long enough for the scarf and the feet to settle and the shadows to be drawn.
 	await frames(30)
 	for i in 3:

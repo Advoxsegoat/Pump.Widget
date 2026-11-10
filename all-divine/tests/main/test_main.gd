@@ -1,11 +1,14 @@
 extends TestCase
-## The main scene (main/main.tscn): it boots into PLAY with Abarax at the courtyard's spawn, the camera on him
-## and the screen look on; F3 shows the debug overlay, F4 turns the look off, the menu button (Esc) pauses and
-## "Paused" shows while it is paused. F11 and Alt+Enter are tests/main/test_window_toggle.gd's.
+## The main scene (main/main.tscn): it boots into PLAY in the training yard with Abarax at its spawn, the camera on him,
+## the screen look on and the Hud over it; F5 switches to the courtyard and back; F3 shows the debug overlay, F4 turns the
+## look off, the menu button (Esc) pauses and "Paused" shows while it is paused. F11 and Alt+Enter are
+## tests/main/test_window_toggle.gd's.
 ## The self-test (--selftest) is tests/main/test_selftest.gd's.
 
 const MAIN := "res://main/main.tscn"
 const DEFAULT_SETTINGS := "res://data/render/default_settings.tres"
+const YARD := "res://world/training_yard/training_yard.tscn"
+const COURTYARD := "res://world/courtyard/courtyard.tscn"
 
 
 func after_each() -> void:
@@ -158,3 +161,40 @@ func test_escape_is_the_menu_button() -> void:
 	assert_eq(Game.state, Game.State.PAUSE, "Esc pauses")
 	_press_key(KEY_ESCAPE)
 	assert_eq(Game.state, Game.State.PLAY, "Esc again plays")
+
+
+func test_default_region_is_the_yard_and_f5_switches() -> void:
+	var main := _main()
+	var player := _player(main)
+	var yard := _region(main)
+	assert_eq(yard.scene_file_path, YARD, "the yard is the default region")
+	assert_true(yard is Arena, "an Arena")
+	assert_eq(ProjectSettings.get_setting("application/run/main_scene"), MAIN, "and the project boots into this scene")
+	assert_true(main.hud is Hud and main.hud.player == player, "the Hud follows the player")
+	assert_eq(main.hud.arena, yard, "and shows the yard's waves")
+	await frames(2)
+	var foes := get_tree().get_nodes_in_group(Actor.LOCKABLE_GROUP).filter(func(n: Node) -> bool: return yard.is_ancestor_of(n))
+	assert_eq(foes.size(), 1, "the first wave is on: one Knuckle")
+	_press_key(KEY_F5)
+	var courtyard := _region(main)
+	assert_eq(courtyard.scene_file_path, COURTYARD, "F5 goes to the courtyard")
+	assert_false(is_instance_valid(yard) and yard.is_inside_tree(), "the yard is gone, and its foes with it")
+	assert_vec_near(player.global_position, courtyard.spawn().origin, 1e-3, "Abarax is at its spawn")
+	assert_eq(_stage(main).grade, courtyard.grade, "in its grade")
+	assert_eq(main.hud.arena, null, "no waves to show")
+	assert_eq(_rig(main).target, player, "the camera is still on him")
+	await frames(2)
+	_press_key(KEY_F5)
+	assert_eq(_region(main).scene_file_path, YARD, "F5 again goes back to the yard")
+	assert_eq(_stage(main).grade, _region(main).grade, "in the yard's grade")
+	assert_eq(main.hud.arena, _region(main), "with its waves")
+	assert_eq((_region(main) as Arena).wave, 0, "and the first wave on again")
+
+
+func test_f5_after_death_stands_him_up() -> void:
+	var main := _main()
+	var player := _player(main)
+	player.die()
+	_press_key(KEY_F5)
+	assert_false(player.dead, "alive in the courtyard")
+	assert_eq(player.stats.hp, player.stats.max_hp)

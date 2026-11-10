@@ -1,6 +1,7 @@
 extends TestCase
-## The frame budget, headless: the main scene's physics frame (Abarax running the self-test's circuit of the
-## courtyard: walking, rolling, jabbing, climbing the stairs) takes at most 2 ms on average over 600 frames.
+## The frame budget, headless: the main scene's physics frame (Abarax running the self-test's circuit in the training
+## yard: approaching a Knuckle and fighting it, with the arena, the HUD and the enemy brain running) takes at most 2 ms on
+## average over 600 frames.
 ##
 ## Performance.TIME_PHYSICS_PROCESS is no use here: the engine sets it once a second of real time, to the
 ## longest physics step of that second, and under --fixed-fps 600 frames can take less than a second. So the
@@ -34,12 +35,12 @@ func _on_process_frame() -> void:
 		_step_start = 0
 
 
-func test_courtyard_physics_frame_under_two_ms() -> void:
+func test_yard_physics_frame_under_two_ms() -> void:
 	Game.reset()
 	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
 	var player := main.get_node("PixelStage/World/Player") as Actor
 	player.set_brain(ScriptBrain.new(main.selftest_circuit()))
-	# The frame that made the scene, and the next, are not the courtyard's to pay for.
+	# The frame that made the scene, and the next, are not the yard's to pay for.
 	await frames(2)
 	_step_times.clear()
 	_step_start = 0

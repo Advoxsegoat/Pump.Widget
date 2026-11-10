@@ -142,14 +142,15 @@ func tick(intent: Intent, delta: float) -> Vector3:
 
 
 # Starts `move`, unless it is an attack or a dodge, the actor cannot act (no stamina, or exhausted) and it is not
-# `force`d: then nothing changes, a move that plays goes on, and the press that asked is gone, since the callers have
-# consumed it. A dodge with the stick pushed (`intent` from this frame, or null) faces the stick at once. With the
+# `force`d: then nothing changes (but the actor's move_refused says so), a move that plays goes on, and the press that
+# asked is gone, since the callers have consumed it. A dodge with the stick pushed (`intent` from this frame, or null) faces the stick at once. With the
 # stick at rest, a move's neutral variant starts in its place, once the move asked for has passed the stamina gate.
 func _start(move: MoveData, intent: Intent, force := false) -> void:
 	if move == null:
 		push_error("MoveRunner: no move to start on '%s'" % actor.name)
 		return
 	if (move.kind == MoveData.Kind.ATTACK or move.kind == MoveData.Kind.DODGE) and not force and not actor.stats.can_act():
+		actor.move_refused.emit(move, &"stamina")
 		return
 	if move.neutral_variant != &"" and intent != null and intent.move.length() == 0.0:
 		var variant := _fetch(move.neutral_variant)

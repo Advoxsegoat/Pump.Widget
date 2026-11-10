@@ -22,6 +22,7 @@ commit the new files, which tools/audio/tests checks are what this makes):
   tell        a high glint: a few bright partials gliding up a little
   cloth/fall  soft noise bursts and low thuds
   charge      a low hum with a slow vibrato that swells and fades
+  refused     a short soft low double tick: a press the body could not pay for
 """
 import argparse
 import io
@@ -336,6 +337,17 @@ def roll_land(rng):
     ], n), 1.3)
 
 
+def stamina_refused(rng):
+    """A press the body could not answer: a short, soft, low double tick, like a breath held back. Quiet on purpose: it
+    says "no" without scolding."""
+    n = samples_in(0.16)
+    return fade_out(mix([
+        (layer(thump(n, 190.0, 120.0, 0.02, 0.025), 1.0), 0.0),
+        (layer(times(lowpass(noise(rng, n), 700.0), decay(n, 0.02, 0.002)), 0.4), 0.0),
+        (layer(thump(n, 170.0, 110.0, 0.02, 0.02), 0.6), 0.07),
+    ], n), 0.02)
+
+
 def surface_cloth(rng, centre):
     """A blow landing on cloth: a short muffled fwup."""
     n = samples_in(0.14)
@@ -398,6 +410,7 @@ SOUNDS = {
     "surface_cloth_1": (lambda r: surface_cloth(r, 1400.0), -6.0),
     "surface_cloth_2": (lambda r: surface_cloth(r, 1100.0), -6.0),
     "body_fall": (body_fall, PEAK_DB),
+    "stamina_refused": (stamina_refused, -12.0),
     "charge_hum": (charge_hum, -4.0),
 }
 

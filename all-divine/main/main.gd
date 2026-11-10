@@ -1,37 +1,46 @@
 class_name Main
 extends Node
-## The game: a region (the courtyard), Abarax in it and the camera on him, drawn by the PixelStage in the
-## screen look.
+## The game: a region (the training yard by default, with its Arena sending waves of Knuckles; F5 switches to the
+## courtyard and back), Abarax in it and the camera on him, drawn by the PixelStage in the screen look, with the Hud
+## over it.
 ##
 ## When ready, the game goes to PLAY; Abarax stands at the region's spawn with the player's hands on him (a
-## PlayerBrain turned by the camera's yaw); the camera takes him as its target and snaps to him; and the stage
-## puts on the look (data/render/default_settings.tres) in the region's grade.
+## PlayerBrain turned by the camera's yaw); the camera takes him as its target and snaps to him; the stage
+## puts on the look (data/render/default_settings.tres) in the region's grade; and the Arena, if the region is one, begins
+## its first wave with him as its target.
 ##
-## F3 shows or hides the debug overlay; F4 turns the screen look off and on; F11 or Alt+Enter switches between
+## F1 (a pad's Select) shows or hides the controls list; F3 shows or hides the debug overlay; F4 turns the screen look off
+## and on; F5 switches the region; F11 or Alt+Enter switches between
 ## borderless fullscreen, where the game starts, and a 1280x720 window (WindowToggle); the menu button (Esc,
 ## Start) pauses and resumes, and "Paused" shows while it is paused (PauseLabel). This node runs while the game
 ## is paused (to hear the menu button); the stage, and so the world in it, stops.
 ##
-## With --selftest (a user argument: godot -- --selftest) Abarax runs a scripted circuit of the courtyard instead
-## (selftest_circuit) for SELFTEST_FRAMES physics frames; the SelfTest autoload (core/self_test.gd), listening
-## for errors since before this scene loaded, then quits: 0 if none was logged, else 1.
+## With --selftest (a user argument: godot -- --selftest) Abarax fights one tier I Knuckle in the yard through a
+## scripted circuit instead (selftest_circuit: approach, jab, cross, hook, roll, guard, heavy) for SELFTEST_FRAMES
+## physics frames, and the arena does nothing by itself but send that one Knuckle; the SelfTest autoload
+## (core/self_test.gd), listening for errors since before this scene loaded, then quits: 0 if none was logged, else 1.
 
 const DEFAULT_SETTINGS := preload("res://data/render/default_settings.tres")
 const SELFTEST_FRAMES := 600
-## How far from the fountain's centre the self-test's walk stops (its basin is 2.5 m across the radius).
-const SELFTEST_FOUNTAIN_DISTANCE := 4.0
-## How far the self-test walks, at SELFTEST_WALK_PUSH on the stick, before it jogs the rest of the way.
-const SELFTEST_WALK := 1.0
-const SELFTEST_WALK_PUSH := 0.4
-## About how far a dodge roll takes him (its MoveData scales the clip's root motion to about 3 m).
-const SELFTEST_ROLL := 3.0
-## Frames to stand between the circuit's legs: long enough for a jog to come to a stop.
+const YARD := "res://world/training_yard/training_yard.tscn"
+const COURTYARD := "res://world/courtyard/courtyard.tscn"
+## How far Abarax walks toward the Knuckle in the self-test before he waits for it, and the stick's push.
+const SELFTEST_APPROACH := 2.0
+const SELFTEST_WALK_PUSH := 0.6
+## Frames to stand while the Knuckle closes on him, and between the circuit's blows.
+const SELFTEST_WAIT := 90
 const SELFTEST_PAUSE := 20
-## Frames a roll and a jab take, recovery included.
-const SELFTEST_MOVE_FRAMES := 40
+## Frames a palm, a roll, a guard and a heavy take, recovery included.
+const SELFTEST_PALM_FRAMES := 24
+## The hook is the longest of the three: it plays out (a press while it plays would be lost) before the roll.
+const SELFTEST_HOOK_FRAMES := 95
+const SELFTEST_ROLL_FRAMES := 40
+const SELFTEST_GUARD_FRAMES := 50
+const SELFTEST_HEAVY_FRAMES := 70
 
 @onready var stage: PixelStage = $PixelStage
 @onready var region: Region = $PixelStage/World/Region
+@onready var hud: Hud = $PixelStage/Hud/Hud
 @onready var player: Actor = $PixelStage/World/Player
 @onready var camera_rig: CameraRig = $PixelStage/World/CameraRig
 @onready var overlay: DebugOverlay = $DebugOverlay
@@ -54,6 +63,7 @@ func _ready() -> void:
 	camera_rig.snap_now()
 	overlay.actor = player
 	_apply_look()
+	_enter_region()
 	if SelfTest.active:
 		start_selftest()
 
@@ -75,6 +85,19 @@ func _unhandled_input(event: InputEvent) -> void:
 				_apply_look()
 				get_viewport().set_input_as_handled()
 				return
+			KEY_F5:
+				switch_region()
+				get_viewport().set_input_as_handled()
+				return
+			KEY_F1:
+				hud.toggle_hints()
+				get_viewport().set_input_as_handled()
+				return
+	var pad := event as InputEventJoypadButton
+	if pad != null and pad.pressed and pad.button_index == JOY_BUTTON_BACK:
+		hud.toggle_hints()
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed(&"menu"):
 		if Game.state == Game.State.PLAY:
 			Game.change(Game.State.PAUSE)
@@ -83,38 +106,82 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-## Starts the self-test's circuit: Abarax runs selftest_circuit, and the SelfTest autoload ends the game
-## SELFTEST_FRAMES physics frames from now, saying how far from StairsTop he ended.
+## The arena of the region, or null when it is not one (the courtyard).
+func arena() -> Arena:
+	return region as Arena
+
+
+## Switches to the other region (the training yard from the courtyard, the courtyard from the yard; F5): the player is
+## put at its spawn (standing, with full bars, if he was dead), the camera snaps to him, the look takes its grade, and an
+## arena begins its first wave. The old region, and any foes in it, are freed.
+func switch_region() -> void:
+	var to := COURTYARD if region.scene_file_path == YARD else YARD
+	var old := region
+	var world := old.get_parent()
+	world.remove_child(old)
+	old.queue_free()
+	region = (load(to) as PackedScene).instantiate() as Region
+	region.name = "Region"
+	world.add_child(region)
+	world.move_child(region, 0)
+	if player.dead:
+		player.revive(region.spawn())
+	else:
+		player.place(region.spawn())
+		player.stats.refill()
+	camera_rig.snap_now()
+	_apply_look()
+	_enter_region()
+
+
+## Starts the self-test's circuit: Abarax fights the tier I Knuckle the arena sends, through selftest_circuit, and the
+## SelfTest autoload ends the game SELFTEST_FRAMES physics frames from now, saying how it ended.
 func start_selftest() -> void:
+	var fight := arena()
+	if fight == null:
+		push_error("Main: the self-test fights in the training yard, which is not the region (%s)" % region.name)
+		return
+	fight.begin(player)
 	player.set_brain(ScriptBrain.new(selftest_circuit()))
-	var top := (region.get_node(^"StairsTop") as Node3D).global_position
 	SelfTest.begin(SELFTEST_FRAMES, func() -> String:
-		return "Abarax ended %.2f m from StairsTop" % player.global_position.distance_to(top))
+		var foe := fight.enemies()[0]
+		return "Abarax at %d HP, the Knuckle at %d HP" % [ceili(player.stats.hp), ceili(foe.stats.hp)])
 
 
-## The self-test's circuit, as ScriptBrain steps from the spawn: walk, then jog, to the fountain; roll back the
-## way he came; jab; jog to StairsTop, up the stairs. Each leg is timed from the actor's locomotion tuning to
-## cover its distance from rest and coast to a stop.
+## The self-test's circuit, as ScriptBrain steps from the spawn against the Knuckle wave 0 sent (arena.enemies()[0]):
+## walk toward it, wait for it to come, jab, cross, hook, roll back, guard, heavy. He faces and aims at it throughout.
 func selftest_circuit() -> Array:
-	var tuning := player.def.locomotion
+	var foe := arena().enemies()[0]
 	var start := _flat(region.spawn().origin)
-	var fountain := _flat((region.get_node(^"PointsOfInterest/Fountain") as Node3D).global_position)
-	var top := _flat((region.get_node(^"StairsTop") as Node3D).global_position)
-	var toward := (fountain - start).normalized()
-	var by_fountain := fountain - toward * SELFTEST_FOUNTAIN_DISTANCE
-	var rolled_to := by_fountain - toward * SELFTEST_ROLL
+	var toward := (_flat(foe.global_position) - start).normalized()
+	var face := {face_target = foe, aim_target = foe}
 	return [
-		{frames = SELFTEST_PAUSE},
-		_leg(toward, SELFTEST_WALK_PUSH, SELFTEST_WALK, tuning),
-		{frames = SELFTEST_PAUSE},
-		_leg(toward, 1.0, start.distance_to(by_fountain) - SELFTEST_WALK, tuning),
-		{frames = SELFTEST_PAUSE},
+		{frames = SELFTEST_PAUSE}.merged(face),
+		_leg(toward, SELFTEST_WALK_PUSH, SELFTEST_APPROACH, player.def.locomotion).merged(face),
+		{frames = SELFTEST_WAIT}.merged(face),
+		{frames = 1, press = [&"palm"]}.merged(face),
+		{frames = SELFTEST_PALM_FRAMES}.merged(face),
+		{frames = 1, press = [&"palm"]}.merged(face),
+		{frames = SELFTEST_PALM_FRAMES}.merged(face),
+		{frames = 1, press = [&"palm"]}.merged(face),
+		{frames = SELFTEST_HOOK_FRAMES}.merged(face),
 		{frames = 1, move = -toward, press = [&"dodge"]},
-		{frames = SELFTEST_MOVE_FRAMES},
-		{frames = 1, press = [&"palm"]},
-		{frames = SELFTEST_MOVE_FRAMES},
-		_leg((top - rolled_to).normalized(), 1.0, rolled_to.distance_to(top), tuning),
+		{frames = SELFTEST_ROLL_FRAMES}.merged(face),
+		{frames = SELFTEST_GUARD_FRAMES, press = [&"guard"], hold = [&"guard"]}.merged(face),
+		{frames = 1, press = [&"heavy"], hold = [&"heavy"]}.merged(face),
+		{frames = SELFTEST_HEAVY_FRAMES}.merged(face),
 	]
+
+
+# What a region gives the game when it is entered: the Hud follows its arena (none in the courtyard), and an arena runs
+# the fight by itself, begun with the player unless the self-test is on (it asks for what it wants, start_selftest).
+func _enter_region() -> void:
+	var fight := arena()
+	hud.bind(player, camera_rig, stage, fight)
+	if fight != null:
+		fight.automatic = not SelfTest.active
+		if not SelfTest.active:
+			fight.begin(player)
 
 
 # The look on (default_settings) or off (RenderSettings.off()), in the region's grade.

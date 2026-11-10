@@ -74,6 +74,10 @@ signal brain_changed(brain: Brain)
 signal got_hit(result: HitResult, event: HitEvent)
 ## A blow this actor struck has been judged and `event.target` has taken it: `result` is what it came to.
 signal hit_landed(result: HitResult, event: HitEvent)
+## A move was asked for and refused: `reason` says why (&"stamina": the actor cannot act, so an attack or a dodge is not
+## started). The HUD blinks the stamina bar on it and a soft cue plays: a press that does nothing and says nothing is
+## friction.
+signal move_refused(move: MoveData, reason: StringName)
 ## The actor died (die). Emitted once.
 signal died
 ## A paired move began (start_paired): `kind` is its moment, &"finisher" or &"grab". Emitted on both of its fighters,
@@ -119,7 +123,7 @@ const FINISHABLE_GROUP := &"finishable"
 const FINISHER_STANCE_SLACK := 0.05
 
 @export var def: ActorDef
-## Which spawn of its name the actor is (0 for the first), set before it is ready by whoever spawns it (DemoDirector):
+## Which spawn of its name the actor is (0 for the first), set before it is ready by whoever spawns it (the Arena):
 ## the dice of the EnemyBrain it gets from its def are seeded from its name and this.
 @export var spawn_count := 0
 

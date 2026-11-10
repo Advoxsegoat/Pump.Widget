@@ -1,8 +1,8 @@
 class_name DemoReel
 extends Main
-## The preview reel: the demo yard with only a Knuckle (tier II), and both of them played by ScriptBrain choreographies
-## instead of a person and the enemy brain, so that the same fight can be recorded again and again (Movie Maker, see the
-## STATE.md note). A stand-in like the rest of demo/.
+## The preview reel: the training yard with its Hud on and only a Knuckle (tier II) in it (the arena sends none), and both
+## of them played by ScriptBrain choreographies instead of a person and the enemy brain, so that the same fight can be
+## recorded again and again (Movie Maker, see the STATE.md note).
 ##
 ## The Knuckle (FOE_BEATS) throws three attacks (a jab, the perilous sweep, the perilous thrust) at fixed times, facing
 ## Abarax the rest of the time; Abarax's presses are timed against them (BEATS), and in order he walks in and locks
@@ -16,10 +16,10 @@ extends Main
 ## checking the choreography without a picture.
 
 const KNUCKLE_DEF := preload("res://data/actors/knuckle_2.tres")
-## Where Abarax starts (facing west, along the line the whole fight is on, clear of the fountain) and where the Knuckle
-## stands (facing him).
-const ABARAX_AT := Vector3(-0.5, 0.0, 7.0)
-const KNUCKLE_AT := Vector3(-7.4, 0.0, 7.0)
+## Where Abarax starts (facing west, along the line the whole fight is on, in the middle of the yard) and where the
+## Knuckle stands (facing him).
+const ABARAX_AT := Vector3(4.9, 0.0, 3.0)
+const KNUCKLE_AT := Vector3(-2.0, 0.0, 3.0)
 const REEL_HP := 140.0
 const REEL_POSTURE := 40.0
 const WEST := Vector2(-1, 0)
@@ -86,6 +86,10 @@ var _logging := false
 
 func _ready() -> void:
 	super()
+	var fight := arena()
+	if fight != null:
+		fight.automatic = false  # the reel is the Knuckle below, and nothing else
+		fight.clear_foes()
 	player.place(Transform3D(Basis(Vector3.UP, -PI / 2.0), ABARAX_AT))
 	camera_rig.snap_now()
 	var def := KNUCKLE_DEF.duplicate() as ActorDef
@@ -117,9 +121,7 @@ func _ready() -> void:
 	hands.lock_changed.connect(func(locked: Actor) -> void:
 		if _logging:
 			print("%6.2f Abarax %s" % [_clock(), "locks on to the Knuckle" if locked != null else "lets go of the lock"]))
-	var hud := get_node_or_null(^"Hud") as DemoHud
-	if hud != null:
-		hud.controls_label.visible = false
+	hud.hints_visible = false  # the recording has no controls list
 	if OS.get_cmdline_user_args().has("--reel-log"):
 		_logging = true
 		_log_events()

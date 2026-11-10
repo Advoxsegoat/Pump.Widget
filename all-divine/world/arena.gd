@@ -105,12 +105,7 @@ func start_wave(index: int) -> void:
 ## Takes every foe away, puts the player at the Spawn with full bars (standing him up through his get up if he was dead),
 ## and sends the current wave again. F9 and the player's death do it.
 func reset() -> void:
-	_next_in = -1.0
-	_reset_in = -1.0
-	for foe in _enemies + _extras:
-		_remove(foe)
-	_enemies.clear()
-	_extras.clear()
+	clear_foes()
 	if player != null:
 		if player.dead:
 			player.revive(spawn())
@@ -118,6 +113,16 @@ func reset() -> void:
 			player.place(spawn())
 			player.stats.refill()
 	start_wave(maxi(wave, 0))
+
+
+## Takes every foe away, the wave's and the debug ones, and the pending next wave and reset with them.
+func clear_foes() -> void:
+	_next_in = -1.0
+	_reset_in = -1.0
+	for foe in _enemies + _extras:
+		_remove(foe)
+	_enemies.clear()
+	_extras.clear()
 
 
 ## Where the foes come from, in turn: the markers EnemySpawn_1, EnemySpawn_2, ... as far as they go.

@@ -12,6 +12,10 @@ extends Control
 ## the World (render/shaders/screen_post.gdshader), and this node draws the picture with its final
 ## material, which adds bloom, the colour grade and the vignette (render/shaders/screen_final.gdshader).
 ## Both start with every effect off; apply_settings sets them.
+##
+## The HUD is a second viewport, `hud`, exactly the 640x360 picture (transparent), drawn by the child TextureRect `hud_view`
+## on top of the world, at the same whole-number scale and in the same place, without the final material: no grade, no
+## bloom, no vignette, and not shifted by `subpixel`, so every HUD pixel is a clean k x k block and its colours are its own.
 
 ## Size of the World viewport: the picture plus the margin on each side.
 const WORLD_SIZE := PixelSnap.INTERNAL + Vector2i(2, 2) * PixelSnap.MARGIN
@@ -30,6 +34,9 @@ var settings: RenderSettings
 var grade: GradeProfile
 
 @onready var world: SubViewport = $World
+@onready var hud: SubViewport = $Hud
+## Draws the HUD's picture over the world's (see the top): a child with no material of its own.
+var hud_view: TextureRect
 
 
 func _init() -> void:
@@ -38,6 +45,27 @@ func _init() -> void:
 	final.set_shader_parameter(&"picture_size", WORLD_SIZE)
 	set_uniforms(final, final_uniforms(RenderSettings.new().off(), GradeProfile.new()))
 	material = final
+
+
+func _ready() -> void:
+	hud_view = TextureRect.new()
+	hud_view.name = "HudView"
+	hud_view.texture = hud.get_texture()
+	hud_view.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	hud_view.stretch_mode = TextureRect.STRETCH_SCALE
+	hud_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud_view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	add_child(hud_view)
+	resized.connect(_place_hud)
+	_place_hud()
+
+
+## Puts the HUD's picture where the world's goes, scaled by the same whole number (it follows the window's size).
+func _place_hud() -> void:
+	var window := Vector2i(size)
+	var rect := layout(window)
+	hud_view.position = Vector2(rect.position)
+	hud_view.size = Vector2(rect.size)
 
 
 ## Puts the look on screen: the strengths in `s` and the colours in `g` (a neutral grade when null) go to

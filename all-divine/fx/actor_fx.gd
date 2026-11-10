@@ -11,6 +11,8 @@ extends Node
 ##   shake {strength}   shakes the camera
 ##   tell {kind}        `glint`: the glint FxDef and the cue tell_glint; `perilous`: the FxDef perilous_rose, the
 ##                      cue perilous_sting and a rose flash of the body
+## A move the actor was refused (Actor.move_refused: a press it had no stamina for): the player's actor sounds the soft
+## cue stamina_refused, so that a press that does nothing says so (the HUD blinks the stamina bar as well).
 ## A charge that fills (MoveRunner.charged): the FxDef charge_glow on the chest and the cue charge_hum, once, as it fills.
 ## A hit (Actor.got_hit), whatever the actor does about it: a blow that came to nothing (a WHIFF: a body held in
 ## reach while invulnerable reports one every tick) shows and sounds nothing. Any other shakes the camera by the
@@ -68,6 +70,7 @@ func _listen() -> void:
 	_actor.runner.mark.connect(_on_mark)
 	_actor.runner.charged.connect(_on_charged)
 	_actor.got_hit.connect(_on_got_hit)
+	_actor.move_refused.connect(_on_move_refused)
 
 
 func _on_mark(kind: StringName, args: Dictionary) -> void:
@@ -80,6 +83,11 @@ func _on_mark(kind: StringName, args: Dictionary) -> void:
 			shake_camera(float(args.get("strength", 0.0)))
 		&"tell":
 			_tell(StringName(args.get("kind", &"")))
+
+
+func _on_move_refused(_move: MoveData, _reason: StringName) -> void:
+	if _actor.def.team == ActorDef.Team.PLAYER:
+		Sfx.play(&"stamina_refused")
 
 
 func _on_charged(_move: MoveData) -> void:
