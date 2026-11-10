@@ -2,10 +2,15 @@ extends TestCase
 ## The sway, duck and dash-step clips and moves of the sway-and-duck defence (spec 3.1, 3.3, 3.7, 5): sixteen moves, each
 ## with a clip of its own name. Their lengths, marks and costs are the spec's tempo table; their shapes are measured on
 ## the rig (ClipMotion) standing at the origin facing +Z, so Abarax's left is +X and a pull back is -Z.
-##   a sway   the head leaves the guard stance's place 0.18-0.25 m (Slip) or 0.12-0.20 m (Quick, Flurry) toward its side
+##   a sway   a slip and a dip: at its peak the head is 0.30-0.36 m (Slip), 0.24-0.28 m (Quick) or 0.20-0.24 m (Flurry) off the
+##            guard stance's place toward its side, and 0.12-0.18, 0.10-0.14 or 0.08-0.12 m lower
 ##   a duck   the head drops 0.35 m (Slip) or 0.25 m (Quick, Flurry) at least
+##   both     the head goes out to its peak and back with no overshoot
 ##   both     the feet stay (3 cm), and the body starts and ends in guard_hold's pose
-##   a dash-step  the root travels 1.30 m its own way within frames 0-10, eased, and stops
+##   a dash-step  the root travels 1.30 m its own way within frames 0-10, eased, and stops; it is a step: by frame 4 the
+##                leading foot is 0.25 m ahead of the hips and the trailing one 0.20 m behind, by frame 12 both are back
+##                where the guard stance has them
+## What it all looks like in the game's picture is tests/render/test_sway_shots.gd's.
 
 const RIG := "res://actors/abarax/abarax_rig.tscn"
 const GUARD := &"guard_hold"
@@ -46,7 +51,24 @@ const TEMPOS: Array[StringName] = [&"slip", &"quick", &"flurry"]
 ## Where the head goes in a sway, as a direction in the rig's frame (+X his left, -Z behind him).
 const LEAN := {&"left": ABARAX_LEFT, &"right": -ABARAX_LEFT, &"back": BEHIND}
 ## The head's peak travel in a sway, per tempo: [at least, at most] metres.
-const SWAY_HEAD := {&"slip": [0.18, 0.25], &"quick": [0.12, 0.20], &"flurry": [0.12, 0.20]}
+const SWAY_HEAD := {&"slip": [0.30, 0.36], &"quick": [0.24, 0.28], &"flurry": [0.20, 0.24]}
+## How much lower than in the guard stance the head is at that peak: [at least, at most] metres.
+const SWAY_DIP := {&"slip": [0.12, 0.18], &"quick": [0.10, 0.14], &"flurry": [0.08, 0.12]}
+## How far the head may sink back toward the guard stance, or go further out, from one frame to the next of its way out or
+## back: the head's distance from where the guard stance has it rises to the peak and falls from it, within this.
+const OVERSHOOT := 0.002
+## The stride of a dash-step: how far ahead of the hips the leading foot is by frame 4, how far behind them the trailing one,
+## and by frame 12 how far (on the ground) each foot may be from where the guard stance has it, relative to the hips.
+const STRIDE_FRAME := 4
+const STRIDE_LEAD := 0.25
+const STRIDE_TRAIL := 0.20
+const STRIDE_BACK_FRAME := 12
+const STRIDE_BACK_TOLERANCE := 0.08
+## The foot that leads each dash-step.
+## A dash-step's head leans at least this far ahead of the hips along its way, and comes this far down from the guard stance.
+const LEAN_AHEAD := 0.05
+const LOW := 0.30
+const LEAD_FOOT := {&"dash_step": &"foot_l", &"dash_step_left": &"foot_l", &"dash_step_right": &"foot_r", &"dash_step_back": &"foot_r"}
 ## The least the head drops in a duck, per tempo.
 const DUCK_DROP := {&"slip": 0.35, &"quick": 0.25, &"flurry": 0.25}
 ## Where a dash-step's root goes, in the rig's frame.
@@ -94,6 +116,19 @@ func _frame_of(clip: StringName, kind: StringName) -> int:
 
 func _tempo_of(id: StringName) -> StringName:
 	return StringName(String(id).split("_")[-1])
+
+
+# How much lower the head is than at the start of the clip on the frame it is furthest along `way`.
+func _dip_at_peak(clip: StringName, way: Vector3) -> float:
+	var at := _at(clip)
+	var best := -INF
+	var dip := 0.0
+	for frame: int in at:
+		var along := ((at[frame][&"Head"] as Vector3) - (at[0][&"Head"] as Vector3)).dot(way)
+		if along > best:
+			best = along
+			dip = (at[0][&"Head"] as Vector3).y - (at[frame][&"Head"] as Vector3).y
+	return dip
 
 
 # How far, along `way`, joint `joint` goes from where the clip starts it: the most of any frame.
@@ -149,6 +184,7 @@ func test_every_sway_duck_and_dash_step_has_its_move_its_clip_and_its_length() -
 			assert_false(move.root_motion, "%s stands where it is" % id)
 		else:
 			assert_true(move.root_motion, "%s travels on its root" % id)
+			assert_false(move.invulnerable, "%s is never invulnerable" % id)
 
 
 func test_each_evade_window_and_redodge_frame_matches_its_tempo() -> void:
@@ -208,6 +244,9 @@ func test_the_head_leaves_the_line_and_the_feet_stay() -> void:
 			var out := _peak(id, &"Head", LEAN[side])
 			var span: Array = SWAY_HEAD[tempo]
 			assert_true(out >= span[0] and out <= span[1], "%s: the head goes %.3f m aside (%.2f to %.2f)" % [id, out, span[0], span[1]])
+			var dip := _dip_at_peak(id, LEAN[side])
+			var dips: Array = SWAY_DIP[tempo]
+			assert_true(dip >= dips[0] and dip <= dips[1], "%s: the head is %.3f m lower at the peak (%.2f to %.2f)" % [id, dip, dips[0], dips[1]])
 			for foot: StringName in [&"foot_l", &"foot_r"]:
 				assert_true(_wander(id, foot) <= FOOT_TRAVEL, "%s: %s moves %.3f m" % [id, foot, _wander(id, foot)])
 	for tempo: StringName in TEMPOS:
@@ -301,6 +340,33 @@ func test_a_dash_step_travels_1_3_m_its_own_way_by_frame_ten() -> void:
 		assert_true(steps[DASH_FRAMES - 1] < quickest * 0.6, "%s: eased out (last step %.3f, quickest %.3f)" % [id, steps[DASH_FRAMES - 1], quickest])
 
 
+func test_a_dash_step_is_a_step_not_a_slide() -> void:
+	var guard := _at(GUARD)[0] as Dictionary
+	for id: StringName in DASH_WAY:
+		if not _rig.tree.has_animation(id):
+			fail("%s: no clip" % id)
+			continue
+		var at := _at(id)
+		var way: Vector3 = DASH_WAY[id]
+		var lead: StringName = LEAD_FOOT[id]
+		var trail: StringName = &"foot_r" if lead == &"foot_l" else &"foot_l"
+		var pelvis: Vector3 = at[STRIDE_FRAME][&"pelvis"]
+		var ahead := ((at[STRIDE_FRAME][lead] as Vector3) - pelvis).dot(way)
+		var behind := -((at[STRIDE_FRAME][trail] as Vector3) - pelvis).dot(way)
+		assert_true(ahead >= STRIDE_LEAD, "%s: by f%d the leading foot (%s) is %.3f m ahead of the hips (at least %.2f)" % [id, STRIDE_FRAME, lead, ahead, STRIDE_LEAD])
+		assert_true(behind >= STRIDE_TRAIL, "%s: by f%d the trailing foot is %.3f m behind the hips (at least %.2f)" % [id, STRIDE_FRAME, behind, STRIDE_TRAIL])
+		for foot: StringName in [&"foot_l", &"foot_r"]:
+			var rel := (at[STRIDE_BACK_FRAME][foot] as Vector3) - (at[STRIDE_BACK_FRAME][&"pelvis"] as Vector3)
+			var rest := (guard[foot] as Vector3) - (guard[&"pelvis"] as Vector3)
+			var off := Vector2(rel.x - rest.x, rel.z - rest.z).length()
+			assert_true(off <= STRIDE_BACK_TOLERANCE, "%s: by f%d the %s is %.3f m from where the guard stance has it, under the hips" % [id, STRIDE_BACK_FRAME, foot, off])
+		# The feet leave the ground to step: each lifts on its way.
+		var lifted := 0.0
+		for frame: int in at:
+			lifted = maxf(lifted, (at[frame][lead] as Vector3).y - (at[0][lead] as Vector3).y)
+		assert_true(lifted >= 0.05, "%s: the leading foot lifts %.3f m on its step" % [id, lifted])
+
+
 func test_a_dash_step_stays_low_and_leans_the_way_it_goes() -> void:
 	var guard := _at(GUARD)[0] as Dictionary
 	for id: StringName in DASH_WAY:
@@ -314,8 +380,39 @@ func test_a_dash_step_stays_low_and_leans_the_way_it_goes() -> void:
 		for frame: int in at:
 			lean = maxf(lean, ((at[frame][&"Head"] as Vector3) - (at[frame][&"pelvis"] as Vector3)).dot(way))
 			low = minf(low, (at[frame][&"Head"] as Vector3).y)
-		assert_true(lean >= 0.05, "%s: the head is %.3f m ahead of the hips toward its way" % [id, lean])
-		assert_true(low <= (guard[&"Head"] as Vector3).y - 0.10, "%s: the head comes down to %.3f m (the guard: %.3f)" % [id, low, (guard[&"Head"] as Vector3).y])
+		assert_true(lean >= LEAN_AHEAD, "%s: the head is %.3f m ahead of the hips toward its way (at least %.2f)" % [id, lean, LEAN_AHEAD])
+		assert_true(low <= (guard[&"Head"] as Vector3).y - LOW, "%s: the head comes down to %.3f m (the guard: %.3f, at least %.2f lower)" % [id, low, (guard[&"Head"] as Vector3).y, LOW])
+
+
+func test_the_head_goes_out_to_its_peak_and_back_with_no_overshoot() -> void:
+	var clips: Array[StringName] = []
+	for tempo: StringName in TEMPOS:
+		for side: StringName in SWAYS:
+			clips.append(StringName("sway_%s_%s" % [side, tempo]))
+		clips.append(StringName("duck_%s" % tempo))
+	for id in clips:
+		if not _rig.tree.has_animation(id):
+			fail("%s: no clip" % id)
+			continue
+		var at := _at(id)
+		var start := at[0][&"Head"] as Vector3
+		var frames := at.keys()
+		frames.sort()
+		var peak_frame: int = frames[0]
+		var peak := 0.0
+		for frame: int in frames:
+			var away := ((at[frame][&"Head"] as Vector3) - start).length()
+			if away > peak + 1e-6:
+				peak = away
+				peak_frame = frame
+		for i in range(1, frames.size()):
+			var before := ((at[frames[i - 1]][&"Head"] as Vector3) - start).length()
+			var now := ((at[frames[i]][&"Head"] as Vector3) - start).length()
+			if frames[i] <= peak_frame:
+				assert_true(now >= before - OVERSHOOT, "%s: the head is %.3f m out on f%d and %.3f on f%d, on its way out" % [id, before, frames[i - 1], now, frames[i]])
+			else:
+				assert_true(now <= before + OVERSHOOT, "%s: the head is %.3f m out on f%d and %.3f on f%d, on its way back" % [id, before, frames[i - 1], now, frames[i]])
+		assert_true(peak_frame > 0 and peak_frame < frames[frames.size() - 1], "%s: the peak (f%d) is inside the clip" % [id, peak_frame])
 
 
 # --- the links ---
