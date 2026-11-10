@@ -316,10 +316,12 @@ func finishable_target() -> Actor:
 	return best
 
 
-# Whether `foe` (in the group finishable) is one to finish now: live, unpaired, of the other team, within `reach` on the
-# ground and in the arc of the facing, facing the actor, and able to be staged (can_stage_finisher_on).
+# Whether `foe` (in the group finishable) is one to finish now: in the world, live, unpaired, of the other team, within
+# `reach` on the ground and in the arc of the facing, facing the actor, and able to be staged (can_stage_finisher_on).
+# The foe the brain had locked on to is remembered from the latest physics frame, and may have been taken out of the
+# world since (a reset or a region switch between two frames): it is then no one to finish, and has no place to ask after.
 func _can_finish(foe: Actor, reach: float) -> bool:
-	if foe == self or foe.dead or foe.paired_with != null or foe.def.team == def.team:
+	if foe == self or not foe.is_inside_tree() or foe.dead or foe.paired_with != null or foe.def.team == def.team:
 		return false
 	var flat := _flat_to(foe.global_position)
 	if flat.length() > reach:

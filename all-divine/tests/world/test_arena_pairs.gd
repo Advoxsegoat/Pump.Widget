@@ -121,3 +121,34 @@ func test_f9_with_a_lock_on_leaves_no_error_on_the_next_draw_or_frames() -> void
 	main.switch_region()
 	main.hud.notification(CanvasItem.NOTIFICATION_DRAW)
 	await frames(4)
+
+
+# Locked on to a foe whose posture is broken, in reach: the finisher prompt is up, and the actor remembers whom its brain
+# had locked on to (the palm would finish that one). F9 or F5 between two physics frames takes the foe away; the draw that
+# follows must not ask after it (the remembered foe is no longer in the world).
+func test_f9_and_f5_with_the_finisher_prompt_up_on_the_locked_foe_leave_no_error_on_the_next_draw() -> void:
+	for key in [&"reset", &"switch"]:
+		var main := _main()
+		await frames(3)
+		var brain := PlayerBrain.new()
+		brain.view_yaw = main.camera_rig.yaw()
+		main.player.set_brain(brain)
+		var foe := _foe(main)
+		main.player.place(Transform3D(Basis(Vector3.UP, PI), Vector3(0.0, 0.0, 6.0)))
+		foe.place(Transform3D(Basis(Vector3.UP, 0.0), Vector3(0.0, 0.0, 4.9)))
+		brain.lock.target = foe
+		foe.stats.damage_posture(1000.0)
+		foe.add_to_group(Actor.FINISHABLE_GROUP)
+		await frames(3)
+		assert_true(main.player.finishable_target() == foe, "%s: the palm would finish the locked foe" % key)
+		assert_true(main.hud.prompt_at() is Vector2i, "%s: the finisher prompt is up" % key)
+		if key == &"reset":
+			main.arena().reset()
+		else:
+			main.switch_region()
+		main.hud.notification(CanvasItem.NOTIFICATION_DRAW)
+		assert_eq(main.hud.prompt_at(), null, "%s: no prompt over a foe that is gone" % key)
+		assert_eq(main.player.finishable_target(), null, "%s: and no one to finish" % key)
+		await frames(4)
+		main.queue_free()
+		await frames(1)
