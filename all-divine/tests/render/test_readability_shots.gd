@@ -156,6 +156,8 @@ func _check_rim(move_id: StringName, frame: int, name: String, color: Color, min
 	(foe.get_node("ActorFx") as ActorFx).end_tell()  # (the rim is driven every frame: ending the tell is what ends it)
 	await _draw()
 	var without := _world(main)
+	await _draw()
+	assert_true(_world(main).get_data() == without.get_data(), "%s: the frame is steady: the same picture a frame later (nothing in it moves by itself)" % name)
 	var box := _box(main, foe, with_aura)
 	var changed := _diff(with_aura, without, box)
 	var body := await _silhouette(main, foe, without)
@@ -237,6 +239,10 @@ func test_abarax_parry_burst_is_a_rim_and_a_ring_and_no_tint() -> void:
 	event.profile = HitProfile.new()
 	event.point = player.global_position + Vector3(0.4, 1.2, 0.3)
 	player.got_hit.emit(result, event)
+	# A parry's hit spark is a particle burst that scatters differently on every run (and shows over the body, being a spark):
+	# it is a real effect but not what is measured here, and was the pixels that made this test fail now and then.
+	for spark in get_tree().get_nodes_in_group(ActorFx.GROUP):
+		spark.free()
 	player.rig.tick(2.0 / 60)  # two frames into it: the rim has risen
 	for wave in get_tree().get_nodes_in_group(GroundWave.GROUP):
 		wave.set_physics_process(false)
@@ -250,6 +256,8 @@ func test_abarax_parry_burst_is_a_rim_and_a_ring_and_no_tint() -> void:
 	player.rig.clear_aura()
 	await _draw()
 	var without := _world(main)
+	await _draw()
+	assert_true(_world(main).get_data() == without.get_data(), "the frame is steady: the same picture a frame later (nothing in it moves by itself)")
 	var changed := _diff(with_aura, without, _box(main, player, with_aura))
 	var body := await _silhouette(main, player, without)
 	var interior := _eroded(body, MARGIN_PX)

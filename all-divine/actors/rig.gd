@@ -117,7 +117,7 @@ var airborne := false
 ## How wide an aura's rim is, in pixels of the 640x360 picture: 1 to 2.
 var rim_width_px := 1.5
 ## How far the rim's hull may be pushed back from the camera, in metres, with nothing behind the body (see toon_rim.gdshader).
-const RIM_PUSH_MAX := 0.8
+const RIM_PUSH_MAX := 1.2
 ## How much of the distance to a wall behind the body (from its middle) is left out of the push: found by measuring the rim
 ## against a wall and a corner at 0.36 m (tests/render/test_readability_shots.gd), where more left the inside lit and less
 ## lost the edge. The hull's push along the view moves it back by VIEW_FORWARD_SHARE of its length (the camera looks down

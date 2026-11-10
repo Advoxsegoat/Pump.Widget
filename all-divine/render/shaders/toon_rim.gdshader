@@ -19,14 +19,14 @@ uniform float rim_width = 1.5;
 // and than one limb stands in front of another. The push dies away toward the ground (over push_ramp metres above
 // ground_y, the floor under the body, which Rig.tick keeps up to date), where it would sink the hull into the floor and
 // leave the feet with no rim.
-uniform float rim_push = 0.8;
-uniform float push_ramp = 0.7;
+uniform float rim_push = 1.2;
+uniform float push_ramp = 1.1;
 uniform float ground_y = 0.0;
 
 void vertex() {
 	vec4 view = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
 	float height = (MODEL_MATRIX * vec4(VERTEX, 1.0)).y - ground_y;
-	view.z -= rim_push * clamp(height / push_ramp, 0.15, 1.0);
+	view.z -= rim_push * clamp(height / push_ramp, 0.3, 1.0);
 	vec4 clip = PROJECTION_MATRIX * view;
 	vec3 view_normal = normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
 	vec2 away = view_normal.xy;
