@@ -229,10 +229,11 @@ func _luma(c: Color) -> float:
 	return 255.0 * (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b)
 
 
-# How `actor`'s body stands out in the World picture `img`: {body, ground, spread}. `body` is the mean luma of its pixels
-# (its silhouette less the outermost pixel, which the screen look draws as an outline); `ground` the median luma of the
-# ground beside it, 3 to 8 pixels from its silhouette, off `other`'s body (the median leaves out its own shadow and the
-# lines between the stones); `spread` how far apart the body's lit and dark sides are, its 90th less its 10th percentile.
+# How `actor`'s body stands out in the World picture `img`: {body, ground, spread, near}. `body` is the mean luma of its
+# pixels (its silhouette less the outermost pixel, which the screen look draws as an outline); `ground` the median luma of
+# the ground beside it, 3 to 8 pixels from its silhouette, off `other`'s body (the median leaves out its own shadow and the
+# lines between the stones); `spread` how far apart the body's lit and dark sides are, its 90th less its 10th percentile;
+# `near` the share of its pixels within 10 luma of the ground (the part of it that merges with the floor).
 func _standing_out(main: Main, img: Image, actor: Actor, other: Actor) -> Dictionary:
 	var feet := Vector2i(main.camera_rig.camera.unproject_position(actor.global_position).round())
 	var box := Rect2i(feet.x - 40, feet.y - 80, 80, 100).intersection(Rect2i(Vector2i.ZERO, img.get_size()))
@@ -251,27 +252,49 @@ func _standing_out(main: Main, img: Image, actor: Actor, other: Actor) -> Dictio
 	var sum := 0.0
 	for l in inner:
 		sum += l
-	return {body = sum / maxf(inner.size(), 1.0), ground = beside[beside.size() / 2], pixels = inner.size(),
-			spread = inner[inner.size() * 9 / 10] - inner[inner.size() / 10]}
+	var ground := beside[beside.size() / 2]
+	var near_ground := 0
+	for l in inner:
+		if absf(l - ground) < 10.0:
+			near_ground += 1
+	return {body = sum / maxf(inner.size(), 1.0), ground = ground, pixels = inner.size(),
+			spread = inner[inner.size() * 9 / 10] - inner[inner.size() / 10], near = float(near_ground) / maxf(inner.size(), 1.0)}
 
 
 # Between the lantern pools the fighters must not sink into the floor: the outfits are the first thing to see. Mid-yard,
-# where no lamp reaches, a Knuckle's and Abarax's bodies each differ from the ground beside them by 30 luma or more in the
-# World picture, and still have a lit and a dark side (the toon shading is not flattened into one tone).
+# where no lamp reaches, Abarax and a Knuckle of each tier stand in a row. Each body is brighter than the ground beside it in
+# the World picture: Abarax and tier I by 55 luma or more, tier II by 48, tier III (the elite, in black) by 40; no more than
+# a tenth of any body is within 10 luma of the ground (legs that merge with the floor); each still has a lit and a dark side
+# (the toon shading is not flattened into one tone); and the tiers keep their order, tier III the darkest of the three and
+# tier I the lightest.
+# (The bars were set as 30, 25 and 20 on a measure that counted each body's shadow on the floor as part of the body, about a
+# third of its pixels and darker than the floor. On the body alone, which is what is measured here, the same three lines are
+# 55, 48 and 40: tier III must stand out as tier II did before its palette was lifted, which was 40.)
 func test_the_fighters_stand_out_between_the_lantern_pools() -> void:
 	Game.reset()
 	Arena.reset_spawn_counts()
 	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
 	main.arena().automatic = false
-	var foe := main.arena().enemies()[0]
-	foe.set_brain(Brain.new())
-	main.player.set_brain(Brain.new())
-	foe.place(Transform3D(Basis.IDENTITY, DARK + Vector3(-1.2, 0.0, 0.0)))
-	main.player.place(Transform3D(Basis.IDENTITY, DARK + Vector3(1.2, 0.0, 0.0)))
+	main.arena().debug_key(KEY_F7)
+	main.arena().debug_key(KEY_F8)
+	var tiers := {}
+	for node in get_tree().get_nodes_in_group(Actor.LOCKABLE_GROUP):
+		tiers[(node as Actor).def.id] = node
+	assert_eq(tiers.size(), 3, "a Knuckle of each tier (%s)" % [tiers.keys()])
+	# Left to right: tier III, II, I, then Abarax, 1.6 m apart.
+	var row: Array = [[&"knuckle_3", "tier III", 40.0], [&"knuckle_2", "tier II", 48.0], [&"knuckle_1", "tier I", 55.0], [&"abarax", "Abarax", 55.0]]
+	var bodies: Array[Actor] = []
+	for i in row.size():
+		var actor: Actor = main.player if i == 3 else tiers.get(row[i][0])
+		if actor == null:
+			return
+		actor.set_brain(Brain.new())
+		actor.place(Transform3D(Basis.IDENTITY, DARK + Vector3(-2.4 + 1.6 * i, 0.0, 0.0)))
+		bodies.append(actor)
 	main.camera_rig.snap_now()
 	await frames(30)
-	foe.freeze(100000000)
-	main.player.freeze(100000000)
+	for actor in bodies:
+		actor.freeze(100000000)
 	main.camera_rig.snap_now()
 	for i in 3:
 		await RenderingServer.frame_post_draw
@@ -280,10 +303,16 @@ func test_the_fighters_stand_out_between_the_lantern_pools() -> void:
 	assert_eq(get_viewport().get_texture().get_image().save_png(path), OK)
 	var world_640 := img.get_region(Rect2i(PixelSnap.MARGIN, PixelSnap.MARGIN, 640, 360))
 	assert_eq(world_640.save_png(path.replace(".png", "_640.png")), OK)
-	for pair: Array in [["the Knuckle", foe, main.player], ["Abarax", main.player, foe]]:
-		var seen := await _standing_out(main, img, pair[1], pair[2])
-		assert_true(seen.pixels > 200, "%s shows (%d pixels)" % [pair[0], seen.pixels])
-		assert_true(absf(seen.body - seen.ground) >= 30.0, "%s differs from the ground beside by 30 luma or more: body %.1f, ground %.1f (%+.1f)" % [
-				pair[0], seen.body, seen.ground, seen.body - seen.ground])
-		assert_true(seen.body > seen.ground, "%s is the brighter of the two: an outfit to see, not a dark shape" % pair[0])
-		assert_true(seen.spread >= 30.0, "%s has a lit side and a dark side still (its luma spreads over %.1f)" % [pair[0], seen.spread])
+	var lumas: Array[float] = []
+	for i in row.size():
+		var who: String = row[i][1]
+		var least: float = row[i][2]
+		var seen := await _standing_out(main, img, bodies[i], bodies[(i + 1) % row.size()])
+		lumas.append(seen.body)
+		assert_true(seen.pixels > 200, "%s shows (%d pixels)" % [who, seen.pixels])
+		assert_true(seen.body - seen.ground >= least, "%s is %d luma or more above the ground beside: body %.1f, ground %.1f (%+.1f)" % [
+				who, roundi(least), seen.body, seen.ground, seen.body - seen.ground])
+		assert_true(seen.near <= 0.1, "%s: no more than a tenth of the body is within 10 luma of the ground (%d%%)" % [who, roundi(seen.near * 100.0)])
+		assert_true(seen.spread >= 30.0, "%s has a lit side and a dark side still (its luma spreads over %.1f)" % [who, seen.spread])
+	assert_true(lumas[0] < lumas[1] and lumas[1] < lumas[2], "the tiers keep their order: tier III (%.1f) is darker than tier II (%.1f), and that than tier I (%.1f)" % [
+			lumas[0], lumas[1], lumas[2]])

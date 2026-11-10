@@ -149,7 +149,20 @@ func test_tiers_have_their_numbers() -> void:
 		palettes.append(def.palette)
 	assert_eq(palettes[1].tone(HOOD_SLOT, Palette.BASE).to_html(false), "9a2a2a", "tier II wears the Hand's red hood")
 	assert_eq(palettes[2].tone(METAL_SLOT, Palette.BASE).to_html(false), "c8a04a", "tier III's metal is brass")
-	assert_true(palettes[2].tone(3, Palette.BASE).v < 0.2, "tier III's main is black")
+	# Tier III wears black: its coat's deepest tone is near black. Its lit tones, and tier II's, are lifted so that the coat
+	# and the legs show on the yard's dark floor at night (tests/render/test_yard_shot.gd); in the light each tier's coat, legs
+	# and boots are still darker than those of the tier below it, and every slot's tones still run from light to dark.
+	assert_true(palettes[2].tone(3, Palette.DEEP).v < 0.1, "tier III's main is black in its shadows")
+	for slot: int in [3, 5, 6]:
+		var values: Array[float] = []
+		for palette in palettes:
+			values.append(palette.tone(slot, Palette.BASE).v)
+		assert_true(values[2] < values[1] and values[1] < values[0], "%s: tier III's is darker than tier II's, and that than tier I's (%s)" % [palettes[0].slot_names[slot], values])
+	for palette in palettes:
+		for slot in Palette.SLOTS:
+			if palette.slot_names[slot] != "":
+				assert_true(palette.tone(slot, Palette.HIGHLIGHT).v >= palette.tone(slot, Palette.BASE).v and palette.tone(slot, Palette.BASE).v > palette.tone(slot, Palette.SHADE).v
+						and palette.tone(slot, Palette.SHADE).v > palette.tone(slot, Palette.DEEP).v, "%s %s: highlight, base, shade and deep run from light to dark" % [palette.id, palette.slot_names[slot]])
 	assert_ne(palettes[0], palettes[1])
 
 
