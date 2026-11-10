@@ -23,8 +23,8 @@
 script res://world/arena.gd
 floor 48 48
 sky #0b1020
-ambient #5b78b8 0.32
-sun -50 35 #8099d8 0.55
+ambient #3a4c80 0.12
+sun -50 35 #5870b0 0.18
 grade res://data/render/grades/training_yard.tres
 
 # The walls, and a pillar at each corner and each side of the gate.
@@ -52,7 +52,7 @@ piece pillar-stone -9 -1
 piece pillar-stone 9 -1
 
 # Six lanterns, the two in the north casting shadows.
-lamps #ffb060 6 1.0 3.45
+lamps #ffc468 6 3.0 3.45
 lantern -8 -8 shadow
 lantern 8 -8 shadow
 lantern -9.5 0

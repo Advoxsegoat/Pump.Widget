@@ -69,7 +69,7 @@ func test_spawns_and_pois_exist() -> void:
 	assert_eq(lamps.size(), 6, "six lanterns")
 	assert_eq(lamps.filter(func(l: OmniLight3D) -> bool: return l.shadow_enabled).size(), 2, "two of them with shadows")
 	for lamp: OmniLight3D in lamps:
-		assert_eq(lamp.light_color.to_html(false), "ffb060", "%s is warm" % lamp.name)
+		assert_eq(lamp.light_color.to_html(false), "ffc468", "%s is warm" % lamp.name)
 	var poi := get_tree().get_nodes_in_group(&"poi").filter(func(n: Node) -> bool: return region.is_ancestor_of(n))
 	assert_true(poi.size() >= 2, "points of interest (%d)" % poi.size())
 	assert_true(poi.all(func(n: Node) -> bool: return n is Marker3D), "Marker3Ds")

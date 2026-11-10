@@ -160,3 +160,34 @@ func test_the_south_edge_hides_no_more_than_the_feet() -> void:
 	assert_true(open > 300, "Abarax shows %d pixels in the open" % open)
 	var at_edge := await _body_pixels(Vector3(0.0, 0.0, 12.5 - 0.36))
 	assert_true(at_edge >= 0.9 * open, "at 0.36 m from the south edge %d of his %d pixels show" % [at_edge, open])
+
+
+# The mean colour of the PATCH box round the ground point `at`.
+func _mean_colour(img: Image, main: Main, at: Vector3) -> Color:
+	var k := PixelStage.scale_for(SIZE)
+	var corner := Vector2(PixelStage.layout(SIZE).position + PixelStage.draw_offset(main.stage.subpixel, k))
+	var pixel := corner + main.camera_rig.camera.unproject_position(at) * k
+	var sum := Vector3.ZERO
+	var count := 0
+	for y in range(int(pixel.y) - PATCH / 2, int(pixel.y) + PATCH / 2):
+		for x in range(int(pixel.x) - PATCH / 2, int(pixel.x) + PATCH / 2):
+			var c := img.get_pixel(clampi(x, 0, SIZE.x - 1), clampi(y, 0, SIZE.y - 1))
+			sum += Vector3(c.r, c.g, c.b)
+			count += 1
+	sum /= count
+	return Color(sum.x, sum.y, sum.z)
+
+
+func test_the_lantern_lit_ground_is_warm() -> void:
+	Game.reset()
+	Arena.reset_spawn_counts()
+	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
+	await frames(60)
+	for i in 3:
+		await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	var lit := _mean_colour(img, main, LIT)
+	var dark := _mean_colour(img, main, DARK)
+	assert_true(lit.h * 360.0 >= 20.0 and lit.h * 360.0 <= 50.0, "the lantern-lit ground is warm: hue %.0f (want 20 to 50), colour %s" % [lit.h * 360.0, lit.to_html(false)])
+	assert_true(lit.s > 0.15, "and not grey (saturation %.2f)" % lit.s)
+	assert_true(dark.h * 360.0 > 190.0 and dark.h * 360.0 < 250.0, "while the dark ground stays a cool blue (hue %.0f)" % (dark.h * 360.0))
