@@ -370,3 +370,50 @@ func test_each_answer_has_its_own_glyph_of_nine_by_nine() -> void:
 		seen[str(rows)] = true
 	assert_eq(seen.size(), 3, "three different shapes")
 	assert_true(Hud.ICON_CELLS.has(HitProfile.Perilous.SWEEP) and Hud.ICON_CELLS.has(HitProfile.Perilous.THRUST) and Hud.ICON_CELLS.has(HitProfile.Perilous.GRAB))
+
+
+# --- the parry rim peaks with the blow, and a feint wears its model's rim ---
+
+# The rim's level on each frame a Knuckle (tier II, thinking with `steps`) has it on, from the frame it first shows to the last
+# before it goes out: plays up to `until` frames.
+func _rim_levels(steps: Array, until := 60) -> Array[float]:
+	var arena := TestArena.make(self)
+	var k := TestArena.spawn(arena, load("res://data/actors/knuckle_2.tres") as ActorDef, ScriptBrain.new(steps), Vector3.ZERO, "K")
+	k.place(Transform3D(Basis(Vector3.UP, 0.0), Vector3.ZERO))
+	var levels: Array[float] = []
+	var seen := false
+	for i in until:
+		await frames(1)
+		if k.rig.aura_active():
+			seen = true
+			levels.append(k.rig.aura_level())
+		elif seen:
+			break
+	arena.free()
+	return levels
+
+
+func test_the_jabs_rim_climbs_to_its_peak_at_the_blow_plain_or_held() -> void:
+	for held in [0, 6, 12]:
+		var steps: Array = [{frames = 1, press = [&"palm"], hold = [&"palm"]}] if held > 0 else [{frames = 1, press = [&"palm"]}]
+		if held > 0:
+			steps = [{frames = held + 12, press = [&"palm"], hold = [&"palm"]}]
+		var levels := await _rim_levels(steps)
+		assert_true(levels.size() >= 12, "the rim shows for the tell (%d frames, held %d)" % [levels.size(), held])
+		for i in range(1, levels.size()):
+			assert_true(levels[i] >= levels[i - 1] - 1e-4, "never falls (held %d, frame %d: %.2f then %.2f)" % [held, i, levels[i - 1], levels[i]])
+		assert_true(levels.back() >= 0.9, "at least 0.9 on the frame before the blow (held %d: %.2f)" % [held, levels.back()])
+		var tail := levels.slice(levels.size() - 8)
+		for i in range(1, tail.size()):
+			assert_true(tail[i] > tail[i - 1], "and climbs frame over frame in the last frames (held %d: %s)" % [held, tail])
+		assert_true(levels[0] < 0.6, "from a lower start (held %d: %.2f)" % [held, levels[0]])
+
+
+func test_a_feints_rim_is_the_jabs_frame_for_frame_and_ends_where_the_blow_would_be() -> void:
+	var jab := await _rim_levels([{frames = 1, press = [&"palm"]}])
+	var feint := await _rim_levels([{frames = 1, press = [&"dodge"]}])
+	assert_eq(Registry.fetch(&"moves", &"knuckle_feint").imitates, &"knuckle_jab", "the data says which blow the feint imitates")
+	assert_true(jab.size() >= 12 and feint.size() >= 12, "both show a rim (%d, %d)" % [jab.size(), feint.size()])
+	assert_eq(feint.size(), jab.size(), "for as many frames")
+	for i in mini(jab.size(), feint.size()):
+		assert_near(feint[i], jab[i], 1e-3, "frame %d" % i)

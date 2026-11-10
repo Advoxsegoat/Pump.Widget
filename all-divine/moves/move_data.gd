@@ -32,3 +32,6 @@ enum Kind { ATTACK, DODGE, OTHER, REACTION }
 ## Seconds over which the move fades in over what the actor was doing, and out to locomotion.
 @export var blend_in := 0.05
 @export var blend_out := 0.15
+## The move whose blow this one imitates until it stops (a feint): its tell shows the rim of that move's tell on the same
+## frames, so that the two cannot be told apart until the blow does not come (ActorFx). Empty for a move that is itself.
+@export var imitates: StringName

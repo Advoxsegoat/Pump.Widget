@@ -155,6 +155,8 @@ var _flash_seconds := 0.0  # how long the flash in progress was to last, and how
 var _flash_left := 0.0
 var _rim: ShaderMaterial  # the rim pass's material, made the first time an aura is asked for
 var _aura_on := false
+var _aura_held := false  # the aura is set by hold_aura, not an envelope
+var _aura_held_level := 0.0
 var _aura_color := Color.WHITE
 var _aura_strength := 1.0  # the aura's strongest, 0 to 1
 var _aura_seconds := 0.0  # how long it lasts, and how far into that it is
@@ -274,6 +276,7 @@ func aura(color: Color, seconds: float, strength := 1.0, build := 0.0, start := 
 		return
 	_ensure_rim()
 	_aura_on = true
+	_aura_held = false
 	_aura_color = color
 	_aura_strength = clampf(strength, 0.0, 1.0)
 	_aura_seconds = seconds
@@ -286,9 +289,24 @@ func aura(color: Color, seconds: float, strength := 1.0, build := 0.0, start := 
 	_set_rim_pass(true)
 
 
+## Lights the rim at exactly `level` (0 to 1) until it is set again or cleared, with no envelope of its own: what a tell does,
+## driving it from the move's own clock (ActorFx) so that it peaks with the blow whatever the move waits for.
+func hold_aura(color: Color, level: float) -> void:
+	_ensure_rim()
+	_aura_on = true
+	_aura_held = true
+	_aura_color = color
+	_aura_held_level = clampf(level, 0.0, 1.0)
+	_rim.set_shader_parameter(&"rim_color", color)
+	_rim.set_shader_parameter(&"rim_width", rim_width_px)
+	_apply_aura()
+	_set_rim_pass(true)
+
+
 ## Ends the aura now.
 func clear_aura() -> void:
 	_aura_on = false
+	_aura_held = false
 	if _rim != null:
 		_rim.set_shader_parameter(&"rim_strength", 0.0)
 		_set_rim_pass(false)
@@ -303,6 +321,8 @@ func aura_active() -> bool:
 func aura_level() -> float:
 	if not _aura_on:
 		return 0.0
+	if _aura_held:
+		return _aura_held_level
 	var rise := minf(AURA_RISE, _aura_seconds * 0.3)
 	var fade := minf(AURA_FADE, _aura_seconds * 0.4)
 	var up := clampf(_aura_time / rise, 0.0, 1.0) if rise > 0.0 else 1.0
@@ -543,7 +563,7 @@ func stop_move(blend_out: float) -> void:
 ## the markers this places; with physics interpolation on, outside the physics step they read where the
 ## markers were at the start of the frame, so the legs and head would aim a frame late.
 func tick(delta: float) -> void:
-	if _aura_on:
+	if _aura_on and not _aura_held:
 		_aura_time += delta
 		if _aura_time >= _aura_seconds:
 			clear_aura()

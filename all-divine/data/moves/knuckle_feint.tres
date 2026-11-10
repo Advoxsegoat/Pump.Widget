@@ -7,3 +7,4 @@ script = ExtResource("1_move")
 id = &"knuckle_feint"
 kind = 2
 clip = &"knuckle_feint"
+imitates = &"knuckle_jab"

@@ -93,6 +93,11 @@ var _warping := false  # whether the current move is warped
 var _strike_at_hit := 0.0  # where the target should stand from the body when the warped blow lands (metres)
 
 
+## Seconds of its charge_hold the clip still has to stand at its mark (0 when none is held).
+func charge_left() -> float:
+	return maxf(_charge_left, 0.0) if charging else 0.0
+
+
 ## True while a move plays.
 func busy() -> bool:
 	return current != null

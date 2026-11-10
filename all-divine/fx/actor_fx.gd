@@ -66,6 +66,7 @@ var tuning: ReadabilityTuning = TUNING
 var icon_shape: HitProfile.Perilous = HitProfile.Perilous.NONE
 
 var _actor: Actor
+var _plan := {}  # the rim of the tell in progress, driven every frame (_drive_rim); empty with none
 var _tell_end := &""  # the mark that ends the tell in progress (hitbox_on or hitbox_off), or &"" with none
 var _offs_left := 0  # for a perilous tell: how many hitbox_off marks are still to come
 
@@ -139,6 +140,7 @@ func end_tell() -> void:
 	if _tell_end == &"":
 		return
 	_tell_end = &""
+	_plan = {}
 	_offs_left = 0
 	icon_shape = HitProfile.Perilous.NONE
 	_actor.rig.clear_aura()
@@ -150,45 +152,61 @@ func _on_move_ended(_move: MoveData, _cancelled: bool) -> void:
 
 # The readability pass at a tell (see the top): the rim, the ground wave and, for a perilous attack, the icon. What it
 # shows is what the move's clip says is coming: its first hitbox_on (and the profile that blow carries) for a glint,
-# its last hitbox_off for a perilous one.
+# its last hitbox_off for a perilous one. A move that `imitates` another reads the clip of that one instead, so a feint's
+# rim is its model's frame for frame, and ends where the blow would be.
 func _show_tell(perilous: bool) -> void:
 	var move := _actor.runner.current
 	if move == null or not _actor.rig.tree.has_animation(move.clip):
 		return
+	var source := move
+	if move.imitates != &"" and not perilous:
+		var model := Registry.fetch(&"moves", move.imitates) as MoveData
+		if model != null and _actor.rig.tree.has_animation(model.clip):
+			source = model
 	var now := _actor.runner.time
-	var marks := Marks.read(_actor.rig.tree.get_animation(move.clip))
+	var marks := Marks.read(_actor.rig.tree.get_animation(source.clip))
+	var clip_tell := now
+	if source != move:
+		for mark in marks:
+			if mark["kind"] == &"tell":
+				clip_tell = mark["time"]
+				break
 	var first_on := INF
 	var last_off := -INF
 	var offs := 0
-	var holds := 0.0
+	var hold_at := INF
+	var hold_seconds := 0.0
 	var profile: HitProfile = null
 	var perilous_profile: HitProfile = null
 	for mark in marks:
 		var t: float = mark["time"]
-		if t <= now + MARKS_EPSILON:
+		if t <= clip_tell + MARKS_EPSILON:
 			continue
 		match mark["kind"]:
 			&"hitbox_on":
 				if first_on == INF:
 					first_on = t
-					profile = move.hits.get(StringName(mark["args"].get("profile", &"")))
-				var carried: Variant = move.hits.get(StringName(mark["args"].get("profile", &"")))
+					profile = source.hits.get(StringName(mark["args"].get("profile", &"")))
+				var carried: Variant = source.hits.get(StringName(mark["args"].get("profile", &"")))
 				if perilous_profile == null and carried is HitProfile and (carried as HitProfile).perilous != HitProfile.Perilous.NONE:
 					perilous_profile = carried
 			&"hitbox_off":
 				last_off = t
 				offs += 1
 			&"charge_hold":
-				if first_on == INF:
-					holds += float(mark["args"].get("frames", 0)) / Marks.RATE
+				if first_on == INF and hold_at == INF:
+					hold_at = t
+					hold_seconds = float(mark["args"].get("frames", 0)) / Marks.RATE
 	_actor.rig.rim_width_px = tuning.rim_width_px
+	_plan = {}
 	if perilous:
 		if offs == 0:
 			return
 		_tell_end = &"hitbox_off"
 		_offs_left = offs
 		if tuning.perilous_rim_on:
-			_actor.rig.aura(tuning.perilous_rim_color, last_off - now + holds + Rig.AURA_FADE, tuning.rim_peak_strength)
+			_plan = {color = tuning.perilous_rim_color, start = tuning.rim_peak_strength, own_start = now}
+			_drive_rim()
 		if tuning.perilous_wave_on:
 			_show_wave(tuning.perilous_wave_radius)
 		if tuning.perilous_icon_on and perilous_profile != null:
@@ -198,9 +216,43 @@ func _show_tell(perilous: bool) -> void:
 			return
 		_tell_end = &"hitbox_on"
 		if tuning.parry_aura_on:
-			_actor.rig.aura(tuning.parry_rim_color, first_on - now + holds + Rig.AURA_FADE, tuning.rim_peak_strength, tuning.rim_build_seconds, tuning.rim_start_strength)
+			_plan = {color = tuning.parry_rim_color, start = tuning.rim_start_strength, own_start = now, clip_tell = clip_tell,
+					first_on = first_on, hold_at = hold_at, hold_seconds = hold_seconds, imitating = source != move}
+			_drive_rim()
 		if tuning.heavy_wave_on and is_heavy(profile):
 			_show_wave(tuning.heavy_wave_radius)
+
+
+# Sets the rim for this frame from the move's own clock, after the actor has ticked (a child runs after its parent): a
+# perilous tell's is at full strength throughout; a parryable one's starts at rim_start_strength and climbs over the last
+# rim_build_seconds before the blow, the time left to its first hitbox_on, counting the charge a jab may still be held for
+# (before its charge_hold mark, all of it; at it, what is left of the hold). So it peaks with the blow whether the move
+# waits for a charge or not. A feint (a move that imitates) ends it where the blow it imitates would land.
+func _physics_process(_delta: float) -> void:
+	if not _plan.is_empty():
+		_drive_rim()
+
+
+func _drive_rim() -> void:
+	var runner := _actor.runner
+	if runner.current == null:
+		return
+	var elapsed := runner.time - float(_plan.own_start)
+	var rise := clampf((elapsed + 1.0 / Marks.RATE) / Rig.AURA_RISE, 0.0, 1.0)
+	var level := float(_plan.start)
+	if _plan.has("first_on"):
+		var t: float = float(_plan.clip_tell) + elapsed
+		var left: float = float(_plan.first_on) - t
+		if left <= MARKS_EPSILON and _plan.imitating:
+			end_tell()
+			return
+		if t < float(_plan.hold_at):
+			left += float(_plan.hold_seconds)
+		else:
+			left += runner.charge_left()
+		var build := maxf(tuning.rim_build_seconds, 0.001)
+		level = lerpf(float(_plan.start), tuning.rim_peak_strength, clampf(1.0 - left / build, 0.0, 1.0))
+	_actor.rig.hold_aura(_plan.color, level * rise)
 
 
 ## Whether `profile` is a heavy blow: not perilous (that has its own tells) and with at least the tuning's hit-stop, or one

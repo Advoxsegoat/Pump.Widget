@@ -139,13 +139,13 @@ func _save(main: Main, name: String) -> void:
 
 
 # Checks one tell's rim: frame `frame` of `move_id` with its aura against the same frame without it.
-func _check_rim(move_id: StringName, frame: int, name: String, color: Color) -> void:
+func _check_rim(move_id: StringName, frame: int, name: String, color: Color, min_level := 0.4) -> void:
 	var run := await _scene(move_id, frame)
 	var main: Main = run["main"]
 	var foe: Actor = run["foe"]
 	assert_true(foe.rig.aura_active(), "the aura is on mid-tell (%s frame %d)" % [move_id, frame])
 	assert_eq(foe.rig.aura_color(), color)
-	assert_true(foe.rig.aura_level() > 0.4, "and strong (%.2f)" % foe.rig.aura_level())
+	assert_true(foe.rig.aura_level() > min_level, "and strong (%.2f, wanted over %.2f)" % [foe.rig.aura_level(), min_level])
 	# The waves are not what is measured here: take them away from the frames altogether.
 	for wave in get_tree().get_nodes_in_group(GroundWave.GROUP):
 		wave.visible = false
@@ -177,15 +177,19 @@ func _check_rim(move_id: StringName, frame: int, name: String, color: Color) -> 
 
 
 func test_the_parry_rim_is_on_the_edge_and_not_in_the_body() -> void:
-	await _check_rim(&"knuckle_jab", 15, "parry_rim", Color("bfe6ff"))
+	await _check_rim(&"knuckle_jab", 15, "parry_rim", Color("bfe6ff"), 0.75)
 
 
 func test_the_heavy_attack_rim_is_on_the_edge_and_not_in_the_body() -> void:
-	await _check_rim(&"knuckle_hook", 34, "heavy_rim", Color("bfe6ff"))
+	await _check_rim(&"knuckle_hook", 34, "heavy_rim", Color("bfe6ff"), 0.7)
 
 
 func test_the_perilous_rim_is_on_the_edge_and_not_in_the_body() -> void:
-	await _check_rim(&"knuckle_sweep", 25, "perilous_rim", Color("e8607e"))
+	await _check_rim(&"knuckle_sweep", 25, "perilous_rim", Color("e8607e"), 0.95)
+
+
+func test_the_perilous_rim_late_in_the_sweep_is_still_on_the_edge() -> void:
+	await _check_rim(&"knuckle_sweep", 50, "perilous_rim_late", Color("e8607e"), 0.95)
 
 
 func test_the_ground_wave_changes_no_pixel_of_a_body_above_its_feet() -> void:
