@@ -116,6 +116,14 @@ var looks: Array[LookAtModifier3D] = []
 var airborne := false
 ## How wide an aura's rim is, in pixels of the 640x360 picture: 1 to 2.
 var rim_width_px := 1.5
+## How far the rim's hull may be pushed back from the camera, in metres, with nothing behind the body (see toon_rim.gdshader).
+const RIM_PUSH_MAX := 0.8
+## How much of the distance to a wall behind the body (from its middle) is left out of the push: found by measuring the rim
+## against a wall and a corner at 0.36 m (tests/render/test_readability_shots.gd), where more left the inside lit and less
+## lost the edge. The hull's push along the view moves it back by VIEW_FORWARD_SHARE of its length (the camera looks down
+## at 40 degrees).
+const BODY_BACK := 0.08
+const VIEW_FORWARD_SHARE := 0.766
 ## True while the body is lifeless (set_lifeless): it neither breathes, plants its feet nor looks.
 var lifeless := false
 ## The Area3D around the body, on the `hurtbox` layer, that hitboxes find. Its actor marks it with the meta
@@ -714,6 +722,32 @@ func _ensure_rim() -> void:
 func _apply_aura() -> void:
 	_rim.set_shader_parameter(&"rim_strength", aura_level())
 	_rim.set_shader_parameter(&"ground_y", global_position.y)
+	_rim.set_shader_parameter(&"rim_push", _rim_push())
+
+
+# How far the rim's hull is pushed back this frame: all of RIM_PUSH_MAX with open ground behind the body, less when a wall or a
+# pillar stands close behind it (a hull pushed into the wall would be hidden by it and the rim lost where fights end up). Six
+# rays go back from the body, along the way the camera looks on the ground, across its width and at two heights; the nearest
+# hit sets how far back the hull may go, with the body's own thickness left out.
+func _rim_push() -> float:
+	if not is_inside_tree():
+		return RIM_PUSH_MAX
+	var camera := get_viewport().get_camera_3d()
+	var back := Vector3(0, 0, -1)
+	if camera != null:
+		back = Vector3(-camera.global_basis.z.x, 0.0, -camera.global_basis.z.z).normalized()
+	var across := back.cross(Vector3.UP)
+	var space := get_world_3d().direct_space_state
+	var nearest := INF
+	for height: float in [0.5, 1.3]:
+		for side: float in [-0.3, 0.0, 0.3]:
+			var from := global_position + Vector3.UP * height + across * side
+			var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, from + back * (RIM_PUSH_MAX + BODY_BACK), Layers.WORLD))
+			if not hit.is_empty():
+				nearest = minf(nearest, from.distance_to(hit.position))
+	if nearest == INF:
+		return RIM_PUSH_MAX
+	return clampf((nearest - BODY_BACK) / VIEW_FORWARD_SHARE, 0.0, RIM_PUSH_MAX)
 
 
 # Puts the rim pass over every mesh of the body (the overlay is drawn after the body's own pass), or takes it off.
