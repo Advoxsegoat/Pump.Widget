@@ -88,6 +88,22 @@ func start() -> void:
 		_release_lead()
 
 
+## Ends the pair at once, from outside (a reset or a region switch is taking a fighter away): both fighters that are still here
+## are free (no paired_with, no pair) and nothing of the pair is left connected. Their moves are not touched.
+func abort() -> void:
+	for actor: Variant in [lead, follower]:
+		if is_instance_valid(actor) and (actor as Actor).pair == pair:
+			(actor as Actor).paired_with = null
+			(actor as Actor).pair = null
+	if is_instance_valid(lead):
+		_disconnect(lead.runner.mark, _on_lead_mark)
+		_disconnect(lead.runner.move_ended, _on_lead_ended)
+	if is_instance_valid(follower):
+		_disconnect(follower.runner.move_ended, _on_follow_ended)
+	_lead_done = true
+	_follow_done = true
+
+
 ## One of Melee's turns: aligns the two by as much of the alignment as the lead's clip has played (see the top of this
 ## file). True once the pair is over: the follower's move has ended (or either fighter is gone from the game).
 func tick() -> bool:
@@ -194,8 +210,11 @@ func _both_here() -> bool:
 
 # Whether `actor` is still in this pair, with `other` (or with no one left in the game): only then does the pair's end
 # free it.
-func _holds(actor: Actor, other: Actor) -> bool:
-	return actor.pair == pair and (actor.paired_with == other or not is_instance_valid(actor.paired_with))
+func _holds(actor: Variant, other: Variant) -> bool:
+	if not is_instance_valid(actor) or actor.pair != pair:
+		return false
+	var mine: Variant = actor.paired_with
+	return not is_instance_valid(mine) or not is_instance_valid(other) or mine == other
 
 
 # A pair_hit mark of the lead's move: the blow of the profile it names, on the follower.

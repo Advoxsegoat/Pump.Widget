@@ -91,6 +91,22 @@ func begin_pair(pairing: Pairing) -> void:
 	_beginning.append(pairing)
 
 
+## Ends every paired move `actor` is in, at once (Pairing.abort), before it is taken out of the game; returns the fighters
+## on the other side of them that are still here.
+func end_pairs_of(actor: Actor) -> Array[Actor]:
+	var others: Array[Actor] = []
+	for list: Array in [_pairs, _beginning]:
+		for pairing: Pairing in list.duplicate():
+			if pairing.lead != actor and pairing.follower != actor:
+				continue
+			var other: Variant = pairing.follower if pairing.lead == actor else pairing.lead
+			if is_instance_valid(other):
+				others.append(other as Actor)
+			pairing.abort()
+			list.erase(pairing)
+	return others
+
+
 func _physics_process(_delta: float) -> void:
 	if not _posted.is_empty():
 		_apply_posted()

@@ -105,6 +105,15 @@ func start(move: MoveData, force := false) -> void:
 	_start(move, null, force)
 
 
+## Stops the current move at once (cancelled), fading the rig back to locomotion over `blend_out` seconds: for a body that is
+## put somewhere else (a reset). Nothing if no move plays.
+func stop(blend_out := 0.0) -> void:
+	if current == null:
+		return
+	_end(true)
+	actor.rig.stop_move(blend_out)
+
+
 ## One physics frame: turns an attacking body toward the intent's aim_target (see _aim), advances the current
 ## move by `delta` (not while a charge is held) and acts on the marks it passes, starts the move a buffered press
 ## asks for (into an open cancel window, or from rest), and ends the move at its clip's end. Returns the

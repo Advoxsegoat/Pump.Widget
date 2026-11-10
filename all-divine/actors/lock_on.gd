@@ -84,9 +84,10 @@ static func next(from: Actor, current: Actor, candidates: Array, right: bool, ri
 
 ## Lets go of the target if it has died, left the tree (or been freed), or is further than LOSE_RANGE from `from`.
 func update(from: Actor) -> void:
-	if target == null:
+	if not is_instance_valid(target):
+		target = null
 		return
-	if not is_instance_valid(target) or not target.is_inside_tree() or target.dead \
+	if not target.is_inside_tree() or target.dead \
 			or _flat(from, target).length() > LOSE_RANGE:
 		target = null
 

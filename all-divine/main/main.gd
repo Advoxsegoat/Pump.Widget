@@ -123,6 +123,9 @@ func arena() -> Arena:
 func switch_region() -> void:
 	var to := COURTYARD if region.scene_file_path == YARD else YARD
 	var old := region
+	if old is Arena:
+		(old as Arena).clear_foes()  # ends what holds them (pairs, the lock) before they go with the region
+	player.runner.stop()
 	var world := old.get_parent()
 	world.remove_child(old)
 	old.queue_free()

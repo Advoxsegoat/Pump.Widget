@@ -479,9 +479,9 @@ func _bar(row: Vector2i, value: float, maximum: float) -> Rect2i:
 # The foe the player has locked on to, or null.
 func _locked() -> Actor:
 	if player != null and player.brain is PlayerBrain:
-		var target := (player.brain as PlayerBrain).lock.target
-		if is_instance_valid(target) and not target.dead:
-			return target
+		var target: Variant = (player.brain as PlayerBrain).lock.target  # (a Variant: it may have been freed)
+		if is_instance_valid(target) and (target as Actor).is_inside_tree() and not (target as Actor).dead:
+			return target as Actor
 	return null
 
 

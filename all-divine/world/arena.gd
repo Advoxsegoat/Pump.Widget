@@ -107,6 +107,7 @@ func start_wave(index: int) -> void:
 func reset() -> void:
 	clear_foes()
 	if player != null:
+		player.runner.stop()  # whatever he was playing (a grab's fall, a finisher's lunge) goes with the foes
 		if player.dead:
 			player.revive(spawn())
 		else:
@@ -120,7 +121,15 @@ func clear_foes() -> void:
 	_next_in = -1.0
 	_reset_in = -1.0
 	for foe in _enemies + _extras:
+		if not is_instance_valid(foe):
+			continue
+		# What holds a foe is ended before it goes: a pair it is in (the player's move, if he was in it, stops with it), and
+		# the player's lock on it (and the camera's).
+		for other in Melee.end_pairs_of(foe):
+			if other == player:
+				player.runner.stop()
 		_remove(foe)
+	_let_go_of_lock()
 	_enemies.clear()
 	_extras.clear()
 
@@ -228,6 +237,15 @@ func _send(def: ActorDef, marker: Marker3D, foe_name: String) -> Actor:
 func _next_spawn() -> Marker3D:
 	var spawns := enemy_spawns()
 	return spawns[_extras.size() % spawns.size()] if not spawns.is_empty() else null
+
+
+# The player's lock-on and the camera's lean toward it are let go.
+func _let_go_of_lock() -> void:
+	if player != null and is_instance_valid(player) and player.brain is PlayerBrain:
+		(player.brain as PlayerBrain).lock.target = null
+	var rig := get_tree().get_first_node_in_group(CameraRig.GROUP) as CameraRig if is_inside_tree() else null
+	if rig != null:
+		rig.lock_target = null
 
 
 # Takes `foe` out of the tree at once (so that the next foes can have its name, which seeds their dice) and frees it.
