@@ -51,8 +51,10 @@ extends Node3D
 
 ## The shader every body is drawn with: the toon light ramp held to the palette.
 const TOON_SHADER := preload("res://render/shaders/toon_character.gdshader")
-## The shader of the rim light on the silhouette (aura): a second pass over the body, an inverted hull.
-const RIM_SHADER := preload("res://render/shaders/toon_rim.gdshader")
+## The mark pass of an aura is drawn at this render priority and its hull at the next (RimMarks says what they are): every
+## body's mark is written before any body's hull reads it, and both come after the screen look's quad, which is the first
+## of the transparent things, so the rim is drawn over the look and not blurred or outlined by it.
+const RIM_MARK_PRIORITY := -1
 ## An aura rises over this many seconds (or a third of its time, if that is shorter) and fades over the last of this many
 ## (or two fifths of its time).
 const AURA_RISE := 0.05
@@ -116,14 +118,6 @@ var looks: Array[LookAtModifier3D] = []
 var airborne := false
 ## How wide an aura's rim is, in pixels of the 640x360 picture: 1 to 2.
 var rim_width_px := 1.5
-## How far the rim's hull may be pushed back from the camera, in metres, with nothing behind the body (see toon_rim.gdshader).
-const RIM_PUSH_MAX := 1.2
-## How much of the distance to a wall behind the body (from its middle) is left out of the push: found by measuring the rim
-## against a wall and a corner at 0.36 m (tests/render/test_readability_shots.gd), where more left the inside lit and less
-## lost the edge. The hull's push along the view moves it back by VIEW_FORWARD_SHARE of its length (the camera looks down
-## at 40 degrees).
-const BODY_BACK := 0.08
-const VIEW_FORWARD_SHARE := 0.766
 ## How fast a dead body's feet may ease back to the clip's pose, in metres a second (FootPlanter.max_rate): 0.3 m/s is 5 mm
 ## a frame, under the centimetre a corpse is allowed to move in one.
 const LIFELESS_FOOT_RATE := 0.3
@@ -162,9 +156,13 @@ var _look_weight := 0.0  # how much the look shows, 0 to 1 (each modifier's infl
 var _look_from := 0.0  # the weight when the look last started to fade in or out
 var _look_time := 0.0  # seconds since then
 var _material: ShaderMaterial  # the toon material of apply_palette, or null before it
+var _meshes: Array[MeshInstance3D] = []  # the body's meshes, found once (_body_meshes)
+var _meshes_found := false
 var _flash_seconds := 0.0  # how long the flash in progress was to last, and how long it has left
 var _flash_left := 0.0
-var _rim: ShaderMaterial  # the rim pass's material, made the first time an aura is asked for
+var _rim: ShaderMaterial  # the rim's hull pass, made the first time an aura is asked for
+var _rim_mark: ShaderMaterial  # the rim's mark pass, drawn before it: the material over each mesh while an aura is on
+var _mark := 0  # the stencil mark the two passes share while an aura is on (RimMarks), 0 with none
 var _aura_on := false
 var _aura_held := false  # the aura is set by hold_aura, not an envelope
 var _aura_held_level := 0.0
@@ -231,8 +229,8 @@ func apply_palette(p: Palette) -> void:
 	palette = p
 	_material = toon_material(p)
 	_flash_left = 0.0
-	for mesh in $Model.find_children("*", "MeshInstance3D", true, false):
-		(mesh as MeshInstance3D).material_override = _material
+	for mesh in _body_meshes():
+		mesh.material_override = _material
 
 
 ## Hides the MeshInstance3Ds under Model named in `parts` (an actor's hidden_parts: a tier's hood, say) and shows every
@@ -240,8 +238,7 @@ func apply_palette(p: Palette) -> void:
 ## change nothing; a name given twice is hidden as given once.
 func hide_parts(parts: PackedStringArray) -> PackedStringArray:
 	var meshes := PackedStringArray()
-	for node in $Model.find_children("*", "MeshInstance3D", true, false):
-		var mesh := node as MeshInstance3D
+	for mesh in _body_meshes():
 		mesh.visible = not parts.has(String(mesh.name))
 		meshes.append(String(mesh.name))
 	var unknown := PackedStringArray()
@@ -282,11 +279,12 @@ func flash(color: Color, seconds: float) -> void:
 ## land). A tell asks for its time plus the fade and ends the aura itself at its end mark (clear_aura), so what shows
 ## between is the hold, not the fade. A new aura replaces the one in progress. It is counted in the rig's own ticks, so a
 ## body frozen by hit-stop holds it.
+## While it is on, the body is drawn twice more: a pass that marks the pixels the body shows on, then the body grown by the
+## rim's width and lit only off those pixels (RimMarks). So the rim cannot fall on the body's inside in any pose, and what
+## stands behind the body does not change it.
 func aura(color: Color, seconds: float, strength := 1.0, build := 0.0, start := 1.0) -> void:
 	if seconds <= 0.0:
 		return
-	_ensure_rim()
-	_aura_on = true
 	_aura_held = false
 	_aura_color = color
 	_aura_strength = clampf(strength, 0.0, 1.0)
@@ -294,33 +292,26 @@ func aura(color: Color, seconds: float, strength := 1.0, build := 0.0, start := 
 	_aura_time = 0.0
 	_aura_build = build
 	_aura_start = clampf(start, 0.0, 1.0)
-	_rim.set_shader_parameter(&"rim_color", color)
-	_rim.set_shader_parameter(&"rim_width", rim_width_px)
-	_apply_aura()
-	_set_rim_pass(true)
+	_show_rim()
 
 
 ## Lights the rim at exactly `level` (0 to 1) until it is set again or cleared, with no envelope of its own: what a tell does,
 ## driving it from the move's own clock (ActorFx) so that it peaks with the blow whatever the move waits for.
 func hold_aura(color: Color, level: float) -> void:
-	_ensure_rim()
-	_aura_on = true
 	_aura_held = true
 	_aura_color = color
 	_aura_held_level = clampf(level, 0.0, 1.0)
-	_rim.set_shader_parameter(&"rim_color", color)
-	_rim.set_shader_parameter(&"rim_width", rim_width_px)
-	_apply_aura()
-	_set_rim_pass(true)
+	_show_rim()
 
 
-## Ends the aura now.
+## Ends the aura now: the rim's passes come off the body and its mark is free for another's.
 func clear_aura() -> void:
+	if _aura_on:
+		_set_rim_passes(false)
 	_aura_on = false
 	_aura_held = false
 	if _rim != null:
 		_rim.set_shader_parameter(&"rim_strength", 0.0)
-		_set_rim_pass(false)
 
 
 ## Whether an aura is on.
@@ -350,7 +341,7 @@ func aura_color() -> Color:
 	return _aura_color
 
 
-## The rim pass's material (null before the first aura): its uniforms are what the screen shows.
+## The material of the rim's hull pass (null before the first aura): its uniforms are what the screen shows.
 func rim_material() -> ShaderMaterial:
 	return _rim
 
@@ -581,7 +572,7 @@ func tick(delta: float) -> void:
 		if _aura_time >= _aura_seconds:
 			clear_aura()
 		else:
-			_apply_aura()
+			_rim.set_shader_parameter(&"rim_strength", aura_level())
 	if _flash_left > 0.0:
 		_flash_left = maxf(_flash_left - delta, 0.0)
 		_material.set_shader_parameter(&"flash_amount", _flash_left / _flash_seconds if _flash_left > 1e-6 else 0.0)
@@ -714,51 +705,53 @@ func _filter_upper_body() -> void:
 	blend.filter_enabled = true
 
 
-# The rim pass's material, made once.
-func _ensure_rim() -> void:
-	if _rim != null:
-		return
-	_rim = ShaderMaterial.new()
-	_rim.shader = RIM_SHADER
-	_rim.set_shader_parameter(&"rim_strength", 0.0)
+# The body's meshes: every MeshInstance3D under Model as the rig was built, found the first time they are asked for and
+# kept (the palette, the hidden parts and the rim all go over them, the rim every frame of a tell). One that joins the
+# model later (an effect riding a bone) is no part of the body.
+func _body_meshes() -> Array[MeshInstance3D]:
+	if not _meshes_found:
+		_meshes_found = true
+		for node in $Model.find_children("*", "MeshInstance3D", true, false):
+			_meshes.append(node as MeshInstance3D)
+	return _meshes
 
 
-# Gives the rim pass the aura's strength for its time, and the floor it stands on.
-func _apply_aura() -> void:
+# Shows the aura as it now stands: its colour, width and strength go to the hull pass, and if the rim was off, its two
+# passes go over the body.
+func _show_rim() -> void:
+	if _rim == null:
+		_rim = ShaderMaterial.new()
+		_rim.render_priority = RIM_MARK_PRIORITY + 1
+		_rim_mark = ShaderMaterial.new()
+		_rim_mark.render_priority = RIM_MARK_PRIORITY
+		_rim_mark.next_pass = _rim
+	if not _aura_on:
+		_aura_on = true
+		_set_rim_passes(true)
+	_rim.set_shader_parameter(&"rim_color", _aura_color)
+	_rim.set_shader_parameter(&"rim_width", rim_width_px)
 	_rim.set_shader_parameter(&"rim_strength", aura_level())
-	_rim.set_shader_parameter(&"ground_y", global_position.y)
-	_rim.set_shader_parameter(&"rim_push", _rim_push())
 
 
-# How far the rim's hull is pushed back this frame: all of RIM_PUSH_MAX with open ground behind the body, less when a wall or a
-# pillar stands close behind it (a hull pushed into the wall would be hidden by it and the rim lost where fights end up). Six
-# rays go back from the body, along the way the camera looks on the ground, across its width and at two heights; the nearest
-# hit sets how far back the hull may go, with the body's own thickness left out.
-func _rim_push() -> float:
-	if not is_inside_tree():
-		return RIM_PUSH_MAX
-	var camera := get_viewport().get_camera_3d()
-	var back := Vector3(0, 0, -1)
-	if camera != null:
-		back = Vector3(-camera.global_basis.z.x, 0.0, -camera.global_basis.z.z).normalized()
-	var across := back.cross(Vector3.UP)
-	var space := get_world_3d().direct_space_state
-	var nearest := INF
-	for height: float in [0.5, 1.3]:
-		for side: float in [-0.3, 0.0, 0.3]:
-			var from := global_position + Vector3.UP * height + across * side
-			var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, from + back * (RIM_PUSH_MAX + BODY_BACK), Layers.WORLD))
-			if not hit.is_empty():
-				nearest = minf(nearest, from.distance_to(hit.position))
-	if nearest == INF:
-		return RIM_PUSH_MAX
-	return clampf((nearest - BODY_BACK) / VIEW_FORWARD_SHARE, 0.0, RIM_PUSH_MAX)
+# Puts the rim's passes over every mesh of the body (a material_overlay is drawn after the mesh's own material: here the
+# mark pass, and the hull as its next pass), with a mark taken for them; or takes them off and gives the mark back.
+func _set_rim_passes(on: bool) -> void:
+	if on:
+		_mark = RimMarks.take()
+		_rim_mark.shader = RimMarks.mark_shader(_mark)
+		_rim.shader = RimMarks.hull_shader(_mark)
+	else:
+		RimMarks.give_back(_mark)
+		_mark = 0
+	for mesh in _body_meshes():
+		mesh.material_overlay = _rim_mark if on else null
 
 
-# Puts the rim pass over every mesh of the body (the overlay is drawn after the body's own pass), or takes it off.
-func _set_rim_pass(on: bool) -> void:
-	for mesh in $Model.find_children("*", "MeshInstance3D", true, false):
-		(mesh as MeshInstance3D).material_overlay = _rim if on else null
+func _notification(what: int) -> void:
+	# A body freed with its rim on: the mark it holds is free again.
+	if what == NOTIFICATION_PREDELETE and _mark != 0:
+		RimMarks.give_back(_mark)
+		_mark = 0
 
 
 # Keeps each bone's pose as the skeleton shows it: called while it updates, with the modifiers applied.

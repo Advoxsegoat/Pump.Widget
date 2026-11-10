@@ -7,6 +7,7 @@ extends TestCase
 ## The frames are the World viewport's own image (642x362, the picture and its margin), taken one after another with both
 ## fighters frozen (hit-stop holds their poses), their shadows off and the waves held still. Each tell's frame is also saved
 ## to out/shots/ at 640x360 and, with the HUD and the grade, at the window's scale, for a person to look at.
+## tests/render/test_rim_matrix.gd checks the rim in every blow's pose against walls, a corner and another body.
 
 const MAIN := "res://main/main.tscn"
 const SIZE := Vector2i(1920, 1080)
@@ -118,13 +119,9 @@ func _grown(mask: Dictionary, r: int) -> Dictionary:
 	return grown
 
 
-# The foe's silhouette: where hiding its body changes the frame (aura and wave off, no shadows).
+# A body's silhouette: exactly the pixels it shows on (ShotMasks.silhouette), in the box round it.
 func _silhouette(main: Main, actor: Actor, reference: Image) -> Dictionary:
-	actor.rig.visible = false
-	await _draw()
-	var hidden := _world(main)
-	actor.rig.visible = true
-	return _diff(reference, hidden, _box(main, actor, reference))
+	return await ShotMasks.silhouette(main, actor, _box(main, actor, reference))
 
 
 func _save(main: Main, name: String) -> void:
@@ -139,8 +136,8 @@ func _save(main: Main, name: String) -> void:
 
 
 # Checks one tell's rim: frame `frame` of `move_id` with its aura against the same frame without it.
-func _check_rim(move_id: StringName, frame: int, name: String, color: Color, min_level := 0.4) -> void:
-	var run := await _scene(move_id, frame)
+func _check_rim(move_id: StringName, frame: int, name: String, color: Color, min_level := 0.4, foe_at := FOE_AT, player_at := PLAYER_AT) -> void:
+	var run := await _scene(move_id, frame, foe_at, player_at)
 	var main: Main = run["main"]
 	var foe: Actor = run["foe"]
 	assert_true(foe.rig.aura_active(), "the aura is on mid-tell (%s frame %d)" % [move_id, frame])
@@ -175,7 +172,7 @@ func _check_rim(move_id: StringName, frame: int, name: String, color: Color, min
 	assert_true(edge_changed >= MIN_EDGE_CHANGED, "%s: pixels on the body's edge change (%d, at strength %.2f)" % [name, edge_changed, level])
 	assert_true(float(inside_changed) <= MAX_INTERIOR_CHANGED * interior.size(),
 			"%s: %d of the %d interior pixels changed (at most %d%% may)" % [name, inside_changed, interior.size(), roundi(MAX_INTERIOR_CHANGED * 100)])
-	assert_true(changed.size() - edge_changed - inside_changed <= 2 + changed.size() / 20, "%s: and nothing far from the body changed (%d pixels)" % [name, changed.size() - edge_changed - inside_changed])
+	assert_true(changed.size() - edge_changed - inside_changed <= 2, "%s: and nothing far from the body changed (%d pixels)" % [name, changed.size() - edge_changed - inside_changed])
 
 
 func test_the_parry_rim_is_on_the_edge_and_not_in_the_body() -> void:
@@ -190,8 +187,10 @@ func test_the_perilous_rim_is_on_the_edge_and_not_in_the_body() -> void:
 	await _check_rim(&"knuckle_sweep", 25, "perilous_rim", Color("e8607e"), 0.95)
 
 
+# (The sweep carries the body 4 m south by then. It starts further west than the other cases, so that it does not end up
+# behind a gate pillar, which would hide half of it from the camera.)
 func test_the_perilous_rim_late_in_the_sweep_is_still_on_the_edge() -> void:
-	await _check_rim(&"knuckle_sweep", 50, "perilous_rim_late", Color("e8607e"), 0.95)
+	await _check_rim(&"knuckle_sweep", 50, "perilous_rim_late", Color("e8607e"), 0.95, FOE_AT + Vector3(-3.0, 0.0, 0.0), PLAYER_AT + Vector3(-3.0, 0.0, 0.0))
 
 
 func test_the_ground_wave_changes_no_pixel_of_a_body_above_its_feet() -> void:
