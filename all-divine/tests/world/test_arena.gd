@@ -289,3 +289,23 @@ func test_an_arena_that_is_not_automatic_does_nothing_by_itself() -> void:
 	arena.player.die()
 	await frames(240)
 	assert_true(arena.player.dead, "and a dead player stays dead: no reset")
+
+
+func test_an_edit_to_the_wave_set_changes_what_spawns_after_the_yard_is_saved_and_loaded() -> void:
+	# A scene saved from the yard must not bake the waves in: the wave set is what they come from, so editing it still counts.
+	var source := (load(YARD) as PackedScene).instantiate() as Arena
+	var packed := PackedScene.new()
+	assert_eq(packed.pack(source), OK, "the yard packs")
+	source.free()
+	var set := load(WAVES) as ArenaWaveSet
+	var original := set.waves[0].count[0]
+	set.waves[0].count[0] = 3
+	var arena := track(packed.instantiate()) as Arena
+	var player := (load("res://actors/actor.tscn") as PackedScene).instantiate() as Actor
+	player.def = load(ABARAX) as ActorDef
+	player.set_brain(Brain.new())
+	arena.add_child(player)
+	arena.begin(player)
+	var sent := _foes(arena).size()
+	set.waves[0].count[0] = original
+	assert_eq(sent, 3, "wave 0 sent three: the saved scene follows the wave set, not a copy of it")

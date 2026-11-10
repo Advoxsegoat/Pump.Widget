@@ -36,8 +36,12 @@ signal wave_started(index: int)
 ## Every foe of the wave has fallen: its index.
 signal wave_cleared(index: int)
 
-## The waves, in order (the default is data/arena/waves.tres).
-@export var waves: Array[ArenaWave] = []
+## Where the waves come from (the default, with none set, is data/arena/waves.tres). Only this is saved with a scene, so the
+## waves stay one resource: editing the wave set changes every arena that uses it, a saved scene included.
+@export var wave_set: ArenaWaveSet
+## The waves, in order: the wave set's, as the arena was made (not saved: a copy of them in a scene would no longer follow
+## their data). A test may put its own here.
+var waves: Array[ArenaWave] = []
 ## Whether the arena runs the fight by itself (the next wave, the reset after the player's death).
 var automatic := true
 ## The player: the foes' target, and who is put back at the Spawn.
@@ -63,6 +67,8 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	if wave_set != null:
+		waves.assign(wave_set.waves)
 	tokens = get_node_or_null(^"AttackTokens") as AttackTokens
 	if tokens == null:
 		tokens = AttackTokens.new()
