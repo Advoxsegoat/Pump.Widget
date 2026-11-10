@@ -14,6 +14,8 @@ var airborne := false
 var guarding := false
 ## A parry window is open: a move's parry_on mark (guard_raise's first ten frames).
 var parrying := false
+## An evade window is open (a move's evade_on mark): which dodge it is, or NONE.
+var evading: MoveData.Evade = MoveData.Evade.NONE
 ## A move's marks let the body take a blow without a reaction.
 var hyperarmour := false
 ## The way the body faces, on the ground plane, of length 1: a guard or a parry covers the arc about it.
@@ -36,6 +38,7 @@ static func of(actor: Actor) -> Defense:
 	d.hyperarmour = actor.runner.hyperarmour
 	d.guarding = actor.is_guarding()
 	d.parrying = actor.runner.parry_window
+	d.evading = actor.runner.evading
 	var flat := Vector3(actor.facing().x, 0.0, actor.facing().z)
 	if not flat.is_zero_approx():
 		d.facing = flat.normalized()

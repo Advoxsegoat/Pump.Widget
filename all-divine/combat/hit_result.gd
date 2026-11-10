@@ -9,13 +9,17 @@ extends RefCounted
 ## GUARD_BREAK a guard took it but had too little stamina to pay for it: the guard breaks
 ## PARRIED     a parry turned it back: the attacker loses posture
 ## CAUGHT      a parry caught a thrust: the attacker loses a set amount of posture
+## EVADED      an evade window (a sway or a duck) avoided an ordinary blow or a grab: the blow is spent, with no weight and
+##             nothing taken off either side, and both fighters hear of it (`perfect` says whether the dodge matched)
 ## GRABBED     a grab took hold: Melee starts the attacker's grab pair, and the blow itself does nothing more; an
 ##             attacker without a grab pair has it taken as a HIT that staggers
-enum Outcome { WHIFF, HIT, GUARDED, GUARD_BREAK, PARRIED, CAUGHT, GRABBED }
+enum Outcome { WHIFF, HIT, GUARDED, GUARD_BREAK, PARRIED, CAUGHT, GRABBED, EVADED }
 ## The reaction move the target plays: none, its `flinch`, or its longer `stagger`.
 enum Reaction { NONE, FLINCH, STAGGER }
 
 var outcome: Outcome = Outcome.WHIFF
+## For an EVADED blow: the dodge matched the blow's line (Combat.is_perfect), or it was a grab.
+var perfect := false
 var reaction: Reaction = Reaction.NONE
 ## Taken off the target's HP.
 var hp_damage := 0.0

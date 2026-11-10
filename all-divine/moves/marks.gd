@@ -18,7 +18,7 @@ extends RefCounted
 ##   charge_hold             {action, frames, profile}: while `action` is held, the clip waits at this mark
 ##                           for up to `frames`; held to the end, the move's later hits use `profile`
 ##   pair_hit                {profile}: a blow of a paired move
-##   iframes_on/off, hyperarmour_on/off, parry_on/off, guard_on/off, airborne_on/off, cancel_close, recovery
+##   iframes_on/off, hyperarmour_on/off, parry_on/off, guard_on/off, airborne_on/off, evade_on/off, cancel_close, recovery
 ##                           (no arguments) open and close the windows of those names, or mark the moment
 ## There is no hit-stop mark: how long a hit freezes both sides is the profile's `hitstop_frames`, applied
 ## on contact.
@@ -33,7 +33,7 @@ const TRACK := NodePath("Marks")
 const KINDS: Array[StringName] = [&"hitbox_on", &"hitbox_off", &"iframes_on", &"iframes_off", &"hyperarmour_on",
 		&"hyperarmour_off", &"cancel_open", &"cancel_close", &"recovery", &"fx", &"sfx", &"shake",
 		&"parry_on", &"parry_off", &"guard_on", &"guard_off", &"airborne_on", &"airborne_off",
-		&"tell", &"charge_hold", &"pair_hit"]
+		&"tell", &"charge_hold", &"pair_hit", &"evade_on", &"evade_off"]
 ## Marks are counted in frames at this rate (the physics rate).
 const RATE := 60
 ## between() treats times this close as the same time. A clip saved to disk keeps its times as 32-bit

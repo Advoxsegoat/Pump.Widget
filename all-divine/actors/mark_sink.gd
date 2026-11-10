@@ -30,3 +30,5 @@ func airborne_off(_args: Dictionary) -> void: pass
 func tell(_args: Dictionary) -> void: pass
 func charge_hold(_args: Dictionary) -> void: pass
 func pair_hit(_args: Dictionary) -> void: pass
+func evade_on(_args: Dictionary) -> void: pass
+func evade_off(_args: Dictionary) -> void: pass

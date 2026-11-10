@@ -30,11 +30,11 @@ func test_the_track_is_called_marks() -> void:
 
 func test_kinds_drop_hitstop_and_add_the_combat_kinds() -> void:
 	# Hit-stop comes from the HitProfile, on contact, so there is no mark for it.
-	assert_eq(Marks.KINDS.size(), 21)
+	assert_eq(Marks.KINDS.size(), 23)
 	for kind in [&"hitbox_on", &"hitbox_off", &"iframes_on", &"iframes_off", &"hyperarmour_on", &"hyperarmour_off",
 			&"cancel_open", &"cancel_close", &"recovery", &"fx", &"sfx", &"shake",
 			&"parry_on", &"parry_off", &"guard_on", &"guard_off", &"airborne_on", &"airborne_off",
-			&"tell", &"charge_hold", &"pair_hit"]:
+			&"tell", &"charge_hold", &"pair_hit", &"evade_on", &"evade_off"]:
 		assert_true(Marks.KINDS.has(kind), kind)
 	assert_false(Marks.KINDS.has(&"hitstop"))
 

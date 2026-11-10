@@ -12,6 +12,7 @@ guard_stamina = 24.0
 knockback = 3.0
 hitstop_frames = 6
 shake = 0.5
+line = 1
 staggers = true
 impact_sound = &"impact_heavy"
 
@@ -24,6 +25,7 @@ guard_stamina = 34.0
 knockback = 5.0
 hitstop_frames = 6
 shake = 0.8
+line = 1
 staggers = true
 impact_sound = &"impact_heavy"
 

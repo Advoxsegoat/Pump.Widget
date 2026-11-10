@@ -9,15 +9,18 @@ extends RefCounted
 ## from the attacker). The first rule that applies wins:
 ##   1. the target is dead, paired or invulnerable: WHIFF
 ##   2. a LOW blow on the airborne: WHIFF (it passes under)
-##   3. a GRAB: GRABBED, which starts the attacker's grab pair (Melee); for an attacker without one it is taken as a
+##   3. an evade window open (d.evading) against an ordinary blow or a GRAB: EVADED. The blow is spent: it does nothing
+##      to the target, whatever guard or parry is up too. `perfect` says whether the dodge matched (is_perfect). A
+##      SWEEP and a THRUST are not avoided and go on down the rules
+##   4. a GRAB: GRABBED, which starts the attacker's grab pair (Melee); for an attacker without one it is taken as a
 ##      HIT that staggers, so it carries the blow's damage and posture and a STAGGER
-##   4. a parry with the attacker inside the arc: an ordinary blow is PARRIED (the attacker loses the blow's
+##   5. a parry with the attacker inside the arc: an ordinary blow is PARRIED (the attacker loses the blow's
 ##      posture damage times parry_posture_scale), a THRUST is CAUGHT (the attacker loses catch_posture); a
 ##      SWEEP cannot be parried and goes on down the rules
-##   5. a guard with the attacker inside the arc, against a blow a guard can take (an ordinary one): GUARDED,
+##   6. a guard with the attacker inside the arc, against a blow a guard can take (an ordinary one): GUARDED,
 ##      paying the blow's guard_stamina, or GUARD_BREAK when there is less stamina than that (all of it is
 ##      spent); either way the guard takes the blow's posture damage
-##   6. otherwise a HIT: the blow's damage and posture damage, and a reaction: none under hyper-armour; else,
+##   7. otherwise a HIT: the blow's damage and posture damage, and a reaction: none under hyper-armour; else,
 ##      once the poise damage reaches the target's poise, a STAGGER if the blow staggers or else a FLINCH;
 ##      below the poise, none
 ## The arc is guard_arc_deg either side of the defender's facing, toward where the attacker stands (back
@@ -28,6 +31,10 @@ static func resolve(e: HitEvent, d: Defense, tuning: CombatTuning) -> HitResult:
 	if d.dead or d.paired or d.invulnerable:
 		return r
 	if p.height == HitProfile.Height.LOW and d.airborne:
+		return r
+	if d.evading != MoveData.Evade.NONE and (p.perilous == HitProfile.Perilous.NONE or p.perilous == HitProfile.Perilous.GRAB):
+		r.outcome = HitResult.Outcome.EVADED
+		r.perfect = is_perfect(d.evading, p)
 		return r
 	if p.perilous == HitProfile.Perilous.GRAB:
 		r.outcome = HitResult.Outcome.GRABBED
@@ -63,6 +70,16 @@ static func resolve(e: HitEvent, d: Defense, tuning: CombatTuning) -> HitResult:
 	else:
 		r.reaction = HitResult.Reaction.FLINCH
 	return r
+
+
+## Whether the evade `evade` is the perfect dodge of the blow `p`: any evade of a grab, a SWAY of a STRAIGHT blow, a
+## DUCK of a ROUND one. No evade (NONE) is no dodge at all.
+static func is_perfect(evade: MoveData.Evade, p: HitProfile) -> bool:
+	if evade == MoveData.Evade.NONE:
+		return false
+	if p.perilous == HitProfile.Perilous.GRAB:
+		return true
+	return evade == (MoveData.Evade.SWAY if p.line == HitProfile.Line.STRAIGHT else MoveData.Evade.DUCK)
 
 
 ## What a blow of a paired move (`e.paired`: a lead's pair_hit mark) comes to. No rule judges it, since the

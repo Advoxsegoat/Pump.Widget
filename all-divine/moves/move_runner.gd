@@ -64,6 +64,11 @@ var hyperarmour := false
 ## with a parry window that starts less than the tuning's parry_refresh_frames after the last one did (counted on the
 ## actor's buffer_frame clock, so hit-stop does not count) passes its parry_on without opening it.
 var parry_window := false
+## The current move's `evade` between its evade_on and evade_off marks (a blow judged now is avoided: Combat.resolve,
+## rule 3), else NONE. Cleared when the move ends.
+var evading: MoveData.Evade = MoveData.Evade.NONE
+## True once a blow was evaded during the current move; false again when the next move starts (HitIntake.take sets it).
+var evaded := false
 ## True between a guard_on and a guard_off mark: the move holds a guard up (guard_raise from its f4).
 var guard_window := false
 ## True between an airborne_on and an airborne_off mark: the body is off the ground (the hop), so a LOW blow passes
@@ -182,6 +187,7 @@ func _start(move: MoveData, intent: Intent, force := false) -> void:
 		_end(true)
 	current = move
 	time = 0.0
+	evaded = false
 	_anim = rig.tree.get_animation(move.clip)
 	_marks = Marks.read(_anim)
 	if _marks.any(func(m: Dictionary) -> bool: return m["kind"] == &"parry_on"):
@@ -215,6 +221,7 @@ func _end(cancelled: bool) -> void:
 	iframes = false
 	hyperarmour = false
 	parry_window = false
+	evading = MoveData.Evade.NONE
 	guard_window = false
 	_set_airborne(false)
 	window = {}
@@ -319,6 +326,10 @@ func _act(kind: StringName, args: Dictionary) -> void:
 			parry_window = _parry_fresh
 		&"parry_off":
 			parry_window = false
+		&"evade_on":
+			evading = current.evade
+		&"evade_off":
+			evading = MoveData.Evade.NONE
 		&"guard_on":
 			guard_window = true
 		&"guard_off":

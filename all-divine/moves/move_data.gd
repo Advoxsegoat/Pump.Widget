@@ -6,6 +6,9 @@ extends Resource
 
 ## A REACTION is what an actor plays when something is done to it (a flinch, a stagger, a death).
 enum Kind { ATTACK, DODGE, OTHER, REACTION }
+## Which way a move's evade window leans (the window itself is its clip's evade_on and evade_off marks): NONE is no
+## evade at all, SWAY a lean aside, DUCK a drop. A sway is the perfect dodge of a straight blow, a duck of a round one.
+enum Evade { NONE, SWAY, DUCK }
 
 @export var id: StringName
 @export var kind: Kind = Kind.ATTACK
@@ -17,6 +20,9 @@ enum Kind { ATTACK, DODGE, OTHER, REACTION }
 ## Keeps a move's distance tunable without re-authoring its clip.
 @export var root_motion_scale := 1.0
 @export var stamina_cost := 0.0
+## The evade the move's evade window is, while it is open (see Evade). A move with an evade window says which here, and
+## a move without one leaves it NONE: the clip checker holds the two together.
+@export var evade: Evade = Evade.NONE
 ## The ways this move hits: profile name -> HitProfile, written inline in the move's .tres. A hitbox_on
 ## mark names the profile its hitbox carries, so every hit of the move is one of these.
 @export var hits: Dictionary = {}

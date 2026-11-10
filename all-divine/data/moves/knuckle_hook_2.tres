@@ -12,6 +12,7 @@ guard_stamina = 15.0
 knockback = 2.0
 hitstop_frames = 5
 shake = 0.3
+line = 1
 
 [resource]
 script = ExtResource("1_move")

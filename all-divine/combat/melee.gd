@@ -29,6 +29,10 @@ extends Node
 ## the attacker's body, in the same one call (its apply_hits, as `turned`), so a body that is struck and has its own
 ## blow turned back on one frame, or has two of its blows turned back, still takes them all at once, in any order.
 ##
+## A blow that was evaded (EVADED) is spent: it is not handed back to the scanner (so the same swing cannot land
+## on the body later, when the window has closed), nobody freezes, nobody is pushed and no grab pair starts. Its target
+## and its attacker both hear of it (got_hit, hit_landed), and the target's runner notes that it evaded (HitIntake.take).
+##
 ## A blow that landed also has weight (_weigh): both fighters freeze for the profile's `hitstop_frames` and the
 ## target is pushed along the blow by its `knockback`. A trade freezes both for the longer of the two blows'
 ## frames, not their sum, since a freeze that is on is only ever lengthened (Actor.freeze).
@@ -45,7 +49,8 @@ extends Node
 const PRIORITY := 100
 ## The outcomes that stop both fighters for the blow's hit-stop (Actor.freeze) and shove the target
 ## (Actor.push): a blow that landed, was guarded, broke the guard, was turned back or was caught. A WHIFF touched
-## nothing, so it has no weight; a grab that takes hold is another thing (a paired move, not a blow).
+## nothing and an EVADED blow was avoided, so neither has weight; a grab that takes hold is another thing (a paired
+## move, not a blow).
 const FREEZES: Array[HitResult.Outcome] = [HitResult.Outcome.HIT, HitResult.Outcome.GUARDED,
 		HitResult.Outcome.GUARD_BREAK, HitResult.Outcome.PARRIED, HitResult.Outcome.CAUGHT]
 ## The outcomes that turn a blow back on its attacker, who then takes attacker_posture_damage and recoils.

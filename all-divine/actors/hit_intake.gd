@@ -58,7 +58,8 @@ func _init(actor: Actor) -> void:
 ##   has none, stagger), and the actor joins the group finishable while it reels
 ## (each the def's reaction move of that name; one it lacks plays nothing). But a body that is reeling from a broken
 ## posture plays no new reaction (it reels on), and one in a paired move neither reacts nor dies here (the pair
-## decides when it is over). A WHIFF changes nothing, nor does anything on the dead. got_hit is emitted for each blow
+## decides when it is over). A WHIFF changes nothing, nor does anything on the dead; an EVADED blow changes only the
+## runner's `evaded` flag: nothing comes off the body, it is not kicked and it reacts to nothing. got_hit is emitted for each blow
 ## that landed after, whatever its outcome.
 func take(events: Array[HitEvent], results: Array[HitResult], turned: Array[HitEvent] = [],
 		turned_results: Array[HitResult] = []) -> void:
@@ -70,6 +71,9 @@ func take(events: Array[HitEvent], results: Array[HitResult], turned: Array[HitE
 		for i in events.size():
 			var r := results[i]
 			if r.outcome == HitResult.Outcome.WHIFF:
+				continue
+			if r.outcome == HitResult.Outcome.EVADED:
+				_actor.runner.evaded = true
 				continue
 			if KICKS.has(r.outcome):
 				_actor.rig.hit_react(events[i].direction, HIT_REACT_BASE + events[i].profile.poise_damage / HIT_REACT_POISE)

@@ -876,3 +876,36 @@ func test_the_bone_an_effect_rides_by_its_data_is_checked_against_the_rig() -> v
 	assert_true(_has_problem(problems, ["fx at f10", "hand_l", "palm_trail"]), "\n".join(problems))
 	assert_true(_has_problem(problems, ["tell at f5", "hand_r", "glint"]), "\n".join(problems))
 	assert_true(_has_problem(problems, ["tell at f15", "Head", "perilous_rose"]), "\n".join(problems))
+
+
+# --- the evade window ---
+
+# A move of kind OTHER with `evade`, on a clip with the fx and sfx every move needs and `extra` marks.
+func _evader(evade: MoveData.Evade, extra: Array) -> PackedStringArray:
+	var move := _move(&"sway_fixture", MoveData.Kind.OTHER)
+	move.evade = evade
+	return _check(move, [_m(0, &"sfx", {"name": &"palm_whoosh"}), _m(0, &"fx", {"name": &"palm_trail"})] + extra)
+
+
+func test_an_evade_move_needs_one_window_opening_on_frame_two() -> void:
+	for evade in [MoveData.Evade.SWAY, MoveData.Evade.DUCK]:
+		var name: String = MoveData.Evade.keys()[evade]
+		assert_eq(_evader(evade, [_m(2, &"evade_on"), _m(12, &"evade_off")]), PackedStringArray(), "%s: one window from f2 is fine" % name)
+		var problems := _evader(evade, [])
+		assert_true(_has_problem(problems, ["sway_fixture", "evade", "no evade window"]), "%s: none: %s" % [name, "\n".join(problems)])
+		problems = _evader(evade, [_m(3, &"evade_on"), _m(12, &"evade_off")])
+		assert_true(_has_problem(problems, ["sway_fixture", "evade", "f3", "f2"]), "%s: late: %s" % [name, "\n".join(problems)])
+		problems = _evader(evade, [_m(1, &"evade_on"), _m(12, &"evade_off")])
+		assert_true(_has_problem(problems, ["evade", "f1", "f2"]), "%s: early: %s" % [name, "\n".join(problems)])
+		problems = _evader(evade, [_m(2, &"evade_on"), _m(8, &"evade_off"), _m(20, &"evade_on"), _m(30, &"evade_off")])
+		assert_true(_has_problem(problems, ["evade", "exactly one", "not 2"]), "%s: two: %s" % [name, "\n".join(problems)])
+		problems = _evader(evade, [_m(2, &"evade_on")])
+		assert_true(_has_problem(problems, ["evade", "never off", "f2"]), "%s: unpaired: %s" % [name, "\n".join(problems)])
+
+
+func test_a_move_that_is_no_evade_may_not_carry_evade_marks() -> void:
+	var problems := _evader(MoveData.Evade.NONE, [_m(2, &"evade_on"), _m(12, &"evade_off")])
+	assert_true(_has_problem(problems, ["sway_fixture", "evade marks", "evade is NONE"]), "\n".join(problems))
+	assert_eq(_evader(MoveData.Evade.NONE, []), PackedStringArray(), "and without them it is fine")
+	var jab := _jab(_jab_marks([], [_m(5, &"evade_on"), _m(10, &"evade_off")]))
+	assert_true(_has_problem(jab, ["palm_jab", "evade marks"]), "an attack is no evade either: %s" % ["\n".join(jab)])

@@ -12,6 +12,10 @@ enum Height { MID, LOW }
 ## each with its own answer: a SWEEP cannot be guarded or parried (hop it or roll it), a THRUST cannot be
 ## guarded but can be parried (a parried thrust is a catch), and a GRAB can be neither (roll away).
 enum Perilous { NONE, SWEEP, THRUST, GRAB }
+## The line the blow travels, which says which dodge matches it (Combat.is_perfect): a STRAIGHT blow (a jab, a cross,
+## a thrust) is matched by a sway, a ROUND one (a hook, a swing) by a duck. Any evade avoids an ordinary blow, but
+## only the matching one is a perfect dodge.
+enum Line { STRAIGHT, ROUND }
 
 ## Hit points taken from the target.
 @export var damage := 0.0
@@ -35,6 +39,7 @@ enum Perilous { NONE, SWEEP, THRUST, GRAB }
 @export var staggers := false
 @export var height: Height = Height.MID
 @export var perilous: Perilous = Perilous.NONE
+@export var line: Line = Line.STRAIGHT
 ## The sound cue played on contact (a name in data/sounds/).
 @export var impact_sound := &"impact_palm"
 

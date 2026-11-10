@@ -61,7 +61,10 @@ const WINDOW_PAIRS := {
 	"guard": [&"guard_on", &"guard_off"],
 	"airborne": [&"airborne_on", &"airborne_off"],
 	"hyperarmour": [&"hyperarmour_on", &"hyperarmour_off"],
+	"evade": [&"evade_on", &"evade_off"],
 }
+## The frame every evade window opens on, so that a sway or duck pressed at the last moment is safe from its second frame.
+const EVADE_OPENS := 2
 ## The reaction that needs no recovery: the clip ends with the actor on the ground.
 const DEATH := &"death"
 ## A bone within this many degrees of its rest rotation counts as not moved.
@@ -99,6 +102,7 @@ func check_move(move: MoveData, anim: Animation, hitbox_ids: PackedStringArray, 
 		var checked := _check_windows(marks, kinds[0], kinds[1], func(_m: Dictionary) -> String: return label)
 		for problem: String in checked["problems"]:
 			out.append("%s: %s" % [id, problem])
+	_check_evade(id, move, marks, out)
 	if move.kind != MoveData.Kind.ATTACK:
 		for mark in _of_kind(marks, &"charge_hold"):
 			out.append("%s: charge_hold at f%d is only allowed in an attack" % [id, Marks.frame_of(mark["time"])])
@@ -346,6 +350,24 @@ func _check_windows(marks: Array[Dictionary], on_kind: StringName, off_kind: Str
 	for label: String in open:
 		problems.append("%s turned on at f%d is never off" % [label, open[label]])
 	return {"count": count, "problems": problems}
+
+
+# A move with an evade has exactly one evade window, opening on EVADE_OPENS; a move without one has no evade marks.
+# (An unpaired window is reported by the window pairs.)
+func _check_evade(id: String, move: MoveData, marks: Array[Dictionary], out: PackedStringArray) -> void:
+	var opens := _of_kind(marks, &"evade_on")
+	if move.evade == MoveData.Evade.NONE:
+		if not opens.is_empty() or not _of_kind(marks, &"evade_off").is_empty():
+			out.append("%s: has evade marks but its evade is NONE" % id)
+		return
+	if opens.is_empty():
+		out.append("%s: an evade move has no evade window" % id)
+	elif opens.size() > 1:
+		out.append("%s: an evade move needs exactly one evade window, not %d" % [id, opens.size()])
+	else:
+		var frame := Marks.frame_of(opens[0]["time"])
+		if frame != EVADE_OPENS:
+			out.append("%s: the evade window opens at f%d, not f%d" % [id, frame, EVADE_OPENS])
 
 
 func _of_kind(marks: Array[Dictionary], kind: StringName) -> Array[Dictionary]:
