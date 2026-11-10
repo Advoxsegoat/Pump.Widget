@@ -309,3 +309,8 @@ func test_an_edit_to_the_wave_set_changes_what_spawns_after_the_yard_is_saved_an
 	var sent := _foes(arena).size()
 	set.waves[0].count[0] = original
 	assert_eq(sent, 3, "wave 0 sent three: the saved scene follows the wave set, not a copy of it")
+
+
+func test_the_yard_scene_holds_no_copy_of_the_waves() -> void:
+	var text := FileAccess.get_file_as_string(YARD)
+	assert_false(text.contains("Wave_") or text.contains("waves ="), "training_yard.tscn keeps no baked waves")
