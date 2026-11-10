@@ -5,16 +5,19 @@ extends SceneTree
 ## a timing curve, and this tool works out the rest:
 ##
 ##   tools/godot.sh -s res://tools/anim/key_evades.gd                  writes every layer file
-##   tools/godot.sh -s res://tools/anim/key_evades.gd -- --check       exits 1 if a file is not what the table makes (byte for byte)
+##   tools/godot.sh -s res://tools/anim/key_evades.gd -- --check       exits 1 if a file is not what the table makes (within a rounding step)
 ##   tools/godot.sh -s res://tools/anim/key_evades.gd -- --report      writes nothing; prints what each clip does (metres)
 ##   ... -- --only=sway_left_slip,duck_slip                           (with any of them) only those clips
 ##
-## tests/anim/test_key_evades.gd holds the committed files to --check, so a changed table that was not written fails.
+## tests/anim/test_key_evades.gd holds the committed files to --check, so a changed table that was not written fails. The
+## comparison is within a rounding step (see differences): the values are rounded as they are written, and one on the edge of a
+## step can round the other way on another machine's floating point.
 ##
 ## How a clip is made. Every clip is UAL2's guard stance (guard_hold's first frame) held for its length (clips.cfg), and its
 ## layer says how Abarax leaves that stance and comes back to it. The table (PEAKS, TEMPOS, DASH) gives a clip's pose at its
 ## peak; CURVES says how far toward it the body is on each frame (a monotone cubic through the points, so nothing overshoots
-## a peak). For each frame the pose is the peak scaled by that fraction:
+## a peak; each curve's peak is a point of its own, falling after it, so the clip is at its furthest on that frame and not
+## somewhere along a plateau, and always before its evade window closes). For each frame the pose is the peak scaled by that fraction:
 ##   move    where the hips go (metres, toward his left / up / ahead): the weight shift, the dip, the lunge
 ##   turns   how much each spine bone and the head turn, as (lean toward his left, pitch with the top forward, twist toward
 ##           his left) degrees, about the bone's own joint in the body's own directions
@@ -45,16 +48,16 @@ const AHEAD := Vector3(0.0, 0.0, 1.0)
 ## Frames of each tempo's clip and the timing of its leaning: [frame, how far toward the peak, 0 to 1]. One curve for the
 ## three kinds of clip in a tempo, so the three are the same shape.
 const CURVES := {
-	&"slip": [[0, 0.0], [2, 0.2], [5, 0.78], [8, 1.0], [12, 1.0], [17, 0.35], [22, 0.0]],
+	&"slip": [[0, 0.0], [2, 0.2], [5, 0.78], [8, 1.0], [12, 0.93], [17, 0.35], [22, 0.0]],
 	&"quick": [[0, 0.0], [2, 0.38], [4, 0.92], [6, 1.0], [8, 0.96], [12, 0.3], [16, 0.0]],
 	&"flurry": [[0, 0.0], [1.5, 0.45], [3, 0.95], [4, 1.0], [6, 0.9], [9, 0.28], [12, 0.0]],
 }
 const FRAMES := {&"slip": 22, &"quick": 16, &"flurry": 12}
 ## The duck's own timing and frames (it is held longer than its sway).
 const DUCK_CURVES := {
-	&"slip": [[0, 0.0], [3, 0.35], [7, 1.0], [14, 1.0], [20, 0.35], [26, 0.0]],
-	&"quick": [[0, 0.0], [2, 0.4], [4, 0.95], [6, 1.0], [11, 1.0], [14, 0.35], [18, 0.0]],
-	&"flurry": [[0, 0.0], [1.5, 0.45], [3, 0.95], [4, 1.0], [8, 1.0], [11, 0.3], [14, 0.0]],
+	&"slip": [[0, 0.0], [3, 0.35], [7, 1.0], [14, 0.92], [20, 0.35], [26, 0.0]],
+	&"quick": [[0, 0.0], [2, 0.4], [4, 0.95], [6, 1.0], [11, 0.93], [14, 0.35], [18, 0.0]],
+	&"flurry": [[0, 0.0], [1.5, 0.45], [3, 0.95], [4, 1.0], [8, 0.93], [11, 0.3], [14, 0.0]],
 }
 const DUCK_FRAMES := {&"slip": 26, &"quick": 18, &"flurry": 14}
 ## How much of the Slip peak each tempo makes (uniformly: the same shape, smaller). The sways' head travel (0.33 m at Slip)
@@ -115,6 +118,47 @@ const DASH_WAYS := {
 	&"dash_step_left": {"way": LEFT, "peak": &"left", "lead": "l", "mirror": false},
 	&"dash_step_right": {"way": -LEFT, "peak": &"left", "lead": "r", "mirror": true},
 }
+
+
+## The rounding of a bone's rotations (degrees) and of the hips' travel (metres) as they are written.
+const TURN_STEP := 0.001
+const MOVE_STEP := 0.0001
+## A value is the table's within this many rounding steps (a value on the edge of a step can fall either way).
+const STEPS_ALLOWED := 1.5
+
+
+## What is different between a layer file's text `committed` and the text `made` of the table, one line each; empty when they
+## are the same layer within a rounding step: the same bones, the same frames, every value within STEPS_ALLOWED steps.
+static func differences(made: String, committed: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var a := JSON.new()
+	var b := JSON.new()
+	if a.parse(made) != OK or b.parse(committed) != OK or not a.data is Dictionary or not b.data is Dictionary:
+		out.append("a layer is not a JSON object")
+		return out
+	var want: Dictionary = a.data
+	var have: Dictionary = b.data
+	for bone: String in want:
+		if not have.has(bone):
+			out.append("bone %s is missing" % bone)
+	for bone: String in have:
+		if not want.has(bone):
+			out.append("bone %s is not in the table's layer" % bone)
+	for bone: String in want:
+		if not have.has(bone):
+			continue
+		var step := MOVE_STEP if bone == "@pelvis_move" else TURN_STEP
+		var wanted: Array = want[bone]
+		var found: Array = have[bone]
+		if wanted.size() != found.size():
+			out.append("bone %s has %d frames, the table makes %d" % [bone, found.size(), wanted.size()])
+			continue
+		for i in wanted.size():
+			for j in 4:
+				if absf(float(wanted[i][j]) - float(found[i][j])) > step * STEPS_ALLOWED + 1e-9:
+					out.append("bone %s, key %d: %s, the table makes %s" % [bone, i, found[i], wanted[i]])
+					break
+	return out
 
 
 ## Every clip's layer: {"files": {clip name: the text of its layer file}, "report": [one line per clip]}, for the clips
@@ -197,8 +241,13 @@ func _initialize() -> void:
 	for clip: String in made["files"]:
 		var path := LAYERS + clip + ".json"
 		if check:
-			if not FileAccess.file_exists(path) or FileAccess.get_file_as_string(path) != made["files"][clip]:
-				printerr("key_evades.gd: %s is not what the table makes" % path)
+			if not FileAccess.file_exists(path):
+				printerr("key_evades.gd: %s is missing" % path)
+				wrong += 1
+				continue
+			var found := differences(made["files"][clip], FileAccess.get_file_as_string(path))
+			if not found.is_empty():
+				printerr("key_evades.gd: %s is not what the table makes (within a rounding step): %s" % [path, found[0]])
 				wrong += 1
 		elif not report:
 			var file := FileAccess.open(path, FileAccess.WRITE)
