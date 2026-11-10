@@ -191,15 +191,22 @@ func _physics_process(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
-	if key == null or not key.pressed or key.echo:
-		return
-	if DEBUG_KEYS.has(key.keycode):
-		_extras.append(_send(DEBUG_KEYS[key.keycode], _next_spawn(), "Debug%d" % (_extras.size() + 1)))
+	if key != null and key.pressed and not key.echo and debug_key(key.keycode):
+		get_viewport().set_input_as_handled()
+
+
+## The debug keys: F6, F7 and F8 spawn one Knuckle of tier I, II or III, F9 resets. True if `keycode` is one of them (and its
+## work is done). The arena hears keys itself when it is in the window's viewport; Main, which keeps it in the stage's own
+## viewport where keys never arrive, hands them on.
+func debug_key(keycode: Key) -> bool:
+	if DEBUG_KEYS.has(keycode):
+		_extras.append(_send(DEBUG_KEYS[keycode], _next_spawn(), "Debug%d" % (_extras.size() + 1)))
 		_rounds += 1
-		get_viewport().set_input_as_handled()
-	elif key.keycode == RESET_KEY:
+		return true
+	if keycode == RESET_KEY:
 		reset()
-		get_viewport().set_input_as_handled()
+		return true
+	return false
 
 
 # A foe of `def` at `marker` (the region's spawn when null), facing the player, named `foe_name`.

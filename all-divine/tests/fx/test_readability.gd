@@ -163,9 +163,11 @@ func test_waves_have_the_radius_their_kind_names_lie_on_the_ground_and_free_them
 	assert_eq(waves[0].billboard, false, "lying flat")
 	assert_true(waves[0].radius() < 0.1, "it starts small")
 	await frames(12)
-	assert_true(waves[0].radius() > 1.2 and waves[0].visibility() < 0.6, "it grows (%.2f m) and fades (%.2f)" % [waves[0].radius(), waves[0].visibility()])
+	assert_true(waves[0].radius() > 1.2 and waves[0].visibility() > 0.9, "half way it has grown (%.2f m) and still shows in full (%.2f)" % [waves[0].radius(), waves[0].visibility()])
 	var wave := waves[0]
-	await frames(20)
+	await frames(8)
+	assert_true(wave.radius() > 1.6 and wave.visibility() < 0.6 and wave.visibility() > 0.0, "then it fades (%.2f)" % wave.visibility())
+	await frames(12)
 	assert_false(is_instance_valid(wave), "and frees itself after 0.4 s")
 	# A heavy attack: 1.1 m, no icon. A light one: none.
 	var b := _fighter()

@@ -10,6 +10,8 @@ extends Node3D
 const SHADER := preload("res://render/shaders/ground_ring.gdshader")
 ## A wave lies this high above the ground, so the floor does not cut it, and below a body's feet.
 const LIFT := 0.02
+## The part of a wave's time it shows at full strength before it fades.
+const FADE_FROM := 0.45
 ## The group every wave is in: for tests.
 const GROUP := &"ground_waves"
 
@@ -42,9 +44,11 @@ func radius() -> float:
 	return max_radius * _grown()
 
 
-## How much of the ring shows now, 1 to 0.
+## How much of the ring shows now: all of it for the first FADE_FROM of its time, so that it reads as it spreads, then less
+## and less to nothing.
 func visibility() -> float:
-	return clampf(1.0 - _age / maxf(seconds, 0.001), 0.0, 1.0)
+	var t := clampf(_age / maxf(seconds, 0.001), 0.0, 1.0)
+	return 1.0 - smoothstep(FADE_FROM, 1.0, t)
 
 
 func _physics_process(delta: float) -> void:

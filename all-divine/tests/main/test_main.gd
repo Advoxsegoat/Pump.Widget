@@ -198,3 +198,22 @@ func test_f5_after_death_stands_him_up() -> void:
 	_press_key(KEY_F5)
 	assert_false(player.dead, "alive in the courtyard")
 	assert_eq(player.stats.hp, player.stats.max_hp)
+
+
+func test_the_arena_debug_keys_reach_the_arena_through_main() -> void:
+	var main := _main()
+	var arena := main.arena()
+	await frames(2)
+	var foes := func() -> int:
+		return get_tree().get_nodes_in_group(Actor.LOCKABLE_GROUP).filter(func(n: Node) -> bool: return arena.is_ancestor_of(n)).size()
+	assert_eq(foes.call(), 1, "wave 0: one Knuckle")
+	_press_key(KEY_F7)
+	assert_eq(foes.call(), 2, "F7 sends a tier II (the stage's viewport does not hear keys: Main hands them on)")
+	_press_key(KEY_F8)
+	assert_eq(foes.call(), 3, "F8 a tier III")
+	_press_key(KEY_F9)
+	await frames(1)
+	assert_eq(foes.call(), 1, "F9 resets")
+	_press_key(KEY_F5)  # the courtyard has no arena: the keys do nothing there
+	_press_key(KEY_F6)
+	_press_key(KEY_F9)

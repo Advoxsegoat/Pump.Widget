@@ -74,3 +74,48 @@ func _brightness(img: Image, main: Main, at: Vector3) -> float:
 			total += 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
 			count += 1
 	return total / count
+
+
+# The HUD in play: locked on to a Knuckle that has been hit and whose posture is broken, in reach, with the finisher
+# prompt up and the unblockable icon of another foe's sweep: saved to out/shots/yard_hud.png for a person to look at.
+func test_the_hud_in_a_fight_shot() -> void:
+	Game.reset()
+	Arena.reset_spawn_counts()
+	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
+	main.arena().start_wave(3)  # a tier II and a tier I
+	var foes := main.arena().enemies()
+	for foe in foes:
+		foe.set_brain(Brain.new())
+	var player := main.player
+	player.place(Transform3D(Basis(Vector3.UP, PI), Vector3(0.0, 0.0, 6.0)))
+	foes[0].place(Transform3D(Basis(Vector3.UP, 0.0), Vector3(0.0, 0.0, 4.9)))
+	foes[1].place(Transform3D(Basis(Vector3.UP, 0.0), Vector3(-3.5, 0.0, 3.0)))
+	main.camera_rig.snap_now()
+	await frames(5)
+	player.set_brain(PlayerBrain.new())
+	(player.brain as PlayerBrain).lock.target = foes[0]
+	foes[0].stats.take_damage(20.0)
+	foes[0].stats.damage_posture(foes[0].stats.max_posture)
+	foes[0].add_to_group(Actor.FINISHABLE_GROUP)
+	foes[0].got_hit.emit(HitResult.new(), _event(foes[0]))
+	foes[1].runner.start(Registry.fetch(&"moves", &"knuckle_thrust") as MoveData)
+	player.stats.take_damage(35.0)
+	player.stats.spend_stamina(30.0)
+	player.stats.damage_posture(30.0)
+	await frames(12)
+	for i in 3:
+		await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	var path := ProjectSettings.globalize_path("res://").path_join("out/shots/yard_hud.png")
+	assert_eq(img.save_png(path), OK)
+	assert_true(main.hud.reticle_at() is Vector2i, "the reticle is up")
+	assert_true(main.hud.prompt_at() is Vector2i, "and the finisher prompt")
+	assert_eq(main.hud.icons().size(), 1, "and one unblockable icon")
+
+
+func _event(target: Actor) -> HitEvent:
+	var e := HitEvent.new()
+	e.target = target
+	e.profile = HitProfile.new()
+	e.point = target.global_position + Vector3.UP
+	return e

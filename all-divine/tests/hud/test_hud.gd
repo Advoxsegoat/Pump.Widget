@@ -199,6 +199,10 @@ func test_prompt_shows_only_for_a_finishable_foe_in_reach() -> void:
 	var head := hud.picture_point(foe.get_global_transform_interpolated().origin + Vector3.UP * foe.def.look_height)
 	assert_true((at as Vector2i).y < head.y, "over the foe's head (%s vs %s)" % [at, head])
 	assert_true(absi((at as Vector2i).x - int(head.x)) <= 1, "on its line")
+	foe.got_hit.emit(_hit_result(), _hit_event(foe))
+	var bars := hud.foe_bars()
+	assert_eq(bars.size(), 1, "the broken foe shows its bars")
+	assert_true((bars[0].posture as Rect2i).end.y < (at as Vector2i).y - 3, "above the prompt, not over it")
 	# Out of reach: no prompt.
 	foe.place(Transform3D(Basis(Vector3.UP, 0.0), player.global_position + Vector3(0, 0, -4.0)))
 	assert_eq(hud.prompt_at(), null, "too far: none")

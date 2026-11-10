@@ -10,7 +10,8 @@ extends Node
 ## its first wave with him as its target.
 ##
 ## F1 (a pad's Select) shows or hides the controls list; F3 shows or hides the debug overlay; F4 turns the screen look off
-## and on; F5 switches the region; F11 or Alt+Enter switches between
+## and on; F5 switches the region; F6, F7 and F8 spawn a tier I, II or III Knuckle and F9 resets the fight (the Arena's
+## debug keys, which Main passes on); F11 or Alt+Enter switches between
 ## borderless fullscreen, where the game starts, and a 1280x720 window (WindowToggle); the menu button (Esc,
 ## Start) pauses and resumes, and "Paused" shows while it is paused (PauseLabel). This node runs while the game
 ## is paused (to hear the menu button); the stage, and so the world in it, stops.
@@ -88,6 +89,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_F5:
 				switch_region()
 				get_viewport().set_input_as_handled()
+				return
+			KEY_F6, KEY_F7, KEY_F8, KEY_F9:
+				# The arena lives in the stage's own viewport, which the window's keys never reach.
+				if arena() != null and arena().debug_key(key.keycode):
+					get_viewport().set_input_as_handled()
 				return
 			KEY_F1:
 				hud.toggle_hints()

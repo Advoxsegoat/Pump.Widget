@@ -36,6 +36,8 @@ const MAX_BAR := 120
 const STAMINA_ROW := Vector2i(346, 4)
 const HP_ROW := Vector2i(339, 5)
 const POSTURE_ROW := Vector2i(335, 2)
+## The finisher prompt's glyph is this many pixels square.
+const PROMPT_SIZE := 7
 ## A foe's bars: this wide, the HP and posture rows' heights, and how far above its head point the HP bar's bottom is.
 const FOE_BAR := 24
 const FOE_HP_HEIGHT := 3
@@ -204,9 +206,13 @@ func foe_bars() -> Array[Dictionary]:
 		return shown
 	var locked := _locked()
 	var now := Engine.get_physics_frames()
+	# The bars sit above whatever stands over a head: an unblockable icon, or the finisher prompt.
 	var raised := {}
 	for icon in icons():
 		raised[icon.actor] = TUNING.icon_size + 3
+	var finishing := player.finishable_target() if not player.dead else null
+	if finishing != null:
+		raised[finishing] = PROMPT_SIZE + 3
 	for node in get_tree().get_nodes_in_group(Actor.LOCKABLE_GROUP):
 		var foe := node as Actor
 		if foe == null or foe.dead or foe.stats == null or not foe.is_inside_tree():
@@ -241,7 +247,7 @@ func prompt_at() -> Variant:
 	var foe := player.finishable_target()
 	if foe == null:
 		return null
-	return glyph_centre(foe, 7)
+	return glyph_centre(foe, PROMPT_SIZE)
 
 
 ## The centre of a glyph `size` px square over `foe`'s head: its bottom GLYPH_ABOVE above the head point.
