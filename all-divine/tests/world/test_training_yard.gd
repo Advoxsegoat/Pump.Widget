@@ -79,7 +79,6 @@ func test_yard_walls_hold_and_nobody_leaves() -> void:
 	for way_name: String in _ways():
 		var way: Vector2 = _ways()[way_name]
 		var region := _yard()
-		var edge := Vector2(signf(way.x) * (HALF - BODY - 0.0), signf(way.y) * (HALF - BODY - 0.0))
 		# Starts a metre in from the wall (or the corner), toward the middle.
 		var start := Vector2(0.0 if is_zero_approx(way.x) else signf(way.x) * (HALF - 1.0), 0.0 if is_zero_approx(way.y) else signf(way.y) * (HALF - 1.0))
 		var actor := _spawn(region, ABARAX, Vector3(start.x, 0.0, start.y))
