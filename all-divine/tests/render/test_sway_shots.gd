@@ -43,3 +43,22 @@ func test_every_dash_step_is_seen_in_every_facing() -> void:
 		for facing in ClipShots.FACINGS:
 			var m := await _shots.measure(clip, facing)
 			assert_true(m["head"] >= DASH_HEAD, "%s facing %s: the head moves %.1f px (at least %.1f)" % [clip, facing, m["head"], DASH_HEAD])
+
+
+## The ducks: the head moves at least this far in every facing, at least `best` in one, and the silhouette changes by at least
+## this many pixels in every facing, per tempo.
+const DUCK_HEAD_ALL := 3.5
+const DUCK_HEAD_BEST := {&"slip": 9.0, &"quick": 7.0, &"flurry": 7.0}
+const DUCK_SILHOUETTE := {&"slip": 200, &"quick": 150, &"flurry": 150}
+
+
+func test_every_duck_is_seen_in_every_facing() -> void:
+	for tempo: StringName in DUCK_HEAD_BEST:
+		var clip := StringName("duck_%s" % tempo)
+		var best := 0.0
+		for facing in ClipShots.FACINGS:
+			var m := await _shots.measure(clip, facing)
+			best = maxf(best, m["head"])
+			assert_true(m["head"] >= DUCK_HEAD_ALL, "%s facing %s: the head moves %.1f px (at least %.1f)" % [clip, facing, m["head"], DUCK_HEAD_ALL])
+			assert_true(m["silhouette"] >= DUCK_SILHOUETTE[tempo], "%s facing %s: %d silhouette pixels change (at least %d)" % [clip, facing, m["silhouette"], DUCK_SILHOUETTE[tempo]])
+		assert_true(best >= DUCK_HEAD_BEST[tempo], "%s: the head moves %.1f px in its best facing (at least %.1f)" % [clip, best, DUCK_HEAD_BEST[tempo]])

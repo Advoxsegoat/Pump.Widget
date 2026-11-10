@@ -64,6 +64,8 @@ const STRIDE_LEAD := 0.25
 const STRIDE_TRAIL := 0.20
 const STRIDE_BACK_FRAME := 12
 const STRIDE_BACK_TOLERANCE := 0.08
+## A sway or duck is at its furthest at least this many frames before its evade window closes.
+const PEAK_BEFORE_CLOSE := 2
 ## The foot that leads each dash-step.
 ## A dash-step's head leans at least this far ahead of the hips along its way, and comes this far down from the guard stance.
 const LEAN_AHEAD := 0.05
@@ -413,6 +415,31 @@ func test_the_head_goes_out_to_its_peak_and_back_with_no_overshoot() -> void:
 			else:
 				assert_true(now <= before + OVERSHOOT, "%s: the head is %.3f m out on f%d and %.3f on f%d, on its way back" % [id, before, frames[i - 1], now, frames[i]])
 		assert_true(peak_frame > 0 and peak_frame < frames[frames.size() - 1], "%s: the peak (f%d) is inside the clip" % [id, peak_frame])
+
+
+func test_every_sway_and_duck_is_at_its_furthest_while_it_is_still_untouchable() -> void:
+	# The body must be out of the line before its evade window closes, not as it closes: the head's furthest point from where
+	# the clip starts it (the first frame it is furthest, in any direction, the frame the render tests draw; and along its own
+	# way) comes at least PEAK_BEFORE_CLOSE frames before evade_off.
+	for id: StringName in TABLE:
+		if TABLE[id][1] == MoveData.Evade.NONE or not _rig.tree.has_animation(id):
+			continue
+		var at := _at(id)
+		var start := at[0][&"Head"] as Vector3
+		var frames := at.keys()
+		frames.sort()
+		var way := Vector3.DOWN if String(id).begins_with("duck") else (LEAN[StringName(String(id).split("_")[1])] as Vector3)
+		var closes: int = TABLE[id][3]
+		for measure in [&"anywhere", &"along its way"]:
+			var peak_frame := 0
+			var peak := 0.0
+			for frame: int in frames:
+				var off := (at[frame][&"Head"] as Vector3) - start
+				var away := off.length() if measure == &"anywhere" else off.dot(way)
+				if away > peak:  # exactly: a plateau that creeps up must not hide its peak
+					peak = away
+					peak_frame = frame
+			assert_true(peak_frame <= closes - PEAK_BEFORE_CLOSE, "%s: the head is furthest (%s) on f%d, its window closes on f%d (at least %d frames before)" % [id, measure, peak_frame, closes, PEAK_BEFORE_CLOSE])
 
 
 # --- the links ---
