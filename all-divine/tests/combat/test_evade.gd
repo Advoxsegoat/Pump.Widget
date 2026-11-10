@@ -96,7 +96,7 @@ func test_a_sweep_and_a_thrust_land_on_an_evading_body() -> void:
 			assert_false(r.perfect)
 
 
-func test_an_evade_beats_a_guard_and_a_parry_loses_to_nothing() -> void:
+func test_an_evade_comes_before_a_guard_and_a_parry_and_a_sweep_still_lands() -> void:
 	var r := _resolve({"evading": SWAY, "guarding": true})
 	assert_eq(O.keys()[r.outcome], "EVADED", "evading and guarding at once")
 	assert_eq(r.stamina_cost, 0.0, "the guard pays nothing")
@@ -236,7 +236,7 @@ func test_the_window_avoids_only_its_own_frames() -> void:
 	assert_eq(b.runner.evading, MoveData.Evade.NONE, "a move that ends takes its window with it")
 
 
-func test_three_blows_inside_one_window_are_all_evaded_and_a_fourth_after_it_lands() -> void:
+func test_five_blows_inside_one_window_are_all_evaded_and_one_after_it_lands() -> void:
 	# a swings at f10, f12, f14 and f20, c (round blows) at f11 and f13: the first five are inside the window, which is
 	# open for hitboxes that come on from f9 to f18, and the sixth is after it
 	var run := _world()
@@ -280,6 +280,7 @@ func test_a_sweep_and_a_jab_on_the_same_frame_one_evaded_one_lands() -> void:   
 	assert_eq(by_kind[PERILOUS.SWEEP][0], "HIT", "the sweep lands")
 	assert_eq(by_kind[PERILOUS.NONE][1], by_kind[PERILOUS.SWEEP][1], "on the same frame")
 	assert_eq(b.stats.hp, 92.0, "only the sweep's 8")
+	assert_false(b.runner.evaded, "the landed blow wins: no dodge is counted, so no counter would follow")
 	assert_eq(b.runner.current.id if b.runner.current != null else &"", &"flinch", "and the landed blow is the one he reacts to")
 
 

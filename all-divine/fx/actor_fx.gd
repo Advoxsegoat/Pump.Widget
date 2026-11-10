@@ -20,7 +20,8 @@ extends Node
 ## cue stamina_refused, so that a press that does nothing says so (the HUD blinks the stamina bar as well).
 ## A charge that fills (MoveRunner.charged): the FxDef charge_glow on the chest and the cue charge_hum, once, as it fills.
 ## A hit (Actor.got_hit), whatever the actor does about it: a blow that came to nothing (a WHIFF: a body held in
-## reach while invulnerable reports one every tick) shows and sounds nothing. Any other shakes the camera by the
+## reach while invulnerable reports one every tick) shows and sounds nothing, and nor does one that was avoided (EVADED:
+## nothing met the body, so no spark, flash, shake or impact; the evade has its own cues, made elsewhere). Any other shakes the camera by the
 ## profile's `shake`, and sounds where it met, by what came of it:
 ##   HIT, GRABBED        the blow reached the body: the hit_spark, a white flash of the body, and three layers of
 ##                       sound: the profile's impact_sound, the actor's surface_sound (what it is made of) and its
@@ -285,7 +286,7 @@ func _show_burst(point: Vector3) -> void:
 
 
 func _on_got_hit(result: HitResult, event: HitEvent) -> void:
-	if result.outcome == HitResult.Outcome.WHIFF:
+	if result.outcome == HitResult.Outcome.WHIFF or result.outcome == HitResult.Outcome.EVADED:
 		return
 	shake_camera(event.profile.shake)
 	if tuning.parry_burst_on and _actor.def.team == ActorDef.Team.PLAYER \

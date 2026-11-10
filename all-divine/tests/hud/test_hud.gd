@@ -115,6 +115,22 @@ func test_a_refused_press_plays_a_cue() -> void:
 	assert_true(Registry.ids(&"sounds").has("stamina_refused"), "it is a cue in data/sounds")
 
 
+func test_an_evaded_blow_does_not_show_the_foes_bars() -> void:
+	var main := _main()
+	await frames(2)
+	var foe := _foe(main)
+	var evaded := _hit_result()
+	evaded.outcome = HitResult.Outcome.EVADED
+	foe.got_hit.emit(evaded, _hit_event(foe))
+	assert_eq(main.hud.foe_bars().size(), 0, "a blow that was avoided shows no bars")
+	for outcome in [HitResult.Outcome.HIT, HitResult.Outcome.GUARDED, HitResult.Outcome.PARRIED, HitResult.Outcome.CAUGHT]:
+		var r := _hit_result()
+		r.outcome = outcome
+		foe.got_hit.emit(r, _hit_event(foe))
+		assert_eq(main.hud.foe_bars().size(), 1, "%s shows them" % HitResult.Outcome.keys()[outcome])
+		main.hud._hit_at.erase(foe)
+
+
 func test_foe_bars_show_while_locked_or_for_three_seconds_after_a_hit() -> void:
 	var main := _main()
 	var hud := main.hud

@@ -60,7 +60,7 @@ var current: MoveData
 var time := 0.0
 var iframes := false
 var hyperarmour := false
-## True between a parry_on and a parry_off mark: a blow judged now is turned back (Combat.resolve, rule 4). A move
+## True between a parry_on and a parry_off mark: a blow judged now is turned back (Combat.resolve, rule 5). A move
 ## with a parry window that starts less than the tuning's parry_refresh_frames after the last one did (counted on the
 ## actor's buffer_frame clock, so hit-stop does not count) passes its parry_on without opening it.
 var parry_window := false
@@ -68,6 +68,8 @@ var parry_window := false
 ## rule 3), else NONE. Cleared when the move ends.
 var evading: MoveData.Evade = MoveData.Evade.NONE
 ## True once a blow was evaded during the current move; false again when the next move starts (HitIntake.take sets it).
+## When an evaded blow and a landed one reach the body on the same frame the landed one wins: its reaction starts a
+## move, so this ends false, and no counter follows a dodge that got him hit.
 var evaded := false
 ## True between a guard_on and a guard_off mark: the move holds a guard up (guard_raise from its f4).
 var guard_window := false

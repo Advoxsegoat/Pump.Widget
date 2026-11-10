@@ -469,7 +469,7 @@ func _watch(foe: Actor) -> void:
 
 
 func _on_foe_hit(result: HitResult, _event: HitEvent, foe: Actor) -> void:
-	if result.outcome != HitResult.Outcome.WHIFF:
+	if result.outcome != HitResult.Outcome.WHIFF and result.outcome != HitResult.Outcome.EVADED:
 		_hit_at[foe] = Engine.get_physics_frames()
 
 

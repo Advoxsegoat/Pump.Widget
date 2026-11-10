@@ -219,6 +219,65 @@ func test_a_blow_that_whiffs_shows_and_sounds_nothing_of_a_hit() -> void:
 	assert_eq(camera.trauma, 0.0, "no shake")
 
 
+# A duel whose b (voiced, poise 20) plays a fixture evade (a SWAY window open from its first frame) when `evading`, and
+# whose a swings the jab (shake 0.4, which lands on frame 11); returns the run with the camera, `heard` (every cue
+# played over frames 1 to 14) and the outcomes a heard.
+func _evade_duel(evading: bool) -> Dictionary:
+	var stage := track(STAGE_SCENE.instantiate()) as PixelStage
+	var camera := CameraRig.new()
+	camera.stage = stage
+	stage.world.add_child(camera)
+	var voiced := Duel.def(ActorDef.Team.ENEMY, 20.0)
+	voiced.hurt_voice = &"catch_snap"
+	var run := Duel.make(self, [{"frames": 1, "press": [&"palm"]}, {"frames": 60}], [], 1.0, voiced)
+	var a: Actor = run["a"]
+	var b: Actor = run["b"]
+	var jab := (Registry.fetch(&"moves", &"palm_jab") as MoveData).duplicate() as MoveData
+	var palm := (jab.hits[&"palm"] as HitProfile).duplicate() as HitProfile
+	palm.shake = 0.4
+	jab.hits = {&"palm": palm}
+	a.def.moveset = a.def.moveset.duplicate()
+	var outcomes := []
+	a.hit_landed.connect(func(r: HitResult, _e: HitEvent) -> void: outcomes.append(r.outcome))
+	if evading:
+		var move := _fixture_move(b, [_mark(0, &"evade_on"), _mark(50, &"evade_off")])
+		move.evade = MoveData.Evade.SWAY
+		b.runner.start(move)
+	a.runner.start(jab)
+	var heard := []
+	var material := (b.rig.get_node("Model").find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D).material_override as ShaderMaterial
+	var flash := 0.0
+	while a.frame < 14:
+		await frames(1)
+		heard.append_array(Sfx.last_played())
+		flash = maxf(flash, material.get_shader_parameter(&"flash_amount"))
+	run["flash"] = flash
+	run["camera"] = camera
+	run["heard"] = heard
+	run["outcomes"] = outcomes
+	return run
+
+
+func test_an_evaded_blow_shows_and_sounds_nothing_of_a_hit() -> void:
+	var run := await _evade_duel(true)
+	assert_eq(run["outcomes"], [HitResult.Outcome.EVADED], "the jab was evaded through Melee")
+	for cue in [&"impact_palm", &"surface_cloth", &"catch_snap"]:
+		assert_false((run["heard"] as Array).has(cue), "no %s: %s" % [cue, run["heard"]])
+	assert_eq(_live(&"hit_spark").size(), 0, "no spark")
+	assert_near(run["flash"], 0.0, 1e-6, "the body never flashes")
+	assert_eq((run["camera"] as CameraRig).trauma, 0.0, "the camera is not shaken")
+
+
+func test_the_same_blow_landing_does_all_of_it() -> void:
+	var run := await _evade_duel(false)
+	assert_eq(run["outcomes"], [HitResult.Outcome.HIT], "the control: it lands")
+	for cue in [&"impact_palm", &"surface_cloth", &"catch_snap"]:
+		assert_true((run["heard"] as Array).has(cue), "%s: %s" % [cue, run["heard"]])
+	assert_eq(_live(&"hit_spark").size(), 1, "a spark")
+	assert_near(run["flash"], 1.0, 1e-6, "a flash")
+	assert_true((run["camera"] as CameraRig).trauma > 0.0, "a shake")
+
+
 func test_tells_show_glint_or_rose() -> void:
 	var stage := track(STAGE_SCENE.instantiate()) as PixelStage
 	var camera := CameraRig.new()
