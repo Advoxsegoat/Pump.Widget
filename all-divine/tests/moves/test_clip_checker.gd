@@ -6,6 +6,7 @@ const LIB := "res://assets/anim/abarax/library.tres"
 const BAD_DATA := "res://tests/fixtures/moves/bad_data"
 const REACH_DATA := "res://tests/fixtures/moves/reach_data"
 const PAIR_DATA := "res://tests/fixtures/moves/pair_data"
+const IMITATE_DATA := "res://tests/fixtures/moves/imitate_data"
 const FINISHER := "res://data/pairs/finisher_open_hand.tres"
 const HITBOXES: PackedStringArray = ["palm_l", "palm_r"]
 const MOVES: PackedStringArray = ["palm_jab", "palm_cross", "dodge_roll"]
@@ -566,6 +567,30 @@ func test_a_neutral_variant_must_be_a_move() -> void:
 	move.neutral_variant = &"palm_hook"
 	var problems := _check(move, _jab_marks())
 	assert_true(_has_problem(problems, ["palm_jab", "neutral_variant", "unknown move", "palm_hook"]), "\n".join(problems))
+
+
+# A feint wears the rim of the blow it imitates (MoveData.imitates; ActorFx reads that move's clip): a name that is no
+# move would silently show no rim.
+func test_an_imitated_move_must_be_a_move() -> void:
+	var feint := _move(&"feint", MoveData.Kind.OTHER)
+	var marks := [_m(0, &"sfx", SFX), _m(0, &"fx", FX)]
+	feint.imitates = &"palm_cross"
+	assert_eq(_check(feint, marks), PackedStringArray())
+	feint.imitates = &"palm_hok"
+	var problems := _check(feint, marks)
+	assert_true(_has_problem(problems, ["feint", "imitates", "unknown move", "palm_hok"]), "\n".join(problems))
+
+
+# tests/fixtures/moves/imitate_data: an actor on Abarax's rig whose moves imitate `blow` (the jab's clip, which has a
+# hitbox_on: fine), `roll` (the roll's clip, which has none), `nobody` (no such move) and `ghost` (a move whose clip the rig
+# does not have).
+func test_an_imitated_move_must_have_a_blow_in_the_actors_rig() -> void:
+	assert_eq(Registry.scan(IMITATE_DATA), PackedStringArray())
+	var problems := ClipChecker.new().check_all()
+	assert_false(_has_problem(problems, ["good_feint", "imitates"]), "a move with a hitbox_on is one to imitate: \n" + "\n".join(problems))
+	assert_true(_has_problem(problems, ["blind_feint", "imitates", "roll", "no hitbox_on"]), "\n".join(problems))
+	assert_true(_has_problem(problems, ["lost_feint", "imitates", "unknown move", "nobody"]), "\n".join(problems))
+	assert_true(_has_problem(problems, ["clipless_feint", "imitates", "ghost", "no_such_clip", "not in the rig"]), "\n".join(problems))
 
 
 # --- the T-pose rule, on clips and on an actor ---

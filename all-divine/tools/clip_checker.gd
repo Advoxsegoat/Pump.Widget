@@ -20,7 +20,8 @@ extends RefCounted
 ##       on-then-off pairs
 ##   every mark is a known kind and lies within [0, the clip's length]
 ##   cancel_open's `into` names existing moves; hitbox ids are hitboxes of the rig; `neutral_variant`
-##       names an existing move
+##       names an existing move; and so does `imitates` (a feint: its tell wears the rim of that move's blow, and a
+##       name that is no move would show no rim and say nothing)
 ##   tell's `kind` is glint or perilous; charge_hold is only in an ATTACK and names a profile it has
 ##   on a stepped clip (metadata step_fps above 0) every mark is on the 1/step_fps grid
 ##   for an actor of team ENEMY, every ATTACK has a tell at least TELL_LEAD frames before its first
@@ -34,7 +35,8 @@ extends RefCounted
 ## and per actor (check_actor): each required clip exists and is not a T-pose, the moveset, the reactions and the
 ## pairs (its finisher and its grab_pair) name existing moves, each move the actor can start, react with, cancel
 ## into (as the windows open for it: MoveRunner.window_of) or play in one of its pairs is checked against the actor's
-## rig and team, and each of its pairs is checked with the clips of its rig. An enemy's brain (ActorDef.brain) presses
+## rig and team, and each of its pairs is checked with the clips of its rig. A move that `imitates` another imitates one
+## whose clip is in the actor's rig and has a hitbox_on: the blow whose rim it wears. An enemy's brain (ActorDef.brain) presses
 ## only actions of the moveset (each attack's own, and the feint's when it feints), and every press of an attack's
 ## combo, with the extra blow when the brain extends combos, is taken by a cancel window of the move before it.
 ## check_all runs every actor in the Registry, and reports the moves no actor can reach and the pairs no actor
@@ -102,6 +104,8 @@ func check_move(move: MoveData, anim: Animation, hitbox_ids: PackedStringArray, 
 			out.append("%s: charge_hold at f%d is only allowed in an attack" % [id, Marks.frame_of(mark["time"])])
 	if move.neutral_variant != &"" and not move_ids.has(String(move.neutral_variant)):
 		out.append("%s: neutral_variant is the unknown move '%s'" % [id, move.neutral_variant])
+	if move.imitates != &"" and not move_ids.has(String(move.imitates)):
+		out.append("%s: imitates the unknown move '%s'" % [id, move.imitates])
 	for kind in [&"sfx", &"fx"]:
 		if _of_kind(marks, kind).is_empty():
 			out.append("%s: has no %s" % [id, kind])
@@ -455,6 +459,21 @@ func _check_combos(def: ActorDef, tree: AnimationTree, move_ids: PackedStringArr
 	return out
 
 
+# The move `move` imitates (if it names one that exists: check_move reports a name that is no move) has a blow to imitate
+# as the actor `actor_id` plays it: its clip is in the rig (`tree`) and has a hitbox_on. ActorFx reads that clip's marks for
+# the rim of the feint's tell, and with no hitbox_on there, or no clip, it shows none.
+func _check_imitated(move: MoveData, tree: AnimationTree, move_ids: PackedStringArray, actor_id: String, out: PackedStringArray) -> void:
+	if move.imitates == &"" or not move_ids.has(String(move.imitates)):
+		return
+	var model := Registry.fetch(&"moves", move.imitates) as MoveData
+	if model == null:
+		out.append("%s: imitates '%s', which is not a MoveData" % [move.id, move.imitates])
+	elif not tree.has_animation(model.clip):
+		out.append("%s: imitates '%s', whose clip '%s' is not in the rig of %s" % [move.id, move.imitates, model.clip, actor_id])
+	elif _of_kind(Marks.read(tree.get_animation(model.clip)), &"hitbox_on").is_empty():
+		out.append("%s: imitates '%s', which has no hitbox_on: there is no blow whose rim to wear" % [move.id, move.imitates])
+
+
 # check_actor, also noting in `reached` (move id -> true) every move it checked, and in `paired` (pair id -> true)
 # every pair.
 func _check_actor(def: ActorDef, reached: Dictionary, paired: Dictionary) -> PackedStringArray:
@@ -504,6 +523,7 @@ func _check_actor(def: ActorDef, reached: Dictionary, paired: Dictionary) -> Pac
 		else:
 			var anim := tree.get_animation(move.clip)
 			out.append_array(check_move(move, anim, hitbox_ids, move_ids, def.team, bone_names))
+			_check_imitated(move, tree, move_ids, id, out)
 			queue.append_array(_moves_after(move, anim, move_ids, def))
 	out.append_array(_check_combos(def, tree, move_ids))
 	for pair in _pairs_of(def):
