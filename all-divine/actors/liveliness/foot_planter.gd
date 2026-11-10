@@ -52,6 +52,11 @@ var ground := {&"foot_l": null, &"foot_r": null}
 @export var pole_l: Node3D
 @export var pole_r: Node3D
 
+## The fastest a foot's offset, the hips and a foot's tilt to the ground may change, in metres a second (INF: as fast as
+## blend_speed says). The rig sets it while the body is lifeless, so a body that dies with its feet where the ground probes
+## put them eases back to the clip's pose instead of popping to it in a frame.
+var max_rate := INF
+
 ## False while the body is in the air: the offsets fade to 0, as for a foot with no ground.
 var planting := true
 ## Each foot's offset, in metres up, as shown: smoothed, and kept out of the ground.
@@ -99,11 +104,17 @@ func _process_modification_with_delta(delta: float) -> void:
 			lowest = under.y + ankle_height - pose.origin.y
 			goal = under.y + ankle_height - minf(pose.origin.y, ankle_height)
 			normal_goal = (to_skeleton.basis * (hit.normal as Vector3)).normalized()
-		_smoothed[foot] = goal + (float(_smoothed[foot]) - goal) * keep
-		offsets[foot] = maxf(_smoothed[foot], lowest)
-		_normals[i] = normal_goal.lerp(_normals[i], keep).normalized()
+		var eased := goal + (float(_smoothed[foot]) - goal) * keep
+		_smoothed[foot] = move_toward(float(_smoothed[foot]), eased, max_rate * delta) if max_rate < INF else eased
+		var shown := maxf(_smoothed[foot], lowest)
+		# The floor that kept the ankle out of the ground goes with the planting: eased too, or the foot drops to the clip's
+		# pose in the frame the body dies.
+		offsets[foot] = move_toward(float(offsets[foot]), shown, max_rate * delta) if max_rate < INF else shown
+		var tilt_keep := keep if max_rate == INF else exp(-blend_speed * 0.15 * maxf(delta, 0.0))
+		_normals[i] = normal_goal.lerp(_normals[i], tilt_keep).normalized()
 	var drop := clampf(minf(minf(_smoothed[FEET[0]], _smoothed[FEET[1]]), 0.0), -max_drop, 0.0)
-	pelvis_offset = drop + (pelvis_offset - drop) * keep
+	var eased_pelvis := drop + (pelvis_offset - drop) * keep
+	pelvis_offset = move_toward(pelvis_offset, eased_pelvis, max_rate * delta) if max_rate < INF else eased_pelvis
 	_drop_hips(skeleton)
 	var targets: Array[Node3D] = [target_l, target_r]
 	var poles: Array[Node3D] = [pole_l, pole_r]

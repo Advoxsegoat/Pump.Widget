@@ -124,6 +124,9 @@ const RIM_PUSH_MAX := 1.2
 ## at 40 degrees).
 const BODY_BACK := 0.08
 const VIEW_FORWARD_SHARE := 0.766
+## How fast a dead body's feet may ease back to the clip's pose, in metres a second (FootPlanter.max_rate): 0.3 m/s is 5 mm
+## a frame, under the centimetre a corpse is allowed to move in one.
+const LIFELESS_FOOT_RATE := 0.3
 ## True while the body is lifeless (set_lifeless): it neither breathes, plants its feet nor looks.
 var lifeless := false
 ## The Area3D around the body, on the `hurtbox` layer, that hitboxes find. Its actor marks it with the meta
@@ -407,6 +410,8 @@ func set_stance(clip: StringName, on: bool) -> void:
 ## and Actor.revive undoes it.
 func set_lifeless(on: bool) -> void:
 	lifeless = on
+	if foot_planter != null:
+		foot_planter.max_rate = LIFELESS_FOOT_RATE if on else INF
 	if on:
 		clear_aura()
 	if breathing != null:

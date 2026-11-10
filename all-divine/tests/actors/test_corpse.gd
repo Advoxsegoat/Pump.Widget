@@ -81,3 +81,47 @@ func test_dead_abarax_lies_still_until_he_is_stood_up() -> void:
 	var a := _poses(actor)
 	await frames(37)
 	assert_true(_drift(a, _poses(actor)) > 1e-4, "and moves with his breath")
+
+
+# The most any foot of `actor` moved in one frame while `frames_to_watch` frames went by, from the frame before it died on.
+func _foot_travel(actor: Actor, frames_to_watch: int) -> float:
+	var last := {}
+	var worst := 0.0
+	var died_at := -1
+	for i in frames_to_watch:
+		await frames(1)
+		if actor.dead and died_at < 0:
+			died_at = i
+		for foot in Actor.FEET:
+			var at := actor.rig.bone_global(foot)
+			if died_at >= 0 and last.has(foot):
+				worst = maxf(worst, at.distance_to(last[foot]))
+			last[foot] = at
+		if died_at >= 0 and i > died_at + 20:
+			break
+	assert_true(died_at >= 0, "the body died")
+	return worst
+
+
+func test_a_body_killed_lying_does_not_pop_a_foot_on_the_death_frame() -> void:
+	var run := Duel.make(self, [], [], 1.2, null, null)
+	var a: Actor = run["a"]
+	var b: Actor = run["b"]
+	await frames(30)
+	b.stats.hp = 1.0
+	b.stats.damage_posture(1000.0)
+	assert_true(a.start_paired(b, a.def.finisher), "the finisher starts")
+	var travel := await _foot_travel(b, 200)
+	assert_true(travel <= 0.01, "no foot moves more than 1 cm in a frame once it is dead (%.3f m)" % travel)
+
+
+func test_a_body_killed_in_a_grab_does_not_pop_a_foot() -> void:
+	var arena := TestArena.make(self)
+	var foe := TestArena.spawn(arena, load("res://data/actors/knuckle_1.tres") as ActorDef, Brain.new(), Vector3(0, 0, 1.2), "Foe")
+	foe.place(Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, 1.2)))
+	var victim := TestArena.spawn(arena, load(ABARAX) as ActorDef, Brain.new(), Vector3.ZERO, "Victim")
+	await frames(30)
+	victim.stats.hp = 1.0
+	assert_true(foe.start_paired(victim, foe.def.grab_pair), "the grab starts")
+	var travel := await _foot_travel(victim, 200)
+	assert_true(travel <= 0.01, "no foot moves more than 1 cm in a frame once it is dead (%.3f m)" % travel)
