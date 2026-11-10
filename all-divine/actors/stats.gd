@@ -84,6 +84,16 @@ func damage_posture(amount: float) -> bool:
 	return false
 
 
+## Every bar full again, and no exhaustion or break left: what a respawn and the lull between two waves give the player.
+func refill() -> void:
+	hp = max_hp
+	stamina = max_stamina
+	exhausted = false
+	restore_posture()
+	_stamina_idle = INF
+	_posture_idle = INF
+
+
 ## Fills posture and ends the break.
 func restore_posture() -> void:
 	posture = max_posture

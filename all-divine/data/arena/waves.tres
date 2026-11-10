@@ -1,0 +1,42 @@
+[gd_resource type="Resource" script_class="ArenaWaveSet" format=3]
+
+[ext_resource type="Script" path="res://world/arena_wave_set.gd" id="1_set"]
+[ext_resource type="Script" path="res://world/arena_wave.gd" id="2_wave"]
+[ext_resource type="Script" path="res://actors/actor_def.gd" id="3_def"]
+[ext_resource type="Resource" path="res://data/actors/knuckle_1.tres" id="4_k1"]
+[ext_resource type="Resource" path="res://data/actors/knuckle_2.tres" id="5_k2"]
+[ext_resource type="Resource" path="res://data/actors/knuckle_3.tres" id="6_k3"]
+
+[sub_resource type="Resource" id="Wave_1"]
+script = ExtResource("2_wave")
+defs = Array[ExtResource("3_def")]([ExtResource("4_k1")])
+count = PackedInt32Array(1)
+
+[sub_resource type="Resource" id="Wave_2"]
+script = ExtResource("2_wave")
+defs = Array[ExtResource("3_def")]([ExtResource("4_k1")])
+count = PackedInt32Array(2)
+
+[sub_resource type="Resource" id="Wave_3"]
+script = ExtResource("2_wave")
+defs = Array[ExtResource("3_def")]([ExtResource("5_k2")])
+count = PackedInt32Array(1)
+
+[sub_resource type="Resource" id="Wave_4"]
+script = ExtResource("2_wave")
+defs = Array[ExtResource("3_def")]([ExtResource("5_k2"), ExtResource("4_k1")])
+count = PackedInt32Array(1, 1)
+
+[sub_resource type="Resource" id="Wave_5"]
+script = ExtResource("2_wave")
+defs = Array[ExtResource("3_def")]([ExtResource("6_k3")])
+count = PackedInt32Array(1)
+
+[sub_resource type="Resource" id="Wave_6"]
+script = ExtResource("2_wave")
+defs = Array[ExtResource("3_def")]([ExtResource("6_k3"), ExtResource("5_k2")])
+count = PackedInt32Array(1, 1)
+
+[resource]
+script = ExtResource("1_set")
+waves = Array[ExtResource("2_wave")]([SubResource("Wave_1"), SubResource("Wave_2"), SubResource("Wave_3"), SubResource("Wave_4"), SubResource("Wave_5"), SubResource("Wave_6")])

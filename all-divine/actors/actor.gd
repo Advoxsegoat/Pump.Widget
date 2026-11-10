@@ -420,6 +420,19 @@ func die(lying := false) -> void:
 	intake.die(lying)
 
 
+## Stands the actor up at `at` with full bars, dead or not (the player's respawn: the arena resets, and Abarax gets up at
+## its Spawn): it is alive, there, at rest and playing its def's `getup` reaction, which nothing cuts short, so it acts
+## again when he is up. What it had pressed is forgotten.
+func revive(at: Transform3D) -> void:
+	intake.revive()
+	buffer.clear()
+	place(at)
+	stats.refill()
+	_guard_held = false
+	_set_guarding(false)
+	intake.get_up()
+
+
 func _physics_process(delta: float) -> void:
 	frame += 1
 	if frozen == 0:

@@ -34,10 +34,12 @@ const GET_UP_FADE := 0.3
 var _actor: Actor
 var _death: MoveData  # the death move once die() has started it
 var _reel: MoveData  # the move a broken posture plays, while it plays
+var _hurtbox_layer := 0  # the layer the hurtbox was on, which die() takes it off and revive() puts it back on
 
 
 func _init(actor: Actor) -> void:
 	_actor = actor
+	_hurtbox_layer = actor.rig.hurtbox.collision_layer
 	_actor.runner.move_ended.connect(_on_move_ended)
 
 
@@ -116,6 +118,21 @@ func die(lying := false) -> void:
 	else:
 		_actor.collision_layer &= ~Layers.ACTOR
 	_actor.died.emit()
+
+
+## Brings a dead actor back: alive, on the `actor` layer and open to blows again (and a foe to aim at, if it is an
+## enemy), with the death clip cancelled by whatever plays next. Actor.revive is its front, and puts the body somewhere
+## and starts the get up. Nothing happens to one that is not dead.
+func revive() -> void:
+	if not _actor.dead:
+		return
+	_actor.dead = false
+	_death = null
+	_reel = null
+	_actor.collision_layer |= Layers.ACTOR
+	_actor.rig.hurtbox.collision_layer = _hurtbox_layer
+	if _actor.def.team == ActorDef.Team.ENEMY:
+		_actor.add_to_group(Actor.LOCKABLE_GROUP)
 
 
 ## Ends a broken posture: the posture is full again (whether or not it was broken) and the actor leaves the group
