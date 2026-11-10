@@ -11,6 +11,10 @@ extends Control
 ##   - a foe's posture and HP bars (24 px) over its head while it is locked on, or for 3 s after a blow reached it
 ##   - the lock reticle, a 5x5 rose diamond at the head of the foe locked on to
 ##   - the finisher prompt, a 7x7 rose glyph over the foe the player's palm would finish now (Actor.finishable_target)
+##   - the unblockable icon over the head of an enemy giving a perilous attack its tell (ActorFx.icon_shape): a 9x9 rose
+##     glyph with a 1 px dark outline, one shape for each answer (a sweep: hop it; a thrust: catch it; a grab: roll away),
+##     drawn from the tell to the blow's last hitbox_off, its bottom at least 4 px above the head point, never over the
+##     body (spec 3.5)
 ##   - the wave as pips, top centre
 ##   - the controls, bottom right, for the first 8 s and again whenever F1 (a pad's Select) toggles them
 ## Where something stands in the world is projected by the stage's camera, to the pixel the world is drawn at (the stage's
@@ -75,6 +79,45 @@ const JOY_AXES := {
 const MOUSE_BUTTONS := {MOUSE_BUTTON_LEFT: "LMB", MOUSE_BUTTON_RIGHT: "RMB", MOUSE_BUTTON_MIDDLE: "MMB"}
 ## The wave pips' states, as pip_states() gives them.
 enum Pip { COMING, ON, CLEARED }
+## The icons' numbers (their size, colour and how far above the head they sit).
+const TUNING := preload("res://data/tuning/readability.tres")
+## The unblockable icon of each answer, as 9 rows of 9 cells, an X where the glyph is drawn: a sweep is an upward chevron
+## over a low bar (hop it), a thrust a point between two brackets (catch it), a grab a sideways double chevron (roll away).
+const ICON_CELLS := {
+	HitProfile.Perilous.SWEEP: [
+		"....X....",
+		"...XXX...",
+		"..XX.XX..",
+		".XX...XX.",
+		"XX.....XX",
+		".........",
+		".........",
+		"XXXXXXXXX",
+		"XXXXXXXXX",
+	],
+	HitProfile.Perilous.THRUST: [
+		"XX.....XX",
+		"X.......X",
+		"X.XXXXX.X",
+		"X..XXX..X",
+		"X...X...X",
+		"X.......X",
+		"X.......X",
+		"X.......X",
+		"XX.....XX",
+	],
+	HitProfile.Perilous.GRAB: [
+		".........",
+		"XX..XX...",
+		".XX..XX..",
+		"..XX..XX.",
+		"...XX..XX",
+		"..XX..XX.",
+		".XX..XX..",
+		"XX..XX...",
+		".........",
+	],
+}
 
 var player: Actor
 var camera_rig: CameraRig
@@ -161,6 +204,9 @@ func foe_bars() -> Array[Dictionary]:
 		return shown
 	var locked := _locked()
 	var now := Engine.get_physics_frames()
+	var raised := {}
+	for icon in icons():
+		raised[icon.actor] = TUNING.icon_size + 3
 	for node in get_tree().get_nodes_in_group(Actor.LOCKABLE_GROUP):
 		var foe := node as Actor
 		if foe == null or foe.dead or foe.stats == null or not foe.is_inside_tree():
@@ -170,7 +216,7 @@ func foe_bars() -> Array[Dictionary]:
 			continue
 		var head := picture_point(_head(foe))
 		var x := int(head.x) - FOE_BAR / 2
-		var hp_y := int(head.y) - FOE_ABOVE - FOE_HP_HEIGHT
+		var hp_y := int(head.y) - FOE_ABOVE - FOE_HP_HEIGHT - int(raised.get(foe, 0))
 		shown.append({
 			actor = foe,
 			hp = Rect2i(x, hp_y, ceili(FOE_BAR * foe.stats.hp / foe.stats.max_hp), FOE_HP_HEIGHT),
@@ -202,6 +248,27 @@ func prompt_at() -> Variant:
 func glyph_centre(foe: Actor, size: int) -> Vector2i:
 	var head := Vector2i(picture_point(_head(foe)))
 	return Vector2i(head.x, head.y - GLYPH_ABOVE - size / 2 - 1)
+
+
+## The unblockable icons shown now, one for each enemy whose perilous tell is on (ActorFx.icon_shape) as {actor, shape,
+## centre, rect}: the shape (a HitProfile.Perilous), the middle of its 9x9 glyph and the glyph's rect, in picture pixels. The
+## glyph's bottom edge is TUNING.icon_above pixels over the head point (4 at the least), and it follows the head.
+func icons() -> Array[Dictionary]:
+	var shown: Array[Dictionary] = []
+	if player == null or camera_rig == null or not is_instance_valid(camera_rig.camera) or not camera_rig.camera.is_inside_tree():
+		return shown
+	for node in get_tree().get_nodes_in_group(Actor.GROUP):
+		var foe := node as Actor
+		if foe == null or foe.dead or foe == player or not foe.is_inside_tree():
+			continue
+		var fx := foe.get_node_or_null(^"ActorFx") as ActorFx
+		if fx == null or fx.icon_shape == HitProfile.Perilous.NONE:
+			continue
+		var head := Vector2i(picture_point(_head(foe)))
+		var size := TUNING.icon_size
+		var rect := Rect2i(head.x - size / 2, head.y - maxi(TUNING.icon_above, 4) - size, size, size)
+		shown.append({actor = foe, shape = fx.icon_shape, centre = rect.get_center(), rect = rect})
+	return shown
 
 
 ## The wave pips, left to right: Pip.CLEARED for waves done, Pip.ON for the one on, Pip.COMING for the rest. None without an
@@ -270,6 +337,8 @@ func _draw() -> void:
 		var prompt: Variant = prompt_at()
 		if prompt is Vector2i:
 			_glyph(prompt)
+		for icon in icons():
+			_draw_icon(icon.shape, icon.rect)
 	_draw_pips()
 	if hints_visible:
 		_draw_hints()
@@ -330,6 +399,21 @@ func _draw_hints() -> void:
 		draw_string_outline(font, at, line, HORIZONTAL_ALIGNMENT_LEFT, -1, HINT_FONT_SIZE, 3, INK)
 		draw_string(font, at, line, HORIZONTAL_ALIGNMENT_LEFT, -1, HINT_FONT_SIZE, Color.WHITE)
 		y += HINT_FONT_SIZE + 2
+
+
+# An unblockable icon: the rose cells of its shape in `rect`, in a dark outline one pixel thick.
+func _draw_icon(shape: int, rect: Rect2i) -> void:
+	var rows: Array = ICON_CELLS[shape]
+	for pass_outline in [true, false]:
+		for y in rows.size():
+			for x in (rows[y] as String).length():
+				if (rows[y] as String)[x] != "X":
+					continue
+				var cell := Vector2i(rect.position.x + x, rect.position.y + y)
+				if pass_outline:
+					draw_rect(Rect2(cell - Vector2i.ONE, Vector2(3, 3)), INK)
+				else:
+					draw_rect(Rect2(cell, Vector2(1, 1)), TUNING.icon_color)
 
 
 # A filled diamond of radius `r` pixels about `centre` (a (2r+1) square), with a dark outline of one more if `outlined`.

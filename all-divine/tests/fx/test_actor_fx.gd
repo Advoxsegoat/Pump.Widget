@@ -237,12 +237,7 @@ func test_tells_show_glint_or_rose() -> void:
 	sounds = await _sounds(a, 8)
 	assert_eq(sounds[8], [&"perilous_sting"] as Array, "the perilous tell's sting")
 	assert_eq(_live(&"perilous_rose").size(), 1, "its rose")
-	assert_eq(material.get_shader_parameter(&"flash_color"), ROSE, "and the body flashes rose")
-	assert_near(material.get_shader_parameter(&"flash_amount"), 1.0, 0.1, "for a quarter of a second")
-	await frames(20)
-	assert_true(material.get_shader_parameter(&"flash_amount") < 0.4, "fading")
-	await frames(10)
-	assert_near(material.get_shader_parameter(&"flash_amount"), 0.0, 1e-6, "gone by 0.25 s")
+	assert_near(material.get_shader_parameter(&"flash_amount"), 0.0, 1e-6, "and the body no longer flashes: the tell is a rim on its edge, never a tint (tests/fx/test_readability.gd)")
 
 
 func test_a_shake_mark_shakes_the_camera_by_its_strength() -> void:

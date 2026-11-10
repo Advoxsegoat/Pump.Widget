@@ -51,6 +51,12 @@ extends Node3D
 
 ## The shader every body is drawn with: the toon light ramp held to the palette.
 const TOON_SHADER := preload("res://render/shaders/toon_character.gdshader")
+## The shader of the rim light on the silhouette (aura): a second pass over the body, an inverted hull.
+const RIM_SHADER := preload("res://render/shaders/toon_rim.gdshader")
+## An aura rises over this many seconds (or a third of its time, if that is shorter) and fades over the last of this many
+## (or two fifths of its time).
+const AURA_RISE := 0.05
+const AURA_FADE := 0.12
 
 ## The clip a slot is loaded with to hold the pose the tree showed (see play_move). It is added to the rig's
 ## own copy of the actor's library, and holds one key per bone the cancelled move's clip poses.
@@ -108,6 +114,8 @@ var looks: Array[LookAtModifier3D] = []
 ## True while a move carries the body through the air (the hop; MoveRunner sets it from the move's airborne marks): the
 ## feet are not planted then.
 var airborne := false
+## How wide an aura's rim is, in pixels of the 640x360 picture: 1 to 2.
+var rim_width_px := 1.5
 ## True while the body is lifeless (set_lifeless): it neither breathes, plants its feet nor looks.
 var lifeless := false
 ## The Area3D around the body, on the `hurtbox` layer, that hitboxes find. Its actor marks it with the meta
@@ -145,6 +153,14 @@ var _look_time := 0.0  # seconds since then
 var _material: ShaderMaterial  # the toon material of apply_palette, or null before it
 var _flash_seconds := 0.0  # how long the flash in progress was to last, and how long it has left
 var _flash_left := 0.0
+var _rim: ShaderMaterial  # the rim pass's material, made the first time an aura is asked for
+var _aura_on := false
+var _aura_color := Color.WHITE
+var _aura_strength := 1.0  # the aura's strongest, 0 to 1
+var _aura_seconds := 0.0  # how long it lasts, and how far into that it is
+var _aura_time := 0.0
+var _aura_build := 0.0  # over its last this many seconds it climbs from _aura_start of its strength to all of it
+var _aura_start := 1.0
 
 
 func _ready() -> void:
@@ -246,6 +262,68 @@ func flash(color: Color, seconds: float) -> void:
 	_material.set_shader_parameter(&"flash_amount", 1.0)
 
 
+## Lights the silhouette's edge `color` for `seconds`: a rim light on the body's outline, `rim_width_px` wide (1 to 2 pixels
+## of the picture), never on its inside. It rises fast, holds and fades over its last AURA_FADE (or two fifths of its
+## time); `strength` (0 to 1) is how much of the colour shows at its strongest. With `build` above 0 it holds at `start` of
+## that strength until the last `build` seconds of the hold and climbs to all of it by the end of the hold (a blow about to
+## land). A tell asks for its time plus the fade and ends the aura itself at its end mark (clear_aura), so what shows
+## between is the hold, not the fade. A new aura replaces the one in progress. It is counted in the rig's own ticks, so a
+## body frozen by hit-stop holds it.
+func aura(color: Color, seconds: float, strength := 1.0, build := 0.0, start := 1.0) -> void:
+	if seconds <= 0.0:
+		return
+	_ensure_rim()
+	_aura_on = true
+	_aura_color = color
+	_aura_strength = clampf(strength, 0.0, 1.0)
+	_aura_seconds = seconds
+	_aura_time = 0.0
+	_aura_build = build
+	_aura_start = clampf(start, 0.0, 1.0)
+	_rim.set_shader_parameter(&"rim_color", color)
+	_rim.set_shader_parameter(&"rim_width", rim_width_px)
+	_apply_aura()
+	_set_rim_pass(true)
+
+
+## Ends the aura now.
+func clear_aura() -> void:
+	_aura_on = false
+	if _rim != null:
+		_rim.set_shader_parameter(&"rim_strength", 0.0)
+		_set_rim_pass(false)
+
+
+## Whether an aura is on.
+func aura_active() -> bool:
+	return _aura_on
+
+
+## How strong the aura is now, 0 to 1 (0 with none): its strength times how far it has risen, held and faded.
+func aura_level() -> float:
+	if not _aura_on:
+		return 0.0
+	var rise := minf(AURA_RISE, _aura_seconds * 0.3)
+	var fade := minf(AURA_FADE, _aura_seconds * 0.4)
+	var up := clampf(_aura_time / rise, 0.0, 1.0) if rise > 0.0 else 1.0
+	var down := clampf((_aura_seconds - _aura_time) / fade, 0.0, 1.0) if fade > 0.0 else 1.0
+	var ramp := _aura_start
+	if _aura_build > 0.0:
+		var hold_ends := _aura_seconds - fade
+		ramp = lerpf(_aura_start, 1.0, clampf((_aura_time - (hold_ends - _aura_build)) / _aura_build, 0.0, 1.0))
+	return _aura_strength * minf(up, down) * ramp
+
+
+## The colour of the aura in progress.
+func aura_color() -> Color:
+	return _aura_color
+
+
+## The rim pass's material (null before the first aura): its uniforms are what the screen shows.
+func rim_material() -> ShaderMaterial:
+	return _rim
+
+
 ## Where the clip of a stepped move is shown at gameplay time `t`: on a grid of `fps` steps per second,
 ## except that the first step shows as soon as the move starts (so a press answers at once), and the
 ## rest land on the grid (so marks, which sit on it, line up with what is shown). Smooth clips
@@ -301,6 +379,8 @@ func set_stance(clip: StringName, on: bool) -> void:
 ## and Actor.revive undoes it.
 func set_lifeless(on: bool) -> void:
 	lifeless = on
+	if on:
+		clear_aura()
 	if breathing != null:
 		breathing.active = not on
 	if on:
@@ -463,6 +543,12 @@ func stop_move(blend_out: float) -> void:
 ## the markers this places; with physics interpolation on, outside the physics step they read where the
 ## markers were at the start of the frame, so the legs and head would aim a frame late.
 func tick(delta: float) -> void:
+	if _aura_on:
+		_aura_time += delta
+		if _aura_time >= _aura_seconds:
+			clear_aura()
+		else:
+			_apply_aura()
 	if _flash_left > 0.0:
 		_flash_left = maxf(_flash_left - delta, 0.0)
 		_material.set_shader_parameter(&"flash_amount", _flash_left / _flash_seconds if _flash_left > 1e-6 else 0.0)
@@ -593,6 +679,27 @@ func _filter_upper_body() -> void:
 		blend.set_filter_path(NodePath("%s:%s" % [skeleton_path, skeleton.get_bone_name(bone)]), true)
 		under.append_array(Array(skeleton.get_bone_children(bone)))
 	blend.filter_enabled = true
+
+
+# The rim pass's material, made once.
+func _ensure_rim() -> void:
+	if _rim != null:
+		return
+	_rim = ShaderMaterial.new()
+	_rim.shader = RIM_SHADER
+	_rim.set_shader_parameter(&"rim_strength", 0.0)
+
+
+# Gives the rim pass the aura's strength for its time, and the floor it stands on.
+func _apply_aura() -> void:
+	_rim.set_shader_parameter(&"rim_strength", aura_level())
+	_rim.set_shader_parameter(&"ground_y", global_position.y)
+
+
+# Puts the rim pass over every mesh of the body (the overlay is drawn after the body's own pass), or takes it off.
+func _set_rim_pass(on: bool) -> void:
+	for mesh in $Model.find_children("*", "MeshInstance3D", true, false):
+		(mesh as MeshInstance3D).material_overlay = _rim if on else null
 
 
 # Keeps each bone's pose as the skeleton shows it: called while it updates, with the modifiers applied.
