@@ -101,8 +101,8 @@ func take(events: Array[HitEvent], results: Array[HitResult], turned: Array[HitE
 
 ## Kills the actor, once: it plays its def's `death` reaction, its hurtbox goes off (no blow finds it again),
 ## what it had pressed is forgotten and its brain is ignored from then on, it is no longer a foe to aim at or to
-## finish, and `died` is emitted. When the death clip ends, the body leaves the `actor` layer and lies as the clip
-## left it (at once, with no death clip). A body already `lying` where a paired move left it plays no death clip
+## finish, its body goes still (Rig.set_lifeless: no breath, no planted feet, no look) and `died` is emitted. When the
+## death clip ends, the body leaves the `actor` layer and lies as the clip left it (at once, with no death clip). A body already `lying` where a paired move left it plays no death clip
 ## either: it stays as it lies, so a corpse never stands up to fall again.
 func die(lying := false) -> void:
 	if _actor.dead:
@@ -111,6 +111,7 @@ func die(lying := false) -> void:
 	_actor.remove_from_group(Actor.LOCKABLE_GROUP)
 	_actor.remove_from_group(Actor.FINISHABLE_GROUP)
 	_actor.buffer.clear()
+	_actor.rig.set_lifeless(true)
 	_actor.rig.hurtbox.collision_layer = 0
 	_death = null if lying else _reaction_move(&"death")
 	if _death != null:
@@ -130,6 +131,7 @@ func revive() -> void:
 	_death = null
 	_reel = null
 	_actor.collision_layer |= Layers.ACTOR
+	_actor.rig.set_lifeless(false)
 	_actor.rig.hurtbox.collision_layer = _hurtbox_layer
 	if _actor.def.team == ActorDef.Team.ENEMY:
 		_actor.add_to_group(Actor.LOCKABLE_GROUP)

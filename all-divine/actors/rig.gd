@@ -108,6 +108,8 @@ var looks: Array[LookAtModifier3D] = []
 ## True while a move carries the body through the air (the hop; MoveRunner sets it from the move's airborne marks): the
 ## feet are not planted then.
 var airborne := false
+## True while the body is lifeless (set_lifeless): it neither breathes, plants its feet nor looks.
+var lifeless := false
 ## The Area3D around the body, on the `hurtbox` layer, that hitboxes find. Its actor marks it with the meta
 ## `actor`, which is how a HitScanner knows whose body it reached.
 var hurtbox: Area3D
@@ -293,6 +295,21 @@ func set_stance(clip: StringName, on: bool) -> void:
 	_stance_goal = 1.0 if on else 0.0
 
 
+## Makes the body lifeless (or alive again): a corpse is still. Breathing stops, the feet are no longer planted on the
+## ground under them (the clip's pose is all there is) and the head looks at nothing, at once rather than over the
+## look's fade, so that a body held on its last pose (a death's) shows the same pose tick after tick. Actor.die does it
+## and Actor.revive undoes it.
+func set_lifeless(on: bool) -> void:
+	lifeless = on
+	if breathing != null:
+		breathing.active = not on
+	if on:
+		_look_point = null
+		_look_weight = 0.0
+		_look_from = 0.0
+		_show_look()
+
+
 ## Sets how out of breath the body is, 0 (at rest) to 1; it fades back to rest by itself over six seconds.
 ## The actor sets 1 while it sprints.
 func set_exertion(exertion: float) -> void:
@@ -471,7 +488,7 @@ func tick(delta: float) -> void:
 		# The warp is for locomotion: a move's clip poses the whole body.
 		warp.influence = 1.0 - _layer
 	if foot_planter != null:
-		foot_planter.planting = not airborne
+		foot_planter.planting = not airborne and not lifeless
 	_place_look_target()
 	_look_time += delta
 	_show_look()
@@ -597,7 +614,7 @@ func _fade_look() -> void:
 func _show_look() -> void:
 	if looks.is_empty():
 		return
-	var goal := 0.0 if _look_point == null else 1.0
+	var goal := 0.0 if _look_point == null or lifeless else 1.0
 	var ease_with := looks[0]
 	if ease_with.duration <= 0.0 or _look_time >= ease_with.duration:
 		_look_weight = goal
