@@ -48,6 +48,8 @@ const FOE_SHOWN_FRAMES := 180
 ## The stamina bar's blink: lit for this many physics frames, dark for as many, twice.
 const BLINK_FRAMES := 2
 const BLINKS := 2
+## A refused press blinks the bar (and sounds) at most once in this many physics frames: the length of a blink.
+const REFUSAL_FRAMES := 2 * BLINKS * BLINK_FRAMES
 ## Where the glyphs over a head sit: the glyph's bottom this many pixels above the head point.
 const GLYPH_ABOVE := 6
 ## The wave pips: each this square, this far apart, this far from the top.
@@ -503,4 +505,7 @@ func _on_foe_hit(result: HitResult, _event: HitEvent, foe: Actor) -> void:
 
 
 func _on_refused(_move: MoveData, _reason: StringName) -> void:
-	_refused_at = Engine.get_physics_frames()
+	# A press mashed while the bar blinks does not restart it: one blink (and one cue) every 8 frames at most.
+	var now := Engine.get_physics_frames()
+	if now - _refused_at >= REFUSAL_FRAMES:
+		_refused_at = now

@@ -54,6 +54,8 @@ const CHARGE_FX := &"charge_glow"
 const TUNING := preload("res://data/tuning/readability.tres")
 ## Marks within this many seconds of the clock's time are the ones that have passed (a clip saved to disk keeps its times a
 ## little off the frame).
+## The refusal cue sounds once in this many physics frames at most.
+const REFUSAL_CUE_FRAMES := 8
 const MARKS_EPSILON := 1e-4
 
 ## The bones effects were asked to ride that the actor's skeleton lacks, each once, in the order met: each was warned of
@@ -66,6 +68,7 @@ var tuning: ReadabilityTuning = TUNING
 var icon_shape: HitProfile.Perilous = HitProfile.Perilous.NONE
 
 var _actor: Actor
+var _refused_cue_at := -1000  # the physics frame the refusal cue last sounded on
 var _plan := {}  # the rim of the tell in progress, driven every frame (_drive_rim); empty with none
 var _tell_end := &""  # the mark that ends the tell in progress (hitbox_on or hitbox_off), or &"" with none
 var _offs_left := 0  # for a perilous tell: how many hitbox_off marks are still to come
@@ -113,7 +116,10 @@ func _on_mark(kind: StringName, args: Dictionary) -> void:
 
 
 func _on_move_refused(_move: MoveData, _reason: StringName) -> void:
-	if _actor.def.team == ActorDef.Team.PLAYER:
+	# One cue in REFUSAL_CUE_FRAMES at most, however fast the press is mashed (the Hud blinks as seldom).
+	var now := Engine.get_physics_frames()
+	if _actor.def.team == ActorDef.Team.PLAYER and now - _refused_cue_at >= REFUSAL_CUE_FRAMES:
+		_refused_cue_at = now
 		Sfx.play(&"stamina_refused")
 
 

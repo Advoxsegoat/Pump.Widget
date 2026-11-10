@@ -275,3 +275,25 @@ func test_the_controls_come_from_the_bindings_and_f1_hides_them() -> void:
 	back.pressed = true
 	main.get_viewport().push_input(back)
 	assert_true(hud.hints_visible, "a pad's Select toggles it too")
+
+
+func test_a_mashed_refused_press_gives_one_cue_and_one_blink_every_eight_frames() -> void:
+	var main := _main()
+	var hud := main.hud
+	var player := main.player
+	await frames(2)
+	player.stats.spend_stamina(1000.0)
+	var jab := Registry.fetch(&"moves", &"palm_jab") as MoveData
+	var cues := 0
+	var lit: Array[bool] = []
+	for i in 40:
+		if i % 2 == 0:
+			player.runner.start(jab)  # a press every other frame, refused each time
+		lit.append(hud.stamina_blink_on())
+		if Sfx.last_played().has(&"stamina_refused"):
+			cues += 1
+		await frames(1)
+	assert_true(cues <= 5 and cues >= 4, "a cue at most every 8 frames (%d in 40 frames)" % cues)
+	var pattern := [true, true, false, false, true, true, false, false]
+	for i in 40:
+		assert_eq(lit[i], pattern[i % 8], "the blink repeats cleanly once per 8 frames (frame %d)" % i)
