@@ -923,13 +923,16 @@ func test_a_sway_or_duck_needs_neither_iframes_nor_cues_but_a_dodge_that_is_not_
 	assert_true(_has_problem(plain, ["dodge has no iframes_on"]), "a dodge that is no evade is held to its iframes: %s" % ["\n".join(plain)])
 
 
-func test_a_dash_step_is_a_dodge_that_is_never_invulnerable_but_has_its_cues() -> void:
-	var move := _move(&"dash_step_fixture", MoveData.Kind.DODGE)
+func test_a_dodge_that_is_not_invulnerable_has_no_iframes_but_has_its_cues() -> void:
+	var move := _move(&"dash_fixture", MoveData.Kind.DODGE)
+	move.invulnerable = false
 	var cues := [_m(1, &"fx", {"name": &"palm_trail"}), _m(1, &"sfx", {"name": &"palm_whoosh"})]
 	assert_eq(_check(move, cues), PackedStringArray(), "a dash-step is held to no iframes")
 	var problems := _check(move, [])
 	assert_false(_has_problem(problems, ["iframes"]), "\n".join(problems))
 	assert_true(_has_problem(problems, ["no sfx"]), "but it still needs its cues: %s" % ["\n".join(problems)])
+	problems = _check(move, cues + [_m(3, &"iframes_on"), _m(9, &"iframes_off")])
+	assert_true(_has_problem(problems, ["dash_fixture", "not invulnerable", "iframes"]), "and it may not carry iframes: %s" % ["\n".join(problems)])
 
 
 func test_a_directional_target_must_be_a_move() -> void:
@@ -939,3 +942,31 @@ func test_a_directional_target_must_be_a_move() -> void:
 	var problems := _check(move, marks)
 	assert_true(_has_problem(problems, ["sway_fixture", "directional", "back", "no_such_move"]), "\n".join(problems))
 	assert_false(_has_problem(problems, ["right"]), "a move that exists is fine: %s" % ["\n".join(problems)])
+
+
+# ClipChecker.NOT_YET_STARTED seeds moves that nothing starts yet into the player's walk, so that their clips are checked. Once
+# the moveset or a cancel window of a move the player can reach names one of them, it is started for real and needs no seed.
+func test_a_move_the_checker_seeds_is_one_nothing_starts_yet() -> void:
+	var def := Registry.fetch(&"actors", &"abarax") as ActorDef
+	var lib := load(LIB) as AnimationLibrary
+	var queue: Array[String] = []
+	for id in def.moveset.values() + def.reactions.values():
+		queue.append(String(id))
+	var seen := {}
+	while not queue.is_empty():
+		var id: String = queue.pop_back()
+		if id == "" or seen.has(id) or not Registry.ids(&"moves").has(id):
+			continue
+		seen[id] = true
+		var move := Registry.fetch(&"moves", StringName(id)) as MoveData
+		if move == null or not lib.has_animation(move.clip):
+			continue
+		for mark in Marks.read(lib.get_animation(move.clip)):
+			if mark["kind"] == &"cancel_open" and mark["args"].get("into") is Dictionary:
+				for target in MoveRunner.window_of(move, mark["args"]["into"], def).values():
+					queue.append(String(target))
+		queue.append(String(move.neutral_variant))
+		for target in move.directional.values():
+			queue.append(String(target))
+	for id in ClipChecker.NOT_YET_STARTED:
+		assert_false(seen.has(String(id)), "'%s' is now started by the moveset or a cancel window: delete it from ClipChecker.NOT_YET_STARTED" % id)

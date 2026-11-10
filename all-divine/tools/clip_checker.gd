@@ -8,8 +8,8 @@ extends RefCounted
 ##   an ATTACK has, for each hitbox id, hitbox_on before hitbox_off; at least one cancel_open; and exactly
 ##       one recovery, at or after the last hitbox_off; at least one entry in `hits`; and every hitbox_on
 ##       names (`profile`) one of those entries
-##   a DODGE has iframes_on before iframes_off (a sway or duck has its evade window instead, a dash-step none: it is never
-##       invulnerable)
+##   a DODGE has iframes_on before iframes_off (a sway or duck has its evade window instead; a move that is not `invulnerable`, the
+##       dash-step, has none)
 ##   a REACTION other than the death has exactly one recovery
 ##   every move has at least one sfx and one fx (a sway or duck sounds from the rules of the evade, not from a mark)
 ##   every fx names an FxDef in the Registry kind `fx` and every sfx a SoundCue in the kind `sounds` (a mark with
@@ -66,9 +66,6 @@ const WINDOW_PAIRS := {
 }
 ## The frame every evade window opens on, so that a sway or duck pressed at the last moment is safe from its second frame.
 const EVADE_OPENS := 2
-## A dodge whose id starts with this is never invulnerable (spec 3.7: the dash-step), so it needs no iframes; a sway or
-## duck has its evade window in their place.
-const NEVER_INVULNERABLE := "dash_step"
 ## The moves of the sway-and-duck defence that no moveset or cancel window names yet (the input that starts them is the
 ## next task's), seeded into every player actor's walk so that their clips are checked. Once the moveset and the windows
 ## name them, this list goes.
@@ -100,7 +97,12 @@ func check_move(move: MoveData, anim: Animation, hitbox_ids: PackedStringArray, 
 			_check_tells(id, move, marks, out)
 	elif move.kind == MoveData.Kind.DODGE:
 		var iframes := _check_windows(marks, &"iframes_on", &"iframes_off", func(_m: Dictionary) -> String: return "iframes")
-		if iframes["count"] == 0 and move.evade == MoveData.Evade.NONE and not String(move.id).begins_with(NEVER_INVULNERABLE):
+		if move.evade != MoveData.Evade.NONE:
+			pass  # an evade has its window in the place of iframes
+		elif not move.invulnerable:
+			if iframes["count"] > 0:
+				out.append("%s: is not invulnerable but its clip has iframes marks" % id)
+		elif iframes["count"] == 0:
 			out.append("%s: dodge has no iframes_on" % id)
 		for problem: String in iframes["problems"]:
 			out.append("%s: %s" % [id, problem])

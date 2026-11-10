@@ -23,6 +23,9 @@ enum Evade { NONE, SWAY, DUCK }
 ## The evade the move's evade window is, while it is open (see Evade). A move with an evade window says which here, and
 ## a move without one leaves it NONE: the clip checker holds the two together.
 @export var evade: Evade = Evade.NONE
+## Whether a dodge has iframes: the roll does, the dash-step never does (spec 3.7). The clip checker holds the clip to it:
+## the iframes marks of one that is, none on one that is not. (A sway or duck has its evade window instead.)
+@export var invulnerable := true
 ## After a dodge that avoided nothing, the frame of this move before which another sway or duck cannot start: twice the
 ## evade window's length, so a press at random is paid for in time as well as stamina. 0 for a move that does not bar one.
 @export var redodge_frame := 0

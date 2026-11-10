@@ -19,8 +19,8 @@ extends RefCounted
 ##
 ## A clip can be made from more than one of the Quaternius clips, in this order: the clip and the clips
 ## `then` appended to it are joined end to end (join); the joined clip is then retimed to `length`, or
-## time-warped by `warp` (apply_warp); its root's travel is then turned about the vertical by `root_turn`
-## (turn_root); last, a hand-keyed `layer` of bone rotations (and of the pelvis's travel) is laid over it
+## time-warped by `warp` (apply_warp); a `root_travel` then writes the root's travel
+## (write_root_travel); last, a hand-keyed `layer` of bone rotations (and of the pelvis's travel) is laid over it
 ## (apply_layer). The keys of clips.cfg are listed at build.
 
 ## The node the rig puts the model under; the first part of every bone track's path.
@@ -761,12 +761,12 @@ static func _layer_keys_problem(keys: Variant) -> String:
 static func _layer_rotation(keys: Array, frame: float) -> Quaternion:
 	if keys.is_empty() or frame < float(keys[0][0]) - FRAME_EPSILON or frame > float(keys[keys.size() - 1][0]) + FRAME_EPSILON:
 		return Quaternion.IDENTITY
-	var degrees := _key_degrees(keys[keys.size() - 1])
+	var degrees := _key_values(keys[keys.size() - 1])
 	for i in keys.size() - 1:
 		if frame <= float(keys[i + 1][0]) + FRAME_EPSILON:
 			var span := float(keys[i + 1][0]) - float(keys[i][0])
 			var weight := clampf((frame - float(keys[i][0])) / span, 0.0, 1.0) if span > 0.0 else 1.0
-			degrees = _key_degrees(keys[i]).lerp(_key_degrees(keys[i + 1]), weight)
+			degrees = _key_values(keys[i]).lerp(_key_values(keys[i + 1]), weight)
 			break
 	return Basis.from_euler(degrees * (PI / 180.0), EULER_ORDER_YXZ).get_rotation_quaternion()
 
@@ -776,18 +776,18 @@ static func _layer_rotation(keys: Array, frame: float) -> Quaternion:
 static func _layer_move(keys: Array, frame: float) -> Vector3:
 	if keys.is_empty() or frame < float(keys[0][0]) - FRAME_EPSILON or frame > float(keys[keys.size() - 1][0]) + FRAME_EPSILON:
 		return Vector3.ZERO
-	var shift := _key_degrees(keys[keys.size() - 1])
+	var shift := _key_values(keys[keys.size() - 1])
 	for i in keys.size() - 1:
 		if frame <= float(keys[i + 1][0]) + FRAME_EPSILON:
 			var span := float(keys[i + 1][0]) - float(keys[i][0])
 			var weight := clampf((frame - float(keys[i][0])) / span, 0.0, 1.0) if span > 0.0 else 1.0
-			shift = _key_degrees(keys[i]).lerp(_key_degrees(keys[i + 1]), weight)
+			shift = _key_values(keys[i]).lerp(_key_values(keys[i + 1]), weight)
 			break
 	return shift
 
 
-# The x, y and z angles of a layer key [frame, x_deg, y_deg, z_deg], in degrees (for PELVIS_MOVE: the metres).
-static func _key_degrees(key: Array) -> Vector3:
+# The x, y and z of a layer key [frame, x, y, z]: degrees in a bone's keys, metres in PELVIS_MOVE's.
+static func _key_values(key: Array) -> Vector3:
 	return Vector3(float(key[1]), float(key[2]), float(key[3]))
 
 
