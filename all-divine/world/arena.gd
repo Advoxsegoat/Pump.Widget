@@ -119,7 +119,8 @@ func reset() -> void:
 		else:
 			player.place(spawn())
 			player.stats.refill()
-	start_wave(maxi(wave, 0))
+	# A wave that was cleared is over: the reset sends the next (once), not the same again.
+	start_wave(wave + 1 if _cleared else maxi(wave, 0))
 
 
 ## Takes every foe away, the wave's and the debug ones, and the pending next wave and reset with them.
@@ -281,10 +282,12 @@ func _on_enemy_died() -> void:
 			return
 	_cleared = true
 	wave_cleared.emit(wave)
-	if automatic:
+	# With the player dead, the reset that follows his death sends the next wave: a timer of its own would send it twice.
+	if automatic and not (player != null and is_instance_valid(player) and player.dead):
 		_next_in = NEXT_WAVE_DELAY
 
 
 func _on_player_died() -> void:
 	if automatic:
+		_next_in = -1.0
 		_reset_in = RESET_DELAY

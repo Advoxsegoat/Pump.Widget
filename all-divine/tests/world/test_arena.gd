@@ -314,3 +314,30 @@ func test_an_edit_to_the_wave_set_changes_what_spawns_after_the_yard_is_saved_an
 func test_the_yard_scene_holds_no_copy_of_the_waves() -> void:
 	var text := FileAccess.get_file_as_string(YARD)
 	assert_false(text.contains("Wave_") or text.contains("waves ="), "training_yard.tscn keeps no baked waves")
+
+
+func test_dying_on_the_frame_the_last_knuckle_dies_starts_the_next_wave_once() -> void:
+	var arena := _arena()
+	var started: Array[int] = []
+	arena.wave_started.connect(func(i: int) -> void: started.append(i))
+	_foes(arena)[0].die()
+	arena.player.die()
+	await frames(200)
+	assert_eq(started, [1] as Array[int], "wave 1 started, once (not by the timer and again by the reset)")
+	assert_eq(_foes(arena).size(), 2, "with its two Knuckles")
+	assert_false(arena.player.dead, "and he is up")
+
+
+func test_a_foe_falling_after_the_player_does_not_start_a_wave_under_his_corpse() -> void:
+	var arena := _arena()
+	arena.start_wave(1)
+	var started: Array[int] = []
+	arena.wave_started.connect(func(i: int) -> void: started.append(i))
+	arena.player.die()
+	await frames(60)
+	for foe in _foes(arena):
+		foe.die()
+	await frames(100)
+	assert_eq(started, [] as Array[int], "no wave while he lies dead (3 s after the foes fell would be here, were it not cancelled)")
+	await frames(30)
+	assert_eq(started, [2] as Array[int], "the reset after his death starts the next one, once")
