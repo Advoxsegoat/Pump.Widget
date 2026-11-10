@@ -50,8 +50,6 @@ const BLINK_FRAMES := 2
 const BLINKS := 2
 ## A refused press blinks the bar (and sounds) at most once in this many physics frames: the length of a blink.
 const REFUSAL_FRAMES := 2 * BLINKS * BLINK_FRAMES
-## Where the glyphs over a head sit: the glyph's bottom this many pixels above the head point.
-const GLYPH_ABOVE := 6
 ## The wave pips: each this square, this far apart, this far from the top.
 const PIP := 5
 const PIP_GAP := 3
@@ -60,31 +58,8 @@ const PIP_TOP := 8
 const HINT_SECONDS := 8.0
 const HINT_FONT_SIZE := 8
 const HINT_MARGIN := 6
-## The rows of the controls list: what it is for, and the actions whose bindings it names.
-const ROWS := [
-	["Move", [&"move_up", &"move_left", &"move_down", &"move_right"]],
-	["Palm (jab, cross, hook)", [&"palm"]],
-	["Heavy (hold to charge)", [&"heavy"]],
-	["Guard (tap to parry)", [&"guard"]],
-	["Dodge (roll; hop if still)", [&"dodge"]],
-	["Lock on", [&"lock_on"]],
-	["Pause", [&"menu"]],
-]
-const FINISHER_NOTE := "Palm on a broken foe: Open Hand"
-const JOY_BUTTONS := {
-	JOY_BUTTON_A: "A", JOY_BUTTON_B: "B", JOY_BUTTON_X: "X", JOY_BUTTON_Y: "Y",
-	JOY_BUTTON_LEFT_SHOULDER: "LB", JOY_BUTTON_RIGHT_SHOULDER: "RB",
-	JOY_BUTTON_LEFT_STICK: "L3", JOY_BUTTON_RIGHT_STICK: "R3", JOY_BUTTON_START: "Start",
-}
-const JOY_AXES := {
-	JOY_AXIS_LEFT_X: "L stick", JOY_AXIS_LEFT_Y: "L stick", JOY_AXIS_RIGHT_X: "R stick", JOY_AXIS_RIGHT_Y: "R stick",
-	JOY_AXIS_TRIGGER_LEFT: "LT", JOY_AXIS_TRIGGER_RIGHT: "RT",
-}
-const MOUSE_BUTTONS := {MOUSE_BUTTON_LEFT: "LMB", MOUSE_BUTTON_RIGHT: "RMB", MOUSE_BUTTON_MIDDLE: "MMB"}
 ## The wave pips' states, as pip_states() gives them.
 enum Pip { COMING, ON, CLEARED }
-## The icons' numbers (their size, colour and how far above the head they sit).
-const TUNING := preload("res://data/tuning/readability.tres")
 ## The unblockable icon of each answer, as 9 rows of 9 cells, an X where the glyph is drawn: a sweep is an upward chevron
 ## over a low bar (hop it), a thrust a point between two brackets (catch it), a grab a sideways double chevron (roll away).
 const ICON_CELLS := {
@@ -203,6 +178,11 @@ func stamina_blink_on() -> bool:
 ## The foes whose bars show now (locked on, or hit in the last FOE_SHOWN_FRAMES) as {actor, hp, posture}: the two fills in
 ## picture pixels, the posture bar over the HP bar, both over the head.
 func foe_bars() -> Array[Dictionary]:
+	return _bars(icons(), _finishing())
+
+
+# foe_bars, given the icons and the foe the palm would finish that this frame has found already (a draw finds them once).
+func _bars(icons_now: Array[Dictionary], finishing: Actor) -> Array[Dictionary]:
 	var shown: Array[Dictionary] = []
 	if player == null or camera_rig == null:
 		return shown
@@ -210,9 +190,8 @@ func foe_bars() -> Array[Dictionary]:
 	var now := Engine.get_physics_frames()
 	# The bars sit above whatever stands over a head: an unblockable icon, or the finisher prompt.
 	var raised := {}
-	for icon in icons():
-		raised[icon.actor] = TUNING.icon_size + 3
-	var finishing := player.finishable_target() if not player.dead else null
+	for icon in icons_now:
+		raised[icon.actor] = (icon.rect as Rect2i).size.y + 3
 	if finishing != null:
 		raised[finishing] = PROMPT_SIZE + 3
 	for node in get_tree().get_nodes_in_group(Actor.LOCKABLE_GROUP):
@@ -244,23 +223,36 @@ func reticle_at() -> Variant:
 ## Where the finisher prompt is (the centre of its 7x7 glyph, over the head of the foe the player's palm would finish now);
 ## null when there is no such foe in reach.
 func prompt_at() -> Variant:
+	return _prompt_over(_finishing())
+
+
+# The foe the player's palm would finish now, or null (none, or no camera to place it, or he is dead).
+func _finishing() -> Actor:
 	if player == null or camera_rig == null or player.dead:
 		return null
-	var foe := player.finishable_target()
-	if foe == null:
-		return null
-	return glyph_centre(foe, PROMPT_SIZE)
+	return player.finishable_target()
 
 
-## The centre of a glyph `size` px square over `foe`'s head: its bottom GLYPH_ABOVE above the head point.
+func _prompt_over(foe: Actor) -> Variant:
+	return null if foe == null else glyph_centre(foe, PROMPT_SIZE)
+
+
+## The centre of a glyph `size` px square over `foe`'s head: its bottom `icon_above` (the foe's tuning's, as the unblockable
+## icon's) above the head point.
 func glyph_centre(foe: Actor, size: int) -> Vector2i:
 	var head := Vector2i(picture_point(_head(foe)))
-	return Vector2i(head.x, head.y - GLYPH_ABOVE - size / 2 - 1)
+	return Vector2i(head.x, head.y - _tuning_of(foe).icon_above - size / 2 - 1)
+
+
+# The readability tuning `foe`'s own ActorFx works by (the default one when it has none): what its icon is sized by.
+func _tuning_of(foe: Actor) -> ReadabilityTuning:
+	var fx := foe.get_node_or_null(^"ActorFx") as ActorFx
+	return fx.tuning if fx != null else ActorFx.TUNING
 
 
 ## The unblockable icons shown now, one for each enemy whose perilous tell is on (ActorFx.icon_shape) as {actor, shape,
 ## centre, rect}: the shape (a HitProfile.Perilous), the middle of its 9x9 glyph and the glyph's rect, in picture pixels. The
-## glyph's bottom edge is TUNING.icon_above pixels over the head point (4 at the least), and it follows the head.
+## glyph's bottom edge is the foe's tuning's icon_above pixels over the head point (4 at the least), and it follows the head.
 func icons() -> Array[Dictionary]:
 	var shown: Array[Dictionary] = []
 	if player == null or camera_rig == null or not is_instance_valid(camera_rig.camera) or not camera_rig.camera.is_inside_tree():
@@ -273,9 +265,9 @@ func icons() -> Array[Dictionary]:
 		if fx == null or fx.icon_shape == HitProfile.Perilous.NONE:
 			continue
 		var head := Vector2i(picture_point(_head(foe)))
-		var size := TUNING.icon_size
-		var rect := Rect2i(head.x - size / 2, head.y - maxi(TUNING.icon_above, 4) - size, size, size)
-		shown.append({actor = foe, shape = fx.icon_shape, centre = rect.get_center(), rect = rect})
+		var size := fx.tuning.icon_size
+		var rect := Rect2i(head.x - size / 2, head.y - maxi(fx.tuning.icon_above, 4) - size, size, size)
+		shown.append({actor = foe, shape = fx.icon_shape, centre = rect.get_center(), rect = rect, color = fx.tuning.icon_color})
 	return shown
 
 
@@ -298,36 +290,9 @@ func picture_point(point: Vector3) -> Vector2:
 	return (p + Vector2(-PixelSnap.MARGIN - sub.x, -PixelSnap.MARGIN + sub.y)).round()
 
 
-## The controls list, one line a row: keyboard and mouse, then the pad, from the bindings in force now.
+## The controls list, one line a row (see ControlsList).
 func controls_text() -> String:
-	var map := Bindings.current()
-	var lines := PackedStringArray(["Controls (F1 hides)"])
-	for row: Array in ROWS:
-		var keys: Array[String] = []
-		var pad: Array[String] = []
-		for action: StringName in row[1]:
-			for event: InputEvent in map.get(action, []):
-				var shown := event_name(event)
-				var into := pad if Bindings.is_gamepad(event) else keys
-				if not shown.is_empty() and not into.has(shown):
-					into.append(shown)
-		lines.append("%s: %s  |  %s" % [row[0], " ".join(keys), " ".join(pad)])
-	lines.append(FINISHER_NOTE)
-	return "\n".join(lines)
-
-
-## What an event is called on the screen: a key's letter, a mouse button, a pad button, stick or trigger.
-static func event_name(event: InputEvent) -> String:
-	if event is InputEventKey:
-		return OS.get_keycode_string((event as InputEventKey).physical_keycode)
-	if event is InputEventMouseButton:
-		var button := (event as InputEventMouseButton).button_index
-		return MOUSE_BUTTONS.get(button, "Wheel")
-	if event is InputEventJoypadButton:
-		return JOY_BUTTONS.get((event as InputEventJoypadButton).button_index, "Pad")
-	if event is InputEventJoypadMotion:
-		return JOY_AXES.get((event as InputEventJoypadMotion).axis, "Pad")
-	return ""
+	return ControlsList.text()
 
 
 # --- drawing ---
@@ -337,16 +302,19 @@ func _draw() -> void:
 		return
 	_draw_player_bars()
 	if camera_rig != null and is_instance_valid(camera_rig.camera) and camera_rig.camera.is_inside_tree():
-		for bars in foe_bars():
+		# What this frame needs of the world is found once: the icons and the foe the palm would finish.
+		var icons_now := icons()
+		var finishing := _finishing()
+		for bars in _bars(icons_now, finishing):
 			_draw_foe_bars(bars)
 		var reticle: Variant = reticle_at()
 		if reticle is Vector2i:
 			_diamond(reticle, 2, ROSE, true)
-		var prompt: Variant = prompt_at()
+		var prompt: Variant = _prompt_over(finishing)
 		if prompt is Vector2i:
 			_glyph(prompt)
-		for icon in icons():
-			_draw_icon(icon.shape, icon.rect)
+		for icon in icons_now:
+			_draw_icon(icon.shape, icon.rect, icon.color)
 	_draw_pips()
 	if hints_visible:
 		_draw_hints()
@@ -410,7 +378,7 @@ func _draw_hints() -> void:
 
 
 # An unblockable icon: the rose cells of its shape in `rect`, in a dark outline one pixel thick.
-func _draw_icon(shape: int, rect: Rect2i) -> void:
+func _draw_icon(shape: int, rect: Rect2i, color: Color) -> void:
 	var rows: Array = ICON_CELLS[shape]
 	for pass_outline in [true, false]:
 		for y in rows.size():
@@ -421,7 +389,7 @@ func _draw_icon(shape: int, rect: Rect2i) -> void:
 				if pass_outline:
 					draw_rect(Rect2(cell - Vector2i.ONE, Vector2(3, 3)), INK)
 				else:
-					draw_rect(Rect2(cell, Vector2(1, 1)), TUNING.icon_color)
+					draw_rect(Rect2(cell, Vector2(1, 1)), color)
 
 
 # A filled diamond of radius `r` pixels about `centre` (a (2r+1) square), with a dark outline of one more if `outlined`.

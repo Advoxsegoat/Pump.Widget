@@ -417,3 +417,17 @@ func test_a_feints_rim_is_the_jabs_frame_for_frame_and_ends_where_the_blow_would
 	assert_eq(feint.size(), jab.size(), "for as many frames")
 	for i in mini(jab.size(), feint.size()):
 		assert_near(feint[i], jab[i], 1e-3, "frame %d" % i)
+
+
+func test_the_hud_places_an_icon_by_its_actors_own_tuning() -> void:
+	var run := _yard_with_a_sweeper()
+	var main: Main = run["main"]
+	var foe: Actor = run["foe"]
+	await frames(3)
+	var fx := _fx(foe)
+	fx.tuning = _tuning()
+	fx.tuning.icon_above = 12
+	fx.icon_shape = HitProfile.Perilous.SWEEP
+	var head := main.hud.picture_point(foe.get_global_transform_interpolated().origin + Vector3.UP * foe.def.look_height)
+	var rect := main.hud.icons()[0].rect as Rect2i
+	assert_eq(int(head.y) - rect.end.y, 12, "the icon sits 12 px above the head, as this actor's tuning says (not the default's 6)")

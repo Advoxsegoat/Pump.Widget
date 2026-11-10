@@ -95,7 +95,7 @@ func test_each_unblockable_icon_is_drawn_cell_for_cell() -> void:
 			for x in 9:
 				var cell := rect.position + Vector2i(x, y)
 				if (rows[y] as String)[x] == "X":
-					if _is(img, cell, Hud.TUNING.icon_color):
+					if _is(img, cell, ActorFx.TUNING.icon_color):
 						drawn += 1
 					else:
 						wrong += 1
