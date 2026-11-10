@@ -19,7 +19,8 @@ extends RefCounted
 ##
 ## A clip can be made from more than one of the Quaternius clips, in this order: the clip and the clips
 ## `then` appended to it are joined end to end (join); the joined clip is then retimed to `length`, or
-## time-warped by `warp` (apply_warp); last, a hand-keyed `layer` of bone rotations is laid over it
+## time-warped by `warp` (apply_warp); its root's travel is then turned about the vertical by `root_turn`
+## (turn_root); last, a hand-keyed `layer` of bone rotations (and of the pelvis's travel) is laid over it
 ## (apply_layer). The keys of clips.cfg are listed at build.
 
 ## The node the rig puts the model under; the first part of every bone track's path.
@@ -48,7 +49,14 @@ const FRAME_EPSILON := 1e-4
 ## The keys a `then` entry written as a dictionary may have besides its clip (see join_parts).
 const THEN_KEYS: PackedStringArray = ["from", "to", "fade", "root_from"]
 const _SECTION_KEYS: PackedStringArray = ["source", "clip", "loop", "length", "step_fps", "ground_speed_from",
-		"then", "warp", "layer"]
+		"then", "warp", "layer", "root_turn"]
+## The key of a layer that moves the pelvis instead of turning a bone: [[frame, x, y, z], ...] in metres, laid on the
+## pelvis's own travel, x toward the body's left, y up and z ahead of it. How far a body leans over a planted foot is
+## not a thing a rotation can give: the hips have to shift, and the legs follow them (the layer keys those too).
+const PELVIS_MOVE := "@pelvis_move"
+## The Quaternius root bone stands the skeleton up (it is turned -90 degrees about X), and the pelvis's position track is
+## in the root's frame: its y is the body's z (negated) and its z is up. PELVIS_MOVE is turned through this.
+const ROOT_STANDS := Basis(Vector3.RIGHT, -PI / 2.0)
 
 
 ## Reads every animation in a glTF/GLB file and returns {name: Animation}; see load_gltf.
@@ -377,6 +385,10 @@ static func apply_warp(anim: Animation, warp: PackedFloat32Array) -> Animation:
 ## the first key and after the last the layer is no rotation at all. At each frame the layer is multiplied
 ## on after the clip's own rotation, so it turns the bone from wherever the clip has put it.
 ##
+## The one entry that is not a bone is PELVIS_MOVE, [[frame, x, y, z], ...] in metres: it is added to where the clip
+## has the pelvis, in the body's own directions (x its left, y up, z ahead), and is nothing before its first key and
+## after its last, as a rotation is.
+##
 ## A layered bone's rotation track is sampled at KEY_RATE, so the layer lands on its frames however the
 ## clip's own keys are spaced; every other track is copied as it is. A bone with no rotation track in `anim`
 ## is left out (check says so). The input is left alone.
@@ -385,6 +397,13 @@ static func apply_layer(anim: Animation, layer: Dictionary) -> Animation:
 	var times := _frame_times(anim.length)
 	for i in anim.get_track_count():
 		var bone := _bone_of(anim, i)
+		if _is_bone_track(anim, i) and anim.track_get_type(i) == Animation.TYPE_POSITION_3D and bone == HIP_BONE and layer.has(PELVIS_MOVE):
+			var moves: Array = layer[PELVIS_MOVE]
+			var p := _blank_track_like(anim, i, out)
+			for time in times:
+				var shift := ROOT_STANDS.inverse() * _layer_move(moves, time * KEY_RATE)
+				out.position_track_insert_key(p, time, anim.position_track_interpolate(i, time) + shift)
+			continue
 		if not _is_bone_track(anim, i) or anim.track_get_type(i) != Animation.TYPE_ROTATION_3D or not layer.has(bone):
 			anim.copy_track(i, out)
 			continue
@@ -393,6 +412,26 @@ static func apply_layer(anim: Animation, layer: Dictionary) -> Animation:
 		for time in times:
 			var turn := anim.rotation_track_interpolate(i, time) * _layer_rotation(keys, time * KEY_RATE)
 			out.rotation_track_insert_key(t, time, turn)
+	return out
+
+
+## A copy of `anim` whose root's travel over the ground is turned `degrees` about the vertical, counter-clockwise seen
+## from above: the root's position track keeps its height and goes the turned way (+90 takes a forward travel to the body's
+## left, -90 to its right, 180 back). The rotation tracks, and the pelvis and every other bone, are left as they are: it
+## is where the body goes that turns, not how it stands, so a dash can go any way from one clip. A clip with no root
+## position track, or none that moves, is unchanged. The input is left alone.
+static func turn_root(anim: Animation, degrees: float) -> Animation:
+	var out := _empty_like(anim)
+	var turn := Basis(Vector3.UP, deg_to_rad(degrees))
+	for i in anim.get_track_count():
+		if not (_is_bone_track(anim, i) and anim.track_get_type(i) == Animation.TYPE_POSITION_3D and _bone_of(anim, i) == ROOT_BONE):
+			anim.copy_track(i, out)
+			continue
+		var t := _blank_track_like(anim, i, out)
+		for k in anim.track_get_key_count(i):
+			var at: Vector3 = anim.track_get_key_value(i, k)
+			var turned := turn * Vector3(at.x, 0.0, at.z)
+			out.position_track_insert_key(t, anim.track_get_key_time(i, k), Vector3(turned.x, at.y, turned.z))
 	return out
 
 
@@ -452,8 +491,10 @@ static func check(cfg_path: String, sources: Dictionary, model_path: String) -> 
 ##                        time to source time, both in seconds (see warp_time and apply_warp). The first
 ##                        output time is 0 and they increase; the clip is as long as the last one. It
 ##                        takes the place of `length`, so the two cannot both be given
-##   layer="res://assets/anim/layers/<name>.json"   rotations laid over the bones after all this
-##                        (see apply_layer)
+##   root_turn=<degrees>  turns where the root travels about the vertical (+90 left, -90 right, 180 back) after the
+##                        warp or retime, leaving every bone as it stands (see turn_root)
+##   layer="res://assets/anim/layers/<name>.json"   rotations (and the pelvis's travel) laid over the bones after all
+##                        this (see apply_layer)
 ## `sources` maps each source key to a glTF/GLB file. The bone names and the hip height come from the
 ## model at `model_path`; each source's clips are scaled by the model's hip height over the source
 ## skeleton's (see the top of this file), also where `ground_speed_from` measures them (which follows
@@ -560,6 +601,8 @@ static func _section_clip(env: _Env, cfg: ConfigFile, section: String) -> Animat
 	var anim := _assemble(env, cfg, section, str(cfg.get_value(section, "source")))
 	if anim == null:
 		return null
+	if cfg.has_section_key(section, "root_turn"):
+		anim = turn_root(anim, float(cfg.get_value(section, "root_turn")))
 	if cfg.has_section_key(section, "layer"):
 		anim = _layered(env, section, anim, str(cfg.get_value(section, "layer")))
 		if anim == null:
@@ -682,7 +725,10 @@ static func _layered(env: _Env, section: String, anim: Animation, path: String) 
 	var found := PackedStringArray()
 	for bone: String in layer:
 		var why := _layer_keys_problem(layer[bone])
-		if why == "" and not env.bones.has(bone):
+		if why == "" and bone == PELVIS_MOVE:
+			if anim.find_track(NodePath("%s/%s:%s" % [MODEL_NODE, env.skel, HIP_BONE]), Animation.TYPE_POSITION_3D) < 0:
+				why = "the clip has no pelvis position track to move"
+		elif why == "" and not env.bones.has(bone):
 			why = "the model has no such bone"
 		elif why == "" and anim.find_track(NodePath("%s/%s:%s" % [MODEL_NODE, env.skel, bone]), Animation.TYPE_ROTATION_3D) < 0:
 			why = "the clip has no rotation track for it, so there is nothing to lay it on"
@@ -726,7 +772,22 @@ static func _layer_rotation(keys: Array, frame: float) -> Quaternion:
 	return Basis.from_euler(degrees * (PI / 180.0), EULER_ORDER_YXZ).get_rotation_quaternion()
 
 
-# The x, y and z angles of a layer key [frame, x_deg, y_deg, z_deg], in degrees.
+# The pelvis shift of the PELVIS_MOVE keys at `frame` in metres: between the two keys around it, none before the first and
+# after the last.
+static func _layer_move(keys: Array, frame: float) -> Vector3:
+	if keys.is_empty() or frame < float(keys[0][0]) - FRAME_EPSILON or frame > float(keys[keys.size() - 1][0]) + FRAME_EPSILON:
+		return Vector3.ZERO
+	var shift := _key_degrees(keys[keys.size() - 1])
+	for i in keys.size() - 1:
+		if frame <= float(keys[i + 1][0]) + FRAME_EPSILON:
+			var span := float(keys[i + 1][0]) - float(keys[i][0])
+			var weight := clampf((frame - float(keys[i][0])) / span, 0.0, 1.0) if span > 0.0 else 1.0
+			shift = _key_degrees(keys[i]).lerp(_key_degrees(keys[i + 1]), weight)
+			break
+	return shift
+
+
+# The x, y and z angles of a layer key [frame, x_deg, y_deg, z_deg], in degrees (for PELVIS_MOVE: the metres).
 static func _key_degrees(key: Array) -> Vector3:
 	return Vector3(float(key[1]), float(key[2]), float(key[3]))
 
@@ -996,6 +1057,8 @@ static func _check_section(cfg: ConfigFile, section: String) -> PackedStringArra
 		var layer: Variant = cfg.get_value(section, "layer")
 		if not layer is String or (layer as String).is_empty():
 			found.append("[%s] layer must be the path of a layer file" % section)
+	if cfg.has_section_key(section, "root_turn") and not _is_number(cfg.get_value(section, "root_turn")):
+		found.append("[%s] root_turn must be a number of degrees, not %s" % [section, cfg.get_value(section, "root_turn")])
 	return found
 
 
