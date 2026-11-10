@@ -49,7 +49,7 @@ const FRAME_EPSILON := 1e-4
 ## The keys a `then` entry written as a dictionary may have besides its clip (see join_parts).
 const THEN_KEYS: PackedStringArray = ["from", "to", "fade", "root_from"]
 const _SECTION_KEYS: PackedStringArray = ["source", "clip", "loop", "length", "step_fps", "ground_speed_from",
-		"then", "warp", "layer", "root_turn"]
+		"then", "warp", "layer", "root_travel"]
 ## The key of a layer that moves the pelvis instead of turning a bone: [[frame, x, y, z], ...] in metres, laid on the
 ## pelvis's own travel, x toward the body's left, y up and z ahead of it. How far a body leans over a planted foot is
 ## not a thing a rotation can give: the hips have to shift, and the legs follow them (the layer keys those too).
@@ -415,23 +415,21 @@ static func apply_layer(anim: Animation, layer: Dictionary) -> Animation:
 	return out
 
 
-## A copy of `anim` whose root's travel over the ground is turned `degrees` about the vertical, counter-clockwise seen
-## from above: the root's position track keeps its height and goes the turned way (+90 takes a forward travel to the body's
-## left, -90 to its right, 180 back). The rotation tracks, and the pelvis and every other bone, are left as they are: it
-## is where the body goes that turns, not how it stands, so a dash can go any way from one clip. A clip with no root
-## position track, or none that moves, is unchanged. The input is left alone.
-static func turn_root(anim: Animation, degrees: float) -> Animation:
+## A copy of `anim` whose root travels `x` metres to the body's left and `z` metres ahead of it (negative: right, behind) over
+## `seconds`, eased in and out (smoothstep), and stays there to the clip's end. It replaces the root's position track, or
+## makes one at `root_path` if the clip has none; every other track is as it was. This is how a dash goes any way from a
+## stance that has no travel of its own: the distance is written, not borrowed from a pack clip. The input is left alone.
+static func write_root_travel(anim: Animation, root_path: NodePath, x: float, z: float, seconds: float) -> Animation:
 	var out := _empty_like(anim)
-	var turn := Basis(Vector3.UP, deg_to_rad(degrees))
 	for i in anim.get_track_count():
-		if not (_is_bone_track(anim, i) and anim.track_get_type(i) == Animation.TYPE_POSITION_3D and _bone_of(anim, i) == ROOT_BONE):
+		if not (anim.track_get_type(i) == Animation.TYPE_POSITION_3D and anim.track_get_path(i) == root_path):
 			anim.copy_track(i, out)
-			continue
-		var t := _blank_track_like(anim, i, out)
-		for k in anim.track_get_key_count(i):
-			var at: Vector3 = anim.track_get_key_value(i, k)
-			var turned := turn * Vector3(at.x, 0.0, at.z)
-			out.position_track_insert_key(t, anim.track_get_key_time(i, k), Vector3(turned.x, at.y, turned.z))
+	var t := out.add_track(Animation.TYPE_POSITION_3D)
+	out.track_set_path(t, root_path)
+	for time in _frame_times(anim.length):
+		var u := clampf(time / seconds, 0.0, 1.0) if seconds > 0.0 else 1.0
+		var eased := u * u * (3.0 - 2.0 * u)
+		out.position_track_insert_key(t, time, Vector3(x * eased, 0.0, z * eased))
 	return out
 
 
@@ -491,8 +489,8 @@ static func check(cfg_path: String, sources: Dictionary, model_path: String) -> 
 ##                        time to source time, both in seconds (see warp_time and apply_warp). The first
 ##                        output time is 0 and they increase; the clip is as long as the last one. It
 ##                        takes the place of `length`, so the two cannot both be given
-##   root_turn=<degrees>  turns where the root travels about the vertical (+90 left, -90 right, 180 back) after the
-##                        warp or retime, leaving every bone as it stands (see turn_root)
+##   root_travel=[x, z, seconds]   the root goes x metres to the body's left and z ahead over that time, eased in and
+##                        out, and stays; written after the warp or retime, replacing any travel (see write_root_travel)
 ##   layer="res://assets/anim/layers/<name>.json"   rotations (and the pelvis's travel) laid over the bones after all
 ##                        this (see apply_layer)
 ## `sources` maps each source key to a glTF/GLB file. The bone names and the hip height come from the
@@ -601,8 +599,9 @@ static func _section_clip(env: _Env, cfg: ConfigFile, section: String) -> Animat
 	var anim := _assemble(env, cfg, section, str(cfg.get_value(section, "source")))
 	if anim == null:
 		return null
-	if cfg.has_section_key(section, "root_turn"):
-		anim = turn_root(anim, float(cfg.get_value(section, "root_turn")))
+	if cfg.has_section_key(section, "root_travel"):
+		var travel := _floats(cfg.get_value(section, "root_travel"))
+		anim = write_root_travel(anim, NodePath("%s/%s:%s" % [MODEL_NODE, env.skel, ROOT_BONE]), travel[0], travel[1], travel[2])
 	if cfg.has_section_key(section, "layer"):
 		anim = _layered(env, section, anim, str(cfg.get_value(section, "layer")))
 		if anim == null:
@@ -1057,8 +1056,10 @@ static func _check_section(cfg: ConfigFile, section: String) -> PackedStringArra
 		var layer: Variant = cfg.get_value(section, "layer")
 		if not layer is String or (layer as String).is_empty():
 			found.append("[%s] layer must be the path of a layer file" % section)
-	if cfg.has_section_key(section, "root_turn") and not _is_number(cfg.get_value(section, "root_turn")):
-		found.append("[%s] root_turn must be a number of degrees, not %s" % [section, cfg.get_value(section, "root_turn")])
+	if cfg.has_section_key(section, "root_travel"):
+		var travel := _floats(cfg.get_value(section, "root_travel"))
+		if travel.size() != 3 or _count(cfg.get_value(section, "root_travel")) != 3 or travel[2] <= 0.0:
+			found.append("[%s] root_travel must be [x metres, z metres, seconds above 0], not %s" % [section, cfg.get_value(section, "root_travel")])
 	return found
 
 

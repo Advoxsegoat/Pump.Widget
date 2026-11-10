@@ -909,3 +909,33 @@ func test_a_move_that_is_no_evade_may_not_carry_evade_marks() -> void:
 	assert_eq(_evader(MoveData.Evade.NONE, []), PackedStringArray(), "and without them it is fine")
 	var jab := _jab(_jab_marks([], [_m(5, &"evade_on"), _m(10, &"evade_off")]))
 	assert_true(_has_problem(jab, ["palm_jab", "evade marks"]), "an attack is no evade either: %s" % ["\n".join(jab)])
+
+
+# --- sways, ducks, dash-steps and the sides a move starts ---
+
+func test_a_sway_or_duck_needs_neither_iframes_nor_cues_but_a_dodge_that_is_not_one_still_does() -> void:
+	for evade in [MoveData.Evade.SWAY, MoveData.Evade.DUCK]:
+		var move := _move(&"sway_fixture", MoveData.Kind.DODGE)
+		move.evade = evade
+		var bare := [_m(2, &"evade_on"), _m(12, &"evade_off")]
+		assert_eq(_check(move, bare), PackedStringArray(), "an evade is its window: no iframes, no fx, no sfx")
+	var plain := _check(_move(&"sway_fixture", MoveData.Kind.DODGE), [])
+	assert_true(_has_problem(plain, ["dodge has no iframes_on"]), "a dodge that is no evade is held to its iframes: %s" % ["\n".join(plain)])
+
+
+func test_a_dash_step_is_a_dodge_that_is_never_invulnerable_but_has_its_cues() -> void:
+	var move := _move(&"dash_step_fixture", MoveData.Kind.DODGE)
+	var cues := [_m(1, &"fx", {"name": &"palm_trail"}), _m(1, &"sfx", {"name": &"palm_whoosh"})]
+	assert_eq(_check(move, cues), PackedStringArray(), "a dash-step is held to no iframes")
+	var problems := _check(move, [])
+	assert_false(_has_problem(problems, ["iframes"]), "\n".join(problems))
+	assert_true(_has_problem(problems, ["no sfx"]), "but it still needs its cues: %s" % ["\n".join(problems)])
+
+
+func test_a_directional_target_must_be_a_move() -> void:
+	var move := _move(&"sway_fixture", MoveData.Kind.OTHER)
+	move.directional = {&"right": &"palm_jab", &"back": &"no_such_move"}
+	var marks := [_m(0, &"sfx", {"name": &"palm_whoosh"}), _m(0, &"fx", {"name": &"palm_trail"})]
+	var problems := _check(move, marks)
+	assert_true(_has_problem(problems, ["sway_fixture", "directional", "back", "no_such_move"]), "\n".join(problems))
+	assert_false(_has_problem(problems, ["right"]), "a move that exists is fine: %s" % ["\n".join(problems)])

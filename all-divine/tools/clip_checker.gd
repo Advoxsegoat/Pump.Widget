@@ -8,9 +8,10 @@ extends RefCounted
 ##   an ATTACK has, for each hitbox id, hitbox_on before hitbox_off; at least one cancel_open; and exactly
 ##       one recovery, at or after the last hitbox_off; at least one entry in `hits`; and every hitbox_on
 ##       names (`profile`) one of those entries
-##   a DODGE has iframes_on before iframes_off
+##   a DODGE has iframes_on before iframes_off (a sway or duck has its evade window instead, a dash-step none: it is never
+##       invulnerable)
 ##   a REACTION other than the death has exactly one recovery
-##   every move has at least one sfx and one fx
+##   every move has at least one sfx and one fx (a sway or duck sounds from the rules of the evade, not from a mark)
 ##   every fx names an FxDef in the Registry kind `fx` and every sfx a SoundCue in the kind `sounds` (a mark with
 ##       no name, or one the data does not have, is reported), and the bone each effect rides is a bone of the rig:
 ##       an fx's own `bone`, else its FxDef's, and the FxDef's of a tell (glint, perilous_rose) and of a charge_hold
@@ -20,7 +21,7 @@ extends RefCounted
 ##       on-then-off pairs
 ##   every mark is a known kind and lies within [0, the clip's length]
 ##   cancel_open's `into` names existing moves; hitbox ids are hitboxes of the rig; `neutral_variant`
-##       names an existing move; and so does `imitates` (a feint: its tell wears the rim of that move's blow, and a
+##       and every `directional` target name existing moves; and so does `imitates` (a feint: its tell wears the rim of that move's blow, and a
 ##       name that is no move would show no rim and say nothing)
 ##   tell's `kind` is glint or perilous; charge_hold is only in an ATTACK and names a profile it has
 ##   on a stepped clip (metadata step_fps above 0) every mark is on the 1/step_fps grid
@@ -65,6 +66,9 @@ const WINDOW_PAIRS := {
 }
 ## The frame every evade window opens on, so that a sway or duck pressed at the last moment is safe from its second frame.
 const EVADE_OPENS := 2
+## A dodge whose id starts with this is never invulnerable (spec 3.7: the dash-step), so it needs no iframes; a sway or
+## duck has its evade window in their place.
+const NEVER_INVULNERABLE := "dash_step"
 ## The reaction that needs no recovery: the clip ends with the actor on the ground.
 const DEATH := &"death"
 ## A bone within this many degrees of its rest rotation counts as not moved.
@@ -91,7 +95,7 @@ func check_move(move: MoveData, anim: Animation, hitbox_ids: PackedStringArray, 
 			_check_tells(id, move, marks, out)
 	elif move.kind == MoveData.Kind.DODGE:
 		var iframes := _check_windows(marks, &"iframes_on", &"iframes_off", func(_m: Dictionary) -> String: return "iframes")
-		if iframes["count"] == 0:
+		if iframes["count"] == 0 and move.evade == MoveData.Evade.NONE and not String(move.id).begins_with(NEVER_INVULNERABLE):
 			out.append("%s: dodge has no iframes_on" % id)
 		for problem: String in iframes["problems"]:
 			out.append("%s: %s" % [id, problem])
@@ -108,10 +112,13 @@ func check_move(move: MoveData, anim: Animation, hitbox_ids: PackedStringArray, 
 			out.append("%s: charge_hold at f%d is only allowed in an attack" % [id, Marks.frame_of(mark["time"])])
 	if move.neutral_variant != &"" and not move_ids.has(String(move.neutral_variant)):
 		out.append("%s: neutral_variant is the unknown move '%s'" % [id, move.neutral_variant])
+	for side in move.directional:
+		if not move_ids.has(String(move.directional[side])):
+			out.append("%s: directional '%s' is the unknown move '%s'" % [id, side, move.directional[side]])
 	if move.imitates != &"" and not move_ids.has(String(move.imitates)):
 		out.append("%s: imitates the unknown move '%s'" % [id, move.imitates])
 	for kind in [&"sfx", &"fx"]:
-		if _of_kind(marks, kind).is_empty():
+		if _of_kind(marks, kind).is_empty() and move.evade == MoveData.Evade.NONE:
 			out.append("%s: has no %s" % [id, kind])
 	return out
 
@@ -443,6 +450,9 @@ func _moves_after(move: MoveData, anim: Animation, move_ids: PackedStringArray, 
 					found.append(String(target))
 	if move_ids.has(String(move.neutral_variant)):
 		found.append(String(move.neutral_variant))
+	for target in move.directional.values():
+		if move_ids.has(String(target)):
+			found.append(String(target))
 	return found
 
 

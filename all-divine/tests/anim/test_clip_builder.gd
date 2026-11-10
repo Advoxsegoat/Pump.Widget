@@ -576,40 +576,41 @@ func test_a_layer_may_move_the_pelvis_and_turn_bones_together() -> void:
 	assert_vec_near(out.position_track_interpolate(now, _at(30)) - clip.position_track_interpolate(was, _at(30)), Vector3(0.1, 0.0, 0.0), 1e-5, "and the pelvis moved")
 
 
-func test_turn_root_turns_the_travel_about_the_vertical_and_nothing_else() -> void:
-	var clip := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.5, 2.0))  # 2 m ahead (+Z) and half a metre up
-	var root := clip.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
-	var cases := {90.0: Vector3(2.0, 0.5, 0.0), -90.0: Vector3(-2.0, 0.5, 0.0), 180.0: Vector3(0.0, 0.5, -2.0), 0.0: Vector3(0.0, 0.5, 2.0)}
-	for degrees: float in cases:
-		var out := ClipBuilder.turn_root(clip, degrees)
-		assert_vec_near(out.position_track_interpolate(out.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D), 1.0), cases[degrees], 1e-5, "%s degrees" % degrees)
-		assert_vec_near(out.position_track_interpolate(out.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D), 0.5), (cases[degrees] as Vector3) * 0.5, 1e-5, "%s degrees: halfway" % degrees)
-		assert_eq(out.track_get_key_count(out.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)), clip.track_get_key_count(root), "the same keys")
-		_assert_same_pose(_without_root(out), 0.4, _without_root(clip), 0.4, 1e-6, "the bones are as they were")
-	assert_vec_near(clip.position_track_interpolate(root, 1.0), Vector3(0.0, 0.5, 2.0), 1e-6, "the input is left alone")
+func test_write_root_travel_goes_the_way_asked_eased_and_stays() -> void:
+	var clip := _moving(1.0, Vector3.ZERO, Vector3(0.0, 0.5, 2.0))
+	var out := ClipBuilder.write_root_travel(clip, ROOT_PATH, 1.0, -2.0, 0.5)
+	var root := out.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
+	assert_eq(out.get_track_count(), clip.get_track_count(), "the old root track is replaced, not added to")
+	assert_vec_near(out.position_track_interpolate(root, 0.0), Vector3.ZERO, 1e-6, "starts at the origin")
+	assert_vec_near(out.position_track_interpolate(root, 0.25), Vector3(0.5, 0.0, -1.0), 1e-5, "halfway at the midpoint")
+	assert_vec_near(out.position_track_interpolate(root, 0.5), Vector3(1.0, 0.0, -2.0), 1e-5, "there on time")
+	assert_vec_near(out.position_track_interpolate(root, 1.0), Vector3(1.0, 0.0, -2.0), 1e-5, "and stays")
+	var early := out.position_track_interpolate(root, 1.0 / 60.0).length()
+	var middle := out.position_track_interpolate(root, 0.25 + 1.0 / 120.0).distance_to(out.position_track_interpolate(root, 0.25 - 1.0 / 120.0))
+	assert_true(early < middle * 0.2, "eased in: the first frame covers %.4f against %.4f in the middle" % [early, middle])
+	_assert_same_pose(_without_root(out), 0.4, _without_root(clip), 0.4, 1e-6, "the bones are as they were")
+	var bare := _without_root(clip)
+	var made := ClipBuilder.write_root_travel(bare, ROOT_PATH, 0.0, 1.0, 0.5)
+	assert_ne(made.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D), -1, "a clip with no root gets one")
+	assert_vec_near(clip.position_track_interpolate(clip.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D), 1.0), Vector3(0.0, 0.5, 2.0), 1e-6, "the input is left alone")
 
 
-func test_build_turns_the_root_by_root_turn_before_the_layer() -> void:
+func test_build_writes_the_root_travel_and_checks_it() -> void:
 	var run := _build_setup()
 	_write_text(run["cfg"], "\n".join([
-		"[ahead]", "source=\"pack_rm\"", "clip=\"Run\"",
-		"[left]", "source=\"pack_rm\"", "clip=\"Run\"", "root_turn=90",
-		"[odd]", "source=\"pack_rm\"", "clip=\"Run\"", "root_turn=\"left\"",
+		"[left]", "source=\"pack\"", "clip=\"Idle\"", "root_travel=[1.5, 0.0, 0.25]",
+		"[odd]", "source=\"pack\"", "clip=\"Idle\"", "root_travel=[1.5, 0.0]",
+		"[slow]", "source=\"pack\"", "clip=\"Idle\"", "root_travel=[1.5, 0.0, 0.0]",
 	]))
 	var lines := ClipBuilder.check(run["cfg"], run["sources"], MODEL)
-	assert_eq(lines.size(), 1, str(lines))
-	assert_true(lines.size() == 1 and lines[0].contains("[odd]") and lines[0].contains("root_turn"), "a word is not a turn: %s" % [lines])
-	_write_text(run["cfg"], "\n".join([
-		"[ahead]", "source=\"pack_rm\"", "clip=\"Run\"",
-		"[left]", "source=\"pack_rm\"", "clip=\"Run\"", "root_turn=90",
-	]))
+	assert_eq(lines.size(), 2, str(lines))
+	for line in lines:
+		assert_true(line.contains("root_travel"), line)
+	_write_text(run["cfg"], "[left]\nsource=\"pack\"\nclip=\"Idle\"\nroot_travel=[1.5, 0.0, 0.25]\n")
 	assert_eq(ClipBuilder.build(run["cfg"], run["sources"], run["out"], MODEL), OK)
-	var ahead := _load(run["out"] + "/ahead.tres") as Animation
 	var left := _load(run["out"] + "/left.tres") as Animation
-	var a := ahead.position_track_interpolate(ahead.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D), 1.0)
-	var l := left.position_track_interpolate(left.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D), 1.0)
-	assert_true(a.z > 1.0, "the source runs ahead (%s)" % a)
-	assert_vec_near(l, Vector3(a.z, a.y, 0.0), 1e-4, "and the turned one runs to the left as far")
+	var root := left.find_track(ROOT_PATH, Animation.TYPE_POSITION_3D)
+	assert_vec_near(left.position_track_interpolate(root, left.length), Vector3(1.5, 0.0, 0.0), 1e-4, "it goes 1.5 m to the left")
 
 
 func test_a_layer_that_moves_the_pelvis_of_a_clip_without_one_is_a_problem() -> void:

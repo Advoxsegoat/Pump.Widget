@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://moves/move_data.gd" id="1_move"]
+
+[resource]
+script = ExtResource("1_move")
+id = &"sway_left_quick"
+kind = 1
+clip = &"sway_left_quick"
+root_motion = false
+stamina_cost = 4.0
+evade = 1
+redodge_frame = 16
+directional = {
+&"back": &"sway_back_quick",
+&"right": &"sway_right_quick"
+}

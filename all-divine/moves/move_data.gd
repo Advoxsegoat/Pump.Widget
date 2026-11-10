@@ -23,6 +23,9 @@ enum Evade { NONE, SWAY, DUCK }
 ## The evade the move's evade window is, while it is open (see Evade). A move with an evade window says which here, and
 ## a move without one leaves it NONE: the clip checker holds the two together.
 @export var evade: Evade = Evade.NONE
+## After a dodge that avoided nothing, the frame of this move before which another sway or duck cannot start: twice the
+## evade window's length, so a press at random is paid for in time as well as stamina. 0 for a move that does not bar one.
+@export var redodge_frame := 0
 ## The ways this move hits: profile name -> HitProfile, written inline in the move's .tres. A hitbox_on
 ## mark names the profile its hitbox carries, so every hit of the move is one of these.
 @export var hits: Dictionary = {}
@@ -35,6 +38,11 @@ enum Evade { NONE, SWAY, DUCK }
 ## The move started instead of this one when the stick is at rest (a standing jab, say, in place of a
 ## stepping one). None means this move is started either way.
 @export var neutral_variant: StringName
+## The moves started instead of this one when the direction asked for lies on that side of the body: &"left", &"right" or
+## &"back" -> a move id (a sway's mirror and its pull back, a dash-step's three other ways). The direction is measured
+## against the way the body faces, as a sway leans and a dash-step goes; the move itself is the forward or left one. Empty:
+## this move is started whichever way the stick lies.
+@export var directional: Dictionary = {}
 ## Seconds over which the move fades in over what the actor was doing, and out to locomotion.
 @export var blend_in := 0.05
 @export var blend_out := 0.15
