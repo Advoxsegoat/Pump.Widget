@@ -1,7 +1,7 @@
 extends SceneTree
 ## Makes the textures we draw ourselves:
 ##   tools/godot.sh -s res://tools/art/make_textures.gd
-## writes assets/env/textures/flagstone.png, the same bytes every time. Run `tools/godot.sh --import`
+## writes assets/env/textures/flagstone.png and slate.png, the same bytes every time. Run `tools/godot.sh --import`
 ## afterwards. Exits 0, or 1 if a file could not be written.
 
 const OUT_DIR := "res://assets/env/textures"
@@ -22,17 +22,26 @@ const STONE_MIN := 10
 const STONE_MAX := 26
 ## The share of a stone's texels shown in the next grey up or down, so a stone is not one flat colour.
 const SPECKLE := 0.07
+## The kerbstones: two dark blue-grey slates and the joint between two stones. They are dark because the training yard's
+## kerb is lit by its moon, as the fighters are (the kerb must show in the dark): moonlit, these read as pale stone.
+const SLATES: Array[Color] = [Color8(58, 60, 70), Color8(66, 68, 79)]
+const SLATE_JOINT := Color8(40, 41, 49)
+const SLATE_SIZE := 2 * TEXELS_PER_METRE
+const SLATE_SEED := 11
+## A kerbstone is this many texels long, its joint included: a metre.
+const KERBSTONE := TEXELS_PER_METRE
 
 
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
-	var path := OUT_DIR.path_join("flagstone.png")
-	var error := flagstone().save_png(ProjectSettings.globalize_path(path))
-	if error != OK:
-		printerr("make_textures: could not write %s (%s)" % [path, error_string(error)])
-		quit(1)
-		return
-	print("make_textures: wrote %s" % path)
+	for made: Array in [["flagstone.png", flagstone()], ["slate.png", slate()]]:
+		var path := OUT_DIR.path_join(made[0])
+		var error := (made[1] as Image).save_png(ProjectSettings.globalize_path(path))
+		if error != OK:
+			printerr("make_textures: could not write %s (%s)" % [path, error_string(error)])
+			quit(1)
+			return
+		print("make_textures: wrote %s" % path)
 	quit(0)
 
 
@@ -73,6 +82,32 @@ static func flagstone() -> Image:
 		bytes[i * 3] = c.r8
 		bytes[i * 3 + 1] = c.g8
 		bytes[i * 3 + 2] = c.b8
+	return Image.create_from_data(size, size, false, Image.FORMAT_RGB8, bytes)
+
+
+## The training yard's kerb: a 2 m tile of two kerbstones, each a metre long and one of the two SLATES (speckled with
+## the other), with a SLATE_JOINT one texel wide at its right end. There is no line across the stones: laid by the world's
+## metres on a kerb's top and on its face, the joints of the two meet at the kerb's edge. It tiles seamlessly; the same
+## seeded random numbers (SLATE_SEED) make the same tile.
+static func slate() -> Image:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = SLATE_SEED
+	var size := SLATE_SIZE
+	var bytes := PackedByteArray()
+	bytes.resize(size * size * 3)
+	for y in size:
+		for x in size:
+			var c := SLATE_JOINT
+			if x % KERBSTONE != KERBSTONE - 1:
+				@warning_ignore("integer_division")
+				var stone := (x / KERBSTONE) % SLATES.size()
+				if rng.randf() < SPECKLE:
+					stone = (stone + 1) % SLATES.size()
+				c = SLATES[stone]
+			var i := (y * size + x) * 3
+			bytes[i] = c.r8
+			bytes[i + 1] = c.g8
+			bytes[i + 2] = c.b8
 	return Image.create_from_data(size, size, false, Image.FORMAT_RGB8, bytes)
 
 

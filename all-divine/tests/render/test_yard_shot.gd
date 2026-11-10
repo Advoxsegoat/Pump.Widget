@@ -121,8 +121,7 @@ func _event(target: Actor) -> HitEvent:
 	return e
 
 
-# How many pixels Abarax's body shows in the World image with him at `at` (idle, frozen): the pixels that change when his rig is
-# hidden (the screen look's shadows are off).
+# How many pixels Abarax's body shows on in the World image with him at `at` (idle, frozen): his silhouette, exactly.
 func _body_pixels(at: Vector3) -> int:
 	Game.reset()
 	Arena.reset_spawn_counts()
@@ -137,19 +136,9 @@ func _body_pixels(at: Vector3) -> int:
 	main.player.freeze(100000)
 	for i in 3:
 		await RenderingServer.frame_post_draw
-	var shown := main.stage.world.get_texture().get_image()
-	main.player.rig.visible = false
-	for i in 3:
-		await RenderingServer.frame_post_draw
-	var hidden := main.stage.world.get_texture().get_image()
-	var feet := main.camera_rig.camera.unproject_position(main.player.global_position)
-	var count := 0
-	for y in range(maxi(int(feet.y) - 80, 0), mini(int(feet.y) + 20, shown.get_height())):
-		for x in range(maxi(int(feet.x) - 40, 0), mini(int(feet.x) + 40, shown.get_width())):
-			var p := shown.get_pixel(x, y)
-			var q := hidden.get_pixel(x, y)
-			if absf(p.r - q.r) + absf(p.g - q.g) + absf(p.b - q.b) > 0.02:
-				count += 1
+	var feet := Vector2i(main.camera_rig.camera.unproject_position(main.player.global_position).round())
+	var box := Rect2i(feet.x - 40, feet.y - 80, 80, 100).intersection(Rect2i(Vector2i.ZERO, main.stage.world.size))
+	var count := (await ShotMasks.silhouette(main, main.player, box)).size()
 	main.queue_free()
 	await frames(1)
 	return count
@@ -158,8 +147,50 @@ func _body_pixels(at: Vector3) -> int:
 func test_the_south_edge_hides_no_more_than_the_feet() -> void:
 	var open := await _body_pixels(Vector3(0.0, 0.0, 6.0))
 	assert_true(open > 300, "Abarax shows %d pixels in the open" % open)
-	var at_edge := await _body_pixels(Vector3(0.0, 0.0, 12.5 - 0.36))
-	assert_true(at_edge >= 0.9 * open, "at 0.36 m from the south edge %d of his %d pixels show" % [at_edge, open])
+	# In the gate, between its pillars, and along the kerb away from it.
+	for x: float in [0.0, -5.0]:
+		var at_edge := await _body_pixels(Vector3(x, 0.0, 12.5 - 0.36))
+		assert_true(at_edge >= 0.9 * open, "at 0.36 m from the south edge (x %.0f) %d of his %d pixels show" % [x, at_edge, open])
+
+
+# The south edge is a barrier to see: its kerb stands out from the floor before it all along, in the dark of the middle and
+# in the lamps' pools toward the corners, by 20 luma or more in the World picture (in the dark it is the paler, under a
+# lamp the darker of the two).
+func test_the_south_kerb_shows_against_the_floor() -> void:
+	Game.reset()
+	Arena.reset_spawn_counts()
+	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
+	main.arena().clear_foes()
+	main.arena().automatic = false
+	main.player.set_brain(Brain.new())
+	for x: float in [-9.0, -4.5, 0.0, 4.5, 9.0]:
+		main.player.place(Transform3D(Basis(Vector3.UP, PI), Vector3(x, 0.0, 9.5)))
+		main.camera_rig.snap_now()
+		await frames(10)
+		main.camera_rig.snap_now()
+		for i in 3:
+			await RenderingServer.frame_post_draw
+		var img := main.stage.world.get_texture().get_image()
+		if is_zero_approx(x):
+			assert_eq(get_viewport().get_texture().get_image().save_png(ProjectSettings.globalize_path("res://").path_join("out/shots/yard_south_edge.png")), OK)
+		# Two spots a metre and a half either side of him: the kerb's top there, and the floor 1.2 m before it.
+		for side: float in [-1.5, 1.5]:
+			var kerb := _patch_luma(img, main, Vector3(x + side, 0.3, 12.7))
+			var ground := _patch_luma(img, main, Vector3(x + side, 0.0, 11.3))
+			assert_true(absf(kerb - ground) >= 20.0, "at x %.1f the kerb (luma %.1f) differs from the floor before it (%.1f) by 20 or more" % [x + side, kerb, ground])
+
+
+# The mean luma of the 5 x 3 pixels of the World picture round the world point `at`.
+func _patch_luma(img: Image, main: Main, at: Vector3) -> float:
+	var centre := Vector2i(main.camera_rig.camera.unproject_position(at).round())
+	var sum := 0.0
+	var count := 0
+	for dy in range(-1, 2):
+		for dx in range(-2, 3):
+			var p := (centre + Vector2i(dx, dy)).clamp(Vector2i.ZERO, img.get_size() - Vector2i.ONE)
+			sum += _luma(img.get_pixelv(p))
+			count += 1
+	return sum / count
 
 
 # The mean colour of the PATCH box round the ground point `at`.

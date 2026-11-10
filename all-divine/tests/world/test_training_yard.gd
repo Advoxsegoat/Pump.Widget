@@ -74,6 +74,44 @@ func test_a_moon_lights_the_bodies_and_the_sun_leaves_them_to_it() -> void:
 		assert_true(lamp.light_cull_mask & Layers.RENDER_BODIES != 0 and lamp.light_cull_mask & Layers.RENDER_WORLD != 0, "a lantern lights bodies and world")
 
 
+# The south edge, on the camera's side, is a kerb: a low run of stone that is not the floor's, which the moon lights as it
+# lights the fighters, so that it shows in the dark. What stops a body there is the kerb itself: its collider is the box
+# that is seen, and nothing unseen stands on it or behind it.
+func test_the_south_edge_is_a_kerb_that_is_seen_where_it_stops_a_body() -> void:
+	var region := _yard()
+	assert_true(region.get_node_or_null("Barrier") == null, "no unseen barrier")
+	var kerb := region.get_node_or_null("Curb") as StaticBody3D
+	assert_true(kerb != null, "a kerb")
+	if kerb == null:
+		return
+	var shape := kerb.get_node_or_null("Shape") as CollisionShape3D
+	var mesh := kerb.get_node_or_null("Mesh") as MeshInstance3D
+	assert_true(shape != null and mesh != null and shape.shape is BoxShape3D and mesh.mesh is BoxMesh, "a box to see and a box to stop at")
+	if shape == null or mesh == null or not shape.shape is BoxShape3D or not mesh.mesh is BoxMesh:
+		return
+	var box := (shape.shape as BoxShape3D).size
+	assert_eq((mesh.mesh as BoxMesh).size, box, "the collider is the size of what is seen")
+	assert_true(mesh.global_transform.is_equal_approx(shape.global_transform), "and in its place")
+	assert_true(kerb.collision_layer & Layers.WORLD != 0, "it stops bodies")
+	assert_true(box.y >= 0.3 - 1e-6, "at least 0.3 m high (%.2f)" % box.y)
+	assert_near(shape.global_position.z - box.z / 2.0, HALF, 1e-4, "its inner face is the yard's south edge")
+	assert_near(shape.global_position.y - box.y / 2.0, 0.0, 1e-4, "it stands on the floor")
+	assert_true(shape.global_position.x - box.x / 2.0 <= -HALF + 1e-4 and shape.global_position.x + box.x / 2.0 >= HALF - 1e-4, "from wall to wall")
+	var floor_stone := load("res://world/materials/flagstone.tres") as Material
+	assert_true(mesh.material_override != null and mesh.material_override != floor_stone, "in a stone that is not the floor's")
+	assert_true(mesh.layers & Layers.RENDER_WORLD != 0 and mesh.layers & Layers.RENDER_BODIES != 0, "lit by the night as the world is, and by the moon as the fighters are")
+	# Nothing unseen above it or behind it: at chest height a ray from inside the yard goes out over the kerb, well past it.
+	await frames(2)
+	var space := region.get_world_3d().direct_space_state
+	for x: float in [-10.0, -6.0, 0.0, 6.0, 10.0]:
+		var over := space.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(x, 1.0, HALF - 2.0), Vector3(x, 1.0, HALF + 6.0), Layers.WORLD))
+		assert_true(over.is_empty(), "x %.0f: nothing stands over the kerb at chest height (%s)" % [x, over.get("collider")])
+		var low := space.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(x, 0.15, HALF - 2.0), Vector3(x, 0.15, HALF + 6.0), Layers.WORLD))
+		assert_true(low.get("collider") == kerb, "x %.0f: at shin height the kerb is what is met" % x)
+		if not low.is_empty():
+			assert_near((low["position"] as Vector3).z, HALF, 1e-3, "x %.0f: at its face" % x)
+
+
 func test_spawns_and_pois_exist() -> void:
 	var region := _yard()
 	var spawn := region.get_node_or_null("Spawn") as Marker3D

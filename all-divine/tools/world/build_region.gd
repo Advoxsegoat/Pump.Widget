@@ -17,6 +17,11 @@ extends SceneTree
 const REGION := preload("res://world/region.gd")
 const LAYERS := preload("res://core/layers.gd")
 const FLAGSTONE := preload("res://world/materials/flagstone.tres")
+## The stones a curb can be made of, by the name a layout gives.
+const STONES := {
+	"flagstone": FLAGSTONE,
+	"slate": preload("res://world/materials/slate.tres"),
+}
 const KENNEY := "res://assets/env/kenney_town/%s.glb"
 ## Kenney pieces are this many times their size: a tile of 2.5 m, a wall 2.5 m tall.
 const SCALE := 2.5
@@ -171,13 +176,15 @@ class Builder:
 					at.y = y if y != null else _ground(Vector2(at.x, at.z))
 					_piece(_group("Props"), args[0], at, n[2] if n.size() > 2 else 0.0)
 			"curb":
-				var n := _numbers(args, 5, 5)
+				var options := Array(args.slice(5))
+				var moonlit := options.has("moonlit")
+				options.erase("moonlit")
+				if options.size() > 1 or (options.size() == 1 and not STONES.has(options[0])):
+					_problem("curb needs X0 Z0 X1 Z1 H [STONE] [moonlit], the stone one of %s" % ", ".join(STONES.keys()))
+					return
+				var n := _numbers(args.slice(0, 5), 5, 5)
 				if n.size() == 5:
-					_curb(_rect(n), n[4])
-			"barrier":
-				var n := _numbers(args, 5, 5)
-				if n.size() == 5:
-					_barrier(_rect(n), n[4])
+					_curb(_rect(n), n[4], STONES[options[0]] if options.size() == 1 else FLAGSTONE, moonlit)
 			"lamps":
 				var n := _numbers(args.slice(1), 3, 3)
 				if args.size() == 4 and n.size() == 3:
@@ -252,18 +259,15 @@ class Builder:
 		var centre := rect.get_center()
 		_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, height / 2, centre.y)), FLAGSTONE)
 
-	# A low box of flagstone over `rect`, `height` high, on world and ik_surface: a curb, which hides no more than the feet.
-	func _curb(rect: Rect2, height: float) -> void:
+	# A low box of `stone` over `rect`, `height` high, solid as it is seen and no further: a curb. `moonlit`: it is drawn
+	# on the bodies' render layer as well as the world's, so that a region's moon lights it as it lights the fighters (a
+	# barrier has to show in the dark).
+	func _curb(rect: Rect2, height: float, stone: Material, moonlit: bool) -> void:
 		var body := _body(_name("Curb"), _root, _world_and_feet)
 		var centre := rect.get_center()
-		_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, height / 2, centre.y)), FLAGSTONE)
-
-	# An unseen collider over `rect`, `height` high, on world alone: what a curb cannot be (a wall that stops bodies and
-	# hides nothing).
-	func _barrier(rect: Rect2, height: float) -> void:
-		var body := _body(_name("Barrier"), _root, LAYERS.WORLD)
-		var centre := rect.get_center()
-		_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, height / 2, centre.y)), null)
+		_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, height / 2, centre.y)), stone)
+		if moonlit:
+			(body.get_node("Mesh") as MeshInstance3D).layers = LAYERS.RENDER_WORLD | LAYERS.RENDER_BODIES
 
 	# `count` steps over `rect`, climbing toward `up` to the ground past its far edge.
 	func _stairs(rect: Rect2, count: int, up: Vector2) -> void:

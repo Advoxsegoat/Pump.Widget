@@ -33,8 +33,10 @@
 #                                   along the line, its face on the line and toward FACING, the slab behind it;
 #                                   solid: a collision box behind the face, at least 1 m deep
 #   piece PIECE X Z [YAW] [y=Y]     a Kenney piece; it collides as models/<PIECE> says in build_courtyard.gd
-#   curb X0 Z0 X1 Z1 H              a low box of flagstone over that rectangle, H high, solid only up to its height: a curb
-#   barrier X0 Z0 X1 Z1 H           an unseen collider over that rectangle, H high, on `world`: stops bodies, hides nothing
+#   curb X0 Z0 X1 Z1 H [STONE] [moonlit]
+#                                   a low box of stone over that rectangle, H high, solid as it is seen and no further:
+#                                   a curb. STONE: flagstone (the floor's, if none is given) or slate. moonlit: the
+#                                   region's moon lights it too, as it lights the fighters, so that it shows in the dark
 #   lantern X Z [shadow]            a lantern with its lamp (see lamps); shadow: the lamp casts shadows
 #   lamps COLOUR RANGE ENERGY UP    every lantern's lamp: an OmniLight3D UP metres above the lantern's foot
 #   marker NAME X Z [YAW]           a Marker3D (the way it faces is its +Z, as an actor's)
