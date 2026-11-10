@@ -90,8 +90,12 @@ jobs:
       - name: Install Godot
         run: bash tools/setup.sh
 
+      # Here a software renderer draws every frame of every test, so the run takes about ten times the headless
+      # one (some 15 minutes). test.sh's own cap of 900 s is a guard against a hung test, not a budget.
       - name: Test suite with the render tests
         run: tools/test.sh --render
+        env:
+          TEST_TIMEOUT: "1800"
 
   render-forward-plus:
     name: Tests (render, Forward+ on lavapipe)
