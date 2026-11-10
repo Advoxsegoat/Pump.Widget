@@ -5,7 +5,7 @@
 # (world/courtyard/layout.txt says what each does), and `script`.
 #
 # A walled yard at night for the fights: 25 x 25 m inside (the Kenney kit's tile is 2.5 m, so 24 m is not a whole
-# number of them; 25 is the nearest), the walls solid on every side, the south wall half height so that the camera, which
+# number of them; 25 is the nearest), the walls solid on every side, the south edge a low curb so that the camera, which
 # looks north from the south, sees over it. The gate in its middle is two pillars and no way through. The player
 # starts at the south, facing north; the foes come at him from the arc of spawns in the north.
 #
@@ -17,7 +17,7 @@
 #           |                                         |
 #           |                                         |
 #           | L                @ Spawn              L |
-#           | T  =============[gate]==============  T |   z=12.5 (half wall)
+#           | T  =============[gate]==============  T |   z=12.5 (a low curb)
 #           +---------------------------------------+
 
 script res://world/arena.gd
@@ -31,7 +31,10 @@ grade res://data/render/grades/training_yard.tres
 edge wall -12.5 -12.5 12.5 -12.5 s solid
 edge wall 12.5 -12.5 12.5 12.5 w solid
 edge wall -12.5 -12.5 -12.5 12.5 e solid
-edge wall-half -12.5 12.5 12.5 12.5 n solid
+# The south edge is a low curb with an unseen barrier behind it, not a wall: the camera looks from the south and a wall
+# would hide the fighters near it (legs, sweeps, the waves on the ground).
+curb -12.5 12.5 12.5 12.9 0.2
+barrier -12.5 12.5 12.5 13.5 3.0
 piece pillar-stone -12.625 -12.625
 piece pillar-stone 12.625 -12.625
 piece pillar-stone -12.625 12.625

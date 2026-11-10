@@ -119,3 +119,44 @@ func _event(target: Actor) -> HitEvent:
 	e.profile = HitProfile.new()
 	e.point = target.global_position + Vector3.UP
 	return e
+
+
+# How many pixels Abarax's body shows in the World image with him at `at` (idle, frozen): the pixels that change when his rig is
+# hidden (the screen look's shadows are off).
+func _body_pixels(at: Vector3) -> int:
+	Game.reset()
+	Arena.reset_spawn_counts()
+	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
+	for light in main.region.find_children("*", "Light3D", true, false):
+		(light as Light3D).shadow_enabled = false
+	main.arena().clear_foes()
+	main.arena().automatic = false
+	main.player.place(Transform3D(Basis(Vector3.UP, PI), at))
+	main.camera_rig.snap_now()
+	await frames(10)
+	main.player.freeze(100000)
+	for i in 3:
+		await RenderingServer.frame_post_draw
+	var shown := main.stage.world.get_texture().get_image()
+	main.player.rig.visible = false
+	for i in 3:
+		await RenderingServer.frame_post_draw
+	var hidden := main.stage.world.get_texture().get_image()
+	var feet := main.camera_rig.camera.unproject_position(main.player.global_position)
+	var count := 0
+	for y in range(maxi(int(feet.y) - 80, 0), mini(int(feet.y) + 20, shown.get_height())):
+		for x in range(maxi(int(feet.x) - 40, 0), mini(int(feet.x) + 40, shown.get_width())):
+			var p := shown.get_pixel(x, y)
+			var q := hidden.get_pixel(x, y)
+			if absf(p.r - q.r) + absf(p.g - q.g) + absf(p.b - q.b) > 0.02:
+				count += 1
+	main.queue_free()
+	await frames(1)
+	return count
+
+
+func test_the_south_edge_hides_no_more_than_the_feet() -> void:
+	var open := await _body_pixels(Vector3(0.0, 0.0, 6.0))
+	assert_true(open > 300, "Abarax shows %d pixels in the open" % open)
+	var at_edge := await _body_pixels(Vector3(0.0, 0.0, 12.5 - 0.36))
+	assert_true(at_edge >= 0.9 * open, "at 0.36 m from the south edge %d of his %d pixels show" % [at_edge, open])

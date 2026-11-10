@@ -170,6 +170,14 @@ class Builder:
 					var at := Vector3(n[0], 0.0, n[1])
 					at.y = y if y != null else _ground(Vector2(at.x, at.z))
 					_piece(_group("Props"), args[0], at, n[2] if n.size() > 2 else 0.0)
+			"curb":
+				var n := _numbers(args, 5, 5)
+				if n.size() == 5:
+					_curb(_rect(n), n[4])
+			"barrier":
+				var n := _numbers(args, 5, 5)
+				if n.size() == 5:
+					_barrier(_rect(n), n[4])
 			"lamps":
 				var n := _numbers(args.slice(1), 3, 3)
 				if args.size() == 4 and n.size() == 3:
@@ -237,6 +245,19 @@ class Builder:
 		var body := _body(_name("Terrace"), _root, _world_and_feet)
 		var centre := rect.get_center()
 		_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, height / 2, centre.y)), FLAGSTONE)
+
+	# A low box of flagstone over `rect`, `height` high, on world and ik_surface: a curb, which hides no more than the feet.
+	func _curb(rect: Rect2, height: float) -> void:
+		var body := _body(_name("Curb"), _root, _world_and_feet)
+		var centre := rect.get_center()
+		_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, height / 2, centre.y)), FLAGSTONE)
+
+	# An unseen collider over `rect`, `height` high, on world alone: what a curb cannot be (a wall that stops bodies and
+	# hides nothing).
+	func _barrier(rect: Rect2, height: float) -> void:
+		var body := _body(_name("Barrier"), _root, LAYERS.WORLD)
+		var centre := rect.get_center()
+		_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, height / 2, centre.y)), null)
 
 	# `count` steps over `rect`, climbing toward `up` to the ground past its far edge.
 	func _stairs(rect: Rect2, count: int, up: Vector2) -> void:
