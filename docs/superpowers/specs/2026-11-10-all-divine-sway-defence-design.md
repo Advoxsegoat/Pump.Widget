@@ -71,7 +71,10 @@ A sway or a duck opens an **evade window**. While it is open, every ordinary blo
 Abarax is **evaded**, whoever throws it and from whichever side. One sway therefore slips two or three blows that land
 together.
 
-- The feet stay planted. A sway leans the body about 0.2 m; a duck drops it. He stays in range.
+- The feet stay planted. A sway is a slip and a dip: the head goes about 0.3 m off the line and drops a little with
+  it; a duck drops the whole body. He stays in range.
+- **A dodge must be seen.** The game is drawn small (a fighter is about 55 pixels tall), so each sway, pull and duck is
+  sized by what shows on screen, whichever way he faces, not by what a real boxer's slip measures.
 - A sway leans toward the pressed side of the screen. Measured against the way he faces, that is a lean to his left, to
   his right, or back (a pull). A press straight toward the foe is a slip to his left.
 - **An evade window does not stop a sweep or a thrust.** Those have their own answers (3.5).
@@ -192,6 +195,7 @@ Each keeps one answer, and its icon shows it.
 - The dash-step is the minimal dash: for a larger enemy's reach, for an area attack, for closing in.
 - It keeps Abarax facing his target (the lock, or the cursor; with neither, the way he already faces) and stops at
   bodies and walls.
+- It is a step, not a slide: the legs stride the way he goes and come back under him as he stops.
 - From frame 10 it can be cancelled into a palm, a heavy, a guard, a sway or a duck: dash in and strike.
 - Holding the key after the dash-step sprints, as it did after the roll.
 
@@ -212,8 +216,9 @@ Each keeps one answer, and its icon shows it.
 
 ## 5. Look, sound and readability
 
-- **Slip:** a weighty upper-body lean from the planted guard stance, out and back, the weight going onto one leg.
-  **Duck:** a drop under the swing and up.
+- **Slip:** a weighty slip and dip from the planted guard stance, out and back: the head and shoulders go off the line,
+  the body sinks, the weight goes onto one leg. A pull back folds the body away and tucks the chin. **Duck:** a drop
+  under the swing and up.
 - **Quick:** the same shapes, smaller and sharper.
 - **Flurry:** near-instant leans. Every dodge leaves an afterimage (a fading copy of his silhouette where he was, about
   8 frames), drawn behind him.
