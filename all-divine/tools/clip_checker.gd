@@ -69,6 +69,11 @@ const EVADE_OPENS := 2
 ## A dodge whose id starts with this is never invulnerable (spec 3.7: the dash-step), so it needs no iframes; a sway or
 ## duck has its evade window in their place.
 const NEVER_INVULNERABLE := "dash_step"
+## The moves of the sway-and-duck defence that no moveset or cancel window names yet (the input that starts them is the
+## next task's), seeded into every player actor's walk so that their clips are checked. Once the moveset and the windows
+## name them, this list goes.
+const NOT_YET_STARTED: Array[StringName] = [&"sway_left_slip", &"sway_left_quick", &"sway_left_flurry", &"duck_slip",
+		&"duck_quick", &"duck_flurry", &"dash_step"]
 ## The reaction that needs no recovery: the clip ends with the actor on the ground.
 const DEATH := &"death"
 ## A bone within this many degrees of its rest rotation counts as not moved.
@@ -416,6 +421,10 @@ func _start_moves(def: ActorDef, move_ids: PackedStringArray, out: PackedStringA
 				out.append("%s: brain attack presses '%s', which its moveset lacks" % [def.id, option.action if option != null else &""])
 		if def.brain.feint_chance > 0.0 and not def.moveset.has(EnemyBrain.FEINT_ACTION):
 			out.append("%s: brain feints, but its moveset has no feint ('%s')" % [def.id, EnemyBrain.FEINT_ACTION])
+	if def.team == ActorDef.Team.PLAYER:
+		for move_id in NOT_YET_STARTED:
+			if move_ids.has(String(move_id)):
+				found.append(String(move_id))
 	for action in def.moveset:
 		var move_id := String(def.moveset[action])
 		if move_ids.has(move_id):

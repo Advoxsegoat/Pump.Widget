@@ -41,6 +41,7 @@ F0 (Foundation) is built: a lit courtyard to walk in, with Abarax moving, rollin
 ### The sway-and-duck defence
 
 - Sway-defence Task 1: the rules of an evade. A move can carry an `evade` (SWAY or DUCK) and an `evade_on`/`evade_off` window (frame 2 on); while it is open `Combat.resolve` avoids every ordinary blow and grab as `EVADED` (a sweep or thrust still lands), perfect when the dodge matches the blow's new `line` (STRAIGHT: sway, ROUND: duck, a grab: either). An evaded blow is spent: no freeze, no push, no pair, not forgotten by the scanner, `runner.evaded` set. The hooks and the heavy are ROUND. The clip checker holds one window opening on frame 2.
+- Sway-defence Task 2: the sixteen sway, duck and dash-step moves and clips (the spec's three tempos, planted feet, dash-steps 1.3 m eased over ten frames), `MoveData.directional` and `redodge_frame`; nothing starts them yet. The clip checker seeds the base sways, ducks and dash-step (`NOT_YET_STARTED`, to go when Task 3 names them in the moveset and the windows). The builder gained an `@pelvis_move` layer entry and `root_travel`; the checker lets a sway, duck or dash-step have no iframes, and follows `directional`.
 
 ## Preview reel
 

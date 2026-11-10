@@ -15,15 +15,9 @@ rig_scene = ExtResource("2_rig")
 palette = ExtResource("4_palette")
 moveset = {
 &"dodge": &"dodge_roll",
-&"duck": &"duck_slip",
-&"duck_flurry": &"duck_flurry",
-&"duck_quick": &"duck_quick",
 &"guard": &"guard_raise",
 &"heavy": &"palm_heavy",
-&"palm": &"palm_jab",
-&"sway": &"sway_left_slip",
-&"sway_flurry": &"sway_left_flurry",
-&"sway_quick": &"sway_left_quick"
+&"palm": &"palm_jab"
 }
 locomotion = ExtResource("3_tuning")
 combat = ExtResource("5_combat")
