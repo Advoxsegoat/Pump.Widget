@@ -165,3 +165,79 @@ func test_the_rim_goes_on_the_bodys_own_meshes_found_once() -> void:
 	rig.apply_palette(load(ABARAX) as Palette)
 	assert_true(extra.material_override == null, "nor is it dressed in the palette")
 	extra.free()
+
+
+# The passes over `rig`'s first mesh, in the order they are chained.
+func _chain(rig: Rig) -> Array[ShaderMaterial]:
+	var chain: Array[ShaderMaterial] = []
+	var material := _meshes(rig)[0].material_overlay as ShaderMaterial
+	while material != null:
+		chain.append(material)
+		material = material.next_pass as ShaderMaterial
+	return chain
+
+
+# Each mark's two shaders are new to the renderer the first time something is drawn with them, and it builds them on
+# that frame: the first frame of a tell took twice as long as the next. So the rims a fight goes round (the first
+# RimMarks.WARM marks) are drawn once when a region loads: a body wears their passes, showing nothing, for a few frames.
+func test_warming_a_rig_draws_the_first_marks_passes_unseen_for_a_few_frames() -> void:
+	var rig := _rig()
+	RimMarks.forget()
+	var taken := RimMarks.taken()
+	rig.warm_rim()
+	assert_eq(RimMarks.made(), 2 * RimMarks.WARM, "the two shaders of each of the first %d marks are made" % RimMarks.WARM)
+	var chain := _chain(rig)
+	assert_eq(chain.size(), 2 * RimMarks.WARM, "and the body wears them all, one pass after another")
+	if chain.size() != 2 * RimMarks.WARM:
+		return
+	for i in RimMarks.WARM:
+		var mark := RimMarks.FIRST + i
+		var mark_pass := chain[2 * i]
+		var hull := chain[2 * i + 1]
+		assert_true(mark_pass.shader == RimMarks.mark_shader(mark), "mark %d's mark pass" % mark)
+		assert_true(hull.shader == RimMarks.hull_shader(mark), "then its hull")
+		assert_eq(mark_pass.render_priority, Rig.RIM_MARK_PRIORITY, "drawn where an aura's is")
+		assert_eq(hull.render_priority, Rig.RIM_MARK_PRIORITY + 1)
+		var strength: Variant = hull.get_shader_parameter(&"rim_strength")
+		assert_true(strength == null or float(strength) == 0.0, "a hull with no strength shows nothing (%s)" % str(strength))
+	for mesh in _meshes(rig):
+		assert_true(mesh.material_overlay == chain[0], "%s wears the passes" % mesh.name)
+	assert_eq(RimMarks.taken(), taken, "warming holds no mark")
+	assert_false(rig.aura_active(), "and is no aura")
+	# Taking each of those marks now makes nothing.
+	var held: Array[int] = []
+	for i in RimMarks.WARM:
+		var mark := RimMarks.take()
+		held.append(mark)
+		RimMarks.mark_shader(mark)
+		RimMarks.hull_shader(mark)
+	assert_eq(RimMarks.made(), 2 * RimMarks.WARM, "a rim that comes on later finds its shaders made (marks %s)" % str(held))
+	for mark in held:
+		RimMarks.give_back(mark)
+	# Drawn, they come off.
+	for i in Rig.WARM_FRAMES - 1:
+		await get_tree().process_frame
+	assert_true(_meshes(rig)[0].material_overlay == chain[0], "they stay for %d frames, to be drawn at least once" % Rig.WARM_FRAMES)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	for mesh in _meshes(rig):
+		assert_true(mesh.material_overlay == null, "%s: and then are taken off" % mesh.name)
+
+
+func test_an_aura_takes_over_from_the_warming_passes() -> void:
+	var rig := _rig()
+	rig.warm_rim()
+	rig.hold_aura(ROSE, 1.0)
+	var mark_pass := _meshes(rig)[0].material_overlay as ShaderMaterial
+	assert_true(mark_pass != null and mark_pass.next_pass == rig.rim_material(), "the aura's own two passes are what the body wears")
+	for i in Rig.WARM_FRAMES + 2:
+		await get_tree().process_frame
+	for mesh in _meshes(rig):
+		assert_true(mesh.material_overlay == mark_pass, "%s: the end of the warming leaves them on" % mesh.name)
+	# With an aura on there is nothing to warm with: the body's passes are the aura's.
+	rig.warm_rim()
+	assert_true(_meshes(rig)[0].material_overlay == mark_pass, "warming again changes nothing while it shows")
+	rig.clear_aura()
+	for i in Rig.WARM_FRAMES + 2:
+		await get_tree().process_frame
+		assert_true(_meshes(rig)[0].material_overlay == null, "and nothing is left over the body when it goes")

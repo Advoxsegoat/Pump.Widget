@@ -217,3 +217,44 @@ func test_the_arena_debug_keys_reach_the_arena_through_main() -> void:
 	_press_key(KEY_F5)  # the courtyard has no arena: the keys do nothing there
 	_press_key(KEY_F6)
 	_press_key(KEY_F9)
+
+
+# The passes over the first of `actor`'s body meshes, in the order they are chained.
+func _rim_passes(actor: Actor) -> Array[ShaderMaterial]:
+	var chain: Array[ShaderMaterial] = []
+	var mesh := actor.rig.get_node("Model").find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D
+	var material := mesh.material_overlay as ShaderMaterial
+	while material != null:
+		chain.append(material)
+		material = material.next_pass as ShaderMaterial
+	return chain
+
+
+# A rim's shaders are built the first time something is drawn with them, which made the first frame of a tell twice as
+# long as the next. So a region that loads has Abarax wear the passes of the first RimMarks.WARM marks, unseen, for its
+# first frames (Rig.warm_rim): after that, taking any of them makes no shader. tests/render/test_rim_first_frame.gd
+# times the frames.
+func test_a_region_that_loads_warms_the_rims_a_fight_will_light() -> void:
+	RimMarks.forget()
+	var main := _main()
+	var player := _player(main)
+	assert_eq(RimMarks.made(), 2 * RimMarks.WARM, "the shaders of the first %d marks are made when the yard is ready" % RimMarks.WARM)
+	assert_eq(_rim_passes(player).size(), 2 * RimMarks.WARM, "and Abarax wears their passes, to be drawn with the yard's first frames")
+	var held: Array[int] = []
+	for i in RimMarks.WARM:
+		var mark := RimMarks.take()
+		held.append(mark)
+		RimMarks.mark_shader(mark)
+		RimMarks.hull_shader(mark)
+	assert_eq(RimMarks.made(), 2 * RimMarks.WARM, "taking each of them makes no new shader (marks %s)" % str(held))
+	for mark in held:
+		RimMarks.give_back(mark)
+	for i in Rig.WARM_FRAMES + 1:
+		await get_tree().process_frame
+	assert_eq(_rim_passes(player).size(), 0, "the passes come off after a few frames")
+	# The courtyard's first frames draw them again: whatever the renderer kept, a region starts with them built.
+	_press_key(KEY_F5)
+	assert_eq(_rim_passes(player).size(), 2 * RimMarks.WARM, "and go on again in the next region")
+	for i in Rig.WARM_FRAMES + 1:
+		await get_tree().process_frame
+	assert_eq(_rim_passes(player).size(), 0)

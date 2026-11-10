@@ -159,6 +159,33 @@ func test_two_rims_one_body_behind_the_other() -> void:
 	_save()
 
 
+# The passes a region's first frames are drawn with, so that a rim's shaders are built before a fight needs them
+# (Rig.warm_rim): eight passes over Abarax, and not a pixel of the picture changes.
+func test_the_warming_passes_show_nothing() -> void:
+	var run := await _pose(&"knuckle_sweep", 10)
+	var main: Main = run["main"]
+	var foe: Actor = run["foe"]
+	var player := main.player
+	var at := _open_for(main, 0)
+	_put(foe, Transform3D(run["turn"] as Basis, at))
+	_put(player, Transform3D(Basis.IDENTITY, at - BEHIND))
+	main.camera_rig.snap_now()
+	await frames(Rig.WARM_FRAMES + 2)  # the passes the region put on when it loaded are off again
+	main.camera_rig.snap_now()
+	await _draw()
+	var without := _world(main)
+	var body := player.rig.get_node("Model").find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D
+	assert_true(body.material_overlay == null, "nothing over Abarax before")
+	player.rig.warm_rim()
+	await _draw()
+	assert_true(body.material_overlay != null, "the picture is taken with the passes on")
+	var with := _world(main)
+	var changed := ShotMasks.diff(with, without, Rect2i(Vector2i.ZERO, without.get_size()), 0.0)
+	_lines.append("warming    Abarax wearing the passes of the first %d marks: %d pixels of %d changed" % [RimMarks.WARM, changed.size(), without.get_width() * without.get_height()])
+	assert_eq(changed.size(), 0, "the warming passes change no pixel of the picture")
+	_save()
+
+
 # One move at an early frame and at its blow, in every place.
 func _check_move(move_id: StringName, at_frames: Array) -> void:
 	for frame: int in at_frames:

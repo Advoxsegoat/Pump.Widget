@@ -55,6 +55,9 @@ const TOON_SHADER := preload("res://render/shaders/toon_character.gdshader")
 ## body's mark is written before any body's hull reads it, and both come after the screen look's quad, which is the first
 ## of the transparent things, so the rim is drawn over the look and not blurred or outlined by it.
 const RIM_MARK_PRIORITY := -1
+## The warming passes (warm_rim) stay over the body for this many frames: drawn twice at least, wherever in a frame they
+## were put on.
+const WARM_FRAMES := 3
 ## An aura rises over this many seconds (or a third of its time, if that is shorter) and fades over the last of this many
 ## (or two fifths of its time).
 const AURA_RISE := 0.05
@@ -163,6 +166,8 @@ var _flash_left := 0.0
 var _rim: ShaderMaterial  # the rim's hull pass, made the first time an aura is asked for
 var _rim_mark: ShaderMaterial  # the rim's mark pass, drawn before it: the material over each mesh while an aura is on
 var _mark := 0  # the stencil mark the two passes share while an aura is on (RimMarks), 0 with none
+var _warm: ShaderMaterial  # the passes warm_rim put over the body, while they are on: the first of the chain
+var _warm_left := 0  # the frames they have left
 var _aura_on := false
 var _aura_held := false  # the aura is set by hold_aura, not an envelope
 var _aura_held_level := 0.0
@@ -206,6 +211,7 @@ func _ready() -> void:
 		_hitboxes[StringName(attachment.name)] = attachment.get_node("zone/shape") as CollisionShape3D
 	hurtbox = $Hurtbox
 	_body_meshes()
+	set_process(false)  # only the warming passes count frames (warm_rim); the body is driven by tick
 	_look_target = get_node_or_null(^"LookTarget") as Marker3D
 	for look in looks:
 		_look_influence.append(look.influence)
@@ -345,6 +351,27 @@ func aura_color() -> Color:
 ## The material of the rim's hull pass (null before the first aura): its uniforms are what the screen shows.
 func rim_material() -> ShaderMaterial:
 	return _rim
+
+
+## Has the renderer build the shaders of the rims a fight goes round, now and not on the frame a tell starts. Each mark
+## has its own two shaders (RimMarks), and a shader is built on the first frame something is drawn with it: the frame a
+## wind-up's rim came on in took half as long again, once for each mark. So the body wears the two passes of each of the
+## first RimMarks.WARM marks, one after another, for WARM_FRAMES frames, and they show nothing: a mark pass never does,
+## and a hull with no strength is clear. One body does it for all (a shader is built once, whatever is drawn with it):
+## Main asks Abarax, whom the camera is on, when a region loads, before anything there has a rim on. (While he wears
+## them his body carries those marks, and another body's rim would not show over him.)
+## With an aura on, the body's passes are the aura's, and this does nothing; an aura that comes on takes their place.
+func warm_rim() -> void:
+	if _aura_on:
+		return
+	if _warm == null:
+		for mark in range(RimMarks.FIRST + RimMarks.WARM - 1, RimMarks.FIRST - 1, -1):
+			var hull := _rim_pass(RimMarks.hull_shader(mark), RIM_MARK_PRIORITY + 1, _warm)
+			_warm = _rim_pass(RimMarks.mark_shader(mark), RIM_MARK_PRIORITY, hull)
+		for mesh in _body_meshes():
+			mesh.material_overlay = _warm
+	_warm_left = WARM_FRAMES
+	set_process(true)
 
 
 ## Where the clip of a stepped move is shown at gameplay time `t`: on a grid of `fps` steps per second,
@@ -721,17 +748,40 @@ func _body_meshes() -> Array[MeshInstance3D]:
 	return _meshes
 
 
+# Counts the warming passes' frames (warm_rim), and takes them off after the last.
+func _process(_delta: float) -> void:
+	_warm_left -= 1
+	if _warm_left <= 0:
+		_end_warming(true)
+
+
+# The warming passes are done with: taken off the body (`take_off`), or left for an aura's passes to replace.
+func _end_warming(take_off: bool) -> void:
+	if _warm != null and take_off:
+		for mesh in _body_meshes():
+			mesh.material_overlay = null
+	_warm = null
+	set_process(false)
+
+
+# One pass of a rim: `shader` at `priority`, with `next` drawn after it.
+static func _rim_pass(shader: Shader, priority: int, next: ShaderMaterial) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	material.render_priority = priority
+	material.next_pass = next
+	return material
+
+
 # Shows the aura as it now stands: its colour, width and strength go to the hull pass, and if the rim was off, its two
 # passes go over the body.
 func _show_rim() -> void:
 	if _rim == null:
-		_rim = ShaderMaterial.new()
-		_rim.render_priority = RIM_MARK_PRIORITY + 1
-		_rim_mark = ShaderMaterial.new()
-		_rim_mark.render_priority = RIM_MARK_PRIORITY
-		_rim_mark.next_pass = _rim
+		_rim = _rim_pass(null, RIM_MARK_PRIORITY + 1, null)
+		_rim_mark = _rim_pass(null, RIM_MARK_PRIORITY, _rim)
 	if not _aura_on:
 		_aura_on = true
+		_end_warming(false)
 		_set_rim_passes(true)
 	_rim.set_shader_parameter(&"rim_color", _aura_color)
 	_rim.set_shader_parameter(&"rim_width", rim_width_px)

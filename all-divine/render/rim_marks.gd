@@ -13,7 +13,9 @@ extends RefCounted
 ## The stencil buffer holds a byte, and 0 is "no body": the marks are 1 to 255, taken while a rim is on and given back
 ## when it goes off, the lowest free one first, so a fight uses the same two or three over and over. A mark is written
 ## into the shader's own code (a shader's stencil reference is not a uniform), so each mark has its own copy of the two
-## shaders, made the first time it is taken and kept.
+## shaders, made the first time it is asked for and kept. The renderer builds a shader on the first frame something is
+## drawn with it, so the first WARM marks' are drawn once, unseen, as a region loads (Rig.warm_rim), and not on the
+## frame a tell starts.
 
 const MARK_SHADER := preload("res://render/shaders/toon_rim_mark.gdshader")
 const HULL_SHADER := preload("res://render/shaders/toon_rim.gdshader")
@@ -21,6 +23,10 @@ const HULL_SHADER := preload("res://render/shaders/toon_rim.gdshader")
 ## show no rim over one another, and nothing else goes wrong.
 const FIRST := 1
 const LAST := 255
+## The marks a fight goes round, counted from FIRST: one for Abarax's rim, one for each of two foes with a tell showing,
+## and one to spare. Their shaders are made and drawn once when a region loads, so that taking one of them later builds
+## nothing; a fifth rim at once builds its own on the frame it comes on.
+const WARM := 4
 
 static var _taken := {}  # mark -> true
 static var _mark_shaders := {}  # mark -> Shader
@@ -45,6 +51,19 @@ static func give_back(mark: int) -> void:
 ## How many marks are taken now.
 static func taken() -> int:
 	return _taken.size()
+
+
+## How many shaders have been made ready so far: two for each mark whose passes were asked for.
+static func made() -> int:
+	return _mark_shaders.size() + _hull_shaders.size()
+
+
+## Forgets the shaders made so far: each is made again the next time it is asked for, and each copy (every mark's but
+## FIRST's, which are the files themselves) is then new to the renderer. A test that counts what a region makes ready,
+## or times the first frame of a rim, starts from here whatever ran before it.
+static func forget() -> void:
+	_mark_shaders.clear()
+	_hull_shaders.clear()
 
 
 ## The shader of the mark pass that writes `mark`.

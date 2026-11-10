@@ -184,7 +184,10 @@ func selftest_circuit() -> Array:
 
 # What a region gives the game when it is entered: the Hud follows its arena (none in the courtyard), and an arena runs
 # the fight by itself, begun with the player unless the self-test is on (it asks for what it wants, start_selftest).
+# And the rims a fight will light are drawn, unseen, with the region's first frames (Rig.warm_rim): those frames build
+# everything the region shows, and a rim that comes on later then builds nothing.
 func _enter_region() -> void:
+	player.rig.warm_rim()
 	var fight := arena()
 	hud.bind(player, camera_rig, stage, fight)
 	if fight != null:
