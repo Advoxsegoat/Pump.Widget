@@ -229,8 +229,8 @@ func test_the_marks_are_the_cancel_windows_and_cues_the_plan_lists() -> void:
 			assert_eq(fx.size(), 1, "%s: one effect" % id)
 			assert_eq(sfx.size(), 1, "%s: one sound" % id)
 			if fx.size() == 1 and sfx.size() == 1:
-				assert_eq([Marks.frame_of(fx[0]["time"]), fx[0]["args"]["name"]], [1, &"roll_dust"], "%s: the dust" % id)
-				assert_eq([Marks.frame_of(sfx[0]["time"]), sfx[0]["args"]["name"]], [1, &"roll_cloth"], "%s: the cloth" % id)
+				assert_eq([Marks.frame_of(fx[0]["time"]), fx[0]["args"]["name"]], [1, &"dust_puff"], "%s: the dust" % id)
+				assert_eq([Marks.frame_of(sfx[0]["time"]), sfx[0]["args"]["name"]], [1, &"cloth_move"], "%s: the cloth" % id)
 
 
 # --- the shapes ---

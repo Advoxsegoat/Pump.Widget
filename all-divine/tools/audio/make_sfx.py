@@ -317,8 +317,9 @@ def tell_glint(rng):
     return fade_out(mix([(layer(ring, 1.0), 0.0), (layer(sparkle, 0.25), 0.0)], n), 0.02)
 
 
-def roll_cloth(rng):
-    """A roll's cloth: a soft swish of noise whose centre rises, in two swells, over a quieter low rustle."""
+def cloth_move(rng):
+    """Cloth moving (a dash-step, a hop, a reaction): a soft swish of noise whose centre rises, in two swells, over a
+    quieter low rustle."""
     n = samples_in(0.45)
     env = swell(n, 0.4)
     ripple = [0.75 + 0.25 * math.sin(TAU * 7.0 * i / RATE) for i in range(n)]
@@ -327,8 +328,8 @@ def roll_cloth(rng):
     return mix([(layer(swish, 1.0), 0.0), (layer(rustle, 0.5), 0.0)], n)
 
 
-def roll_land(rng):
-    """The end of a roll: a soft thud and a puff of dust."""
+def foot_land(rng):
+    """A landing: a soft thud and a puff of dust (the hop's, the sweep's)."""
     n = samples_in(0.3)
     return saturate(mix([
         (layer(thump(n, 95.0, 48.0, 0.05, 0.06), 1.0), 0.0),
@@ -405,8 +406,8 @@ SOUNDS = {
     "catch_snap": (catch_snap, PEAK_DB),
     "perilous_sting": (perilous_sting, PEAK_DB),
     "tell_glint": (tell_glint, -3.0),
-    "roll_cloth": (roll_cloth, -8.0),
-    "roll_land": (roll_land, -4.0),
+    "cloth_move": (cloth_move, -8.0),
+    "foot_land": (foot_land, -4.0),
     "surface_cloth_1": (lambda r: surface_cloth(r, 1400.0), -6.0),
     "surface_cloth_2": (lambda r: surface_cloth(r, 1100.0), -6.0),
     "body_fall": (body_fall, PEAK_DB),

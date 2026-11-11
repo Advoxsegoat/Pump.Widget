@@ -7,7 +7,7 @@ extends TestCase
 ## and starts its trail and lands on frame 11 (its f10).
 
 const STAGE_SCENE := preload("res://render/pixel_stage.tscn")
-const FX_IDS: Array[StringName] = [&"hit_spark", &"palm_trail", &"roll_dust", &"glint", &"perilous_rose", &"charge_glow"]
+const FX_IDS: Array[StringName] = [&"hit_spark", &"palm_trail", &"dust_puff", &"glint", &"perilous_rose", &"charge_glow"]
 const ROSE := Color("e8607e")
 
 
@@ -134,8 +134,8 @@ func test_a_dash_step_sounds_its_cloth_and_kicks_up_dust_at_the_feet() -> void:
 	for f in sounds:
 		for id in sounds[f]:
 			heard.append([f, id])
-	assert_eq(heard, [[2, &"roll_cloth"]], "the cloth at its f1, and no landing: it never leaves the ground")
-	var dust := _live(&"roll_dust")
+	assert_eq(heard, [[2, &"cloth_move"]], "the cloth at its f1, and no landing: it never leaves the ground")
+	var dust := _live(&"dust_puff")
 	assert_eq(dust.size(), 1, "one puff")
 	assert_false(dust[0].get_parent() is BoneAttachment3D, "left on the ground, not riding a bone")
 
@@ -157,7 +157,7 @@ func test_a_hit_plays_impact_surface_and_voice_layers() -> void:
 
 func test_a_jab_that_flinches_plays_each_layer_once_and_the_flinch_its_cloth() -> void:
 	# The Duel's target (poise 5) flinches at the jab's 6, with a voice. The blow plays impact, surface and voice
-	# once each; the flinch adds cloth moving (roll_cloth), not a second surface_cloth over the blow's.
+	# once each; the flinch adds cloth moving (cloth_move), not a second surface_cloth over the blow's.
 	var voiced := Duel.def(ActorDef.Team.ENEMY, 5.0)
 	voiced.hurt_voice = &"catch_snap"
 	var run := Duel.make(self, [{"frames": 1, "press": [&"palm"]}, {"frames": 60}], [], 1.0, voiced)
@@ -165,7 +165,7 @@ func test_a_jab_that_flinches_plays_each_layer_once_and_the_flinch_its_cloth() -
 	var heard := await _sounds(run["a"], 11)
 	assert_eq(b.runner.current.id if b.runner.current != null else &"", &"flinch", "the jab flinched it")
 	var layers: Array = heard[11]
-	for id in [&"impact_palm", &"surface_cloth", &"catch_snap", &"roll_cloth"]:
+	for id in [&"impact_palm", &"surface_cloth", &"catch_snap", &"cloth_move"]:
 		assert_eq(layers.count(id), 1, "%s once: %s" % [id, layers])
 	assert_eq(layers.size(), 4, "and nothing else: %s" % [layers])
 

@@ -73,8 +73,8 @@ func _jab_marks(without: Array = [], extra: Array = []) -> Array:
 # A dash-step's marks (a DODGE with no evade, so no iframes): its cues, a recovery and the window that follows it.
 func _dash_marks(without: Array = [], extra: Array = []) -> Array:
 	var marks := [
-		_m(1, &"sfx", {"name": &"roll_cloth"}),
-		_m(1, &"fx", {"name": &"roll_dust"}),
+		_m(1, &"sfx", {"name": &"cloth_move"}),
+		_m(1, &"fx", {"name": &"dust_puff"}),
 		_m(10, &"recovery"),
 		_m(10, &"cancel_open", {"into": {&"palm": &"palm_jab"}}),
 	]

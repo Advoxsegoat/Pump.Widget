@@ -167,7 +167,7 @@ func test_start_fires_the_marks_at_time_zero() -> void:
 	var got: Array = []
 	actor.runner.mark.connect(func(kind: StringName, args: Dictionary) -> void: got.append([kind, args]))
 	actor.runner.start(Registry.fetch(&"moves", &"hop") as MoveData)
-	assert_eq(got, [[&"sfx", {"name": &"roll_cloth"}]], "the hop's f0 sound, on the start itself")
+	assert_eq(got, [[&"sfx", {"name": &"cloth_move"}]], "the hop's f0 sound, on the start itself")
 	actor.runner.tick(Intent.new(), DT)
 	assert_eq(got.size(), 1, "and not again on the next tick")
 

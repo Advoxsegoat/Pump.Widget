@@ -404,7 +404,7 @@ tracks/56/keys = {
 "transitions": PackedFloat32Array(1, 1),
 "values": [{
 "args": [{
-&"name": &"roll_cloth"
+&"name": &"cloth_move"
 }],
 "method": &"sfx"
 }, {
@@ -423,7 +423,7 @@ tracks/57/keys = {
 "transitions": PackedFloat32Array(1),
 "values": [{
 "args": [{
-&"name": &"roll_dust"
+&"name": &"dust_puff"
 }],
 "method": &"fx"
 }]

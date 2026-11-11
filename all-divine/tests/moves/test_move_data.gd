@@ -54,45 +54,45 @@ const LENGTHS := {&"palm_jab": 35, &"palm_cross": 40, &"palm_hook": 82, &"palm_h
 const STEPS := {&"palm_jab": 12, &"palm_cross": 12, &"palm_hook": 12, &"palm_heavy": 12}
 # The reactions every actor shares (F1 Tasks 5 and 8): [length in frames, whether the move takes the clip's root
 # motion, then its marks as in TABLE]. Each is smooth. The death's thud and dust are on the frame its hips
-# meet the ground. A reaction's own sound is cloth moving (roll_cloth): the blow that caused it already plays
+# meet the ground. A reaction's own sound is cloth moving (cloth_move): the blow that caused it already plays
 # the target's surface (ActorFx).
 const REACTIONS := {
 	&"flinch": [27, false, [
-		[0, &"sfx", {"name": &"roll_cloth"}],
-		[0, &"fx", {"name": &"roll_dust"}],
+		[0, &"sfx", {"name": &"cloth_move"}],
+		[0, &"fx", {"name": &"dust_puff"}],
 		[20, &"recovery", {}],
 		[22, &"cancel_open", {"into": {&"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	]],
 	&"stagger": [48, false, [
-		[0, &"sfx", {"name": &"roll_cloth"}],
-		[0, &"fx", {"name": &"roll_dust"}],
+		[0, &"sfx", {"name": &"cloth_move"}],
+		[0, &"fx", {"name": &"dust_puff"}],
 		[40, &"recovery", {}],
 		[42, &"cancel_open", {"into": {&"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	]],
 	&"death": [144, false, [
 		[56, &"sfx", {"name": &"body_fall"}],
-		[56, &"fx", {"name": &"roll_dust"}],
+		[56, &"fx", {"name": &"dust_puff"}],
 	]],
 	&"guard_hit": [21, false, [
-		[0, &"sfx", {"name": &"roll_cloth"}],
-		[0, &"fx", {"name": &"roll_dust"}],
+		[0, &"sfx", {"name": &"cloth_move"}],
+		[0, &"fx", {"name": &"dust_puff"}],
 		[6, &"cancel_open", {"into": {&"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 		[12, &"recovery", {}],
 		[14, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	]],
 	&"guard_break": [60, false, [
-		[0, &"sfx", {"name": &"roll_cloth"}],
-		[0, &"fx", {"name": &"roll_dust"}],
+		[0, &"sfx", {"name": &"cloth_move"}],
+		[0, &"fx", {"name": &"dust_puff"}],
 		[50, &"recovery", {}],
 	]],
 	&"parried": [36, false, [
-		[0, &"sfx", {"name": &"roll_cloth"}],
-		[0, &"fx", {"name": &"roll_dust"}],
+		[0, &"sfx", {"name": &"cloth_move"}],
+		[0, &"fx", {"name": &"dust_puff"}],
 		[36, &"recovery", {}],
 	]],
 	&"caught": [54, false, [
-		[0, &"sfx", {"name": &"roll_cloth"}],
-		[0, &"fx", {"name": &"roll_dust"}],
+		[0, &"sfx", {"name": &"cloth_move"}],
+		[0, &"fx", {"name": &"dust_puff"}],
 		[45, &"recovery", {}],
 	]],
 }
@@ -113,13 +113,13 @@ const GUARD_MOVES := {
 		[14, &"guard_off", {}],
 	]],
 	&"parry": [24, false, [
-		[0, &"sfx", {"name": &"roll_cloth"}],
+		[0, &"sfx", {"name": &"cloth_move"}],
 		[0, &"fx", {"name": &"glint"}],
 		[3, &"cancel_open", {"into": {&"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 		[8, &"cancel_open", {"into": {&"palm": &"palm_jab", &"heavy": &"palm_heavy", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	]],
 	&"catch": [30, false, [
-		[0, &"sfx", {"name": &"roll_cloth"}],
+		[0, &"sfx", {"name": &"cloth_move"}],
 		[4, &"fx", {"name": &"palm_trail", "bone": &"hand_r"}],
 		[8, &"cancel_open", {"into": {&"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 		[14, &"cancel_open", {"into": {&"palm": &"palm_jab", &"heavy": &"palm_heavy", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],

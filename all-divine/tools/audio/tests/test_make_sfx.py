@@ -27,7 +27,7 @@ NAMES = [
     "impact_heavy_1", "impact_heavy_2",
     "whoosh_light_1", "whoosh_light_2", "whoosh_light_3", "whoosh_heavy",
     "guard_block_1", "guard_block_2", "parry_ring", "catch_snap",
-    "perilous_sting", "tell_glint", "roll_cloth", "roll_land",
+    "perilous_sting", "tell_glint", "cloth_move", "foot_land",
     "surface_cloth_1", "surface_cloth_2", "body_fall", "charge_hum", "stamina_refused",
 ]
 

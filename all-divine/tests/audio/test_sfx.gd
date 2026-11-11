@@ -9,7 +9,7 @@ const STAGE_SCENE := preload("res://render/pixel_stage.tscn")
 const CUES := {
 	&"impact_palm": 3, &"impact_heavy": 2, &"palm_whoosh": 3, &"whoosh_light": 3, &"whoosh_heavy": 1,
 	&"guard_block": 2, &"parry_ring": 1, &"catch_snap": 1, &"perilous_sting": 1, &"tell_glint": 1,
-	&"roll_cloth": 1, &"roll_land": 1, &"surface_cloth": 2, &"body_fall": 1, &"charge_hum": 1,
+	&"cloth_move": 1, &"foot_land": 1, &"surface_cloth": 2, &"body_fall": 1, &"charge_hum": 1,
 }
 
 
@@ -93,10 +93,10 @@ func test_an_unknown_id_warns_plays_nothing_and_is_recorded() -> void:
 
 
 func test_what_was_played_is_forgotten_with_the_frame() -> void:
-	Sfx.play(&"roll_land")
+	Sfx.play(&"foot_land")
 	Sfx.play(&"surface_cloth")
 	quietly(func() -> void: Sfx.play(&"no_such_cue"))
-	assert_eq(Sfx.last_played(), [&"roll_land", &"surface_cloth"] as Array[StringName], "in the order played")
+	assert_eq(Sfx.last_played(), [&"foot_land", &"surface_cloth"] as Array[StringName], "in the order played")
 	await frames(1)
 	assert_eq(Sfx.last_played().size(), 0, "a frame later")
 	assert_eq(Sfx.last_unknown().size(), 0)
@@ -159,9 +159,9 @@ func test_a_world_that_is_gone_does_not_take_the_pool_with_it() -> void:
 	camera.stage = stage
 	stage.world.add_child(camera)
 	for i in 16:
-		Sfx.play(&"roll_land", Vector3(float(i), 0, 0))
+		Sfx.play(&"foot_land", Vector3(float(i), 0, 0))
 	stage.free()
 	for i in 20:
-		Sfx.play(&"roll_land", Vector3(float(i), 0, 0))
-	Sfx.play(&"roll_land")
+		Sfx.play(&"foot_land", Vector3(float(i), 0, 0))
+	Sfx.play(&"foot_land")
 	assert_eq(Sfx.playing_nodes().size(), 16, "sixteen voices still")
