@@ -216,13 +216,10 @@ func test_posture_still_breaks_it_through_hyper_armour() -> void:
 	assert_false(heavy.runner.hyperarmour, "the armour went with the move it cut off")
 
 
-func test_a_broken_heavy_is_finished_and_the_blows_reach_its_larger_body() -> void:
-	# The finisher stages follower and lead from the lead's size alone, so a follower 18% larger is where it could go wrong:
-	# each of the three blows must reach it (its head or torso at most REACH from the striking hand and SINK inside it), and the
-	# two bodies pass at most SINK into each other (F1 Task 10's staging criteria, as test_knuckle_staging holds them for
-	# tiers I and III). It has HP for the three blows (60 of its 140) and lives.
-	var def := _heavy_def().duplicate() as ActorDef
-	var run := _fight(1.0, [{"frames": 40}, {"frames": 1, "press": [&"palm"]}, {"frames": 300}], [], 0.0, def)
+# Abarax's finisher on `def` (a broken posture, his palm on frame 10): {blows (each the striking hand's gap to the body, in metres:
+# negative is inside it), sink (the deepest the two bodies pass into each other), seen (the pair began), hp}.
+func _finisher_on(def: ActorDef) -> Dictionary:
+	var run := _fight(1.0, [{"frames": 9}, {"frames": 1, "press": [&"palm"]}, {"frames": 300}], [], 0.0, def)
 	var heavy: Actor = run["heavy"]
 	var abarax: Actor = run["abarax"]
 	track(PostureBreaker.make(abarax, heavy))
@@ -230,38 +227,51 @@ func test_a_broken_heavy_is_finished_and_the_blows_reach_its_larger_body() -> vo
 	abarax.runner.mark.connect(func(kind: StringName, _args: Dictionary) -> void:
 		if kind == &"pair_hit":
 			hit_now[0] = true)
-	await Duel.play_to(self, abarax, 2)
-	assert_true(heavy.is_in_group(Actor.FINISHABLE_GROUP), "broken")
-	var blows := 0
-	var worst_sink := -INF
-	var short := 0.0
-	var deepest := 0.0
-	var seen_pair := false
+	var out := {"blows": [], "sink": -INF, "seen": false, "hp": 0.0}
 	while abarax.frame < 400:
 		await frames(1)
 		if abarax.paired_with == heavy:
-			seen_pair = true
-		elif seen_pair and heavy.paired_with == null:
+			out["seen"] = true
+		elif out["seen"] and heavy.paired_with == null:
 			break
-		if not seen_pair:
+		if not out["seen"]:
 			continue
 		var a_caps := Bodies.of(abarax.rig)
 		var h_caps := Bodies.of(heavy.rig)
-		worst_sink = maxf(worst_sink, Bodies.overlap(a_caps, h_caps)[0])
+		out["sink"] = maxf(out["sink"], Bodies.overlap(a_caps, h_caps)[0])
 		if hit_now[0]:
 			hit_now[0] = false
 			var left := Bodies.strike_gap(a_caps, h_caps, "hand_l")
 			var right := Bodies.strike_gap(a_caps, h_caps, "hand_r")
-			var best: Array = left if left[0] < right[0] else right
-			short = maxf(short, best[0])
-			deepest = minf(deepest, best[0])
-			blows += 1
-	assert_true(seen_pair, "his palm starts the finisher on it")
-	assert_eq(blows, 3, "three blows")
-	assert_true(short <= 0.08, "each reaches it (at worst %.3f m short)" % short)
-	assert_true(deepest >= -0.05, "and none is more than 5 cm inside it (%.3f m)" % deepest)
-	assert_true(worst_sink <= 0.05, "and the bodies pass at most %.3f m into each other" % worst_sink)
-	assert_eq(heavy.stats.hp, 140.0 - 60.0, "the finisher took 15, 15 and 30 of its 140 HP")
+			out["blows"].append(minf(left[0], right[0]))
+	out["hp"] = heavy.stats.hp
+	_end(run)
+	return out
+
+
+func test_a_broken_heavy_is_finished_and_the_blows_reach_its_larger_body() -> void:
+	# The finisher stages the pair from the lead's size, and the def's own pair_reach for a follower that is not the model's
+	# size: each of the three blows must reach the heavy (its head or torso at most 8 cm from the striking hand and 5 cm inside
+	# it), and the bodies pass at most 5 cm into each other (F1 Task 10's staging criteria). It has HP for the three blows (60 of
+	# its 140) and lives.
+	var def := _heavy_def().duplicate() as ActorDef
+	var out := await _finisher_on(def)
+	assert_true(out["seen"], "his palm starts the finisher on it")
+	assert_eq(out["blows"].size(), 3, "three blows")
+	for gap: float in out["blows"]:
+		assert_true(gap <= 0.08 and gap >= -0.05, "a blow reaches it (%.3f m from the body)" % gap)
+	assert_true(out["sink"] <= 0.05, "and the bodies pass at most %.3f m into each other" % out["sink"])
+	assert_eq(out["hp"], 140.0 - 60.0, "the finisher took 15, 15 and 30 of its 140 HP")
+
+
+func test_the_finisher_on_tier_three_is_as_it_was_before_the_heavy() -> void:
+	# Tier III (1.04) is not the heavy's to change: its three blows' gaps are what they were at the base commit.
+	var out := await _finisher_on((load("res://data/actors/knuckle_3.tres") as ActorDef).duplicate() as ActorDef)
+	var base := [0.0396, 0.0149, 0.077]  # measured on the code at 19fc53a with this fixture
+	assert_eq(out["blows"].size(), 3)
+	for i in mini(3, out["blows"].size()):
+		assert_near(out["blows"][i], base[i], 0.004, "blow %d: %.3f m, as at the base (%.3f)" % [i + 1, out["blows"][i], base[i]])
+	assert_eq(load("res://data/actors/knuckle_3.tres").pair_reach, 1.0, "tier III has the model's reach")
 
 
 func _counter_after_dodge(evade: StringName, links: int, counter_at: int, duck_at: int) -> Dictionary:
