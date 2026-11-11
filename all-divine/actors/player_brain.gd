@@ -14,8 +14,8 @@ extends Brain
 ## Sway and duck (spec 2): guard held (or pressed on this very frame) and a direction pressed on this frame is a sway,
 ## or a duck when the screen direction is within DUCK_CONE_DEG of straight down; the intent presses `sway` or `duck`
 ## with the evade_dir (the camera's yaw turns the screen into the world), and a `guard` press of the same frame is
-## dropped, so a direction and guard together are a sway and not a parry. A direction that was down before guard was
-## presses nothing (Inputs.direction_pressed_this_frame is a press, not a hold).
+## dropped, so a direction and guard together are a sway and not a parry. A direction that was down before guard went
+## down presses nothing (Inputs.direction_pressed_this_frame is a press, not a hold).
 ##
 ## Lock-on (see LockOn): lock_on locks the foe in the picture that the cursor, the stick or his facing (in that order) points
 ## at, or lets go. While locked, target_left and target_right (a flick of the right stick), and the wheel, move to the
