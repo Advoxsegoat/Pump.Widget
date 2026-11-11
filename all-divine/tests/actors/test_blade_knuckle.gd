@@ -31,6 +31,8 @@ const RECOVERY := 24
 ## How near he stands (metres, centre to centre) when a counter starts after a perfect dodge of his cut or chop: the hook
 ## lands to about 1.1 m, the rising palm to 1.28 m.
 const COUNTER_GAP := 1.10
+## How far the sword hand may be from the carry's where a move joins it (the pop rule's limit for a hand across a join).
+const HAND_STEP := 0.25
 ## Where the whole attack of an action stops landing on a standing Abarax (he steps through the cut and the chop; measured to 2.3 and 2.8 m).
 const MISSES_FROM := {&"palm": 2.7, &"gift": 3.1}
 
@@ -417,7 +419,8 @@ func test_a_counter_after_a_dodged_cut_reaches_him() -> void:
 func test_no_blade_clip_pops() -> void:
 	var rig := (_def().rig_scene.instantiate()) as Rig
 	track(rig)
-	for id: StringName in MOVES:
+	var clips: Array = MOVES.keys() + [&"blade_idle", &"blade_walk", &"blade_jog", &"blade_sprint"]
+	for id: StringName in clips:
 		var worst: Array = ClipMotion.worst_pop(rig, id)
 		assert_true(worst[0] <= worst[3], "%s: the %s moves %.3f m to f%d (at most %.2f)" % [id, worst[1], worst[0], worst[2], worst[3]])
 		var limb: Array = ClipMotion.worst_join(rig, id)
@@ -629,3 +632,85 @@ func test_the_blade_knuckles_attack_mix() -> void:
 	assert_true(share.call(&"blade_lunge") >= 0.08 and share.call(&"blade_lunge") <= 0.15, "the lunge is 8 to 15%%: %s" % mix)
 	assert_true(repeats >= ceili((total - 20) * 0.2), "the same attack follows itself in at least 20%%: %s" % mix)
 	assert_true(total >= 170 and total <= 254, "about 10.6 sequences a fight, within 20%% (170 to 254 in 20): %s" % mix)
+
+
+# --- the armed carry ---
+
+# The clips the locomotion blend of `rig` plays, by blend point: [idle, walk, jog, sprint] in speed order.
+static func _loco_clips(rig: Rig) -> Array:
+	var loco := (rig.tree.tree_root as AnimationNodeBlendTree).get_node(&"loco") as AnimationNodeBlendSpace1D
+	var names := []
+	for i in loco.get_blend_point_count():
+		names.append((loco.get_blend_point_node(i) as AnimationNodeAnimation).animation)
+	return names
+
+
+func test_his_locomotion_plays_his_armed_clips_and_nobody_elses_changes() -> void:
+	var arena := TestArena.make(self)
+	var blade := TestArena.spawn(arena, _def(), Brain.new(), Vector3(0, 0, 0), "Blade")
+	assert_eq(_loco_clips(blade.rig), [&"blade_idle", &"blade_walk", &"blade_jog", &"blade_sprint"], "the blade Knuckle carries the sword")
+	var others := [load(FISTS[0]), load(FISTS[2]), load(Duel.ABARAX)]
+	for i in others.size():
+		var actor := TestArena.spawn(arena, others[i] as ActorDef, Brain.new(), Vector3(4.0 + i * 3.0, 0, 0), "Other%d" % i)
+		assert_eq(_loco_clips(actor.rig), [&"idle", &"walk", &"jog", &"sprint"], "%s's locomotion is what it was" % (others[i] as ActorDef).id)
+	# A rig of the shared scene made after he stood there is untouched too: the scene's blend tree is not his to change.
+	var fresh := (load(FISTS[0]) as ActorDef).rig_scene.instantiate() as Rig
+	track(fresh)
+	assert_eq(_loco_clips(fresh), [&"idle", &"walk", &"jog", &"sprint"], "the shared rig scene is as it was")
+	var def := _def()
+	assert_eq(def.locomotion_clips, {&"idle": &"blade_idle", &"walk": &"blade_walk", &"jog": &"blade_jog", &"sprint": &"blade_sprint"})
+	for clip: StringName in def.locomotion_clips.values():
+		assert_true(blade.rig.tree.has_animation(clip), "the rig has %s" % clip)
+	assert_eq(ClipChecker.new().check_actor(def), PackedStringArray(), "the clip checker passes him with them")
+
+
+func test_his_moves_start_from_and_return_to_the_carry_without_a_pop() -> void:
+	# Standing, he starts the cut, the chop and the lunge from the carry and each of the four ends back in it: the sword hand is
+	# at most HAND_STEP from where the carry has it at the join (the rig blends the join in over 0.05 s, as for every move).
+	var rig := (_def().rig_scene.instantiate()) as Rig
+	track(rig)
+	rig.set_locomotion_clips(_def().locomotion_clips)
+	var hand := func(clip: StringName, frame: int) -> Vector3:
+		rig.play_move(clip, 0.0)
+		rig.set_move_time(float(frame) / Marks.RATE)
+		rig.tick(1.0 / Marks.RATE)
+		return rig.global_transform.basis.inverse() * (rig.animated_pose(&"hand_r").origin - rig.global_position)
+	var carry: Vector3 = hand.call(&"blade_idle", 0)
+	for id: StringName in [&"blade_cut", &"blade_chop", &"blade_lunge"]:
+		assert_true(carry.distance_to(hand.call(id, 0)) <= HAND_STEP, "%s starts %.2f m from the carry (at most %.2f)" % [id, carry.distance_to(hand.call(id, 0)), HAND_STEP])
+	for id: StringName in MOVES:
+		var last := _length(id)
+		assert_true(carry.distance_to(hand.call(id, last)) <= HAND_STEP, "%s ends %.2f m from the carry (at most %.2f)" % [id, carry.distance_to(hand.call(id, last)), HAND_STEP])
+
+
+## Capsules of his body, bone to bone and radius: the torso, the legs, the head and the left arm (the sword hand's own arm is
+## what holds it).
+const BODY := [[&"pelvis", &"spine_03", 0.17], [&"spine_03", &"neck_01", 0.14], [&"thigh_l", &"calf_l", 0.10], [&"thigh_r", &"calf_r", 0.10],
+		[&"calf_l", &"foot_l", 0.07], [&"calf_r", &"foot_r", 0.07], [&"Head", &"Head", 0.12], [&"upperarm_l", &"lowerarm_l", 0.06],
+		[&"lowerarm_l", &"hand_l", 0.05]]
+
+
+static func _distance_to_segment(p: Vector3, a: Vector3, b: Vector3) -> float:
+	var ab := b - a
+	var length := ab.length_squared()
+	return p.distance_to(a + ab * (0.0 if length < 1e-9 else clampf((p - a).dot(ab) / length, 0.0, 1.0)))
+
+
+func test_the_sword_is_never_inside_his_body_or_under_the_floor_when_he_carries_it() -> void:
+	var rig := (_def().rig_scene.instantiate()) as Rig
+	track(rig)
+	for clip: StringName in [&"blade_idle", &"blade_walk", &"blade_jog", &"blade_sprint"]:
+		var deepest := 0.0
+		var lowest := 9.0
+		for frame in range(0, roundi(rig.tree.get_animation(clip).length * Marks.RATE), 2):
+			rig.play_move(clip, 0.0)
+			rig.set_move_time(float(frame) / Marks.RATE)
+			rig.tick(1.0 / Marks.RATE)
+			var hand := rig.animated_pose(&"hand_r")
+			for i in 16:
+				var point := hand * Vector3(-0.006, 0.065, 0.04 + 0.76 * i / 15.0)
+				lowest = minf(lowest, point.y)
+				for part: Array in BODY:
+					deepest = maxf(deepest, float(part[2]) - _distance_to_segment(point, rig.animated_pose(part[0]).origin, rig.animated_pose(part[1]).origin))
+		assert_true(deepest <= 0.001, "%s: the sword goes %.3f m into his body" % [clip, deepest])
+		assert_true(lowest > 0.05, "%s: the sword's lowest point is %.2f m above the floor" % [clip, lowest])

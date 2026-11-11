@@ -393,6 +393,21 @@ static func stepped_time(t: float, fps: int) -> float:
 	return maxf(floorf(t * fps + 1e-4), 1.0) / fps
 
 
+## Has the locomotion blend play `clips` (base clip name -> clip name: &"idle" -> &"blade_idle") in place of the clips it names, from
+## the next tick on. The blend tree is a resource the scene shares with every rig made from it, so this rig takes a copy of it
+## first and changes only the copy: no other body of the scene changes. A clip the rig lacks is an error and is left as it was.
+func set_locomotion_clips(clips: Dictionary) -> void:
+	tree.tree_root = tree.tree_root.duplicate(true)
+	var loco := (tree.tree_root as AnimationNodeBlendTree).get_node(&"loco") as AnimationNodeBlendSpace1D
+	for i in loco.get_blend_point_count():
+		var node := loco.get_blend_point_node(i) as AnimationNodeAnimation
+		var armed := StringName(str(clips.get(node.animation, node.animation)))
+		if not tree.has_animation(armed):
+			push_error("Rig: '%s' has no locomotion clip '%s'" % [name, armed])
+			continue
+		node.animation = armed
+
+
 ## Sets the locomotion blend: `speed` in m/s picks between idle, walk, jog and sprint (the blend points
 ## sit at those clips' ground speeds), and `backward` plays the cycle in reverse.
 func set_locomotion(speed: float, backward: bool) -> void:

@@ -14,6 +14,12 @@ team = 1
 rig_scene = ExtResource("2_rig")
 palette = ExtResource("4_palette")
 hidden_parts = PackedStringArray("Knuckle_Pauldron")
+locomotion_clips = {
+&"idle": &"blade_idle",
+&"jog": &"blade_jog",
+&"sprint": &"blade_sprint",
+&"walk": &"blade_walk"
+}
 model_scale = 1.0
 moveset = {
 &"dodge": &"knuckle_feint",
@@ -42,4 +48,4 @@ max_stamina = 100.0
 max_posture = 70.0
 poise = 8.0
 look_height = 1.6
-required_clips = PackedStringArray("idle", "walk", "jog", "sprint")
+required_clips = PackedStringArray("idle", "walk", "jog", "sprint", "blade_idle", "blade_walk", "blade_jog", "blade_sprint")

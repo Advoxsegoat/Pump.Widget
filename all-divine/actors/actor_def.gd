@@ -55,5 +55,8 @@ enum Team { PLAYER, ENEMY }
 @export var surface_sound := &"surface_cloth"
 ## The sound cue of its voice when a blow lands on it; none is silent.
 @export var hurt_voice := &""
+## The clips his locomotion plays in place of the rig's own idle, walk, jog and sprint: base clip name -> clip name (the blade
+## Knuckle carries his sword in `blade_idle` and the rest). Empty: the rig's own, as every other actor has them. Rig.set_locomotion_clips.
+@export var locomotion_clips: Dictionary = {}
 ## Clips the rig must have, and that must not leave the bind pose showing (see ClipChecker).
 @export var required_clips := PackedStringArray(["idle", "walk", "jog", "sprint"])

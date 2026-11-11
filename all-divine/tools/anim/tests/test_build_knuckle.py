@@ -129,7 +129,7 @@ class BuildKnuckle(unittest.TestCase):
         length = float(blade[:, 2].max()) - 0.052
         self.assertAlmostEqual(length, 0.75, delta=0.005, msg="0.75 m from the guard to the tip")
         self.assertLess(float(np.ptp(blade[:, 0])), 0.03, "a flat blade: its thickness is small")
-        self.assertTrue(0.03 <= float(np.ptp(blade[:, 1])) <= 0.07, "and a few centimetres wide")
+        self.assertTrue(0.095 <= float(np.ptp(blade[:, 1])) <= 0.115, "and a cleaver's breadth, about 10 cm, wide")
         self.assertTrue(float(local[:, 2].min()) < -0.05, "the grip and pommel lie behind the guard, in the fist")
         self.assertLess(len(points) // 3, 200, "a small mesh: the whole model stays within its budget")
 

@@ -210,6 +210,8 @@ func _ready() -> void:
 		rig.apply_palette(def.palette)
 	rig.hide_parts(def.hidden_parts)
 	rig.set_model_scale(def.model_scale)
+	if not def.locomotion_clips.is_empty():
+		rig.set_locomotion_clips(def.locomotion_clips)
 	stats = Stats.from_def(def)
 	locomotion = Locomotion.new(def.locomotion)
 	if def.chain != null:

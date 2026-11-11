@@ -23,7 +23,7 @@ The meshes, and what each is made of:
     Knuckle_Hood      Male_Ranger_Head_Hood
     Knuckle_Pauldron  Male_Ranger_Acc_Pauldron
     Knuckle_Blade     a sword made here (make_blade), not taken from a pack: a straight single-edged blade 0.75 m from
-                      its guard to its tip, with the guard, grip and pommel, in the right hand. It is skinned to hand_r
+                      its guard to its tip and 10.5 cm broad, with the guard, grip and pommel, in the right hand. It is skinned to hand_r
                       alone, so it follows every clip as the hand does, and only the blade Knuckle shows it.
 
 Palette slots are stored as UV2.x = (slot + 0.5) / 16 (UV2.y = 0.5), as Abarax's are. Vertex colours are dropped.
@@ -204,15 +204,15 @@ POMMEL_Z = (-0.085, -0.070)
 GRIP_Z = (-0.070, 0.040)
 GUARD_Z = (0.040, 0.052)
 BLADE_LENGTH = 0.75  # from the guard's face to the tip
-BLADE_WIDTH = 0.052  # spine to edge
+BLADE_WIDTH = 0.105  # spine to edge: a cleaver's breadth, over 3 px across at the game's 32 px a metre
 BLADE_THICKNESS = 0.014  # at the spine
-BLADE_BEVEL = 0.016  # how far from the edge the flat face turns into the edge's bevel
+BLADE_BEVEL = 0.03  # how far from the edge the flat face turns into the edge's bevel
 TIP_LENGTH = 0.075  # the last stretch, where the edge sweeps up to the spine
-TIP_SPINE_GAP = 0.010  # the tip stands this far from the spine's line, toward the edge
+TIP_SPINE_GAP = 0.018  # the tip stands this far from the spine's line, toward the edge
 BOX_HALF = {  # (x, y) half-sizes of each box part
     "pommel": (0.016, 0.016),
     "grip": (0.0145, 0.0135),
-    "guard": (0.021, 0.046),
+    "guard": (0.021, 0.062),
 }
 
 
@@ -243,7 +243,7 @@ def blade_faces(vertices, faces, slots):
         return [(cx + x * scale, cy + y * scale + shift) for x, y in pts]
 
     rings = [(z0 - 0.004, section(1.0, 0.0)), (z_tip - TIP_LENGTH, section(1.0, 0.0)),
-             (z_tip - TIP_LENGTH / 2.0, section(0.55, 0.012))]
+             (z_tip - TIP_LENGTH / 2.0, section(0.55, 0.022))]
     base = len(vertices)
     for z, pts in rings:
         vertices.extend((x, y, z) for x, y in pts)
