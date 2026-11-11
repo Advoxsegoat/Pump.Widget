@@ -280,6 +280,7 @@ func _start(move: MoveData, intent: Intent, force := false) -> void:
 			_track_until = m["time"]
 	_begin_warp(move, intent)
 	_travel_turn = _turn_onto_stick(move, intent)
+	rig.release_feet()  # a hold of an earlier move ends with it: a reaction that cuts a counter short starts with free feet
 	if move.plant_feet:
 		rig.hold_feet(Rig.FEET_HOLD_FRAMES)
 	rig.play_move(move.clip, move.blend_in)

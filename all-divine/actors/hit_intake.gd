@@ -135,6 +135,7 @@ func die(lying := false) -> void:
 	_actor.buffer.clear()
 	if _actor.chain != null:
 		_actor.chain.end()
+	_actor.rig.release_feet()
 	_actor.rig.set_lifeless(true)
 	_actor.rig.hurtbox.collision_layer = 0
 	_death = null if lying else _reaction_move(&"death")

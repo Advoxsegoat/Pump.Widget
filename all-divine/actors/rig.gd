@@ -497,6 +497,13 @@ func hold_feet(frames: int) -> void:
 	foot_planter.hold_frames(frames)
 
 
+## Lets every held foot go at once: another move has started (a reaction too), or the body died or was paired.
+func release_feet() -> void:
+	if foot_planter != null:
+		foot_planter.holds.clear()
+		foot_planter.hold_frames(0)
+
+
 ## Where `foot` was in the world in the last tick's pose before it was planted (the clips' pose with the
 ## modifiers before the FootPlanter), placed where the body is now: where to probe for the ground under it.
 ## Before the first tick, or without a planter, the clips' pose.

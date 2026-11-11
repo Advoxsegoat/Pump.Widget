@@ -5,6 +5,7 @@ extends SceneTree
 ##
 ##   tools/godot.sh -s res://tools/anim/key_counters.gd            writes the four layer files
 ##   tools/godot.sh -s res://tools/anim/key_counters.gd -- --report  writes nothing; prints what each clip does
+##   tools/godot.sh -s res://tools/anim/key_counters.gd -- --check   exits 1 if a file is not what the table makes (within a rounding step)
 ##   ... -- --only=counter_hook,clear_wave                         (with either) only those clips
 ##
 ## Then rebuild the library (tools/anim/build_library.gd) to lay them over. It reads each clip from the library, takes the layer
@@ -44,7 +45,8 @@ const LEGS: Array[String] = ["thigh_l", "calf_l", "foot_l", "thigh_r", "calf_r",
 const ARMS_L: Array[String] = ["upperarm_l", "lowerarm_l", "hand_l"]
 const ARMS_R: Array[String] = ["upperarm_r", "lowerarm_r", "hand_r"]
 
-## Per clip: `ease` (the frames over which it starts as the guard stance and becomes its own pose), `hold` (see legs), `pelvis` ([[frame, x left, y up, z ahead]...] metres added to where the clip has the
+## Per clip: `lean` ([[frame, degrees]...]: the spine pitched forward over the hips by that much, split between spine_02 and spine_03: the
+## rising palm starts bent over, its fist at the hip), `ease` (the frames over which it starts as the guard stance and becomes its own pose), `hold` (see legs), `pelvis` ([[frame, x left, y up, z ahead]...] metres added to where the clip has the
 ## hips, as ClipBuilder.PELVIS_MOVE does: the wave sinks to reach the floor), and its arms: {side: {guard: [[frame, weight]...], path: [[frame, x, y, z]...],
 ## path_weight: [[frame, weight]...]}}. Weights are linear between the points, then eased.
 const SPECS := {
@@ -55,10 +57,16 @@ const SPECS := {
 		"r": {"guard": [[0, 0.0], [10, 0.0], [16, 1.0], [33, 1.0]]},
 	},
 	&"counter_rise": {
+		"lean": [[0, 0.0], [3, -34.0], [8, -8.0], [12, 0.0]],
 		"ease": 7,
 		"hold": 32,
 		"l": {"guard": [[0, 1.0], [36, 1.0]]},
-		"r": {"guard": [[0, 0.0], [10, 0.0], [17, 1.0], [36, 1.0]]},
+		"r": {
+			# up from below: low in front of the hips as the body is still down, through the blow to above the shoulder, and home
+			"path": [[2, 0.12, -0.48, 0.02], [5, 0.04, -0.2, 0.4], [8, 0.03, 0.02, 0.42], [10, 0.03, 0.17, 0.3], [14, 0.04, 0.05, 0.2]],
+			"path_weight": [[0, 0.0], [2, 1.0], [14, 1.0], [18, 0.0]],
+			"guard": [[0, 0.0], [13, 0.0], [20, 1.0], [36, 1.0]],
+		},
 	},
 	&"clear_backpalm": {
 		"ease": 7,
@@ -88,9 +96,12 @@ const SPECS := {
 func _initialize() -> void:
 	var only := PackedStringArray()
 	var report := false
+	var check := false
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--report":
 			report = true
+		elif arg == "--check":
+			check = true
 		elif arg == "--debug":
 			pass  # lists the frames a hand misses its path on
 		elif arg.begins_with("--only="):
@@ -101,18 +112,49 @@ func _initialize() -> void:
 			return
 	if not root.is_inside_tree():
 		await process_frame
+	var made := generate(only)
+	for line: String in made["report"]:
+		print(line)
+	var wrong := 0
+	for clip: String in made["files"]:
+		var path := LAYERS + clip + ".json"
+		if check:
+			if not FileAccess.file_exists(path):
+				printerr("key_counters.gd: %s is missing" % path)
+				wrong += 1
+				continue
+			var found := differences(made["files"][clip], FileAccess.get_file_as_string(path))
+			if not found.is_empty():
+				printerr("key_counters.gd: %s is not what the table makes (within a rounding step): %s" % [path, found[0]])
+				wrong += 1
+		elif not report:
+			var file := FileAccess.open(path, FileAccess.WRITE)
+			file.store_string(made["files"][clip])
+			file.close()
+	quit(1 if wrong > 0 else 0)
+
+
+## What is different between a layer file's text `committed` and the text `made` of the table, one line each; the same comparison
+## as the sways' (EvadeKeyer.differences): empty when the same bones and frames and every value within 1.5 rounding steps.
+static func differences(made: String, committed: String) -> PackedStringArray:
+	return preload("res://tools/anim/key_evades.gd").differences(made, committed)
+
+
+## Every clip's layer: {"files": {clip name: the text of its layer file}, "report": [one line per clip]}, for the clips named in `only`
+## (all of them if it is empty). Works from the library as built with the layers now committed (it takes them off first), so it
+## makes the same files whether or not they are laid on.
+static func generate(only := PackedStringArray()) -> Dictionary:
 	var solver := _Solver.new()
 	var library := load(LIBRARY) as AnimationLibrary
+	var files := {}
+	var report := PackedStringArray()
 	for clip: StringName in SPECS:
 		if not only.is_empty() and not only.has(String(clip)):
 			continue
 		var made := solver.make(clip, library.get_animation(clip), SPECS[clip])
-		print(made["report"])
-		if not report:
-			var file := FileAccess.open(LAYERS + String(clip) + ".json", FileAccess.WRITE)
-			file.store_string(made["text"])
-			file.close()
-	quit(0)
+		files[String(clip)] = made["text"]
+		report.append(made["report"])
+	return {"files": files, "report": report}
 
 
 ## Solves one clip at a time on Abarax's skeleton.
@@ -198,6 +240,10 @@ class _Solver:
 					var bone := _skeleton.find_bone(name)
 					_skeleton.set_bone_pose_rotation(bone, (base[name] as Quaternion).slerp(_guard[name], left))
 				shift += ((_guard_g["pelvis"] as Transform3D).origin - (_ref["pelvis"] as Transform3D).origin) * left
+			if spec.has("lean"):
+				var lean := _along_scalar(spec["lean"], frame)
+				for name in ["spine_02", "spine_03"]:
+					_pitch(name, lean * 0.5)
 			if shift != Vector3.ZERO:
 				var pelvis := _skeleton.find_bone("pelvis")
 				_skeleton.set_bone_pose_position(pelvis, _skeleton.get_bone_pose_position(pelvis) + Builder.ROOT_STANDS.inverse() * shift)
@@ -262,6 +308,22 @@ class _Solver:
 				var t: float = (frame - points[i][0]) / float(points[i + 1][0] - points[i][0])
 				return lerpf(points[i][1], points[i + 1][1], smoothstep(0.0, 1.0, t))
 		return points[points.size() - 1][1]
+
+	# The value of [[frame, value]...] at `frame`: linear between them, the end values outside.
+	func _along_scalar(points: Array, frame: float) -> float:
+		if frame <= points[0][0]:
+			return points[0][1]
+		for i in points.size() - 1:
+			if frame <= points[i + 1][0]:
+				return lerpf(points[i][1], points[i + 1][1], (frame - points[i][0]) / float(points[i + 1][0] - points[i][0]))
+		return points[points.size() - 1][1]
+
+	# Pitches `bone` forward by `degrees` about its own joint, in the body's own directions, its children with it.
+	func _pitch(name: String, degrees: float) -> void:
+		var index := _skeleton.find_bone(name)
+		var parent := _parent_basis(name)
+		var local := Basis(_skeleton.get_bone_pose_rotation(index))
+		_skeleton.set_bone_pose_rotation(index, (parent.inverse() * Basis(Vector3.RIGHT, deg_to_rad(degrees)) * parent * local).get_rotation_quaternion())
 
 	# The point of [[frame, x, y, z]...] at `frame`: linear between them, the first and last outside.
 	func _along(points: Array, frame: float) -> Vector3:
