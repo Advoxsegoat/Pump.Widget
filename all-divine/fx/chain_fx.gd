@@ -8,7 +8,7 @@ extends Node
 ##   a perfect dodge   an afterimage (the stance he left, aging on his own clock), and the cue perfect_dodge; at Flurry every evade leaves an afterimage
 ##   from Quick on     a white-gold rim on the body (Rig.hold_aura, the stencil-masked hull a tell's rim is): half the brightness at
 ##                     Quick, full at Flurry, off when the chain ends
-##   knocked out       the rim off, the cue knocked_out (at Quick or Flurry: at Slip a blow is an ordinary hit), no whoosh and no afterimage on that frame
+##   knocked out       the rim off, the cue knocked_out (at Quick or Flurry: at Slip a blow is an ordinary hit), sounded when the blow's hit-stop is over, so the impact is heard and then the loss, no whoosh and no afterimage on that frame
 ##   a counter         the palm trail it shows is the tuning's trail_scales times its size, by the tempo it cashed in
 ##
 ## (The slow-down on the chain's first perfect dodge and on the link into Flurry is a rule of the fight, not an effect: ChainSlow.)
@@ -22,6 +22,9 @@ extends Node
 ## on Abarax today, but a feint of his own could be), and to his parry's burst (an envelope, not a hold), and takes the body back
 ## when they are done. It is lit with the marks the region warms as it loads (Rig.warm_rim), so the first one builds no shader.
 
+## Frames after the impact the knock-out cue waits when the blow has no hit-stop to wait out.
+const KNOCK_CUE_FRAMES := 4
+
 ## The tuning: a tuning of its own can be put here (tests do).
 var tuning: ReadabilityTuning = ActorFx.TUNING
 
@@ -32,6 +35,8 @@ var _evaded := false  # a blow was evaded this frame
 var _perfect := false  # one of them perfectly
 var _knocked := false  # a blow landed on a chain with something to lose
 var _knock_cue := false  # ...at Quick or Flurry, where it is a knock-out and not an ordinary hit
+var _hitstop := 0  # the longest hit-stop among the blows that landed this frame
+var _cue_in := -1  # wall frames until the knock-out cue sounds (-1: none waiting)
 var _stance := {}  # the pose he held when the sway or duck now playing began (Afterimage.capture), the stance the dodge left
 var _count := 0  # the chain's count after the latest link of this frame
 var _rim := false  # the rim on the body is this node's
@@ -53,6 +58,11 @@ func _ready() -> void:
 
 func _physics_process(_delta: float) -> void:
 	_drive_rim()
+	if _cue_in >= 0:
+		_cue_in -= 1
+		if _cue_in <= 0:
+			_cue_in = -1
+			Sfx.play(&"knocked_out", _actor.global_position)
 
 
 # A defence succeeded (an evade, a parry, a catch: the chain's own count of them, one per blow).
@@ -73,7 +83,9 @@ func _on_knocked_out(from: DodgeChain.Tempo) -> void:
 	_queue_settle()
 
 
-func _on_got_hit(result: HitResult, _event: HitEvent) -> void:
+func _on_got_hit(result: HitResult, event: HitEvent) -> void:
+	if result.outcome == HitResult.Outcome.HIT or result.outcome == HitResult.Outcome.GRABBED:
+		_hitstop = maxi(_hitstop, event.profile.hitstop_frames)
 	if result.outcome != HitResult.Outcome.EVADED:
 		return
 	_evaded = true
@@ -98,9 +110,13 @@ func _settle() -> void:
 	_perfect = false
 	_knocked = false
 	_knock_cue = false
+	var hitstop := _hitstop
+	_hitstop = 0
 	if knocked:
 		if cue:
-			Sfx.play(&"knocked_out", _actor.global_position)
+			# After the impact is heard, not on it: when the blow's hit-stop is over and he begins to reel (the frame after its last
+			# held one), or 4 frames after it if the blow has none.
+			_cue_in = hitstop + 1 if hitstop > 0 else KNOCK_CUE_FRAMES
 		return
 	if not evaded or _actor.dead:
 		return

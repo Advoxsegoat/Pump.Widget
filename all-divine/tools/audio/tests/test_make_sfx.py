@@ -161,14 +161,17 @@ class MakeSfx(unittest.TestCase):
         self.assertTrue(-6.0 <= peak_db(perfect) <= -2.0, "%.1f dBFS" % peak_db(perfect))
         rate, _, _, knocked = read(self.files["knocked_out"])
         self.assertTrue(0.2 <= len(knocked) / rate <= 0.6, "%.2f s" % (len(knocked) / rate))
-        self.assertTrue(-20.0 <= peak_db(knocked) <= -14.0, "a layer under the blow's own impact, which is the loud part: %.1f dBFS" % peak_db(knocked))
+        # The heavy impacts ring at 0.6 of full scale for 150 ms, so with 3 frames' offset the cue can be no louder than this without the mix
+        # passing -1 dBFS (-9 dBFS gives -0.91): it is as loud as the mix test allows, not the -6 the controller hoped for.
+        self.assertTrue(-11.0 <= peak_db(knocked) <= -9.0, "as loud as the mix with the loudest impact allows: %.1f dBFS" % peak_db(knocked))
         top = max(abs(s) for s in knocked)
         first = next(i for i, s in enumerate(knocked) if abs(s) >= 0.9 * top)
         self.assertLess(first / rate, 0.012, "it is at its loudest within 12 ms: no swell")
 
-    def test_the_knock_out_with_the_loudest_impact_does_not_clip(self):
-        # A blow that knocks him out of a chain plays its own impact and the knocked_out cue on the same sample, at their bank volumes
-        # (data/sounds/*.tres volume_db): the sum on the SFX bus, which has no limiter, must stay under 0 dBFS.
+    def test_the_knock_out_after_the_loudest_impact_does_not_clip(self):
+        # A blow that knocks him out of a chain plays its own impact, and the knocked_out cue when the blow's hit-stop is over (ChainFx):
+        # at the shortest hit-stop, 3 frames (0.05 s), later. At their bank volumes (data/sounds/*.tres volume_db) the mix on the SFX
+        # bus, which has no limiter, must stay under -1 dBFS; started on the same sample it would clip, which is why it waits.
         sounds = SHIPPED.parents[2] / "data" / "sounds"
 
         def gain(cue):
@@ -176,14 +179,20 @@ class MakeSfx(unittest.TestCase):
             found = re.search(r"^volume_db = (-?[0-9.]+)", text, re.M)
             return 10 ** ((float(found.group(1)) if found else 0.0) / 20.0)
 
+        offset = int(round(3 / 60.0 * make_sfx.RATE))
         knock = [s * gain("knocked_out") for s in read(self.files["knocked_out"])[3]]
         worst = 0.0
+        worst_same = 0.0
         for cue, names in (("impact_palm", ["impact_palm_1", "impact_palm_2", "impact_palm_3"]), ("impact_heavy", ["impact_heavy_1", "impact_heavy_2"])):
             for name in names:
                 hit = [s * gain(cue) for s in read(self.files[name])[3]]
-                mixed = [a + b for a, b in zip(hit, knock)]
-                worst = max(worst, max(abs(s) for s in mixed))
-        self.assertLess(20 * math.log10(worst), -0.3, "%.2f dBFS" % (20 * math.log10(worst)))
+                size = max(len(hit), len(knock) + offset)
+                late = [(hit[i] if i < len(hit) else 0.0) + (knock[i - offset] if 0 <= i - offset < len(knock) else 0.0) for i in range(size)]
+                same = [(hit[i] if i < len(hit) else 0.0) + (knock[i] if i < len(knock) else 0.0) for i in range(size)]
+                worst = max(worst, max(abs(s) for s in late))
+                worst_same = max(worst_same, max(abs(s) for s in same))
+        self.assertLess(20 * math.log10(worst), -1.0, "%.2f dBFS at the offset" % (20 * math.log10(worst)))
+        self.assertGreater(20 * math.log10(worst_same), 0.0, "(and on the same sample it would clip: %.2f dBFS)" % (20 * math.log10(worst_same)))
 
     def test_the_command_line_writes_every_file_and_rejects_the_unknown(self):
         with tempfile.TemporaryDirectory() as out:

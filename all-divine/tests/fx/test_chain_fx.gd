@@ -402,7 +402,7 @@ func test_knocked_out_cuts_the_rim_sounds_the_hard_cue_and_leaves_no_afterimage(
 	result.perfect = true
 	a.chain.knock_out()
 	a.got_hit.emit(result, Blows.event(run["b"], a, Blows.profile()))
-	var heard := await _heard(2)
+	var heard := await _heard(8)
 	assert_eq(heard.count(&"knocked_out"), 1, "the hard cue, once")
 	assert_false(heard.has(&"evade_whoosh") or heard.has(&"perfect_dodge"), "no whoosh or perfect cue on the frame he is knocked out")
 	assert_eq(_afterimages().size(), 0, "no afterimage")
@@ -410,7 +410,7 @@ func test_knocked_out_cuts_the_rim_sounds_the_hard_cue_and_leaves_no_afterimage(
 	# no knock-out cue for a chain that had nothing to lose
 	var empty := _world()
 	(empty["a"] as Actor).chain.knock_out()
-	assert_false((await _heard(2)).has(&"knocked_out"), "an empty chain loses nothing")
+	assert_false((await _heard(8)).has(&"knocked_out"), "an empty chain loses nothing")
 
 
 func test_the_knock_out_cue_is_for_a_knock_out_at_quick_or_flurry() -> void:
@@ -420,8 +420,32 @@ func test_the_knock_out_cue_is_for_a_knock_out_at_quick_or_flurry() -> void:
 		_links(a, case[0])
 		Melee.slow(0, 1.0)
 		a.chain.knock_out()
-		var heard := await _heard(2)
+		var heard := await _heard(8)
 		assert_eq(heard.has(&"knocked_out"), case[1], "a chain of %d knocked out: the cue is %s" % [case[0], "heard" if case[1] else "not heard (at Slip the blow is an ordinary hit)"])
+		(run["arena"] as Node).queue_free()
+		await frames(2)
+
+
+func test_the_knock_out_cue_follows_the_impact_by_its_hit_stop() -> void:
+	# [the blow's hit-stop, the frames after the blow lands that the cue sounds on]: the frame after the last held one, or the 4th
+	# when the blow has no hit-stop
+	for case: Array in [[5, 6], [3, 4], [0, 4]]:
+		var run := _world(null, [{"frames": 80}])
+		var a: Actor = run["a"]
+		_links(a, 8)
+		Melee.slow(0, 1.0)
+		await frames(2)
+		Blows.post(run["b"], a, {"damage": 10.0, "hitstop_frames": case[0]})
+		var landed := -1
+		var cue := -1
+		for i in 14:
+			await frames(1)
+			if landed < 0 and a.stats.hp < 100.0:
+				landed = i
+			if cue < 0 and Sfx.last_played().has(&"knocked_out"):
+				cue = i
+		assert_true(landed >= 0, "the blow landed")
+		assert_eq(cue - landed, case[1], "a blow of hit-stop %d: the cue sounds %d frames after it lands" % [case[0], case[1]])
 		(run["arena"] as Node).queue_free()
 		await frames(2)
 
@@ -433,7 +457,7 @@ func test_a_real_blow_that_lands_on_a_flurry_knocks_him_out_with_the_cue_and_no_
 	await frames(2)
 	assert_true(a.rig.aura_active())
 	Blows.post(run["b"], a, {"damage": 10.0})
-	var heard := await _heard(3)
+	var heard := await _heard(10)
 	assert_true(heard.has(&"knocked_out"), "he is hit: the hard cue (heard %s)" % [heard])
 	assert_eq(a.chain.count, 0)
 	assert_false(a.rig.aura_active(), "no rim")

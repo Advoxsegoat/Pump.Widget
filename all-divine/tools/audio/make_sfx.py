@@ -369,11 +369,12 @@ def perfect_dodge(rng):
 
 def knocked_out(rng):
     """Being knocked out of a chain: a hard low thump, a dull crack and a low rumble, driven a little, no swell: the loss
-    is plain and arrives at once. It plays on the same sample as the blow's own impact (up to -1.5 dBFS) on a bus with no limiter,
-    so it is a layer under that impact, at -18 dBFS: the two together stay under 0."""
+    is plain and arrives at once. It sounds when the blow's hit-stop is over, at least 3 frames after the blow's own impact (up to
+    -1.5 dBFS) on a bus with no limiter; the heavy impacts ring on at 0.6 of full scale, so -10 dBFS is the loudest at which the two
+    stay under -1 dBFS."""
     n = samples_in(0.4)
     return saturate(mix([
-        (layer(thump(n, 150.0, 48.0, 0.03, 0.1), 1.0), 0.0),
+        (layer(thump(n, 90.0, 55.0, 0.03, 0.06), 1.0), 0.0),
         (layer(burst(rng, n, 1700.0, 1.0, 0.018, 0.0003), 0.55), 0.0),
         (layer(times(lowpass(noise(rng, n), 350.0), decay(n, 0.08, 0.001)), 0.5), 0.0),
     ], n), 2.0)
@@ -456,7 +457,7 @@ SOUNDS = {
     "charge_hum": (charge_hum, -4.0),
     "evade_whoosh": (evade_whoosh, -8.0),
     "perfect_dodge": (perfect_dodge, -3.0),
-    "knocked_out": (knocked_out, -18.0),
+    "knocked_out": (knocked_out, -10.0),
 }
 
 
