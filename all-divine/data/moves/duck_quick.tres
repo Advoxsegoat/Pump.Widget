@@ -11,3 +11,7 @@ root_motion = false
 stamina_cost = 5.0
 evade = 2
 redodge_frame = 18
+counters = {
+&"heavy": &"clear_wave",
+&"palm": &"counter_rise"
+}

@@ -21,7 +21,8 @@ extends RefCounted
 ##       on-then-off pairs
 ##   every mark is a known kind and lies within [0, the clip's length]
 ##   cancel_open's `into` names existing moves; hitbox ids are hitboxes of the rig; `neutral_variant`
-##       and every `directional` target name existing moves; and so does `imitates` (a feint: its tell wears the rim of that move's blow, and a
+##       and every `directional` target name existing moves; so do the `counters` of a move with an evade, each an ATTACK with hits
+##       that `cashes` the chain in (and only an ATTACK cashes); and so does `imitates` (a feint: its tell wears the rim of that move's blow, and a
 ##       name that is no move would show no rim and say nothing)
 ##   tell's `kind` is glint or perilous; charge_hold is only in an ATTACK and names a profile it has
 ##   on a stepped clip (metadata step_fps above 0) every mark is on the 1/step_fps grid
@@ -113,12 +114,32 @@ func check_move(move: MoveData, anim: Animation, hitbox_ids: PackedStringArray, 
 	for side in move.directional:
 		if not move_ids.has(String(move.directional[side])):
 			out.append("%s: directional '%s' is the unknown move '%s'" % [id, side, move.directional[side]])
+	_check_counters(move, move_ids, out)
 	if move.imitates != &"" and not move_ids.has(String(move.imitates)):
 		out.append("%s: imitates the unknown move '%s'" % [id, move.imitates])
 	for kind in [&"sfx", &"fx"]:
 		if _of_kind(marks, kind).is_empty() and move.evade == MoveData.Evade.NONE:
 			out.append("%s: has no %s" % [id, kind])
 	return out
+
+
+# The problems of `move`'s `counters` and `cashes`: counters belong to a move with an evade, each names an existing move, and that
+# move is a blow that cashes the chain in (an ATTACK with hits and `cashes`); and only an ATTACK cashes.
+func _check_counters(move: MoveData, move_ids: PackedStringArray, out: PackedStringArray) -> void:
+	if move.cashes and move.kind != MoveData.Kind.ATTACK:
+		out.append("%s: cashes the chain in but is not an ATTACK" % move.id)
+	if not move.counters.is_empty() and move.evade == MoveData.Evade.NONE:
+		out.append("%s: has counters but no evade (a counter follows a blow that was evaded)" % move.id)
+	for action in move.counters:
+		var target := String(move.counters[action])
+		if not move_ids.has(target):
+			out.append("%s: counters '%s' is the unknown move '%s'" % [move.id, action, target])
+			continue
+		var counter := Registry.fetch(&"moves", StringName(target)) as MoveData
+		if counter == null or counter.kind != MoveData.Kind.ATTACK or counter.hits.is_empty():
+			out.append("%s: counters '%s' is '%s', which has no blow (an ATTACK with hits)" % [move.id, action, target])
+		elif not counter.cashes:
+			out.append("%s: counters '%s' is '%s', which does not cash the chain in (cashes)" % [move.id, action, target])
 
 
 ## What is wrong with the actor `def`: its rig, its required clips, its moveset, its pairs, and every move it can
@@ -484,6 +505,9 @@ func _moves_after(move: MoveData, anim: Animation, move_ids: PackedStringArray, 
 	if move_ids.has(String(move.neutral_variant)):
 		found.append(String(move.neutral_variant))
 	for target in move.directional.values():
+		if move_ids.has(String(target)):
+			found.append(String(target))
+	for target in move.counters.values():
 		if move_ids.has(String(target)):
 			found.append(String(target))
 	return found

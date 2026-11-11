@@ -184,13 +184,35 @@ static func _note(bodies: Dictionary, body: Actor, which: int, i: int) -> void:
 
 # Gives the blow `e`, which came to `r`, its weight: both fighters freeze for the profile's hit-stop frames
 # (each keeps the longer of this and any other freeze it has: in a trade the longer of the two, not the sum),
-# and the target is pushed along the blow by the profile's knockback.
+# and the target is pushed along the blow by the profile's knockback, or thrown if the blow has a throw and landed (_throw): a
+# clear-out that was guarded, parried or caught shoves the way any blow does, and a parrier is not thrown.
 func _weigh(e: HitEvent, r: HitResult) -> void:
 	if not FREEZES.has(r.outcome):
 		return
 	e.attacker.freeze(e.profile.hitstop_frames)
 	e.target.freeze(e.profile.hitstop_frames)
-	e.target.push(e.direction * e.profile.knockback)
+	if e.throw > 0.0 and r.outcome == HitResult.Outcome.HIT:
+		_throw(e)
+	else:
+		e.target.push(e.direction * e.profile.knockback)
+
+
+# Throws the target of `e`, a blow with a throw (a clear-out): it travels `e.throw` metres in the open, which a push of that many
+# metres times the tuning's knockback_decay does (a push travels its speed over the decay), the way the profile's throw_way says.
+# A body that this blow killed is not thrown. Walls and other bodies stop it as they stop any push.
+func _throw(e: HitEvent) -> void:
+	if e.target.dead:
+		return
+	var way := e.direction
+	match e.profile.throw_way:
+		HitProfile.ThrowWay.RADIAL:
+			var away := e.target.global_position - e.attacker.global_position
+			away.y = 0.0
+			way = away.normalized() if not away.is_zero_approx() else e.direction
+		HitProfile.ThrowWay.SIDEWAYS:
+			var facing := e.attacker.facing()
+			way = Vector3(-facing.z, 0.0, facing.x).normalized()  # the attacker's right: facing +Z, that is -X
+	e.target.push(way * e.throw * e.target.stats.tuning.knockback_decay)
 
 
 # Starts the grab pair of the attacker of `e`, a GRABBED blow, on its target. False if the attacker has none, or it

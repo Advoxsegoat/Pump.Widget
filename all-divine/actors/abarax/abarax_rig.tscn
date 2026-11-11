@@ -1,4 +1,4 @@
-[gd_scene load_steps=27 format=3]
+[gd_scene load_steps=29 format=3]
 
 [ext_resource type="Script" path="res://actors/rig.gd" id="1_rig"]
 [ext_resource type="PackedScene" path="res://assets/characters/abarax/abarax.glb" id="2_model"]
@@ -91,6 +91,14 @@ node_connections = [&"output", 0, &"move_blend", &"loco_scale", 0, &"loco", &"st
 
 [sub_resource type="SphereShape3D" id="palm_zone"]
 radius = 0.18
+
+[sub_resource type="CylinderShape3D" id="clear_arc_zone"]
+height = 1.4
+radius = 1.8
+
+[sub_resource type="CylinderShape3D" id="clear_ring_zone"]
+height = 1.4
+radius = 2.0
 
 [sub_resource type="CapsuleShape3D" id="body"]
 radius = 0.35
@@ -242,6 +250,28 @@ monitoring = false
 
 [node name="shape" type="CollisionShape3D" parent="Hitboxes/palm_r/zone"]
 shape = SubResource("palm_zone")
+
+[node name="clear_arc" type="Node3D" parent="Hitboxes"]
+
+[node name="zone" type="Area3D" parent="Hitboxes/clear_arc"]
+collision_layer = 16
+collision_mask = 8
+monitoring = false
+
+[node name="shape" type="CollisionShape3D" parent="Hitboxes/clear_arc/zone"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
+shape = SubResource("clear_arc_zone")
+
+[node name="clear_ring" type="Node3D" parent="Hitboxes"]
+
+[node name="zone" type="Area3D" parent="Hitboxes/clear_ring"]
+collision_layer = 16
+collision_mask = 8
+monitoring = false
+
+[node name="shape" type="CollisionShape3D" parent="Hitboxes/clear_ring/zone"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
+shape = SubResource("clear_ring_zone")
 
 [node name="Hurtbox" type="Area3D" parent="."]
 collision_layer = 8

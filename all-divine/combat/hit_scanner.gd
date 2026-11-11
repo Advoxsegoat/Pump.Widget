@@ -123,6 +123,8 @@ func _sweep(actor: Actor, activation: Activation, space: PhysicsDirectSpaceState
 			var target: Actor = (area.get_meta(&"actor", null) as Actor) if area != null else null
 			if target == null or target == actor or target.def.team == actor.def.team or activation.hit.has(target):
 				continue
+			if not _in_arc(actor, target, activation.profile.arc_deg):
+				continue  # not struck: it may still turn into the arc while the blow is live
 			activation.hit[target] = true
 			var e := _event(actor, target, activation, query.transform.origin)
 			_found[e] = activation
@@ -142,7 +144,35 @@ func _event(actor: Actor, target: Actor, activation: Activation, point: Vector3)
 	if flat.is_zero_approx():
 		flat = Vector3(actor.facing().x, 0.0, actor.facing().z)
 	e.direction = flat.normalized()
+	_cash(e, actor, activation)
 	return e
+
+
+# What a counter or clear-out is worth: a blow of a move that cashes the chain in carries the scale of the tempo the chain had when
+# the move started (Actor.cashed_tempo, ChainTuning.cash_scale), throws as far as that tempo's clear-out (clearout_throw), and at
+# Flurry a blow that throws no one staggers whatever the poise. Any blow that throws, cashing or not, throws its profile's metres.
+static func _cash(e: HitEvent, actor: Actor, activation: Activation) -> void:
+	e.throw = activation.profile.throw
+	var tuning := actor.def.chain
+	if not activation.move.cashes or tuning == null:
+		return
+	var tempo := int(actor.cashed_tempo)
+	e.power = tuning.cash_scale[tempo]
+	if activation.profile.throw > 0.0:
+		e.throw = tuning.clearout_throw[tempo]
+	elif actor.cashed_tempo == DodgeChain.Tempo.FLURRY:
+		e.always_staggers = true
+
+
+# Whether `target` stands within half of `arc_deg` of the way `actor` faces, on the ground plane (a blow of 360 reaches all round).
+static func _in_arc(actor: Actor, target: Actor, arc_deg: float) -> bool:
+	if arc_deg >= 360.0:
+		return true
+	var to := Vector2(target.global_position.x - actor.global_position.x, target.global_position.z - actor.global_position.z)
+	var facing := Vector2(actor.facing().x, actor.facing().z)
+	if to.is_zero_approx() or facing.is_zero_approx():
+		return true
+	return rad_to_deg(absf(facing.angle_to(to))) <= arc_deg / 2.0 + 1e-3
 
 
 # How far apart the steps of a sweep may be for `shape`: half its radius (the half-width of a box).

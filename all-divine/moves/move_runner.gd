@@ -22,6 +22,12 @@ extends Node
 ## Which move a consumed press starts is the actor's to say (Actor.move_for: the window's or the moveset's, then the
 ## `directional` variant for the side the press was made toward), at both places the runner starts one.
 ##
+## A counter: after a blow was evaded during a sway or duck, a palm or heavy consumed within COUNTER_FRAMES of it (on the actor's
+## buffer_frame clock, so hit-stop does not eat them) starts that dodge's `counters[action]` in place of what the window or the
+## moveset would start, from the dodge's cancel window and from rest alike. Any other move that starts first takes the counter
+## away (it was that dodge's), and a counter the actor cannot pay stamina for starts nothing, so it cashes nothing: the chain is
+## cashed when an attack starts (Actor), not before. After a dodge that avoided nothing there is no counter.
+##
 ## A dodge is the stick's too: a move with a `neutral_variant` (the dash-step's hop) starts that variant instead when the
 ## intent's stick is at rest, from rest and from a cancel window alike. The variant is checked as the move that was
 ## asked for (a hop is refused where a dash-step would be) and spends its own stamina_cost.
@@ -103,6 +109,8 @@ var _refunded := false  # the current move's refund was paid (take_refund)
 var _dodge: MoveData  # the latest sway or duck started (a move with an evade), and while it bars another (see _redodge_barred)
 var _dodge_started := 0  # the actor's buffer_frame when it started
 var _dodge_evaded := false  # it evaded a blow, so it bars nothing
+var _counter_from: MoveData  # the sway or duck that evaded a blow and whose counters may still start, until another move starts
+var _evaded_at := 0  # the actor's buffer_frame when it evaded
 var _anim: Animation  # the current move's clip
 var _marks: Array[Dictionary] = []  # its marks (Marks.read)
 var _root_track := -1  # its root position track, or -1 when the move has no root motion
@@ -138,6 +146,9 @@ func note_evaded() -> void:
 	evaded = true
 	if current != null and current == _dodge:
 		_dodge_evaded = true
+	if current != null and not current.counters.is_empty():
+		_counter_from = current
+		_evaded_at = actor.buffer_frame
 
 
 ## True while a move plays.
@@ -187,13 +198,13 @@ func tick(intent: Intent, delta: float) -> Vector3:
 	if current != null and not window.is_empty():
 		var action := actor.buffer.consume(_unbarred(window.keys()), actor.buffer_frame)
 		if action != &"" and not actor.start_finisher_on(action):
-			_start(actor.move_for(action, intent, StringName(str(window[action]))), intent)
+			_start(_counter_for(action) if _counter_ready(action) else actor.move_for(action, intent, StringName(str(window[action]))), intent)
 	if current != null and time >= _anim.length - Marks.EPSILON:
 		_end(false)
 	if current == null:
 		var action := actor.buffer.consume(_unbarred(actor.def.moveset.keys()), actor.buffer_frame)
 		if action != &"" and not actor.start_finisher_on(action):
-			_start(actor.move_for(action, intent), intent)
+			_start(_counter_for(action) if _counter_ready(action) else actor.move_for(action, intent), intent)
 	return velocity
 
 
@@ -202,6 +213,16 @@ func _unbarred(actions: Array) -> Array:
 	if not _redodge_barred():
 		return actions
 	return actions.filter(func(action: Variant) -> bool: return not BARRED_ACTIONS.has(action))
+
+
+# Whether `action` is a counter now: the dodge that evaded a blow has a move for it and COUNTER_FRAMES have not passed.
+func _counter_ready(action: StringName) -> bool:
+	return _counter_from != null and actor.buffer_frame - _evaded_at <= COUNTER_FRAMES and _counter_from.counters.has(action)
+
+
+# The move the counter for `action` is (see _counter_ready); null if the data names none that exists.
+func _counter_for(action: StringName) -> MoveData:
+	return _fetch(_counter_from.counters[action])
 
 
 # Whether the latest sway or duck avoided nothing and has not yet had its redodge_frame on the actor's clock.
@@ -238,6 +259,7 @@ func _start(move: MoveData, intent: Intent, force := false) -> void:
 	current = move
 	time = 0.0
 	evaded = false
+	_counter_from = null
 	_refunded = false
 	if move.evade != MoveData.Evade.NONE:
 		_dodge = move

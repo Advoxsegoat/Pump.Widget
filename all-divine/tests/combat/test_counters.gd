@@ -92,11 +92,13 @@ func _move(id: StringName) -> MoveData:
 	return Registry.fetch(&"moves", id) as MoveData
 
 
+# A move's clip, from the library's files (no rig is made: a stray body's hurtbox would stand in the way of a blow).
+func _clip(id: StringName) -> Animation:
+	return load("res://assets/anim/abarax/%s.tres" % _move(id).clip) as Animation
+
+
 func _marks(id: StringName) -> Array[Dictionary]:
-	var a := (load(ABARAX) as ActorDef).rig_scene.instantiate()
-	track(a)
-	var clip := (a as Rig).tree.get_animation(_move(id).clip)
-	return Marks.read(clip)
+	return Marks.read(_clip(id))
 
 
 func _mark_frame(id: StringName, kind: StringName) -> int:
@@ -107,9 +109,7 @@ func _mark_frame(id: StringName, kind: StringName) -> int:
 
 
 func _length(id: StringName) -> int:
-	var rig := (load(ABARAX) as ActorDef).rig_scene.instantiate() as Rig
-	track(rig)
-	return roundi(rig.tree.get_animation(_move(id).clip).length * Marks.RATE)
+	return roundi(_clip(id).length * Marks.RATE)
 
 
 # --- which move a press starts ---
@@ -170,8 +170,8 @@ func test_the_counter_window_is_twenty_four_frames_and_frozen_frames_do_not_coun
 
 func test_a_counter_started_after_another_move_is_the_ordinary_move() -> void:
 	# a dash-step between the evade and the palm: the counter was the sway's, and the dash-step has taken its place
-	var run := _world(_script([[10, [SWAY]], [22, [&"dodge"]], [34, [PALM]]]))
-	await _play(run, [[14, {"line": ROUND}]], 60)
+	var run := _world(_script([[10, [SWAY]], [22, [&"dodge"]], [110, [PALM]]]))
+	await _play(run, [[14, {"line": ROUND}]], 130)
 	assert_true(_ids(run).has(&"hop") or _ids(run).has(&"dash_step"), "the dash-step started (%s)" % [_ids(run)])
 	assert_true(_ids(run).has(&"palm_jab"), "and the palm after it is the jab, not the counter (started %s)" % [_ids(run)])
 	assert_false(_ids(run).has(&"counter_hook"), "no counter")
@@ -207,9 +207,10 @@ func test_each_counters_blow_comes_by_its_frame() -> void:
 	a.runner.start(_move(&"counter_hook"))
 	var started := a.frame
 	await frames(1)
-	var landed := -1
-	a.hit_landed.connect(func(_r: HitResult, _e: HitEvent) -> void: landed = a.frame if landed < 0 else landed)
+	var seen := []
+	a.hit_landed.connect(func(_r: HitResult, _e: HitEvent) -> void: seen.append(a.frame))
 	await frames(20)
+	var landed: int = seen[0] if not seen.is_empty() else -1
 	assert_true(landed > 0 and landed - started <= 10, "the hook lands by its f%d (landed %d frames after it started)" % [BLOW_BY[&"counter_hook"], landed - started])
 
 

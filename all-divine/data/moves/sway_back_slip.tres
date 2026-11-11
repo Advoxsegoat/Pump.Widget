@@ -11,3 +11,7 @@ root_motion = false
 stamina_cost = 6.0
 evade = 1
 redodge_frame = 20
+counters = {
+&"heavy": &"clear_backpalm",
+&"palm": &"counter_hook"
+}

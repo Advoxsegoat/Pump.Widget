@@ -74,13 +74,13 @@ func test_a_clear_out_by_a_wall_and_in_a_corner_puts_no_one_through_it() -> void
 		for way_name: String in _ways():
 			var way: Vector2 = _ways()[way_name]
 			var region := _yard()
-			# He stands three metres in from the wall (or corner) and the foe a metre on, toward it; the wave throws the foe straight
-			# at it, the back palm to his right, so he faces so that his right hand is toward the wall.
+			# He stands three metres in from the wall (or corner). The wave throws the foe straight away from him, so it stands a metre on
+			# toward the wall; the back palm throws it to his right, so he faces along the wall and the foe stands in front of him.
 			var start := Vector2(0.0 if is_zero_approx(way.x) else signf(way.x) * (HALF - 3.0), 0.0 if is_zero_approx(way.y) else signf(way.y) * (HALF - 3.0))
 			var facing := way if id == &"clear_wave" else Vector2(way.y, -way.x)
 			var yaw := Locomotion.yaw_of(facing)
 			var a := _spawn(region, ABARAX, Vector3(start.x, 0.0, start.y), null, yaw, "A")
-			var at := start + way * 1.1
+			var at := start + (way if id == &"clear_wave" else facing) * 1.1
 			var foe := _spawn(region, KNUCKLE_1, Vector3(at.x, 0.0, at.y), null, yaw + PI, "F")
 			await frames(3)
 			_flurry(a)
@@ -88,14 +88,14 @@ func test_a_clear_out_by_a_wall_and_in_a_corner_puts_no_one_through_it() -> void
 			var most_out := -INF
 			var low := 0.0
 			var high := 0.0
-			var hit := false
-			foe.got_hit.connect(func(_r: HitResult, _e: HitEvent) -> void: hit = true)
+			var hit := []
+			foe.got_hit.connect(func(_r: HitResult, _e: HitEvent) -> void: hit.append(true))
 			for i in 150:
 				await frames(1)
 				most_out = maxf(most_out, _out(foe))
 				low = minf(low, foe.global_position.y)
 				high = maxf(high, foe.global_position.y)
-			assert_true(hit, "%s %s: the foe was hit" % [id, way_name])
+			assert_false(hit.is_empty(), "%s %s: the foe was hit" % [id, way_name])
 			assert_true(most_out < 0.05, "%s %s: the foe never got more than 5 cm past its capsule's reach of the wall (%.3f m)" % [id, way_name, most_out])
 			assert_true(absf(foe.global_position.x) < HALF and absf(foe.global_position.z) < HALF, "%s %s: inside the yard at %s" % [id, way_name, foe.global_position])
 			assert_true(low > -0.2 and high < 0.5, "%s %s: on the floor (y %.2f to %.2f)" % [id, way_name, low, high])
@@ -169,13 +169,21 @@ func test_the_paired_and_the_dead_are_not_thrown_and_a_broken_foe_stays_finishab
 
 
 func test_a_foe_thrown_mid_swing_does_not_hit_from_where_it_lands_and_walks_back_in() -> void:
+	# the control: the same jab, pressed on its frame 8, with no clear-out, reaches him
+	var control := TestArena.make(self)
+	var target := _spawn(control, ABARAX, Vector3.ZERO, null, 0.0, "A")
+	_spawn(control, KNUCKLE_1, Vector3(0, 0, 0.95), ScriptBrain.new([{"frames": 7}, {"frames": 1, "press": [&"palm"]}, {"frames": 300}]), PI, "F")
+	await frames(60)
+	assert_true(target.stats.hp < target.stats.max_hp, "left alone he is hit by that jab")
+	control.queue_free()
+	await frames(2)
 	var arena := TestArena.make(self)
 	var tokens := AttackTokens.new()
 	arena.add_child(tokens)
 	var a := _spawn(arena, ABARAX, Vector3.ZERO, null, 0.0, "A")
 	var foe_def := _tough(KNUCKLE_1)
 	# a jab pressed on frame 8: its blow would be on frame 18, and he has a clear-out landing on frame 15
-	var foe := _spawn(arena, KNUCKLE_1, Vector3(0, 0, 1.2), ScriptBrain.new([{"frames": 7}, {"frames": 1, "press": [&"palm"]}, {"frames": 300}]), PI, "F")
+	var foe := _spawn(arena, KNUCKLE_1, Vector3(0, 0, 0.95), ScriptBrain.new([{"frames": 7}, {"frames": 1, "press": [&"palm"]}, {"frames": 300}]), PI, "F")
 	await frames(1)
 	var taken := []
 	a.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void: taken.append(r.outcome))

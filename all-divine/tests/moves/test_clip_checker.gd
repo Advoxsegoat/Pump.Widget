@@ -948,6 +948,44 @@ func test_a_directional_target_must_be_a_move() -> void:
 	assert_false(_has_problem(problems, ["right"]), "a move that exists is fine: %s" % ["\n".join(problems)])
 
 
+# A sway's or duck's `counters` name the moves a palm or heavy starts after it evaded a blow: each must exist, and be a blow of the
+# kind that cashes the chain in (an ATTACK with hits and `cashes`), or the press would start nothing or a move with no worth.
+func test_a_counter_must_be_a_move_with_a_blow_that_cashes_the_chain() -> void:
+	var move := _move(&"sway_fixture", MoveData.Kind.DODGE)
+	move.evade = MoveData.Evade.SWAY
+	var marks := [_m(2, &"evade_on"), _m(12, &"evade_off"), _m(12, &"recovery"), _m(12, &"cancel_open", {"into": {&"palm": &"palm_jab"}})]
+	var known := MOVES + PackedStringArray(["counter_hook", "clear_wave"])
+	var check := func(counters: Dictionary) -> PackedStringArray:
+		move.counters = counters
+		return ClipChecker.new().check_move(move, _anim(60, 0, marks), HITBOXES, known)
+	assert_eq(check.call({&"palm": &"counter_hook", &"heavy": &"clear_wave"}), PackedStringArray(), "real counters are fine")
+	var problems: PackedStringArray = check.call({&"palm": &"no_such_move"})
+	assert_true(_has_problem(problems, ["sway_fixture", "counters", "palm", "no_such_move"]), "unknown: %s" % ["\n".join(problems)])
+	problems = check.call({&"palm": &"dash_step"})
+	assert_true(_has_problem(problems, ["sway_fixture", "counters", "palm", "dash_step", "no blow"]), "no blow: %s" % ["\n".join(problems)])
+	problems = check.call({&"palm": &"palm_jab"})
+	assert_true(_has_problem(problems, ["sway_fixture", "counters", "palm", "palm_jab", "cash"]), "not a cashing move: %s" % ["\n".join(problems)])
+
+
+func test_counters_belong_to_an_evade_and_only_an_attack_cashes() -> void:
+	var plain := _move(&"fixture_plain", MoveData.Kind.OTHER)
+	plain.counters = {&"palm": &"palm_jab"}
+	var problems := _check(plain, [_m(0, &"sfx", SFX), _m(0, &"fx", FX)])
+	assert_true(_has_problem(problems, ["fixture_plain", "counters", "no evade"]), "\n".join(problems))
+	var odd := _move(&"fixture_odd", MoveData.Kind.OTHER)
+	odd.cashes = true
+	problems = _check(odd, [_m(0, &"sfx", SFX), _m(0, &"fx", FX)])
+	assert_true(_has_problem(problems, ["fixture_odd", "cashes", "ATTACK"]), "\n".join(problems))
+
+
+# The counters are started by a press the evade turns into them, not by the moveset or a window: the checker follows `counters` as
+# it follows `directional`, so their clips are checked and no move is "reached by no actor".
+func test_the_counters_are_reached_and_checked() -> void:
+	var problems := ClipChecker.new().check_all()
+	for id in ["counter_hook", "counter_rise", "clear_backpalm", "clear_wave"]:
+		assert_false(_has_problem(problems, [id, "reaches"]), "'%s' is reached from the sways and ducks: \n%s" % [id, "\n".join(problems)])
+
+
 # The Quick and Flurry tempos are started by the chain (Actor.move_for), not by the moveset or a window: the checker walks
 # an actor's chain tuning as a source of started moves, so their clips are checked and no move is "reached by no actor".
 func test_the_moves_only_the_chain_starts_are_reached_and_checked() -> void:

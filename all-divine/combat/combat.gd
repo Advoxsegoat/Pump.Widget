@@ -21,9 +21,10 @@ extends RefCounted
 ##   6. a guard with the attacker inside the arc, against a blow a guard can take (an ordinary one): GUARDED,
 ##      paying the blow's guard_stamina, or GUARD_BREAK when there is less stamina than that (all of it is
 ##      spent); either way the guard takes the blow's posture damage
-##   7. otherwise a HIT: the blow's damage and posture damage, and a reaction: none under hyper-armour; else a STAGGER
-##      whatever the blow's weight when the target's dodge chain is at Quick or Flurry (d.chain_tempo; the longer he
-##      stood and dodged, the more the blow that finds him costs); else, once the poise damage reaches the target's
+##   7. otherwise a HIT: the blow's damage and posture damage (times its `power`: a counter cashed in at Quick or Flurry is worth
+##      more), and a reaction: none under hyper-armour; else a STAGGER whatever the blow's weight when the target's dodge chain is
+##      at Quick or Flurry (d.chain_tempo; the longer he stood and dodged, the more the blow that finds him costs) or when the
+##      blow always staggers (a Flurry counter); else, once the poise damage reaches the target's
 ##      poise, a STAGGER if the blow staggers or else a FLINCH; below the poise, none
 ## The arc is guard_arc_deg either side of the defender's facing, toward where the attacker stands (back
 ## along the blow's direction).
@@ -64,11 +65,11 @@ static func resolve(e: HitEvent, d: Defense, tuning: CombatTuning) -> HitResult:
 			r.stamina_cost = d.stamina
 		return r
 	r.outcome = HitResult.Outcome.HIT
-	r.hp_damage = p.damage
-	r.posture_damage = p.posture_damage
+	r.hp_damage = p.damage * e.power
+	r.posture_damage = p.posture_damage * e.power
 	if d.hyperarmour:
 		r.reaction = HitResult.Reaction.NONE
-	elif d.chain_tempo >= 1:
+	elif d.chain_tempo >= 1 or e.always_staggers:
 		r.reaction = HitResult.Reaction.STAGGER
 	elif p.poise_damage < d.poise:
 		r.reaction = HitResult.Reaction.NONE
