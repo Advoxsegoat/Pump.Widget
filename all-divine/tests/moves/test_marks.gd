@@ -111,7 +111,7 @@ func test_marks_written_survive_a_save_and_load() -> void:
 	var written := [
 		_mark(10, &"hitbox_on", {"id": &"palm_l", "profile": &"palm"}),
 		_mark(10, &"charge_hold", {"action": &"palm", "frames": 12, "profile": &"heavy"}),
-		_mark(20, &"cancel_open", {"into": {&"palm": &"palm_cross", &"dodge": &"dodge_roll"}}),
+		_mark(20, &"cancel_open", {"into": {&"palm": &"palm_cross", &"dodge": &"dash_step"}}),
 	]
 	Marks.write(a, written)
 	var read := Marks.read(_saved_and_loaded(a))

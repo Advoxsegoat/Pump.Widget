@@ -4,7 +4,7 @@ What is done, what is next, and where the decisions live. Every task's final com
 
 ## Done
 
-F0 (Foundation) is built: a lit courtyard to walk in, with Abarax moving, rolling and chaining a jab and a cross. What is left for F0 is the owner's checklist below.
+F0 (Foundation) is built: a lit courtyard to walk in, with Abarax moving, dash-stepping and chaining a jab and a cross. What is left for F0 is the owner's checklist below.
 
 - F0 Task 1: toolchain, project skeleton and the headless test runner (`tools/test.sh`: 4 passed, 0 failed).
 - F0 Task 2: Core autoloads: Game, Inputs (§4.1 bindings, rebinding, deadzone), Registry, audio buses (`tools/test.sh`: 93 passed, 0 failed).
@@ -42,6 +42,7 @@ F0 (Foundation) is built: a lit courtyard to walk in, with Abarax moving, rollin
 
 - Sway-defence Task 1: the rules of an evade. A move can carry an `evade` (SWAY or DUCK) and an `evade_on`/`evade_off` window (frame 2 on); while it is open `Combat.resolve` avoids every ordinary blow and grab as `EVADED` (a sweep or thrust still lands), perfect when the dodge matches the blow's new `line` (STRAIGHT: sway, ROUND: duck, a grab: either). An evaded blow is spent: no freeze, no push, no pair, not forgotten by the scanner, `runner.evaded` set. The hooks and the heavy are ROUND. The clip checker holds one window opening on frame 2.
 - Sway-defence Task 2: the sixteen sway, duck and dash-step moves and clips (the spec's three tempos, planted feet, dash-steps 1.3 m eased over ten frames), `MoveData.directional` and `redodge_frame`; nothing starts them yet. The clip checker seeds the base sways, ducks and dash-step (`NOT_YET_STARTED`, to go when Task 3 names them in the moveset and the windows). The builder gained an `@pelvis_move` layer entry and `root_travel`; the checker lets a sway, duck or dash-step have no iframes, and follows `directional`.
+- Sway-defence Task 3: sway and duck from the pad and the keys, the planted guard, the dash-step in the roll's place. `Inputs.direction_pressed_this_frame` (a move key that went down, or the left stick flicked past 0.6 and let go below 0.35) and `PlayerBrain` turn guard held (or going down that frame) plus a direction into a `sway`, or a `duck` within 45 degrees of straight down, with its world `evade_dir` (a guard press of the same frame is dropped; a direction held before guard starts nothing). `Actor.move_for` and `MoveData.side_of` pick the side from the direction against his facing, at both places the runner starts a press; `CombatTuning.guard_planted` (true for Abarax) gives the guard stance no legs, and a sway or duck that ends with guard held brings the stance back. The dash-step replaced the roll (its move, clip, cues and `clips.cfg` entry deleted; a dash-step keeps his facing and is never invulnerable, so `MoveData.invulnerable` went, and the checker's rule is that a DODGE with no evade carries no evade or iframes marks): every window that took the roll takes `dodge: dash_step`, `sway: sway_left_slip` and `duck: duck_slip`, the guard raise opens one into sway and duck at its parry_off, and parry, catch and guard_hit take them. Controls list, self-test circuit (approach, jab, cross, hook, sway, duck, dash-step, guard, heavy) and the preview reel (the thrust is caught, the Knuckle is dashed in on) follow. `ClipChecker.NOT_YET_STARTED` is down to the four Quick and Flurry heads, for Task 4's chain to name.
 
 ## Preview reel
 
@@ -55,8 +56,8 @@ F1 Combat core (spec §9). Its plan is written, awaiting the owner's review: [`d
 
 1. Download the Windows build from the latest CI run: GitHub, Actions, "The All-Divine (Godot)", the newest run, Artifacts, `all-divine-windows`. Unzip it and run `all-divine.exe`. Windows may warn that the file is unsigned: More info, then Run anyway.
 2. The game starts in fullscreen. F11 (or Alt+Enter) switches to a 1280×720 window and back.
-3. Walk the courtyard with a gamepad, then with the keyboard and mouse (WASD or the left stick to move, Space or A to roll and hold to sprint, left mouse or RB to jab). Leave the stick alone for a while: a pad that drifts a little should not move him.
-4. Check the roll, the jab then cross chain, the stairs and the ramp, and the scarf.
+3. Walk the courtyard with a gamepad, then with the keyboard and mouse (WASD or the left stick to move, Space or A to dash-step toward the stick, or hop if still, and hold to sprint, left mouse or RB to jab; hold Q or LB and press a direction to sway, or S or stick down to duck). Leave the stick alone for a while: a pad that drifts a little should not move him.
+4. Check the sway and the duck, the dash-step, the jab then cross chain, the stairs and the ramp, and the scarf.
 5. Press F4 to compare with the post effects off (F3 shows the debug overlay; Esc pauses and shows "Paused").
 6. If you want to try the web build: download `all-divine-web` from the same run and unzip it. In that folder run `python3 -m http.server 8000`, then open http://localhost:8000 in a browser. Opening `index.html` straight from the folder does not work, because a browser will not load the game's `.wasm` file from a `file://` page.
 7. Write what you see, good and bad, in `all-divine/notes/f0.md`.
@@ -129,8 +130,8 @@ all-divine/out/linux/all-divine.x86_64 --headless -- --selftest   # the built ga
 all-divine/tools/test.sh --forward-plus --filter=test_screen_post # the real Forward+ renderer; needs Vulkan (a GPU, or lavapipe: apt install mesa-vulkan-drivers)
 all-divine/.tools/godot/Godot_v4.7.2-stable_linux.x86_64 --path all-divine
                                                # play (starts fullscreen; F11 or Alt+Enter for a 1280×720 window and back):
-                                               # WASD or the left stick to move, Space/Shift (A) to roll and hold to
-                                               # sprint, left mouse (RB) to jab and again for the cross and the hook, right
+                                               # WASD or the left stick to move, Space/Shift (A) to dash-step (hop if still) and hold to
+                                               # sprint, Q (LB) to guard, with a direction pressed while it is held: sway (A, D, W) or duck (S), left mouse (RB) to jab and again for the cross and the hook, right
                                                # mouse (RT) for the heavy palm, held to charge; F1 the controls list, F3 the debug overlay, F4 the
                                                # screen look off and on, F5 the yard or the courtyard, F6 to F8 a tier I, II or III Knuckle,
                                                # F9 resets the fight, Esc (Start) to pause
