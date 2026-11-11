@@ -36,6 +36,9 @@ extends Node
 ## An effect is shown in the world, where the actor is (so it stays where it was shown), or riding a bone in a
 ## BoneAttachment3D, and is freed after its FxDef's lifetime. Each is in the group GROUP, with the meta `fx` its id.
 
+## An effect was shown (show_fx), with its FxDef's id: ChainFx listens, to make a counter's palm trail larger.
+signal shown(id: StringName, node: Node3D)
+
 ## Every effect it shows is in this group.
 const GROUP := &"fx"
 ## A hit flashes the body white for 2 frames (of the 60 a second the physics runs at).
@@ -263,6 +266,11 @@ func _drive_rim() -> void:
 	_actor.rig.hold_aura(_plan.color, level * rise)
 
 
+## Whether a tell's rim is driving the body's aura now (the chain's rim keeps off it while it does).
+func rim_busy() -> bool:
+	return not _plan.is_empty()
+
+
 ## Whether `profile` is a heavy blow: not perilous (that has its own tells) and with at least the tuning's hit-stop, or one
 ## that staggers.
 func is_heavy(profile: HitProfile) -> bool:
@@ -339,6 +347,7 @@ func show_fx(id: StringName, at: Variant = null, bone := &"") -> Node3D:
 		node.reset_physics_interpolation()
 	# A signal drops its connection to a node that is freed first (a lambda would hold on to it).
 	get_tree().create_timer(def.lifetime, true, true).timeout.connect(holder.queue_free)
+	shown.emit(id, node)
 	return node
 
 

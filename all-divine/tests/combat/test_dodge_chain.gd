@@ -41,7 +41,7 @@ static func _script(presses: Array) -> Array:
 # {arena, a, b, log, started}: `a` plays `steps`; `log` is what its chain said ([signal, args...]) and `started` the moves it
 # started ([frame, id]).
 func _world(steps := [], b_def: ActorDef = null) -> Dictionary:
-	var run := Duel.make(self, steps, [], 1.0, b_def)
+	var run := Duel.without_slow(Duel.make(self, steps, [], 1.0, b_def))
 	var a: Actor = run["a"]
 	run["log"] = []
 	run["started"] = []

@@ -69,6 +69,9 @@ extends CharacterBody3D
 ## Holding dodge sprints only after the dash-step its press started is over, since locomotion does not run
 ## while a move does (tap to dash-step, hold to run).
 
+## The script of the node that shows the chain (fx/chain_fx.gd), made when the def has a chain.
+const CHAIN_FX := "res://fx/chain_fx.gd"
+
 signal brain_changed(brain: Brain)
 ## A blow reached this actor and Melee judged it: `result` is what came of it. Emitted for every outcome, a
 ## WHIFF too, once the actor has taken the blow (apply_hit).
@@ -208,6 +211,11 @@ func _ready() -> void:
 	locomotion = Locomotion.new(def.locomotion)
 	if def.chain != null:
 		chain = DodgeChain.new(def.chain)
+		# What the chain looks and sounds like (the rim, whoosh, afterimage, slow-down), made by path: ChainFx names Actor, and two
+		# scripts that name each other at compile time are not let go of when the editor's import run ends (it reports a leak).
+		var chain_fx := (load(CHAIN_FX) as GDScript).new() as Node
+		chain_fx.name = &"ChainFx"
+		add_child(chain_fx)
 	locomotion.facing_yaw = rotation.y
 	runner.actor = self
 	runner.move_started.connect(_on_move_started)

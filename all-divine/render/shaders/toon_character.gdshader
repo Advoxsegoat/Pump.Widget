@@ -21,6 +21,11 @@
 // where no light reaches at all, the sun included, or only lamps too weak to lift the deep tone, is
 // Compatibility black, not deep.
 //
+// Every pixel it draws also writes BODY_MARK into the stencil buffer (the number that ends the stencil_mode line), so that what
+// is drawn later can tell where a body is: the afterimage (afterimage.gdshader) draws only where no body is, which is how it is
+// behind every body and over none. A rim's mark pass writes its own mark over this one on the pixels of its own body
+// (render/rim_marks.gd), and the marks that are not the body's own differ from it, so a rim over another body still shows.
+//
 // The flash is a mix of the pixel's colour toward flash_color. In Forward+ the light's step up from the deep tone is
 // scaled by 1 - flash_amount and the emission, the deep tone, is mixed toward the flash colour: a mix in linear
 // light. In Compatibility the light's pass and the emission's are added in sRGB, so the light carries the colour
@@ -29,6 +34,7 @@
 // or black lands a few steps off, which a flash can afford.)
 shader_type spatial;
 render_mode ambient_light_disabled, specular_disabled;
+stencil_mode write, compare_always, 255;
 
 uniform sampler2D palette : source_color, filter_nearest;
 uniform vec3 ramp = vec3(0.1, 0.4, 0.85);

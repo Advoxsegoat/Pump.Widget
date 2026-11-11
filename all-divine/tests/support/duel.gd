@@ -29,6 +29,16 @@ static func make(t: TestCase, a_steps := [], b_steps := [], gap := 1.0, b_def: A
 	return {"arena": arena, "a": a, "b": b}
 
 
+## `run` (from make) with the slow-down of `a`'s chain switched off: for the tests of the rules, which count frames to the exact one
+## and priming a chain to Flurry, or a first perfect dodge, would otherwise slow the fight (ChainFx; the slow-down has its own tests).
+static func without_slow(run: Dictionary) -> Dictionary:
+	var fx := (run["a"] as Actor).get_node_or_null("ChainFx") as ChainFx
+	if fx != null:
+		fx.tuning = fx.tuning.duplicate() as ReadabilityTuning
+		fx.tuning.slowdown_on = false
+	return run
+
+
 ## Plays until `actor` has lived `frame` frames (its _physics_process for that frame, and Melee, have run).
 static func play_to(t: TestCase, actor: Actor, frame: int) -> void:
 	while actor.frame < frame:

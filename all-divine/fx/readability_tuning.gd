@@ -5,8 +5,8 @@ extends Resource
 ## it: a tell never tints or covers the body's interior. Auras live on the silhouette's edge, waves on the ground, icons
 ## above the head, so the outfits stay in view (spec 3.5 and 4.4).
 ##
-## ActorFx reads it to decide what to start, Hud to draw the unblockable icon; a switch that is off means the element does
-## not appear at all.
+## ActorFx reads it to decide what to start, Hud to draw the unblockable icon, and ChainFx what the dodge chain shows (its rim,
+## afterimage, slow-down and trail); a switch that is off means the element does not appear at all.
 
 @export_group("Switches")
 ## The blue-white rim on an enemy's parryable attack (and on a heavy one), from its tell to its first hitbox_on.
@@ -20,6 +20,14 @@ extends Resource
 @export var perilous_icon_on := true
 ## Abarax's rim burst and ring when his parry or catch lands.
 @export var parry_burst_on := true
+
+@export_group("Chain switches")
+## The fading copy of his silhouette a perfect dodge leaves, and every dodge at Flurry (ChainFx, Afterimage).
+@export var afterimage_on := true
+## The fight slowing to a share of its speed on the chain's first perfect dodge and on the link into Flurry (Melee.slow).
+@export var slowdown_on := true
+## The thin white-gold rim on Abarax from Quick on, which brightens at Flurry (the same stencil-masked hull as a tell's).
+@export var chain_rim_on := true
 
 @export_group("Rim")
 ## A rim is this wide, in pixels of the 640x360 picture: 1 to 2.
@@ -59,3 +67,17 @@ extends Resource
 @export var burst_ring_radius := 0.5
 @export var burst_ring_seconds := 0.18
 @export var burst_ring_color := Color("fff1c8")
+
+@export_group("Chain")
+## The chain's rim on Abarax: its colour, and how strong it is at Quick and at Flurry (0 to 1; none at Slip).
+@export var chain_rim_color := Color("fff1c8")
+@export_range(0.0, 1.0) var chain_rim_quick := 0.5
+@export_range(0.0, 1.0) var chain_rim_flurry := 1.0
+## The afterimage: its colour (the alpha is how solid it starts) and how many frames it takes to fade away.
+@export var afterimage_color := Color(1.0, 0.94509804, 0.78431374, 0.6)
+@export var afterimage_frames := 8
+## The slow-down: how many physics frames it lasts and the share of them each actor acts on.
+@export var slow_frames := 12
+@export_range(0.0, 1.0) var slow_share := 0.4
+## How many times its size the palm trail of a counter is, by the tempo the chain had when it was cashed in (Slip, Quick, Flurry).
+@export var trail_scales := PackedFloat32Array([1.0, 1.25, 1.5])

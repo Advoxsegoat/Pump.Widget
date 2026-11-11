@@ -330,6 +330,11 @@ func aura_active() -> bool:
 	return _aura_on
 
 
+## Whether the aura on is one set by hold_aura (a tell's, or the chain's), not an envelope (the parry's burst).
+func aura_held() -> bool:
+	return _aura_on and _aura_held
+
+
 ## How strong the aura is now, 0 to 1 (0 with none): its strength times how far it has risen, held and faded.
 func aura_level() -> float:
 	if not _aura_on:

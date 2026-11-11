@@ -35,7 +35,7 @@ func test_seven_blows_gathering_speed_are_climbed_to_flurry_without_a_scratch() 
 	for blow: Array in STRING:
 		presses.append([blow[0] - LEAD, &"sway" if blow[1] == "S" else &"duck"])
 	var attacker := load(KNUCKLE) as ActorDef  # a tier I Knuckle's posture: 60
-	var run := Duel.make(self, _script(presses), [], 1.0, attacker)
+	var run := Duel.without_slow(Duel.make(self, _script(presses), [], 1.0, attacker))
 	var a: Actor = run["a"]
 	var b: Actor = run["b"]
 	a.stats.spend_stamina(50.0)
@@ -68,7 +68,7 @@ func test_parry_sway_sway_duck_takes_no_damage_from_jab_cross_hook() -> void:
 	# A real tier I Knuckle on a ScriptBrain. Its first jab (on frame 1) is parried; it reels, and once it is free again (frame 60)
 	# it throws its string: jab, cross, hook, pressed so each cancels into the next as soon as it can. Abarax sways the jab,
 	# sways the cross and ducks the hook, each pressed four frames before its blow lands (the jab lands on frame 80, the cross
-	# on 110, the hook on 155: the Knuckle's own timing, which the evades do not slow since they freeze no one). The chain
+	# on 110, the hook on 155: the Knuckle's own timing; the slow-down is off here, as it would move the blows against the presses). The chain
 	# climbs 1, 3, 5, 7, and the whole of it fits inside sixty frames without a defence that succeeds.
 	var knuckle := load(KNUCKLE) as ActorDef
 	var a_steps := []
@@ -83,7 +83,7 @@ func test_parry_sway_sway_duck_takes_no_damage_from_jab_cross_hook() -> void:
 		b_steps.append({"frames": frame - at - 1})
 		b_steps.append({"frames": 1, "press": [&"palm"]})
 		at = frame
-	var run := Duel.make(self, a_steps, b_steps, 1.0, knuckle)
+	var run := Duel.without_slow(Duel.make(self, a_steps, b_steps, 1.0, knuckle))
 	var a: Actor = run["a"]
 	var b: Actor = run["b"]
 	var outcomes := []
@@ -107,7 +107,7 @@ func test_mashed_sways_evade_at_most_half_the_frames_at_every_tempo() -> void:  
 		var steps := []
 		for i in int(row[2]):
 			steps.append({"frames": 1, "press": [row[0]]})
-		var run := Duel.make(self, steps)
+		var run := Duel.without_slow(Duel.make(self, steps))
 		var a: Actor = run["a"]
 		for i in int(row[1]):
 			a.chain.link(false, 0)
@@ -124,7 +124,7 @@ func test_mashed_sways_evade_at_most_half_the_frames_at_every_tempo() -> void:  
 		var steps := []
 		for i in 120:
 			steps.append({"frames": 1, "press": [action]})
-		var run := Duel.make(self, steps)
+		var run := Duel.without_slow(Duel.make(self, steps))
 		var a: Actor = run["a"]
 		var open := 0
 		while a.frame < 120:
@@ -141,7 +141,7 @@ func test_mashing_through_the_seven_blow_string_loses_to_timing() -> void:
 	var steps := []
 	for i in 175:
 		steps.append({"frames": 1, "press": [&"sway"]})
-	var run := Duel.make(self, steps, [], 1.0, load(KNUCKLE) as ActorDef)
+	var run := Duel.without_slow(Duel.make(self, steps, [], 1.0, load(KNUCKLE) as ActorDef))
 	var a: Actor = run["a"]
 	var b: Actor = run["b"]
 	var outcomes := []
