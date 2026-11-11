@@ -94,7 +94,7 @@ Every blow has a **line** in its data: **straight** (a jab, a cross, a thrust) o
 
 An evade with the matching dodge is a **perfect dodge**:
 
-- its stamina cost comes back, and 4 more;
+- its stamina cost comes back, and 4 more, once for the dodge however many blows it slipped;
 - it counts double toward the chain (3.3);
 - an afterimage and a cue mark it (section 5).
 
@@ -104,13 +104,14 @@ An evade with the other dodge still avoids the blow, and counts once.
 
 Defences that succeed in a row form a **chain**. It is the rhythm of standing one's ground.
 
-**What builds it.** Each evade and each parry or catch adds 1. A perfect dodge adds 2.
+**What builds it.** Each evade and each parry or catch adds 1. A perfect dodge adds 2. The count is by blow: one sway
+that slips three blows at once adds three (or six), which is how a swarm dodged cleanly climbs fastest.
 
 **What ends it.**
 
-- Abarax attacks: the chain is cashed in (3.4).
+- Abarax attacks, or starts a finisher: the chain is cashed in (3.4).
 - He walks, dash-steps or hops.
-- 60 frames pass without a defence that succeeds.
+- 90 frames pass without a defence that succeeds. (Amended after Task 4's review: at 60 the chain survived a Knuckle's own parry-to-jab by 4 frames and its cross-to-hook by 10, so a slower enemy's string could never be chained at all.)
 - A blow lands on him: he is **knocked out** of the chain (below). A broken guard ends it too.
 
 A blow he guards neither builds the chain nor ends it.

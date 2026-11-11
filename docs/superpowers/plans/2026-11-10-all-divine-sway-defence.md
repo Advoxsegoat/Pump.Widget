@@ -31,7 +31,7 @@
   - Every evade window opens on the move's frame 2.
   - An evade adds 1 to the chain, a parry or catch 1, a perfect dodge 2. A perfect dodge gives back its stamina cost and 4 more.
   - Straight blows are matched by a sway, round ones by a duck, a grab by either.
-  - The chain ends on an attack (cashed in), a walk, a dash-step or hop, 60 frames without a defence that succeeds, a broken guard, or a blow that lands. A guarded blow neither builds nor ends it.
+  - The chain ends on an attack (cashed in), a walk, a dash-step or hop, 90 frames without a defence that succeeds, a broken guard, or a blow that lands. A guarded blow neither builds nor ends it.
   - A blow that lands at Quick or Flurry staggers Abarax whatever its weight.
   - After a dodge that avoided nothing, another sway or duck cannot start until twice the window's length (frames 20, 16, 12 for sways; 24, 18, 14 for ducks).
   - A counter follows an evade within 24 frames. Cashed in at Slip, Quick, Flurry it is worth ×1, ×1.5, ×2; a clear-out throws 2, 2.5, 3 m; a Flurry counter staggers whatever the poise. A clear-out costs 20 stamina.
@@ -45,7 +45,7 @@ Five conditions the tasks' main tests would not reach on their own, most likely 
 
 1. **Blows from several attackers around one dodge.** One blow lands on the frame the window closes, or from behind in the dodge's other frames, or two land on the same frame and only one can be evaded (a sweep with a jab). The evadable ones are evaded, the others land, and a landed blow wins: Abarax is hit and knocked out of the chain. A blow that was evaded never lands later in the same swing. Tests in Tasks 1 and 4.
 2. **Presses that arrive at awkward moments.** A direction held before guard goes down; guard and a direction on one frame; a sway buffered during hit-stop, the slow-down or a stagger; sways mashed; a counter pressed without stamina. One outcome, the same every time: no sway from a held direction, a buffered sway comes out or expires by the buffer's rule, mashing never lengthens a window or builds the chain, a refused counter cashes nothing. Tests in Tasks 3, 4 and 5.
-3. **The chain across freezes.** Frozen frames (hit-stop, the slow-down) do not count toward the 60-frame timeout or the 24-frame counter window; a chain neither times out nor a counter window closes because the fight was slowed. Tests in Tasks 4 and 6.
+3. **The chain across freezes.** Frozen frames (hit-stop, the slow-down) do not count toward the 90-frame timeout or the 24-frame counter window; a chain neither times out nor a counter window closes because the fight was slowed. Tests in Tasks 4 and 6.
 4. **Clear-outs against the world.** A clear-out near a wall, in a corner, against three bodies at once, a paired body, a corpse, a foe whose posture is broken. Nobody passes through a wall or another body, the paired and the dead are not thrown, a broken foe stays finishable. Tests in Task 5.
 5. **The answers that are not evades.** A thrust or sweep thrown into a chain (it lands, and at Quick or Flurry it staggers); a grab slipped on the frame its pair would start; a hop or dash-step during a chain (it ends); a blow during a dash-step (it lands). Tests in Tasks 1, 3 and 4.
 
@@ -277,7 +277,7 @@ func test_no_clip_or_move_names_the_roll_any_more() -> void:
 **Interfaces:**
 - Consumes: `EVADED`, `perfect`, `MoveRunner.evaded` (Task 1); the tempo moves and `redodge_frame` (Task 2); `Actor.move_for` (Task 3).
 - Produces:
-  - `class_name ChainTuning extends Resource` with `@export`s: `quick_at := 3`, `flurry_at := 7`, `timeout_frames := 60`, `perfect_links := 2`, `perfect_refund := 4.0`, `posture_chip := PackedFloat32Array([0, 4, 8])`, `cash_scale := PackedFloat32Array([1.0, 1.5, 2.0])`, `clearout_throw := PackedFloat32Array([2.0, 2.5, 3.0])`, `sway_moves: Array[StringName]` and `duck_moves: Array[StringName]` (the base move of each tempo: `sway_left_slip`, `sway_left_quick`, `sway_left_flurry`; `duck_slip`, `duck_quick`, `duck_flurry`).
+  - `class_name ChainTuning extends Resource` with `@export`s: `quick_at := 3`, `flurry_at := 7`, `timeout_frames := 90`, `perfect_links := 2`, `perfect_refund := 4.0`, `posture_chip := PackedFloat32Array([0, 4, 8])`, `cash_scale := PackedFloat32Array([1.0, 1.5, 2.0])`, `clearout_throw := PackedFloat32Array([2.0, 2.5, 3.0])`, `sway_moves: Array[StringName]` and `duck_moves: Array[StringName]` (the base move of each tempo: `sway_left_slip`, `sway_left_quick`, `sway_left_flurry`; `duck_slip`, `duck_quick`, `duck_flurry`).
   - `class_name DodgeChain extends RefCounted`:
     - `enum Tempo { SLIP, QUICK, FLURRY }`
     - `var count := 0`; `func tempo() -> Tempo`
@@ -304,7 +304,7 @@ func test_an_evade_takes_posture_from_its_attacker_from_quick_on() -> void:  # 0
 func test_a_string_dodged_through_can_break_the_attacker() -> void:
 func test_a_blow_landing_at_quick_or_flurry_staggers_whatever_its_weight() -> void:
 func test_a_blow_landing_at_slip_is_an_ordinary_hit() -> void:
-func test_what_ends_the_chain() -> void:   # an attack (cashed, cashed_tempo set), a dash-step, a hop, walking, 60 frames, a broken guard
+func test_what_ends_the_chain() -> void:   # an attack (cashed, cashed_tempo set), a dash-step, a hop, walking, 90 frames, a broken guard
 func test_a_guarded_blow_neither_builds_nor_ends_it() -> void:
 func test_frozen_frames_do_not_run_the_timeout() -> void:                    # Review Focus 3
 func test_a_thrust_into_a_flurry_lands_and_staggers() -> void:               # Review Focus 5
