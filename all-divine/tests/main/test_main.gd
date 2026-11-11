@@ -87,7 +87,7 @@ func test_main_boots_into_play_with_player_and_camera() -> void:
 	if stage.settings != null:
 		# The look is a copy of the default with each strength at its Settings percent (100 here).
 		var default := load(DEFAULT_SETTINGS) as RenderSettings
-		for strength in [&"outline", &"dof_strength", &"bloom_strength", &"fog_strength", &"grade_strength", &"vignette_strength"]:
+		for strength in [&"outline", &"dof_strength", &"bloom_strength", &"fog_strength", &"grade_strength", &"vignette_strength", &"focus_band", &"bloom_threshold"]:
 			assert_eq(stage.settings.get(strength), default.get(strength), "the default look's %s" % strength)
 	assert_eq(stage.grade, region.grade, "in the region's grade")
 	var overlay := main.get_node("DebugOverlay") as CanvasLayer

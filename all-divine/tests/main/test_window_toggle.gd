@@ -34,7 +34,7 @@ func test_the_game_starts_in_borderless_fullscreen() -> void:
 func test_fullscreen_switches_to_a_1280x720_window() -> void:
 	for mode in [Window.MODE_FULLSCREEN, Window.MODE_EXCLUSIVE_FULLSCREEN]:
 		assert_eq(WindowToggle.target(mode), {"mode": Window.MODE_WINDOWED, "size": Vector2i(1280, 720)}, "from mode %d" % mode)
-	assert_eq(PixelStage.scale_for(WindowToggle.WINDOWED_SIZE), 2, "the window shows the picture at x2")
+	assert_eq(PixelStage.scale_for(Vector2i(1280, 720)), 2, "the window shows the picture at x2")
 
 
 func test_a_window_switches_to_fullscreen() -> void:

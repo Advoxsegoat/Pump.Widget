@@ -7,22 +7,26 @@ extends Node
 ## the file and says `changed`. What the others change is read where it is used: the camera's shake
 ## (shake_scale), the finisher's camera dip (camera/dips), the screen look (look_of), the window (apply_window).
 ##
-## The settings are global, not a save: they live in user://settings.cfg (a ConfigFile), written whenever one changes,
-## and read once at start-up. A file that is missing, empty, binary, half-written, of another kind or of a newer
-## version never makes an error: each key it cannot read is its default and the rest are kept. A save goes to a
-## temporary file and is renamed over the old one, so a failed save leaves the old file whole.
+## The settings are global, not a save: they live in user://settings.cfg (written in ConfigFile's format), written
+## whenever one changes, and read once at start-up. The file is read line by line, so one line that cannot be read
+## (a word with no value, an unfinished string) costs that line and nothing else; a key that is missing, of the wrong
+## type or out of range is its default, an unknown key or section is ignored, and a file that is empty, binary or of a
+## newer version is read as far as it makes sense. Nothing of it is ever an error. A save goes to a temporary file
+## and is renamed over the old one, so a failed save leaves the old file whole.
 ##
 ## The defaults leave the game as it was before there were settings: the switches are whatever
 ## data/tuning/readability.tres says (all on), the camera shake, the look and the sound are 100, the window is the
-## project's own (fullscreen; windowed on the web). The self-test reads and writes no file.
+## project's own (fullscreen; windowed on the web).
+##
+## Only the game reads and writes the player's file. Under the self-test and under any script run with `-s` (the test
+## runner, the tools) the settings are the defaults and that file is neither read nor written; a test's own file,
+## under its own path, is. On the web the page owns the window: apply_window does nothing there (`on_web`).
 
 ## Emitted after a setting changed (by set_value, and by reset_all for each setting that moved).
 signal changed(key: String)
 
 ## The file's version. A file of a newer one is read as far as it is understood.
 const VERSION := 1
-## The picture's size, which a window is a whole multiple of.
-const PICTURE := Vector2i(640, 360)
 ## The most a window can magnify the picture.
 const MAX_SCALE := 6
 ## The steps of the percent settings.
@@ -46,18 +50,33 @@ const SOUND := {
 	"voice": &"Voice",
 	"ui": &"UI",
 }
+## The player's file.
+const PLAYER_PATH := "user://settings.cfg"
 const _TUNING := preload("res://data/tuning/readability.tres")
 const MODES: Array[String] = ["fullscreen", "windowed"]
 
 enum _Kind { SWITCH, PERCENT, CHOICE }
 
+# What a key holds and how it is checked.
+class Spec:
+	extends RefCounted
+	var kind := _Kind.SWITCH
+	var low := 0
+	var high := 0
+	var step := 1
+	var default: Variant = null
+	var options: Array[String] = []
+
 ## Where the settings are kept. Only a test changes it.
-var path := "user://settings.cfg"
+var path := PLAYER_PATH
+## Which file is the player's, the one a test run or the self-test leaves alone. Only a test changes it.
+var player_path := PLAYER_PATH
+## True on the web, where the page owns the window. Only a test changes it.
+var on_web := OS.has_feature("web")
 
 var _keys: Array[String] = []
-# key -> {kind, low, high, step, default, options}
-var _spec := {}
-var _values := {}
+var _spec: Dictionary[String, Spec] = {}
+var _values: Dictionary[String, Variant] = {}
 
 
 func _init() -> void:
@@ -69,9 +88,18 @@ func _init() -> void:
 		_add_percent("look/" + item, LOOK_STEP)
 	for item: String in SOUND:
 		_add_percent("sound/" + item, SOUND_STEP)
-	_spec["window/mode"] = {kind = _Kind.CHOICE, default = "windowed" if OS.has_feature("web") else "fullscreen", options = MODES}
+	var mode := Spec.new()
+	mode.kind = _Kind.CHOICE
+	mode.default = "windowed" if on_web else "fullscreen"
+	mode.options = MODES
+	_spec["window/mode"] = mode
 	_keys.append("window/mode")
-	_spec["window/scale"] = {kind = _Kind.PERCENT, low = 1, high = MAX_SCALE, step = 1, default = 2}
+	var scale_spec := Spec.new()
+	scale_spec.kind = _Kind.PERCENT
+	scale_spec.low = 1
+	scale_spec.high = MAX_SCALE
+	scale_spec.default = 2
+	_spec["window/scale"] = scale_spec
 	_keys.append("window/scale")
 	for key in _keys:
 		_values[key] = _spec[key].default
@@ -134,27 +162,36 @@ func reset_all() -> void:
 		changed.emit(key)
 
 
-## Reads the file at `path`. False, silently, if it is missing or not a ConfigFile. Otherwise each key it understands
-## is taken (a number out of range or of the wrong type, or a word that is no choice, leaves that key at its default),
-## and unknown keys and sections are ignored. The version is not checked: a newer file is read the same way.
+## Reads the file at `path` and applies it: False, silently, if there is no such file (or it is the player's and this
+## is a test run). Otherwise each key it has is taken (a value of the wrong type or out of range, or a word that is
+## no choice, leaves that key at its default; a key it does not have is left as it is), each is applied, and `changed`
+## is emitted for each key whose value is not what it was. A line that cannot be read costs only itself, unknown
+## keys and sections are ignored, and the version is not checked: a newer file is read the same way.
 func load_file() -> bool:
-	var config := _read(path)
-	if config == null:
+	if not _may_use(path):
 		return false
+	var data: Variant = _read(path)
+	if data == null:
+		return false
+	var before := _values.duplicate()
 	for key in _keys:
-		var section := key.get_slice("/", 0)
+		var section: Dictionary = data.get(key.get_slice("/", 0), {})
 		var item := key.get_slice("/", 1)
-		if not config.has_section_key(section, item):
+		if not section.has(item):
 			continue
-		var checked: Variant = _checked(key, config.get_value(section, item), false)
+		var checked: Variant = _checked(key, section[item], false)
 		_values[key] = _spec[key].default if checked == null else checked
+	_apply_all()
+	for key in _keys:
+		if _values[key] != before[key]:
+			changed.emit(key)
 	return true
 
 
 ## Writes every key to `path + ".tmp"` and renames that over `path`. Returns the error if either step fails; the old
-## file is then whole. The self-test writes nothing.
+## file is then whole. The self-test writes nothing, and a test run none of the player's file.
 func save_file() -> Error:
-	if SelfTest.active:
+	if SelfTest.active or not _may_use(path):
 		return OK
 	var config := ConfigFile.new()
 	config.set_value("meta", "version", VERSION)
@@ -195,7 +232,7 @@ func look_of(base: RenderSettings) -> RenderSettings:
 func fitting_scales(screen: Vector2i) -> Array[int]:
 	var fits: Array[int] = []
 	for k in range(1, MAX_SCALE + 1):
-		if PICTURE.x * k <= screen.x and PICTURE.y * k <= screen.y:
+		if PixelSnap.INTERNAL.x * k <= screen.x and PixelSnap.INTERNAL.y * k <= screen.y:
 			fits.append(k)
 	if fits.is_empty():
 		fits.append(1)
@@ -209,7 +246,7 @@ func windowed_size(screen := DisplayServer.screen_get_usable_rect().size) -> Vec
 	var scale: int = _values["window/scale"]
 	if screen.x > 0 and screen.y > 0 and not fitting_scales(screen).has(scale):
 		scale = fitting_scales(screen).back()
-	return PICTURE * scale
+	return PixelSnap.INTERNAL * scale
 
 
 ## What the window should be on a screen of `screen`: {mode, size}, the size of a fullscreen window being
@@ -221,9 +258,10 @@ func window_target(screen: Vector2i) -> Dictionary:
 
 
 ## Puts `window` as the settings say: the mode and, windowed, the size, centred. The self-test leaves the window
-## alone, and so does a test's own window, the one the test runner opened with no game in it.
+## alone, and so does a test's own window, the one the test runner opened with no game in it, and on the web the
+## page's window is the page's.
 func apply_window(window: Window) -> void:
-	if SelfTest.active:
+	if SelfTest.active or on_web:
 		return
 	if window.is_inside_tree() and window.get_tree().current_scene == null:
 		return
@@ -242,45 +280,111 @@ func note_window_mode(mode: Window.Mode) -> void:
 
 
 func _add_switch(key: String, default := true) -> void:
-	_spec[key] = {kind = _Kind.SWITCH, default = default}
+	var spec := Spec.new()
+	spec.default = default
+	_spec[key] = spec
 	_keys.append(key)
 
 
 func _add_percent(key: String, step: int) -> void:
-	_spec[key] = {kind = _Kind.PERCENT, low = 0, high = 100, step = step, default = 100}
+	var spec := Spec.new()
+	spec.kind = _Kind.PERCENT
+	spec.high = 100
+	spec.step = step
+	spec.default = 100
+	_spec[key] = spec
 	_keys.append(key)
 
 
-# `value` as `key` holds it (a number clamped and snapped), or null if it is not a value of the key's kind. From a file
-# (`clamp` false) a number out of range is not a value either.
+# Whether this run may read and write the file at `file_path`: the player's file belongs to the game alone, not to the
+# self-test and not to a script run with -s (the test runner and the tools have a script for a main loop).
+func _may_use(file_path: String) -> bool:
+	if file_path != player_path:
+		return true
+	return not SelfTest.active and Engine.get_main_loop().get_script() == null
+
+
+# `value` as `key` holds it (a number clamped and snapped), or null if it is not a value of the key's kind. A whole
+# float counts as a number (a slider hands floats). From a file (`clamp` false) a number out of range is not a value
+# either.
 func _checked(key: String, value: Variant, clamp: bool) -> Variant:
-	var spec: Dictionary = _spec[key]
+	var spec := _spec[key]
 	match spec.kind:
 		_Kind.SWITCH:
 			return value if typeof(value) == TYPE_BOOL else null
 		_Kind.PERCENT:
-			if typeof(value) != TYPE_INT:
+			var number: int
+			if typeof(value) == TYPE_INT:
+				number = value
+			elif typeof(value) == TYPE_FLOAT and is_finite(value) and value == floorf(value) and absf(value) < 1.0e15:
+				number = int(value)
+			else:
 				return null
-			if not clamp and (value < spec.low or value > spec.high):
+			if not clamp and (number < spec.low or number > spec.high):
 				return null
-			var snapped_value: int = roundi(float(value) / spec.step) * spec.step
-			return clampi(snapped_value, spec.low, spec.high)
+			number = clampi(number, spec.low, spec.high)
+			return clampi(roundi(float(number) / spec.step) * spec.step, spec.low, spec.high)
 		_Kind.CHOICE:
 			return value if typeof(value) == TYPE_STRING and spec.options.has(value) else null
 	return null
 
 
-# The file at `path` as a ConfigFile, or null if there is none or it is not one. The engine reports a parse error
-# of its own for a damaged file; that is the very thing this must stay quiet about, so it is not printed.
-func _read(from: String) -> ConfigFile:
-	if not FileAccess.file_exists(from):
+# The file at `from` as {section: {key: value}}, or null if it cannot be opened. It is read line by line: `[section]`,
+# `key=value` (the value as the engine writes a variant), `;` and `#` notes. A line that is none of these, or whose
+# value cannot be read, is skipped; a bad section header drops the keys under it until the next good one. The engine
+# reports what it cannot parse in its own words, which a damaged file must not make it do, so it is not printed.
+func _read(from: String) -> Variant:
+	var file := FileAccess.open(from, FileAccess.READ)
+	if file == null:
 		return null
+	var bytes := file.get_buffer(file.get_length())
+	file.close()
 	var previous := Engine.print_error_messages
 	Engine.print_error_messages = false
-	var config := ConfigFile.new()
-	var error := config.load(from)
+	var text := bytes.get_string_from_utf8().trim_prefix("\ufeff")
+	var data := {}
+	var section := ""
+	for raw in text.split("\n"):
+		var line := _without_note(raw).strip_edges()
+		if line.is_empty():
+			continue
+		if line.begins_with("["):
+			var name := line.trim_prefix("[").trim_suffix("]")
+			var whole := line.ends_with("]") and not name.is_empty() \
+				and name.find("[") < 0 and name.find("]") < 0 and name.find("=") < 0
+			section = name.strip_edges() if whole else ""
+			continue
+		var at := line.find("=")
+		if section.is_empty() or at <= 0:
+			continue
+		var value: Variant = str_to_var(line.substr(at + 1).strip_edges())
+		if value == null:
+			continue
+		if not data.has(section):
+			data[section] = {}
+		data[section][line.substr(0, at).strip_edges()] = value
 	Engine.print_error_messages = previous
-	return config if error == OK else null
+	return data
+
+
+# `line` up to a `;` or `#` that is not inside a string.
+func _without_note(line: String) -> String:
+	var quoted := false
+	var escaped := false
+	for i in line.length():
+		var c := line[i]
+		if quoted:
+			if escaped:
+				escaped = false
+			elif c == "\\":
+				escaped = true
+			elif c == "\"":
+				quoted = false
+		elif c == "\"":
+			quoted = true
+		elif c == ";" or c == "#":
+			return line.substr(0, i)
+	return line
 
 
 func _apply_all() -> void:

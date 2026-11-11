@@ -145,7 +145,7 @@ func test_a_value_of_the_wrong_type_or_an_unknown_key_is_refused() -> void:
 	assert_true(_made.set_value("camera/shake", 50))
 	var before := FileAccess.get_file_as_string(PATH)
 	assert_false(_made.set_value("camera/shake", "loud"), "a word for a number")
-	assert_false(_made.set_value("camera/shake", 50.0), "a float for a number")
+	assert_false(_made.set_value("camera/shake", 50.5), "a fraction for a number")
 	assert_false(_made.set_value("camera/shake", true), "a bool for a number")
 	assert_false(_made.set_value("effects/afterimage_on", 1), "a number for a switch")
 	assert_false(_made.set_value("window/mode", "sideways"), "a word that is no choice")
@@ -378,3 +378,146 @@ func test_reset_all_restores_every_key_and_the_buses() -> void:
 	var config := ConfigFile.new()
 	assert_eq(config.load(PATH), OK, "and the file says the defaults")
 	assert_eq(config.get_value("camera", "shake"), 100)
+
+
+func test_the_suite_does_not_read_the_players_file() -> void:
+	# The player's file stands in as a file of the test's own: a Settings whose player file is `path` is under the
+	# test runner (as it would be under the self-test), so it must not read it, nor write it.
+	_write("[camera]\nshake=25\n[effects]\nafterimage_on=false\n")
+	var before := FileAccess.get_file_as_string(PATH)
+	var settings := (load(SETTINGS) as GDScript).new() as Node
+	settings.path = PATH
+	settings.player_path = PATH
+	track(settings)
+	assert_eq(settings.get_value("camera/shake"), 100, "the file's shake is not read")
+	assert_eq(settings.get_value("effects/afterimage_on"), true, "nor its switch")
+	assert_true(_effects().afterimage_on, "and the shared tuning is untouched")
+	assert_false(settings.load_file(), "load_file reads nothing of it")
+	settings.set_value("camera/shake", 50)
+	assert_eq(FileAccess.get_file_as_string(PATH), before, "and nothing is written over it")
+	settings.reset_all()
+
+
+func test_load_file_applies_what_it_reads_and_says_changed() -> void:
+	_made = _make()
+	var heard: Array[String] = []
+	_made.changed.connect(func(key: String) -> void: heard.append(key))
+	_write("[effects]\nafterimage_on=false\nslowdown_on=true\n[sound]\nmusic=40\n[camera]\nshake=25\n")
+	assert_true(_made.load_file())
+	assert_false(_effects().afterimage_on, "the shared tuning has changed")
+	var bus := AudioServer.get_bus_index("Music")
+	assert_near(AudioServer.get_bus_volume_db(bus), linear_to_db(0.4), 1e-4, "the Music bus has changed")
+	assert_near(_made.shake_scale(), 0.25, 1e-6, "and the shake")
+	heard.sort()
+	assert_eq(heard, ["camera/shake", "effects/afterimage_on", "sound/music"] as Array[String], "changed for exactly those three")
+	heard.clear()
+	assert_true(_made.load_file())
+	assert_eq(heard.size(), 0, "read again, nothing moved, nothing said")
+
+
+func test_one_bad_line_costs_one_line() -> void:
+	var bad_lines := {
+		"an unquoted word": "shake=oops",
+		"a stray word": "stray",
+		"a line with no =": "shake 50",
+		"an unterminated string": "shake=\"loud",
+		"a bracket": "shake=[1, 2",
+	}
+	for what in bad_lines:
+		_write("[effects]\nafterimage_on=false\n[camera]\ndips=false\n%s\nshake=50\n[sound]\nmusic=40\n" % bad_lines[what])
+		var settings := _make()
+		assert_eq(settings.get_value("effects/afterimage_on"), false, what + ": the section before is read")
+		assert_eq(settings.get_value("camera/dips"), false, what + ": and the key before it")
+		assert_eq(settings.get_value("sound/music"), 40, what + ": and the section after it")
+		var shake: Variant = settings.get_value("camera/shake")
+		if what == "an unquoted word" or what == "an unterminated string" or what == "a line with no =":
+			assert_eq(shake, 50, what + ": the key after the bad line is read too")
+		settings.free()
+	# The bad line is the key's own: that key is its default, its neighbours are read.
+	_write("[camera]\ndips=false\nshake=oops\n[look]\nbloom=25\n")
+	var own := _make()
+	assert_eq(own.get_value("camera/shake"), 100, "shake=oops is shake's default")
+	assert_eq(own.get_value("camera/dips"), false)
+	assert_eq(own.get_value("look/bloom"), 25)
+	own.free()
+	# A bad section header drops the keys under it; the sections after it are read.
+	_write("[sound]\nmusic=40\n[camera\nshake=25\ndips=false\n[look]\nbloom=50\n")
+	var header := _make()
+	assert_eq(header.get_value("sound/music"), 40, "before the bad header")
+	assert_eq(header.get_value("camera/shake"), 100, "under it: dropped")
+	assert_eq(header.get_value("camera/dips"), true, "under it: dropped")
+	assert_eq(header.get_value("look/bloom"), 50, "after it")
+	header.free()
+	# Noise around good lines, a comment, a note after a value, CRLF.
+	_write("junk \u0001\u0002\r\n; a comment\r\n[sound]\r\nmusic=40 ; quieter\r\n#another\r\nvoice=50\r\n")
+	var mixed := _make()
+	assert_eq(mixed.get_value("sound/music"), 40, "a note after the value")
+	assert_eq(mixed.get_value("sound/voice"), 50, "CRLF")
+	mixed.free()
+
+
+func test_a_value_out_of_range_in_the_file_is_the_keys_default_not_its_clamp() -> void:
+	_write("[window]\nscale=9\n[camera]\nshake=-5\n")
+	var settings := _make()
+	assert_eq(settings.get_value("window/scale"), 2, "9 is not 6: it is the default")
+	assert_eq(settings.get_value("camera/shake"), 100, "-5 is not 0")
+	settings.free()
+
+
+func test_on_the_web_the_page_owns_the_window() -> void:
+	_made = _make()
+	var loose := Window.new()  # outside the tree, as a window the game does not own
+	loose.mode = Window.MODE_MAXIMIZED
+	loose.size = Vector2i(777, 555)
+	loose.position = Vector2i(31, 17)
+	# Off the web a windowed setting does size it (the test has teeth).
+	_made.on_web = false
+	_made.set_value("window/mode", "windowed")
+	_made.set_value("window/scale", 1)
+	_made.apply_window(loose)
+	assert_eq([loose.mode, loose.size], [Window.MODE_WINDOWED, Vector2i(640, 360)], "off the web it applies")
+	_made.on_web = true
+	for mode in ["fullscreen", "windowed"]:
+		for scale in [1, 2, 3, 6]:
+			_made.set_value("window/mode", mode)
+			_made.set_value("window/scale", scale)
+			loose.mode = Window.MODE_MAXIMIZED
+			loose.size = Vector2i(777, 555)
+			loose.position = Vector2i(31, 17)
+			_made.apply_window(loose)
+			assert_eq([loose.mode, loose.size, loose.position], [Window.MODE_MAXIMIZED, Vector2i(777, 555), Vector2i(31, 17)],
+				"on the web, %s at %d: untouched" % [mode, scale])
+	loose.free()
+
+
+func test_a_whole_float_is_a_number_but_a_fraction_is_not() -> void:
+	_made = _make()
+	assert_true(_made.set_value("camera/shake", 50.0), "a slider hands floats")
+	assert_eq(_made.get_value("camera/shake"), 50)
+	assert_eq(typeof(_made.get_value("camera/shake")), TYPE_INT, "stored as an int")
+	assert_false(_made.set_value("camera/shake", 75.5), "a fraction is refused")
+	assert_eq(_made.get_value("camera/shake"), 50)
+	assert_false(_made.set_value("camera/shake", INF), "and infinity")
+	assert_false(_made.set_value("camera/shake", NAN), "and NaN")
+
+
+func test_an_extreme_number_clamps_without_overflow() -> void:
+	_made = _make()
+	assert_true(_made.set_value("window/scale", 9223372036854775807))
+	assert_eq(_made.get_value("window/scale"), 6)
+	assert_true(_made.set_value("window/scale", -9223372036854775807))
+	assert_eq(_made.get_value("window/scale"), 1)
+	assert_true(_made.set_value("camera/shake", 9223372036854775807))
+	assert_eq(_made.get_value("camera/shake"), 100)
+
+
+func test_note_window_mode_stores_both_fullscreens_as_fullscreen() -> void:
+	_made = _make()
+	_made.note_window_mode(Window.MODE_WINDOWED)
+	assert_eq(_made.get_value("window/mode"), "windowed")
+	_made.note_window_mode(Window.MODE_EXCLUSIVE_FULLSCREEN)
+	assert_eq(_made.get_value("window/mode"), "fullscreen", "exclusive fullscreen")
+	_made.note_window_mode(Window.MODE_MAXIMIZED)
+	assert_eq(_made.get_value("window/mode"), "windowed", "any other mode")
+	_made.note_window_mode(Window.MODE_FULLSCREEN)
+	assert_eq(_made.get_value("window/mode"), "fullscreen")
