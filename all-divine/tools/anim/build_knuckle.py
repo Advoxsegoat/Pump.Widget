@@ -230,7 +230,7 @@ def box_faces(vertices, faces, slots, slot, x, y, z):
 
 def blade_faces(vertices, faces, slots):
     """Adds the single-edged blade: a five-sided section (flat back, two flat sides, the edge's two bevels) from the
-    guard to TIP_LENGTH short of the tip, then a taper to the point."""
+    guard to TIP_LENGTH short of the tip, then a taper to a small blunt end."""
     cx, cy = GRIP_AXIS
     half_w, half_t = BLADE_WIDTH / 2.0, BLADE_THICKNESS / 2.0
     z0 = GUARD_Z[1]
@@ -242,8 +242,10 @@ def blade_faces(vertices, faces, slots):
                (half_t, half_w - BLADE_BEVEL))
         return [(cx + x * scale, cy + y * scale + shift) for x, y in pts]
 
+    # The point is a small blunt end, not a needle: a needle's last pixels are too thin for the picture to draw, and the rim round a
+    # body must not reach past it.
     rings = [(z0 - 0.004, section(1.0, 0.0)), (z_tip - TIP_LENGTH, section(1.0, 0.0)),
-             (z_tip - TIP_LENGTH / 2.0, section(0.55, 0.022))]
+             (z_tip - TIP_LENGTH / 2.0, section(0.55, 0.022)), (z_tip, section(0.16, TIP_SPINE_GAP * 1.2 - half_w))]
     base = len(vertices)
     for z, pts in rings:
         vertices.extend((x, y, z) for x, y in pts)
@@ -252,12 +254,9 @@ def blade_faces(vertices, faces, slots):
             j = (i + 1) % 5
             faces.append((base + r * 5 + i, base + r * 5 + j, base + (r + 1) * 5 + j, base + (r + 1) * 5 + i))
             slots.append(STEEL)
-    tip = len(vertices)
-    vertices.append((cx, cy - half_w + TIP_SPINE_GAP, z_tip))
     last = base + (len(rings) - 1) * 5
-    for i in range(5):
-        faces.append((last + i, last + (i + 1) % 5, tip))
-        slots.append(STEEL)
+    faces.append(tuple(last + i for i in range(5)))  # the blunt end
+    slots.append(STEEL)
 
 
 def make_blade(armature):
