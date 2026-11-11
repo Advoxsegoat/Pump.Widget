@@ -1,14 +1,15 @@
 extends TestCase
 ## The Knuckle of the Hand: its rig (actors/knuckle/knuckle_rig.tscn, the model tools/anim/build_knuckle.py builds) plays
 ## Abarax's clip library, and its three tiers (data/actors/knuckle_{1,2,3}.tres) are drawn and numbered as the brief
-## says: tier I without the hood and pauldron, tier II without the pauldron, tier III with both, 4% larger.
+## says: tier I without the hood and pauldron, tier II without the pauldron, tier III with both, 4% larger; none of them
+## shows the sword (Knuckle_Blade), which only the blade Knuckle carries.
 
 const RIG := "res://actors/knuckle/knuckle_rig.tscn"
 const TIERS := ["res://data/actors/knuckle_1.tres", "res://data/actors/knuckle_2.tres", "res://data/actors/knuckle_3.tres"]
 const PARTS: PackedStringArray = ["Knuckle_Head", "Knuckle_Hair", "Knuckle_Beard", "Knuckle_Body", "Knuckle_Legs",
-		"Knuckle_Arms", "Knuckle_Boots", "Knuckle_Hood", "Knuckle_Pauldron"]
+		"Knuckle_Arms", "Knuckle_Boots", "Knuckle_Hood", "Knuckle_Pauldron", "Knuckle_Blade"]
 ## What each tier hides, and how much larger it is.
-const HIDDEN := [["Knuckle_Hood", "Knuckle_Pauldron"], ["Knuckle_Pauldron"], []]
+const HIDDEN := [["Knuckle_Hood", "Knuckle_Pauldron", "Knuckle_Blade"], ["Knuckle_Pauldron", "Knuckle_Blade"], ["Knuckle_Blade"]]
 const SCALES := [1.0, 1.0, 1.04]
 ## HP, poise and posture of each tier.
 const NUMBERS := [[60.0, 5.0, 60.0], [90.0, 10.0, 80.0], [130.0, 20.0, 100.0]]

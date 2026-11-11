@@ -22,6 +22,9 @@ The meshes, and what each is made of:
     Knuckle_Boots     Male_Ranger_Feet_Boots
     Knuckle_Hood      Male_Ranger_Head_Hood
     Knuckle_Pauldron  Male_Ranger_Acc_Pauldron
+    Knuckle_Blade     a sword made here (make_blade), not taken from a pack: a straight single-edged blade 0.75 m from
+                      its guard to its tip, with the guard, grip and pommel, in the right hand. It is skinned to hand_r
+                      alone, so it follows every clip as the hand does, and only the blade Knuckle shows it.
 
 Palette slots are stored as UV2.x = (slot + 0.5) / 16 (UV2.y = 0.5), as Abarax's are. Vertex colours are dropped.
 A ranger face is sorted by the colour of T_Ranger_BaseColor at its UV centroid (the stored sRGB value, in HSV):
@@ -38,7 +41,8 @@ degrees). Then:
     5     pants  the cloth of the legs
     6     boots  the boots but their metal
     7     hood   the cloth of the hood
-    8     metal  the metal of every ranger part
+    8     metal  the metal of every ranger part, and the sword's guard and pommel
+    9     steel  the sword's blade (the other palettes leave it unused: they hide the blade); the grip is `sec`
 
 Blender works Z up with this character facing -Y. The exporter writes glTF's Y up, facing +Z.
 """
@@ -51,6 +55,7 @@ from pathlib import Path
 import bpy  # first: the bpy module is what makes bmesh importable
 
 import numpy as np
+from mathutils import Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python -I leaves this folder off sys.path
 from bpy_common import (  # noqa: E402
@@ -90,8 +95,8 @@ ARMATURE = "Armature"
 
 # --- palette slots ---
 
-SKIN, HAIR, EYES, MAIN, SEC, PANTS, BOOTS, HOOD, METAL = range(9)
-SLOT_COUNT = 9
+SKIN, HAIR, EYES, MAIN, SEC, PANTS, BOOTS, HOOD, METAL, STEEL = range(10)
+SLOT_COUNT = 10
 SKIN_MATERIAL = "MI_Regular_Male"
 CLOTH_MATERIAL = "MI_Ranger"
 # On T_Ranger_BaseColor the steel is grey (saturation 0.05-0.2 at the faces' UV centroids), and everything else is
@@ -187,6 +192,101 @@ def ratios(objects):
     return {o.name: min(1.0, max(shared * WEIGHTS.get(o.name, 1.0), MIN_TRIANGLES / triangles(o))) for o in objects}
 
 
+# --- the sword ---
+
+BLADE_BONE = "hand_r"
+BLADE_PART = "Knuckle_Blade"
+# Everything below is in the hand's own frame (the bone's: x out of the back of the hand, y along the fingers, z toward the
+# thumb; at rest the right arm lies along -X, the palm down and the thumb forward): the sword lies along z, held across
+# the palm as a fist closes on a hilt, its edge on the knuckles' side (+y) and its spine toward the wrist (-y).
+GRIP_AXIS = (-0.006, 0.065)  # where the hilt's axis crosses the palm: (x, y), the middle of the fist
+POMMEL_Z = (-0.085, -0.070)
+GRIP_Z = (-0.070, 0.040)
+GUARD_Z = (0.040, 0.052)
+BLADE_LENGTH = 0.75  # from the guard's face to the tip
+BLADE_WIDTH = 0.052  # spine to edge
+BLADE_THICKNESS = 0.014  # at the spine
+BLADE_BEVEL = 0.016  # how far from the edge the flat face turns into the edge's bevel
+TIP_LENGTH = 0.075  # the last stretch, where the edge sweeps up to the spine
+TIP_SPINE_GAP = 0.010  # the tip stands this far from the spine's line, toward the edge
+BOX_HALF = {  # (x, y) half-sizes of each box part
+    "pommel": (0.016, 0.016),
+    "grip": (0.0145, 0.0135),
+    "guard": (0.021, 0.046),
+}
+
+
+def box_faces(vertices, faces, slots, slot, x, y, z):
+    """Adds a box of the half-sizes `x`, `y` (about GRIP_AXIS) and the z range `z` to `vertices` and `faces`."""
+    cx, cy = GRIP_AXIS
+    base = len(vertices)
+    for zz in z:
+        for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+            vertices.append((cx + sx * x, cy + sy * y, zz))
+    for ring in ((0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)):
+        faces.append(tuple(base + i for i in ring))
+        slots.append(slot)
+
+
+def blade_faces(vertices, faces, slots):
+    """Adds the single-edged blade: a five-sided section (flat back, two flat sides, the edge's two bevels) from the
+    guard to TIP_LENGTH short of the tip, then a taper to the point."""
+    cx, cy = GRIP_AXIS
+    half_w, half_t = BLADE_WIDTH / 2.0, BLADE_THICKNESS / 2.0
+    z0 = GUARD_Z[1]
+    z_tip = z0 + BLADE_LENGTH
+
+    def section(scale, shift):
+        # spine top, spine bottom, bottom shoulder, edge, top shoulder (+shift toward the edge, all but the tip pinched)
+        pts = ((half_t, -half_w), (-half_t, -half_w), (-half_t, half_w - BLADE_BEVEL), (0.0, half_w),
+               (half_t, half_w - BLADE_BEVEL))
+        return [(cx + x * scale, cy + y * scale + shift) for x, y in pts]
+
+    rings = [(z0 - 0.004, section(1.0, 0.0)), (z_tip - TIP_LENGTH, section(1.0, 0.0)),
+             (z_tip - TIP_LENGTH / 2.0, section(0.55, 0.012))]
+    base = len(vertices)
+    for z, pts in rings:
+        vertices.extend((x, y, z) for x, y in pts)
+    for r in range(len(rings) - 1):
+        for i in range(5):
+            j = (i + 1) % 5
+            faces.append((base + r * 5 + i, base + r * 5 + j, base + (r + 1) * 5 + j, base + (r + 1) * 5 + i))
+            slots.append(STEEL)
+    tip = len(vertices)
+    vertices.append((cx, cy - half_w + TIP_SPINE_GAP, z_tip))
+    last = base + (len(rings) - 1) * 5
+    for i in range(5):
+        faces.append((last + i, last + (i + 1) % 5, tip))
+        slots.append(STEEL)
+
+
+def make_blade(armature):
+    """The sword as a mesh object on `armature`: made in the hand_r bone's frame (see the constants above), moved to
+    where the bone rests, weighted wholly to hand_r, flat shaded (its bevels must not blur into its sides), with the
+    palette slots of the docstring's table. Returns the object."""
+    bone = armature.data.bones[BLADE_BONE]
+    vertices, faces, slots = [], [], []
+    box_faces(vertices, faces, slots, METAL, *BOX_HALF["pommel"], POMMEL_Z)
+    box_faces(vertices, faces, slots, SEC, *BOX_HALF["grip"], GRIP_Z)
+    box_faces(vertices, faces, slots, METAL, *BOX_HALF["guard"], GUARD_Z)
+    blade_faces(vertices, faces, slots)
+    to_world = armature.matrix_world @ bone.matrix_local
+    mesh = bpy.data.meshes.new(BLADE_PART)
+    mesh.from_pydata([tuple(to_world @ Vector(v)) for v in vertices], [], faces)
+    mesh.update()
+    obj = bpy.data.objects.new(BLADE_PART, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    mesh.uv_layers.new(name="UVMap")
+    group = obj.vertex_groups.new(name=BLADE_BONE)
+    group.add(list(range(len(mesh.vertices))), 1.0, "REPLACE")
+    obj.parent = armature
+    obj.modifiers.new("Armature", "ARMATURE").object = armature
+    write_slots(obj, slots)
+    mesh.shade_flat()
+    triangulate(obj)  # the faces were written in order, so triangulating keeps each one's slot on its two halves
+    return obj
+
+
 # --- the build ---
 
 def build(ubc, outfits, out):
@@ -256,7 +356,9 @@ def build(ubc, outfits, out):
         write_slots(obj, read_slots(obj, SLOT_COUNT))  # collapsing interpolates corners; put each face back on its slot
         finish_mesh(obj)
 
-    # 7. one material, no images
+    # 7. the sword (after the decimation: its triangles are not part of the budget the parts share), then one material,
+    # no images
+    objects.append(make_blade(keep))
     one_material(objects)
 
     # 8. export
@@ -266,7 +368,8 @@ def build(ubc, outfits, out):
     print(f"build_knuckle: {out}: {total} triangles, {len(keep.data.bones)} bones")
     for obj in objects:
         slots = sorted(set(read_slots(obj, SLOT_COUNT)))
-        print(f"  {obj.name}: {triangles(obj)} triangles (ratio {shares[obj.name]:.3f}), slots {slots}")
+        ratio = f" (ratio {shares[obj.name]:.3f})" if obj.name in shares else ""
+        print(f"  {obj.name}: {triangles(obj)} triangles{ratio}, slots {slots}")
 
 
 def main(argv=None):
