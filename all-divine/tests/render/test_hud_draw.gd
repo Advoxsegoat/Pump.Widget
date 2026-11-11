@@ -154,7 +154,7 @@ func test_the_wave_pips_are_drawn_cleared_on_and_coming() -> void:
 	await frames(2)
 	var img := await _picture(main)
 	var states: Array[int] = main.hud.pip_states()
-	assert_eq(states, [Hud.Pip.CLEARED, Hud.Pip.CLEARED, Hud.Pip.ON, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING] as Array[int])
+	assert_eq(states, [Hud.Pip.CLEARED, Hud.Pip.CLEARED, Hud.Pip.ON, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING] as Array[int])
 	var width := states.size() * Hud.PIP + (states.size() - 1) * Hud.PIP_GAP
 	var x0 := (640 - width) / 2
 	for i in states.size():
