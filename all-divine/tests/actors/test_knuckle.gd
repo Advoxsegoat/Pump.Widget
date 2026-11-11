@@ -75,7 +75,7 @@ func test_the_rig_has_the_knuckles_hitboxes_and_no_spring_bone() -> void:
 	var ids := PackedStringArray()
 	for child in rig.get_node(^"Hitboxes").get_children():
 		ids.append(String(child.name))
-	assert_eq(ids, PackedStringArray(["palm_l", "palm_r", "foot_r"]))
+	assert_eq(ids, PackedStringArray(["palm_l", "palm_r", "foot_r", "slam_ring"]))
 	assert_eq((rig.get_node(^"Hitboxes/foot_r") as BoneAttachment3D).bone_name, "foot_r")
 	assert_ne(rig.hurtbox, null, "a hurtbox")
 	assert_ne(rig.warp, null, "the orientation warp")

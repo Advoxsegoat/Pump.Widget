@@ -386,7 +386,7 @@ func can_stage_pair_on(foe: Actor, with_pair: PairedMove) -> bool:
 	var line := PhysicsRayQueryParameters3D.create(chest_point(), foe.chest_point(), Layers.WORLD, [get_rid(), foe.get_rid()])
 	if not space.intersect_ray(line).is_empty():
 		return false
-	var goal := Pairing.follower_faced(global_position, foe, Pairing.feet_middle(foe)) * Pairing.offset_of(with_pair, self).affine_inverse()
+	var goal := Pairing.follower_faced(global_position, foe, Pairing.feet_middle(foe)) * Pairing.offset_of(with_pair, self, foe).affine_inverse()
 	var lunge := goal.origin - global_position
 	var steps := maxi(with_pair.align_frames, 1)
 	var at := global_transform

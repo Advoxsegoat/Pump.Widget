@@ -35,12 +35,15 @@ func _heavy_def() -> ActorDef:
 	return load(HEAVY) as ActorDef
 
 
-# The frame of the first mark of `kind` in the move's clip (the move's own frames, from its f0), or -1.
+# The clip of `move` as the rig's library has it (the marks and the length are read from it).
+func _clip(move: StringName) -> Animation:
+	return (load("res://assets/anim/abarax/library.tres") as AnimationLibrary).get_animation(_move(move).clip)
+
+
+# The frame of the `nth` mark of `kind` in the move's clip (the move's own frames, from its f0), or -1.
 func _mark_frame(move: StringName, kind: StringName, nth := 0) -> int:
-	var rig := (load("res://actors/knuckle/knuckle_rig.tscn") as PackedScene).instantiate() as Rig
-	track(rig)
 	var found := 0
-	for m in Marks.read(rig.tree.get_animation(_move(move).clip)):
+	for m in Marks.read(_clip(move)):
 		if m["kind"] == kind:
 			if found == nth:
 				return Marks.frame_of(m["time"])
@@ -49,21 +52,20 @@ func _mark_frame(move: StringName, kind: StringName, nth := 0) -> int:
 
 
 func _clip_frames(move: StringName) -> int:
-	var rig := (load("res://actors/knuckle/knuckle_rig.tscn") as PackedScene).instantiate() as Rig
-	track(rig)
-	return Marks.frame_of(rig.tree.get_animation(_move(move).clip).length)
+	return Marks.frame_of(_clip(move).length)
 
 
 # A heavy Knuckle at the origin playing `heavy_steps` and Abarax `gap` metres off, `around` radians from straight ahead, playing
 # `abarax_steps`: {arena, heavy, abarax, got}, `got` being [[outcome, Abarax's frame, profile, reaction]] of the blows that
 # were not whiffs, as Abarax took them.
-func _fight(gap: float, abarax_steps: Array, heavy_steps: Array, around := 0.0, heavy_def: ActorDef = null) -> Dictionary:
+func _fight(gap: float, abarax_steps: Array, heavy_steps: Array, around := 0.0, heavy_def: ActorDef = null, origin := Vector3.ZERO) -> Dictionary:
 	var arena := TestArena.make(self)
+	arena.position = origin
 	var heavy := TestArena.spawn(arena, heavy_def if heavy_def != null else _heavy_def(), ScriptBrain.new(heavy_steps), Vector3.ZERO, "Heavy")
-	heavy.place(Transform3D(Basis.IDENTITY, Vector3.ZERO))
+	heavy.place(Transform3D(Basis.IDENTITY, origin))
 	var at := Vector3(sin(around), 0.0, cos(around)) * gap
 	var abarax := TestArena.spawn(arena, load(ABARAX) as ActorDef, ScriptBrain.new(abarax_steps), at, "Abarax")
-	abarax.place(Transform3D(Basis(Vector3.UP, around + PI), at))
+	abarax.place(Transform3D(Basis(Vector3.UP, around + PI), origin + at))
 	var run := {"arena": arena, "heavy": heavy, "abarax": abarax, "got": [], "evading": []}
 	abarax.got_hit.connect(func(r: HitResult, e: HitEvent) -> void:
 		if r.outcome != O.WHIFF:
@@ -78,6 +80,11 @@ func _slam_steps() -> Array:
 
 func _haymaker_steps() -> Array:
 	return [{"frames": 1, "press": [&"palm"]}, {"frames": 200}]
+
+
+# Takes the fight's arena out of the world: the next fight of the same test stands where this one did.
+func _end(run: Dictionary) -> void:
+	(run["arena"] as Node).free()
 
 
 # The blows of `run` that landed (a HIT, or a guard taking it), as outcome names.
@@ -143,6 +150,7 @@ func test_the_clip_checker_passes_it() -> void:
 
 func test_its_clips_do_not_pop_and_the_haymaker_strikes_as_its_hand_arrives() -> void:
 	var rig := (load("res://actors/knuckle/knuckle_rig.tscn") as PackedScene).instantiate() as Rig
+	rig.position = Vector3(500, 0, 500)  # away from every fight: a bare rig has a hurtbox that has no actor
 	track(rig)
 	for clip: StringName in [&"heavy_haymaker", &"heavy_slam"]:
 		var worst: Array = ClipMotion.worst_pop(rig, clip)
@@ -160,7 +168,7 @@ func test_a_jab_does_not_stop_its_wind_up_and_a_flurry_counter_does() -> void:
 	# A jab (6 poise against its 14, and a hook's 12 does not reach it either) is no reason for it to stop: the HIT lands, takes its
 	# HP and posture, and gives it no reaction, so the haymaker goes on to its blow. (A Flurry counter's blow, always_staggers, is
 	# stopped by the armour as Combat.resolve is built: see the report. Here it is held that the armour holds for the small blows.)
-	var run := _fight(1.0, [], _haymaker_steps())
+	var run := _fight(1.8, [], _haymaker_steps())
 	var heavy: Actor = run["heavy"]
 	var abarax: Actor = run["abarax"]
 	await Duel.play_to(self, heavy, 14)
@@ -195,21 +203,52 @@ func test_posture_still_breaks_it_through_hyper_armour() -> void:
 	assert_false(heavy.runner.hyperarmour, "the armour went with the move it cut off")
 
 
-func test_a_broken_heavy_is_finished() -> void:
-	var run := _fight(1.0, [{"frames": 40}, {"frames": 1, "press": [&"palm"]}, {"frames": 300}], _slam_steps())
+func test_a_broken_heavy_is_finished_and_the_blows_reach_its_larger_body() -> void:
+	# The finisher stages follower and lead from the lead's size alone, so a follower 18% larger is where it could go wrong:
+	# each of the three blows must reach it (its head or torso at most REACH from the striking hand and SINK inside it), and the
+	# two bodies pass at most SINK into each other (F1 Task 10's staging criteria, as test_knuckle_staging holds them for
+	# tiers I and III). It has HP for the three blows (60 of its 140) and lives.
+	var def := _heavy_def().duplicate() as ActorDef
+	var run := _fight(1.0, [{"frames": 40}, {"frames": 1, "press": [&"palm"]}, {"frames": 300}], [], 0.0, def)
 	var heavy: Actor = run["heavy"]
 	var abarax: Actor = run["abarax"]
-	await Duel.play_to(self, heavy, 5)
 	track(PostureBreaker.make(abarax, heavy))
-	await Duel.play_to(self, heavy, 6)
+	var hit_now := [false]
+	abarax.runner.mark.connect(func(kind: StringName, _args: Dictionary) -> void:
+		if kind == &"pair_hit":
+			hit_now[0] = true)
+	await Duel.play_to(self, abarax, 2)
 	assert_true(heavy.is_in_group(Actor.FINISHABLE_GROUP), "broken")
-	await Duel.play_to(self, abarax, 42)
-	assert_eq([abarax.paired_with, heavy.paired_with], [heavy, abarax], "his palm starts the finisher on it")
-	var died := [0]
-	heavy.died.connect(func() -> void: died[0] += 1)
-	while abarax.paired_with != null or heavy.paired_with != null:
+	var blows := 0
+	var worst_sink := -INF
+	var short := 0.0
+	var deepest := 0.0
+	var seen_pair := false
+	while abarax.frame < 400:
 		await frames(1)
-	assert_eq(died[0], 1, "the finisher kills it")
+		if abarax.paired_with == heavy:
+			seen_pair = true
+		elif seen_pair and heavy.paired_with == null:
+			break
+		if not seen_pair:
+			continue
+		var a_caps := Bodies.of(abarax.rig)
+		var h_caps := Bodies.of(heavy.rig)
+		worst_sink = maxf(worst_sink, Bodies.overlap(a_caps, h_caps)[0])
+		if hit_now[0]:
+			hit_now[0] = false
+			var left := Bodies.strike_gap(a_caps, h_caps, "hand_l")
+			var right := Bodies.strike_gap(a_caps, h_caps, "hand_r")
+			var best: Array = left if left[0] < right[0] else right
+			short = maxf(short, best[0])
+			deepest = minf(deepest, best[0])
+			blows += 1
+	assert_true(seen_pair, "his palm starts the finisher on it")
+	assert_eq(blows, 3, "three blows")
+	assert_true(short <= 0.08, "each reaches it (at worst %.3f m short)" % short)
+	assert_true(deepest >= -0.05, "and none is more than 5 cm inside it (%.3f m)" % deepest)
+	assert_true(worst_sink <= 0.05, "and the bodies pass at most %.3f m into each other" % worst_sink)
+	assert_eq(heavy.stats.hp, 140.0 - 60.0, "the finisher took 15, 15 and 30 of its 140 HP")
 
 
 # --- the slam ---
@@ -223,6 +262,7 @@ func test_the_slam_hits_everything_within_its_ring_that_stands_on_the_ground() -
 			var blow: HitProfile = run["got"][0][2]
 			assert_eq([blow.perilous, blow.height, blow.damage], [HitProfile.Perilous.SWEEP, HitProfile.Height.LOW, 22.0], "it is the slam's blow")
 			assert_true(run["got"][0][1] >= SLAM_ON + 1 and run["got"][0][1] <= SLAM_OFF + 1, "on frames 39 to 43 (it was on %d)" % run["got"][0][1])
+		_end(run)
 	var far := _fight(2.7, [], _slam_steps())
 	await Duel.play_to(self, far["heavy"], 70)
 	assert_eq(_outcomes(far), [], "a body 2.7 m off is clear of it")
@@ -245,21 +285,25 @@ func test_the_slam_is_left_by_a_dash_step_and_hopped_and_nothing_else_saves_him(
 	var dash := _fight(1.4, _dash_away_at(27), _slam_steps())
 	await Duel.play_to(self, dash["heavy"], 70)
 	assert_eq(_outcomes(dash), [], "a dash-step away begun 12 frames before the blow, from 1.4 m: missed")
+	_end(dash)
 	# A hop from 0.8 m, up from frame 27: its airborne marks cover the whole blow, which passes under.
 	var hop := _fight(0.8, _hop_at(27), _slam_steps())
 	await Duel.play_to(self, hop["heavy"], 70)
 	assert_eq(_outcomes(hop), [], "a hop over it: missed")
+	_end(hop)
 	# Two dash-steps begun at its first frame (the second as the first ends), from 0.8 m.
 	var twice := _fight(0.8, [{"frames": 1, "press": [&"dodge"], "move": AWAY}, {"frames": 17, "move": AWAY},
 			{"frames": 1, "press": [&"dodge"], "move": AWAY}, {"frames": 20, "move": AWAY}, {"frames": 200}], _slam_steps())
 	await Duel.play_to(self, twice["heavy"], 70)
 	assert_eq(_outcomes(twice), [], "two dash-steps inside its tell from 0.8 m: missed")
+	_end(twice)
 	# Nothing else: a guard is broken through, a sway and a duck do not evade a low blow, and standing still is hit.
 	var guard := _fight(1.0, [{"frames": 1, "press": [&"guard"], "hold": [&"guard"]}, {"frames": 200, "hold": [&"guard"]}], _slam_steps())
-	await Duel.play_to(self, guard["heavy"], SLAM_ON + 1)
-	assert_true((guard["abarax"] as Actor).guarding, "his guard is up")
+	await Duel.play_to(self, guard["heavy"], SLAM_ON)
+	assert_true((guard["abarax"] as Actor).is_guarding(), "his guard is up")
 	await Duel.play_to(self, guard["heavy"], 70)
 	assert_eq(_outcomes(guard), ["HIT"], "a guard is broken through: the blow lands whole, not guarded")
+	_end(guard)
 	for evade: StringName in [&"sway_left_slip", &"duck_slip"]:
 		var run := _fight(1.0, [{"frames": 33}, {"frames": 200}], _slam_steps())
 		var abarax: Actor = run["abarax"]
@@ -269,9 +313,11 @@ func test_the_slam_is_left_by_a_dash_step_and_hopped_and_nothing_else_saves_him(
 		assert_true(abarax.runner.evading != MoveData.Evade.NONE, "%s's evade window is open at the blow" % evade)
 		await Duel.play_to(self, run["heavy"], 70)
 		assert_eq(_outcomes(run), ["HIT"], "%s does not evade a low blow" % evade)
+		_end(run)
 	var still := _fight(1.0, [], _slam_steps())
 	await Duel.play_to(self, still["heavy"], 70)
 	assert_eq(_outcomes(still), ["HIT"], "standing there is hit")
+	_end(still)
 	# And a hop that is not over it: up too early (down before the blow) or too late.
 	var early := _fight(0.8, _hop_at(1), _slam_steps())
 	await Duel.play_to(self, early["heavy"], 70)
@@ -312,7 +358,8 @@ func test_the_slam_shows_its_ring_on_the_ground_before_it_hits_and_a_wave_at_the
 		var ring := warnings[0] as SlamRing
 		assert_near(ring.radius, RING, 1e-6, "of the slam's own reach")
 		assert_vec_near(Vector3(ring.global_position.x, 0, ring.global_position.z), Vector3.ZERO, 1e-3, "from his feet")
-		assert_true(ring.global_position.y > 0.0 and ring.global_position.y < 0.1, "on the ground, not in the air (y %.3f)" % ring.global_position.y)
+		var lie := (ring.get_node("Mesh") as Node3D).global_position.y
+		assert_true(lie > 0.0 and lie < 0.1, "on the ground, not in the air (y %.3f)" % lie)
 		assert_true(ring.shown_radius() >= RING - 1e-6, "all the way out at once: it shows where the blow will land (%.2f m)" % ring.shown_radius())
 		assert_true(ring.shown_colour().is_equal_approx(colour), "in the sweep's tell colour")
 	var waves := get_tree().get_nodes_in_group(GroundWave.GROUP).size()
@@ -402,7 +449,8 @@ func test_a_clear_out_throws_it_and_does_not_stagger_it() -> void:
 	var armoured := _fight(0.9, [{"frames": 1}], _slam_steps())
 	var heavy: Actor = armoured["heavy"]
 	var abarax: Actor = armoured["abarax"]
-	var control := _fight(0.9, [], [{"frames": 200}])
+	var elsewhere := Vector3(60, 0, 0)
+	var control := _fight(0.9, [], [{"frames": 200}], 0.0, null, elsewhere)
 	var still: Actor = control["heavy"]
 	await Duel.play_to(self, abarax, 2)
 	abarax.runner.start(_move(&"clear_wave"))
@@ -412,7 +460,7 @@ func test_a_clear_out_throws_it_and_does_not_stagger_it() -> void:
 	await Duel.play_to(self, heavy, 34)
 	assert_true(heavy.runner.hyperarmour, "armoured as it is thrown")
 	var thrown := Vector2(heavy.global_position.x, heavy.global_position.z).length()
-	var control_thrown := Vector2(still.global_position.x, still.global_position.z).length()
+	var control_thrown := Vector2(still.global_position.x - elsewhere.x, still.global_position.z - elsewhere.z).length()
 	assert_true(control_thrown > 1.0, "the control was thrown (%.2f m)" % control_thrown)
 	assert_near(thrown, control_thrown, 0.15, "it was thrown its full distance, armoured (%.2f m against %.2f m)" % [thrown, control_thrown])
 	assert_eq(reactions, [], "and no reaction began")

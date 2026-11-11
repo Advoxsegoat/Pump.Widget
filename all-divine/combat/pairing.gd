@@ -24,6 +24,8 @@ extends RefCounted
 ## HIT_SKIN metres toward the lead from its middle.
 const HIT_HEIGHT := 0.75
 const HIT_SKIN := 0.25
+## How much a larger follower brings the lead in (see offset_of).
+const FOLLOWER_REACH_POWER := 1.3
 
 var lead: Actor
 var follower: Actor
@@ -69,7 +71,7 @@ func start() -> void:
 	follower.runner.move_ended.connect(_on_follow_ended)
 	_pivot = feet_middle(follower)
 	var faced := follower_faced(lead.global_position, follower, _pivot)
-	var lead_goal := faced * offset_of(pair, lead).affine_inverse()
+	var lead_goal := faced * offset_of(pair, lead, follower).affine_inverse()
 	_lunge = lead_goal.origin - lead.global_position
 	_lunge.y = 0.0
 	_lead_turn = angle_difference(lead.rotation.y, lead_goal.basis.get_euler().y)
@@ -128,11 +130,16 @@ func tick() -> bool:
 
 
 ## Where `pair` puts its follower in its lead's space for the lead `lead_actor`: its follow_offset, the distance scaled by
-## the lead's model_scale. The two clips are one scene authored for a lead of the model's size; a larger lead (a tier III
-## Knuckle) reaches further, and stands that much further off for its blows to land as authored.
-static func offset_of(pair: PairedMove, lead_actor: Actor) -> Transform3D:
+## the lead's model_scale. The two clips are one scene authored for a lead and a follower of the model's size; a larger lead (a tier III
+## Knuckle) reaches further, and stands that much further off for its blows to land as authored. A larger follower (the heavy
+## Knuckle, 1.18) has its chest further off its root and its recoil further, so the lead closes in by its size to the power
+## FOLLOWER_REACH_POWER (measured on the finisher, whose three blows then reach the heavy Knuckle as they reach tier I: the
+## plain ratio of sizes leaves the third 1.7 cm short of the staging criterion). `follower_actor` null: the model's size.
+static func offset_of(pair: PairedMove, lead_actor: Actor, follower_actor: Actor = null) -> Transform3D:
 	var offset := pair.follow_offset
 	offset.origin *= lead_actor.def.model_scale
+	if follower_actor != null:
+		offset.origin /= pow(follower_actor.def.model_scale, FOLLOWER_REACH_POWER)
 	return offset
 
 
