@@ -30,6 +30,7 @@ extends SkeletonModifier3D
 
 const FEET: Array[StringName] = [&"foot_l", &"foot_r"]
 const CALVES: Array[StringName] = [&"calf_l", &"calf_r"]
+const TOES: Array[StringName] = [&"ball_leaf_l", &"ball_leaf_r"]
 const HIPS := &"pelvis"
 ## How far ahead of each knee its pole is placed, along the knee's forward (its calf's -Z).
 const POLE_DISTANCE := 0.5
@@ -55,6 +56,10 @@ var ground := {&"foot_l": null, &"foot_r": null}
 @export var blend_speed := 12.0
 ## How high the ankle (the foot bone) stands over the ground when the foot is flat on it, in metres.
 @export var ankle_height := 0.08
+## Whether the toes (the foot's ball bone) are kept out of the ground as well as the ankle: a stride that pitches the foot toes-down
+## puts the toes under the floor by a centimetre or more, which in a body larger than the model's shows. Off for every body but
+## the one whose def asks (ActorDef.keep_toes_up).
+@export var keep_toes_up := false
 ## The TwoBoneIK3Ds' targets and poles, which this places every tick.
 @export var target_l: Node3D
 @export var target_r: Node3D
@@ -88,6 +93,7 @@ var animated := {}
 var _skeleton: Skeleton3D  # the skeleton the bones below were found in
 var _smoothed := {&"foot_l": 0.0, &"foot_r": 0.0}  # each foot's offset smoothed, before the floor
 var _feet := PackedInt32Array()
+var _toes := PackedInt32Array()
 var _calves := PackedInt32Array()
 var _hips := -1
 var _normals: Array[Vector3] = [Vector3.UP, Vector3.UP]  # each foot's ground normal, smoothed, skeleton space
@@ -123,6 +129,8 @@ func _process_modification_with_delta(delta: float) -> void:
 		if planting and hit is Dictionary:
 			var under: Vector3 = to_skeleton * (hit.position as Vector3)
 			lowest = under.y + ankle_height - pose.origin.y
+			if keep_toes_up and _toes[i] >= 0:
+				lowest = maxf(lowest, under.y - skeleton.get_bone_global_pose(_toes[i]).origin.y)
 			goal = under.y + ankle_height - minf(pose.origin.y, ankle_height)
 			normal_goal = (to_skeleton.basis * (hit.normal as Vector3)).normalized()
 		var eased := goal + (float(_smoothed[foot]) - goal) * keep
@@ -202,6 +210,7 @@ func _find_bones(skeleton: Skeleton3D) -> void:
 	_skeleton = skeleton
 	_feet = BoneTurn.find(skeleton, FEET)
 	_calves = BoneTurn.find(skeleton, CALVES)
+	_toes = BoneTurn.find(skeleton, TOES)
 	_hips = skeleton.find_bone(HIPS)
 	_calf_turn = [Quaternion.IDENTITY, Quaternion.IDENTITY]
 	skeleton.skeleton_updated.connect(_on_skeleton_updated)
