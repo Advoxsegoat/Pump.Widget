@@ -198,7 +198,7 @@ func _weigh(e: HitEvent, r: HitResult) -> void:
 
 
 # Throws the target of `e`, a blow with a throw (a clear-out): it travels `e.throw` metres in the open, which a push of that many
-# metres times the tuning's knockback_decay does (a push travels its speed over the decay), the way the profile's throw_way says.
+# metres times the tuning's knockback_decay does (a push travels its speed over the decay), the way the profile's throw_way says (a SIDEWAYS throw goes to the side of the attacker the target stands on).
 # A body that this blow killed is not thrown. Walls and other bodies stop it as they stop any push.
 func _throw(e: HitEvent) -> void:
 	if e.target.dead:
@@ -210,8 +210,12 @@ func _throw(e: HitEvent) -> void:
 			away.y = 0.0
 			way = away.normalized() if not away.is_zero_approx() else e.direction
 		HitProfile.ThrowWay.SIDEWAYS:
+			# square to the attacker's facing, to the side the target stands on: his left for one on his left (facing +Z, +X is his
+			# left), his right for one on his right or dead ahead, so that a clear-out parts a crowd and drags no one across his front
 			var facing := e.attacker.facing()
-			way = Vector3(-facing.z, 0.0, facing.x).normalized()  # the attacker's right: facing +Z, that is -X
+			var right := Vector3(-facing.z, 0.0, facing.x).normalized()
+			var off := e.target.global_position - e.attacker.global_position
+			way = -right if off.dot(right) < -0.05 else right
 	e.target.push(way * e.throw * e.target.stats.tuning.knockback_decay)
 
 

@@ -323,6 +323,42 @@ func test_the_back_palm_hits_only_inside_its_arc_and_the_wave_all_round() -> voi
 		await _free(run)
 
 
+func test_the_back_palm_parts_those_in_front_of_him() -> void:
+	# three bodies 1.2 m from him at 70 degrees to his left (+X), dead ahead and 70 degrees to his right: each is thrown square to his
+	# facing, to the side it stands on (dead ahead, to his right), so nobody is dragged across his front
+	var run := _world([], Duel.def(ActorDef.Team.ENEMY, 5.0))
+	var a: Actor = run["a"]
+	(run["b"] as Actor).queue_free()
+	await frames(1)
+	var bodies: Array[Actor] = []
+	var starts: Array[Vector3] = []
+	for angle: float in [70.0, 0.0, -70.0]:
+		var at := Vector3(sin(deg_to_rad(angle)), 0.0, cos(deg_to_rad(angle))) * 1.2
+		bodies.append(TestArena.spawn(run["arena"], Duel.def(ActorDef.Team.ENEMY, 5.0), ScriptBrain.new([]), at, "T%d" % int(angle)))
+		starts.append(at)
+	await frames(2)
+	a.runner.start(_move(&"clear_backpalm"))
+	var crossed := [false, false, false]
+	for i in 150:
+		await frames(1)
+		if i < 20:
+			continue
+		for x in 3:
+			# left body must stay at x >= 0 (his left is +X), the others at x <= 0
+			var side := bodies[x].global_position.x
+			if (x == 0 and side < -0.05) or (x > 0 and side > 0.05):
+				crossed[x] = true
+	var names := ["left", "ahead", "right"]
+	for x in 3:
+		var moved := bodies[x].global_position - starts[x]
+		assert_near(moved.length(), 2.0, 0.1, "the body %s travelled 2 m (moved %s)" % [names[x], moved])
+		assert_false(crossed[x], "the body %s never crossed to the other side of him" % names[x])
+		var far := Vector2(bodies[x].global_position.x - a.global_position.x, bodies[x].global_position.z - a.global_position.z).length()
+		assert_true(far >= 2.2, "the body %s ends %.2f m from him (at least 2.2)" % [names[x], far])
+		assert_true((bodies[x].global_position.x > 0.0) == (x == 0), "the body %s ends on its own side (x %.2f)" % [names[x], bodies[x].global_position.x])
+	await _free(run)
+
+
 # --- presses at awkward moments, and a miss ---
 
 func test_a_counter_refused_for_stamina_cashes_nothing() -> void:

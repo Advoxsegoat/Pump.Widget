@@ -18,7 +18,7 @@ enum Perilous { NONE, SWEEP, THRUST, GRAB }
 enum Line { STRAIGHT, ROUND }
 
 ## Which way a thrown target (`throw`) goes: ALONG_BLOW is the way the blow travels, RADIAL straight away from the attacker, SIDEWAYS
-## to the attacker's right.
+## square to the attacker's facing, to the side of him the target stands on (his right for one dead ahead), so it parts a crowd.
 enum ThrowWay { ALONG_BLOW, RADIAL, SIDEWAYS }
 
 ## Hit points taken from the target.
