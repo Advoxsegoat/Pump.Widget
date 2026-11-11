@@ -9,6 +9,9 @@ extends TestCase
 ##   The afterimage (Afterimage, behind every body): it is the shape of the silhouette where he stood; after he has moved on and a
 ##   Knuckle stands behind him in the picture, the pixels it changes are none of Abarax's or the Knuckle's, to the pixel; it shows
 ##   on the yard's lit floor and on its dark floor; and after its frames it is gone and the picture is the empty yard's.
+##   The afterimage must be seen: in real dodges (a sway and a duck, at Quick and at Flurry, with the slow-down on and off) the pixels it
+##   shows outside every body are counted on each wall frame, from a run with the afterimage and an identical run without it.
+##   The Quick rim has the Flurry rim's gold hue, on the dark ground and the lamplit one.
 ## Pictures worth a person's look go to out/shots/chain/.
 
 const MAIN := "res://main/main.tscn"
@@ -300,5 +303,150 @@ func test_the_afterimage_shows_on_the_lit_floor_and_the_dark() -> void:
 		assert_true(mean >= 0.12, "%s floor: and clearly (its pixels differ from the floor by %.2f on average, summed over red, green, blue)" % [place[0], mean])
 		_save(with_image, "afterimage_%s_floor" % place[0], box)
 		image.free()
+		main.queue_free()
+		await frames(2)
+
+
+# --- the afterimage in a real dodge ---
+
+## The frames a dodge is followed for, and the floors: this many pixels outside every body on at least this many wall frames.
+const FOLLOW := 45
+const SEEN_PX := 60
+const SEEN_FRAMES_SLOW := 6
+const SEEN_FRAMES_FREE := 3
+
+
+# One real dodge in the yard with `at` under the camera, Abarax's chain primed to `prime` plain links, the foe a metre in front of him
+# throwing a blow (a straight one for a sway, a round one for a duck) that his press on wall frame 10 slips on frame 14; the pictures
+# of the World viewport at each of the FOLLOW wall frames from the first, the slow-down and the afterimage as asked.
+func _dodge_run(at: Vector3, action: StringName, prime: int, slow_on: bool, image_on: bool) -> Array[Image]:
+	Game.reset()
+	Arena.reset_spawn_counts()
+	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
+	main.arena().automatic = false
+	for light in main.region.find_children("*", "Light3D", true, false):
+		(light as Light3D).shadow_enabled = false
+	var foe := main.arena().enemies()[0]
+	foe.set_brain(Brain.new())
+	var player := main.player
+	player.set_brain(Brain.new())
+	var held := Marker3D.new()
+	main.region.add_child(held)
+	held.global_position = at
+	main.camera_rig.target = held
+	_put(player, Transform3D(Basis.IDENTITY, at))
+	_put(foe, Transform3D(Basis(Vector3.UP, PI), at + Vector3(0.0, 0.0, 1.0)))
+	await frames(Rig.WARM_FRAMES + 3)
+	main.camera_rig.snap_now()
+	await frames(2)
+	main.camera_rig.snap_now()
+	var fx := player.get_node("ChainFx") as ChainFx
+	fx.tuning = fx.tuning.duplicate() as ReadabilityTuning
+	fx.tuning.afterimage_on = image_on
+	player.chain_slow.tuning = fx.tuning
+	fx.tuning.slowdown_on = slow_on
+	for i in prime:
+		player.chain.link(false, player.buffer_frame)
+	Melee.slow(0, 1.0)
+	await frames(2)
+	for node in get_tree().get_nodes_in_group(Afterimage.GROUP):
+		node.free()
+	player.set_brain(ScriptBrain.new([{"frames": 9}, {"frames": 1, "press": [action]}, {"frames": 200}]))
+	var pictures: Array[Image] = []
+	for k in FOLLOW:
+		if k == 12:
+			Blows.post(foe, player, {"line": HitProfile.Line.ROUND} if action == &"duck" else {})
+		await frames(1)
+		await RenderingServer.frame_post_draw
+		pictures.append(_world(main))
+	assert_eq(player.chain.count, prime + 2, "the dodge was a perfect one (the chain: %d)" % player.chain.count)
+	main.queue_free()
+	await frames(2)
+	return pictures
+
+
+# The pixels each wall frame shows of the afterimage outside every body: the picture of a run with it less the picture of the same run without.
+func _seen(with: Array[Image], without: Array[Image], box: Rect2i) -> Array[int]:
+	var counts: Array[int] = []
+	for k in with.size():
+		counts.append(ShotMasks.diff(with[k], without[k], box).size())
+	return counts
+
+
+func test_the_afterimage_is_seen_in_real_dodges_through_the_slow_down() -> void:
+	var lines := PackedStringArray()
+	for case: Array in [[&"sway", 3, "quick"], [&"sway", 7, "flurry"], [&"duck", 3, "quick"], [&"duck", 7, "flurry"]]:
+		for slow_on in [true, false]:
+			var at := DARK
+			var with := await _dodge_run(at, case[0], case[1], slow_on, true)
+			var without := await _dodge_run(at, case[0], case[1], slow_on, false)
+			var main_box := Rect2i(231, 60, 180, 170)
+			var counts := _seen(with, without, main_box)
+			var enough := counts.filter(func(n: int) -> bool: return n >= SEEN_PX).size()
+			var label := "%s at %s, slow-down %s" % [case[0], case[2], "on" if slow_on else "off"]
+			lines.append("%-34s px per wall frame: %s  (frames with >= %d px: %d)" % [label, str(counts), SEEN_PX, enough])
+			assert_true(enough >= (SEEN_FRAMES_SLOW if slow_on else SEEN_FRAMES_FREE),
+					"%s: the afterimage shows %d px or more on %d wall frames (at least %d): %s" % [label, SEEN_PX, enough, SEEN_FRAMES_SLOW if slow_on else SEEN_FRAMES_FREE, counts])
+			if case[2] == "flurry" and slow_on:
+				_save_strip(with, "dodge_%s_flurry_slow_dark" % case[0], main_box)
+	var dir := ProjectSettings.globalize_path("res://").path_join("out/shots/chain")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var file := FileAccess.open(dir.path_join("afterimage_pixels.txt"), FileAccess.WRITE)
+	file.store_string("\n".join(lines) + "\n")
+
+
+func test_the_flurry_dodge_strip_on_the_lamplit_floor() -> void:
+	for action: StringName in [&"sway", &"duck"]:
+		var with := await _dodge_run(LIT, action, 7, true, true)
+		_save_strip(with, "dodge_%s_flurry_slow_lit" % action, Rect2i(231, 60, 180, 170))
+
+
+# Every second wall frame of `pictures`, the crop of `box` round the fighters, side by side, enlarged, to out/shots/chain/.
+func _save_strip(pictures: Array[Image], name: String, box: Rect2i) -> void:
+	var tile := Rect2i(box.position + Vector2i(45, 25), Vector2i(90, 100))
+	var tiles := 12
+	var strip := Image.create(tile.size.x * 6, tile.size.y * 2, false, Image.FORMAT_RGBA8)
+	for i in tiles:
+		var crop := pictures[10 + i * 2].get_region(tile)
+		crop.convert(Image.FORMAT_RGBA8)
+		strip.blit_rect(crop, Rect2i(Vector2i.ZERO, crop.get_size()), Vector2i((i % 6) * tile.size.x, (i / 6) * tile.size.y))
+	_save(strip, name)
+
+
+# The Quick rim keeps the gold of the Flurry rim, on the dark ground and on the lamplit one, at about half its brightness.
+func test_the_quick_rim_keeps_its_gold_hue_on_the_dark_floor_and_the_lamplit() -> void:
+	for place: Array in [["dark", DARK], ["lit", LIT]]:
+		var run := await _yard(place[1])
+		var main: Main = run["main"]
+		var player := main.player
+		var foe: Actor = run["foe"]
+		_put(foe, Transform3D(Basis(Vector3.UP, PI), place[1] + Vector3(-8.0, 0.0, -8.0)))
+		var box := _box(main, place[1])
+		await _draw()
+		var without := _world(main)
+		var rims := {}
+		for tempo: Array in [["quick", 3], ["flurry", 7]]:
+			player.chain.end()
+			for i in tempo[1]:
+				player.chain.link(false, player.buffer_frame)
+			await frames(2)
+			await _draw()
+			var with := _world(main)
+			var changed := ShotMasks.diff(with, without, box)
+			var sum := Vector3.ZERO
+			var n := 0
+			for p: Vector2i in changed:
+				var c := with.get_pixelv(p)
+				if maxf(c.r, maxf(c.g, c.b)) > 0.12:
+					sum += Vector3(c.r, c.g, c.b)
+					n += 1
+			assert_true(n >= 30, "%s floor, %s: the rim has pixels (%d)" % [place[0], tempo[0], n])
+			var mean := Color(sum.x / maxf(n, 1.0), sum.y / maxf(n, 1.0), sum.z / maxf(n, 1.0))
+			rims[tempo[0]] = mean
+			var hue_off := absf(wrapf(mean.h * 360.0 - GOLD.h * 360.0, -180.0, 180.0))
+			assert_true(hue_off <= 15.0, "%s floor, %s: the rim's hue is %.0f deg, the gold's is %.0f (within 15)" % [place[0], tempo[0], mean.h * 360.0, GOLD.h * 360.0])
+		var quick: Color = rims["quick"]
+		var flurry: Color = rims["flurry"]
+		assert_true(quick.v < flurry.v * 0.8 and quick.v > flurry.v * 0.3, "%s floor: the Quick rim is dimmer than the Flurry's (%.2f against %.2f)" % [place[0], quick.v, flurry.v])
 		main.queue_free()
 		await frames(2)

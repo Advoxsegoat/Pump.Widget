@@ -36,6 +36,7 @@ func _world(tuning: ReadabilityTuning = null, steps := []) -> Dictionary:
 	var fx := a.get_node("ChainFx") as ChainFx
 	if tuning != null:
 		fx.tuning = tuning
+		(a.chain_slow as ChainSlow).tuning = tuning
 	run["fx"] = fx
 	return run
 
@@ -255,15 +256,64 @@ func test_an_afterimage_is_behind_where_he_stood_and_fades_over_its_frames() -> 
 	var images := _afterimages()
 	assert_eq(images.size(), 1)
 	var image := images[0] as Afterimage
-	assert_eq(image.frames, 8, "the tuning's 8 frames")
+	assert_eq(image.frames, 12, "the tuning's 12 frames")
 	var first := image.alpha()
 	assert_true(first > 0.0 and first <= 1.0, "it starts visible (%.2f)" % first)
 	a.global_position += Vector3(0.0, 0.0, 0.5)  # he moves on; it stays where he stood
 	await frames(4)
 	assert_true(image.alpha() < first, "it fades")
 	assert_near(image.global_position.z, 0.0, 1e-4, "where he stood")
-	await frames(6)
+	var waited := 5
+	while not _afterimages().is_empty() and waited < 60:
+		await frames(1)
+		waited += 1
 	assert_eq(_afterimages().size(), 0, "and is gone after its frames")
+	assert_true(waited >= 12 and waited <= 12 + 7 + 5, "which are the 12 he acts on (the slow-down of this first perfect dodge held him 7 more): gone after %d" % waited)
+
+
+func test_the_afterimage_is_the_stance_he_left_and_ages_on_his_clock() -> void:
+	var run := _world(null, [{"frames": 9}, {"frames": 1, "press": [SWAY]}, {"frames": 80}])
+	var a: Actor = run["a"]
+	var left := {}
+	a.runner.move_started.connect(func(move: MoveData) -> void:
+		if move.evade != MoveData.Evade.NONE:
+			left["head"] = a.rig.bone_global(&"Head")
+			left["at"] = a.global_position)
+	var image: Afterimage = null
+	var ticks := []  # per wall frame: [the image's drop in life, the actor's own clock's rise]
+	while a.frame < 60:
+		if a.frame + 1 == 14:
+			Blows.post(run["b"], a, {})  # a perfect dodge of a straight blow: the first perfect dodge slows the fight
+		var life_before := image.left if image != null and is_instance_valid(image) else -1
+		var clock_before := a.buffer_frame
+		await frames(1)
+		if image == null and not _afterimages().is_empty():
+			image = _afterimages()[0] as Afterimage
+			left["image"] = true
+			left["image_head"] = image.bone_global(&"Head")
+			left["now_head"] = a.rig.bone_global(&"Head")
+		elif image != null and is_instance_valid(image) and life_before >= 0 and not image.is_queued_for_deletion():
+			ticks.append([life_before - image.left, a.buffer_frame - clock_before])
+	assert_true(left.has("image"), "the dodge left an afterimage")
+	assert_true(left.has("head"), "the sway started")
+	assert_true((left["image_head"] as Vector3).distance_to(left["head"]) < 0.02, "its head is where his head was when the dodge began (%s against %s)" % [left["image_head"], left["head"]])
+	assert_true((left["now_head"] as Vector3).distance_to(left["head"]) > 0.03, "and he has moved on from it by the time it shows (%s)" % [left["now_head"]])
+	assert_true(ticks.size() >= 8, "it lived a while (%d frames)" % ticks.size())
+	for t: Array in ticks:
+		assert_eq(t[0], t[1], "it ages on the frames he acts on and on none he is held on (aged %d while his clock rose %d)" % [t[0], t[1]])
+	assert_true(ticks.any(func(t: Array) -> bool: return t[1] == 0), "and the slow-down did hold him while it hung")
+
+
+func test_an_enemy_with_a_chain_does_not_slow_the_fight() -> void:
+	var def := Duel.def(ActorDef.Team.ENEMY, 5.0)
+	var run := Duel.make(self, [], [], 1.0, def)
+	var b: Actor = run["b"]
+	assert_ne(b.chain, null, "it has a chain")
+	assert_eq(b.chain_slow, null, "but the rule that slows the fight is the player's alone")
+	b.chain.link(true, b.buffer_frame)
+	for i in 8:
+		b.chain.link(false, b.buffer_frame)
+	assert_false(Melee.slowed(), "its first perfect dodge and its way into Flurry slow nothing")
 
 
 func test_the_rim_is_off_at_slip_half_at_quick_full_at_flurry_and_gone_when_knocked_out() -> void:
@@ -276,14 +326,15 @@ func test_the_rim_is_off_at_slip_half_at_quick_full_at_flurry_and_gone_when_knoc
 	_links(a, 1)
 	await frames(1)
 	assert_true(rig.aura_active(), "a rim at Quick (count 3)")
-	assert_near(rig.aura_level(), 0.5, 1e-5, "at half strength")
-	assert_eq(rig.aura_color(), GOLD, "white-gold")
+	assert_near(rig.aura_level(), 1.0, 1e-5, "the hull is drawn solid: half strength is half the brightness, not half the opacity, which would grey on the dark ground")
+	assert_true(rig.aura_color().is_equal_approx(Color(GOLD.r * 0.5, GOLD.g * 0.5, GOLD.b * 0.5)), "white-gold at half the brightness (%s)" % rig.aura_color())
 	_links(a, 3)
 	await frames(1)
-	assert_near(rig.aura_level(), 0.5, 1e-5, "still half at count 6")
+	assert_true(rig.aura_color().is_equal_approx(Color(GOLD.r * 0.5, GOLD.g * 0.5, GOLD.b * 0.5)), "still half at count 6")
 	_links(a, 1)
 	await frames(1)
 	assert_near(rig.aura_level(), 1.0, 1e-5, "full at Flurry")
+	assert_true(rig.aura_color().is_equal_approx(GOLD), "in the full gold")
 	a.chain.knock_out()
 	await frames(1)
 	assert_false(rig.aura_active(), "gone when he is knocked out")
@@ -360,6 +411,19 @@ func test_knocked_out_cuts_the_rim_sounds_the_hard_cue_and_leaves_no_afterimage(
 	var empty := _world()
 	(empty["a"] as Actor).chain.knock_out()
 	assert_false((await _heard(2)).has(&"knocked_out"), "an empty chain loses nothing")
+
+
+func test_the_knock_out_cue_is_for_a_knock_out_at_quick_or_flurry() -> void:
+	for case: Array in [[2, false], [3, true], [6, true], [7, true]]:
+		var run := _world()
+		var a: Actor = run["a"]
+		_links(a, case[0])
+		Melee.slow(0, 1.0)
+		a.chain.knock_out()
+		var heard := await _heard(2)
+		assert_eq(heard.has(&"knocked_out"), case[1], "a chain of %d knocked out: the cue is %s" % [case[0], "heard" if case[1] else "not heard (at Slip the blow is an ordinary hit)"])
+		(run["arena"] as Node).queue_free()
+		await frames(2)
 
 
 func test_a_real_blow_that_lands_on_a_flurry_knocks_him_out_with_the_cue_and_no_rim() -> void:
@@ -444,7 +508,7 @@ func test_the_tuning_is_data_for_the_chain() -> void:
 	for switch in [&"afterimage_on", &"slowdown_on", &"chain_rim_on"]:
 		assert_eq(t.get(switch), true, "%s is on" % switch)
 	assert_eq(t.chain_rim_color, GOLD)
-	assert_eq(t.afterimage_frames, 8)
+	assert_eq(t.afterimage_frames, 12)
 	assert_eq(t.slow_frames, 12)
 	assert_near(t.slow_share, 0.4, 1e-6)
 	assert_near(t.chain_rim_quick, 0.5, 1e-6)

@@ -76,7 +76,7 @@ extends Resource
 ## The afterimage: its colour, a pale lilac that stands out from the yard's dark blue ground and its warm lamplit pools alike (the
 ## alpha is how solid it starts) and how many frames it takes to fade away.
 @export var afterimage_color := Color(0.9019608, 0.8627451, 1.0, 0.7)
-@export var afterimage_frames := 8
+@export var afterimage_frames := 12
 ## The slow-down: how many physics frames it lasts and the share of them each actor acts on.
 @export var slow_frames := 12
 @export_range(0.0, 1.0) var slow_share := 0.4

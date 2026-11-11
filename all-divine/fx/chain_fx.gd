@@ -5,13 +5,13 @@ extends Node
 ## the actor's got_hit, and shows what the readability tuning (data/tuning/readability.tres) says, each with a switch.
 ##
 ##   an evade          the cue evade_whoosh at pitch 2^(min(count, 12) / 12): a semitone a link, an octave at the twelfth
-##   a perfect dodge   an afterimage, and the cue perfect_dodge; at Flurry every evade leaves an afterimage
-##   from Quick on     a white-gold rim on the body (Rig.hold_aura, the stencil-masked hull a tell's rim is): half strength at
+##   a perfect dodge   an afterimage (the stance he left, aging on his own clock), and the cue perfect_dodge; at Flurry every evade leaves an afterimage
+##   from Quick on     a white-gold rim on the body (Rig.hold_aura, the stencil-masked hull a tell's rim is): half the brightness at
 ##                     Quick, full at Flurry, off when the chain ends
-##   the first perfect dodge of a chain, and the link that enters Flurry
-##                     the fight slows (Melee.slow, 12 frames at 40%), once
-##   knocked out       the rim off, the cue knocked_out, no whoosh and no afterimage on that frame
+##   knocked out       the rim off, the cue knocked_out (at Quick or Flurry: at Slip a blow is an ordinary hit), no whoosh and no afterimage on that frame
 ##   a counter         the palm trail it shows is the tuning's trail_scales times its size, by the tempo it cashed in
+##
+## (The slow-down on the chain's first perfect dodge and on the link into Flurry is a rule of the fight, not an effect: ChainSlow.)
 ##
 ## The chain links once per blow, so one sway through three blows links three times on one frame: what is heard and shown is
 ## decided once a frame, at the end of it (a deferred call, which runs after Melee has judged the frame's blows): one whoosh at the
@@ -31,9 +31,9 @@ var _queued := false  # the frame's end is queued (_settle)
 var _evaded := false  # a blow was evaded this frame
 var _perfect := false  # one of them perfectly
 var _knocked := false  # a blow landed on a chain with something to lose
+var _knock_cue := false  # ...at Quick or Flurry, where it is a knock-out and not an ordinary hit
+var _stance := {}  # the pose he held when the sway or duck now playing began (Afterimage.capture), the stance the dodge left
 var _count := 0  # the chain's count after the latest link of this frame
-var _had_perfect := false  # the chain has had a perfect dodge since it began
-var _tempo := DodgeChain.Tempo.SLIP  # the tempo the chain was at when last it changed
 var _rim := false  # the rim on the body is this node's
 
 
@@ -43,9 +43,9 @@ func _ready() -> void:
 		push_error("ChainFx: '%s' is not a child of an Actor with a chain" % name)
 		return
 	_actor.chain.linked.connect(_on_linked)
-	_actor.chain.changed.connect(_on_changed)
 	_actor.chain.knocked_out.connect(_on_knocked_out)
 	_actor.got_hit.connect(_on_got_hit)
+	_actor.runner.move_started.connect(_on_move_started)
 	_fx = _actor.get_node_or_null(^"ActorFx") as ActorFx
 	if _fx != null:
 		_fx.shown.connect(_on_shown)
@@ -56,24 +56,20 @@ func _physics_process(_delta: float) -> void:
 
 
 # A defence succeeded (an evade, a parry, a catch: the chain's own count of them, one per blow).
-func _on_linked(perfect: bool) -> void:
+func _on_linked(_perfect: bool) -> void:
 	_count = _actor.chain.count
-	if perfect and not _had_perfect:
-		_had_perfect = true
-		_slow()
 
 
-# The chain's count or tempo changed: the way into Flurry slows the fight once, and a chain that has emptied starts over.
-func _on_changed(count: int, tempo: DodgeChain.Tempo) -> void:
-	if count == 0:
-		_had_perfect = false
-	elif tempo == DodgeChain.Tempo.FLURRY and _tempo != DodgeChain.Tempo.FLURRY:
-		_slow()
-	_tempo = tempo
+# A sway or duck begins: the pose he is in now (the rig has not yet moved this frame) is the stance he leaves, which is what the
+# afterimage of the dodge shows.
+func _on_move_started(move: MoveData) -> void:
+	if move.evade != MoveData.Evade.NONE:
+		_stance = Afterimage.capture(_actor.rig)
 
 
-func _on_knocked_out(_from: DodgeChain.Tempo) -> void:
+func _on_knocked_out(from: DodgeChain.Tempo) -> void:
 	_knocked = true
+	_knock_cue = _knock_cue or from != DodgeChain.Tempo.SLIP
 	_queue_settle()
 
 
@@ -97,11 +93,14 @@ func _settle() -> void:
 	var evaded := _evaded
 	var perfect := _perfect
 	var knocked := _knocked
+	var cue := _knock_cue
 	_evaded = false
 	_perfect = false
 	_knocked = false
+	_knock_cue = false
 	if knocked:
-		Sfx.play(&"knocked_out", _actor.global_position)
+		if cue:
+			Sfx.play(&"knocked_out", _actor.global_position)
 		return
 	if not evaded or _actor.dead:
 		return
@@ -109,13 +108,7 @@ func _settle() -> void:
 	if perfect:
 		Sfx.play(&"perfect_dodge", _actor.global_position)
 	if tuning.afterimage_on and (perfect or _actor.chain.tempo() == DodgeChain.Tempo.FLURRY):
-		Afterimage.spawn(_actor.rig, tuning.afterimage_color, tuning.afterimage_frames)
-
-
-# The fight slows, if the tuning lets it: a call while a slow runs starts it over, so two on one frame are one.
-func _slow() -> void:
-	if tuning.slowdown_on:
-		Melee.slow(tuning.slow_frames, tuning.slow_share)
+		Afterimage.spawn(_actor.rig, tuning.afterimage_color, tuning.afterimage_frames, _stance, _actor)
 
 
 # A counter's palm trail is larger by the tempo it cashed in. The trail's particle material is shared by every trail the scene
@@ -151,8 +144,11 @@ func _drive_rim() -> void:
 	if (_fx != null and _fx.rim_busy()) or (rig.aura_active() and not rig.aura_held()):
 		_rim = false  # a tell, or a burst, has the body
 		return
+	# Half strength is half the brightness at full opacity: a half-transparent rim mixes with the dark blue ground and goes grey, and
+	# the chain's tempo is told by a gold that stays gold.
+	var color := tuning.chain_rim_color
 	rig.rim_width_px = tuning.rim_width_px
-	rig.hold_aura(tuning.chain_rim_color, level)
+	rig.hold_aura(Color(color.r * level, color.g * level, color.b * level, color.a), 1.0)
 	_rim = true
 
 

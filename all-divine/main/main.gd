@@ -202,6 +202,7 @@ func selftest_circuit() -> Array:
 # everything the region shows, and a rim that comes on later then builds nothing.
 func _enter_region() -> void:
 	player.rig.warm_rim()
+	Afterimage.warm(player.rig, Rig.WARM_FRAMES)
 	var fight := arena()
 	hud.bind(player, camera_rig, stage, fight)
 	if fight != null:

@@ -259,3 +259,22 @@ func test_a_region_that_loads_warms_the_rims_a_fight_will_light() -> void:
 	for i in Rig.WARM_FRAMES + 1:
 		await get_tree().process_frame
 	assert_eq(_rim_passes(player).size(), 0)
+
+
+# The afterimage's shader is built on the first frame something is drawn with it, which would be the first perfect dodge's: so a region
+# that loads draws one unseen with the rims' passes (Afterimage.warm), and it is gone after the same few frames.
+func test_a_region_that_loads_warms_the_afterimage_shader_too() -> void:
+	var main := _main()
+	var warm: Array[Node] = []
+	for node in get_tree().get_nodes_in_group(Afterimage.GROUP):
+		if (node as Afterimage).warming:
+			warm.append(node)
+	assert_eq(warm.size(), 1, "one unseen afterimage is drawn with the yard's first frames")
+	assert_true(main != null)
+	for i in Rig.WARM_FRAMES + 2:
+		await get_tree().process_frame
+	var left := 0
+	for node in get_tree().get_nodes_in_group(Afterimage.GROUP):
+		if (node as Afterimage).warming and not node.is_queued_for_deletion():
+			left += 1
+	assert_eq(left, 0, "and is gone after them")
