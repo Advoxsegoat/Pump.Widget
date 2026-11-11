@@ -415,8 +415,12 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 		var push := WALK_PUSH if distance - hi <= braking + BRAKE_MARGIN else JOG_PUSH
 		intent.move = (to / distance).rotated(_swing) * push
 	else:
-		# A back-up within the option's margin, at a walk; one the target keeps following it through is given up once it
-		# has gone the margin, or taken that long at a walk and a second more.
+		# A back-up within the option's margin, at a walk. One chosen while still going faster than a walk (a jog in) brakes first,
+		# the stick at rest: a stick pushed the other way turns the body round at once at the speed it has (Locomotion), and it
+		# would glide backward at a jog, slowing as it went. One the target keeps following it through is given up once it has
+		# gone the margin, or taken that long at a walk and a second more.
+		if actor.locomotion.speed > PRESS_SPEED:
+			return
 		_backed_up += _speed * delta
 		_backing_up_for += delta
 		var walk := actor.locomotion.target_speed(WALK_PUSH, false)
@@ -527,8 +531,10 @@ func _finish(actor: Actor) -> void:
 
 
 # The chosen attack is given up before it was thrown (no way into range, the target paired, no token): the token goes
-# back, and it rests a little before choosing again.
+# back, the option waits its cooldown as if it had been thrown, and it rests a little before choosing again.
 func _drop_plan(actor: Actor) -> void:
+	if _plan != null:
+		_cooldowns[_plan] = _plan.cooldown  # as one thrown: or the same attack is chosen again, and given up again, a rest later
 	_plan = null
 	_presses.clear()
 	_give_back(actor)
@@ -565,12 +571,14 @@ func _give_back(actor: Actor) -> void:
 		AttackTokens.give_back_for(actor)
 
 
-# Whether the window of the actor's feint (its moveset's FEINT_ACTION move) takes `action`.
+# Whether the window of the actor's feint (its moveset's FEINT_ACTION move) takes `action` into the move its moveset gives that
+# action: the feint stands for that attack, and an actor whose palm is a string of its own is not feinted into the Knuckle's jab.
 func _feint_takes(actor: Actor, action: StringName) -> bool:
 	if not _feint_window.has(action):
 		var takes := false
 		for m in _marks_of(actor, FEINT_ACTION):
-			if m["kind"] == &"cancel_open" and m["args"].get("into") is Dictionary and (m["args"]["into"] as Dictionary).has(action):
+			if m["kind"] == &"cancel_open" and m["args"].get("into") is Dictionary and (m["args"]["into"] as Dictionary).has(action) \
+					and StringName(str(m["args"]["into"][action])) == StringName(actor.def.moveset.get(action, &"")):
 				takes = true
 		_feint_window[action] = takes
 	return _feint_window[action]

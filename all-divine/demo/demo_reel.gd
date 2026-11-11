@@ -33,7 +33,7 @@ const WEST := Vector2(-1, 0)
 const EAST := Vector2(1, 0)
 ## The Knuckle's choreography, played by a ScriptBrain as Abarax's is (see BEATS for the keys): it walks in as he comes,
 ## keeps its distance to him, and throws three attacks at fixed times, the jab from 0.95 m (it only lands that close),
-## the sweep from 4.2 m and the thrust from 3.4 m; every step faces, looks at and aims at him, wherever he is.
+## the sweep from 2.2 m (its slide is 2.5 m) and the thrust from 3.4 m; every step faces, looks at and aims at him, wherever he is.
 const FOE_BEATS := [
 	{t = 0.0},
 	{t = 2.6, move = EAST * 1.0},
@@ -45,7 +45,7 @@ const FOE_BEATS := [
 	{t = 5.07},
 	{t = 6.48, press = [&"palm"]},
 	{t = 7.53, move = WEST * 1.0},
-	{t = 8.1, move = WEST * 0.45},
+	{t = 7.8, move = WEST * 0.45},
 	{t = 8.33},
 	{t = 10.28, press = [&"gift"]},
 	{t = 11.9, move = EAST * 1.0},

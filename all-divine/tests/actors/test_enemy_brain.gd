@@ -304,7 +304,7 @@ func test_it_backs_up_to_an_attack_no_further_than_its_margin_and_at_a_walk() ->
 	# back_up_margin to throw it (walking in to one is always allowed), and what back-up is left is a walk.
 	var backups := []  # [tier, action, metres backed up, its margin, peak m/s, frames backing up]
 	for case: Array in [[1, 5, "circle"], [1, 21, "circle"], [2, 5, "circle"], [2, 21, "circle"], [3, 5, "circle"],
-			[3, 21, "circle"], [2, 21, "world"]]:
+			[3, 21, "circle"], [3, 8, "circle"], [3, 13, "circle"], [2, 21, "world"]]:
 		var tier: int = case[0]
 		var strafer := Strafer.new()
 		var run := _fight(_brain_def(BRAINS[tier - 1]), Vector3(0, 0, 4.0), PI, strafer, tier, case[1])
@@ -359,7 +359,7 @@ func test_the_thrust_is_on_the_menu_inside_each_tiers_spacing_band() -> void:
 		assert_true(brain.on_menu(thrust, outer), "knuckle_%d can choose its thrust from %.1f m, the outer edge of its band" % [tier, outer])
 		assert_true(brain.on_menu(thrust, thrust.max_range + 2.0), "and from any further out (it walks in)")
 		var sweep: AttackOption = def.attacks.filter(func(o: AttackOption) -> bool: return o.action == &"gift")[0]
-		assert_false(brain.on_menu(sweep, outer), "but not its sweep, which needs room it would have to back up for")
+		assert_true(brain.on_menu(sweep, def.preferred_range), "and its sweep from where it stands at its preferred range (a short slide, a short back-up)")
 
 
 # Fires `action` and then `combo` (each as the window takes it) from a Knuckle of `tier` `gap` metres from a standing
@@ -620,6 +620,189 @@ func test_it_steps_in_from_its_preferred_range_quickly() -> void:
 	assert_true(walk_ins.size() >= 3, "it attacked again and again (%s)" % [walk_ins])
 	for w: Array in walk_ins:
 		assert_true(w[0] <= 36, "from choosing its jab at %.2f m to pressing it: %d frames (at most 0.6 s)" % [w[1], w[0]])
+
+
+## Abarax for the back-up tests' first half: a Knuckle's own legs, then its brain. It jogs at the target (the stick full, facing
+## him) until it is `at` metres from him, and from then on it is `inner`'s to think for, at the speed it has.
+class Jogger extends Brain:
+	var inner: Brain
+	var foe: Actor
+	var at := 1.6
+	var handed := false
+	var speed_then := 0.0  # how fast it was going when the brain took over
+
+	func think(actor: Actor, delta: float) -> Intent:
+		if not handed:
+			var to := Vector2(foe.global_position.x - actor.global_position.x, foe.global_position.z - actor.global_position.z)
+			if to.length() > at:
+				var intent := Intent.new()
+				intent.move = to.normalized()
+				intent.face_target = foe.global_position
+				return intent
+			handed = true
+			speed_then = actor.locomotion.speed
+		return inner.think(actor, delta)
+
+
+func test_a_back_up_brakes_to_a_walk_first() -> void:
+	# It jogs in at Abarax and, 1.6 m from him, chooses an attack that needs 2.0 m: it must back up. A back-up chosen at a jog is
+	# a stick pushed the other way, and the body goes that way at once at the speed it had, slowing as it goes (Locomotion): so it
+	# first brakes where it stands, and only then backs up, at a walk. No travel away from him faster than PRESS_SPEED.
+	var def := _brain_def(BRAINS[0], [_option(&"palm", 2.0, 2.3, PackedStringArray(), 3.0)])
+	def.notice_time = 0.0
+	def.attack_rest = 0.0
+	var run := _fight(def, Vector3(0, 0, 8.0))
+	var knuckle: Actor = run["knuckle"]
+	var abarax: Actor = run["abarax"]
+	var brain: EnemyBrain = run["brain"]
+	var jogger := Jogger.new()
+	jogger.inner = brain
+	jogger.foe = abarax
+	knuckle.set_brain(jogger)
+	var fastest_away := 0.0
+	var backed := 0.0
+	var planned := 0
+	for i in 60 * 5:
+		await frames(1)
+		if jogger.handed and brain.plan() != null and brain.mode == EnemyBrain.Mode.ENGAGED:
+			planned += 1
+			var away := knuckle.velocity.z  # Abarax stands at the origin, the Knuckle on +Z
+			fastest_away = maxf(fastest_away, away)
+			backed += maxf(away, 0.0) / 60.0
+	assert_true(planned >= 10, "it chose its attack while still jogging (%d frames of closing in)" % planned)
+	assert_true(jogger.speed_then > 3.0 * EnemyBrain.PRESS_SPEED, "and it was jogging when the brain took over (%.2f m/s)" % jogger.speed_then)
+	assert_true(fastest_away <= EnemyBrain.PRESS_SPEED + 0.05, "yet it never went back faster than a walk: %.2f m/s" % fastest_away)
+	assert_true(backed >= 0.2, "and it did back up (%.2f m)" % backed)
+
+
+## Abarax who runs from the Knuckle, faster than it can close the gap, facing it.
+class Runner extends Brain:
+	var foe: Actor
+
+	func think(actor: Actor, _delta: float) -> Intent:
+		var intent := Intent.new()
+		if foe != null:
+			var away := Vector2(actor.global_position.x - foe.global_position.x, actor.global_position.z - foe.global_position.z)
+			intent.move = away.normalized() if not away.is_zero_approx() else Vector2(0, -1)
+			intent.face_target = foe.global_position
+		return intent
+
+
+func test_a_dropped_plan_is_not_chosen_again_inside_its_cooldown() -> void:
+	# It cannot reach the range of its attack (the target runs from it) and gives the plan up after twice reangle_after: the option
+	# waits its cooldown from then, as it would after the attack was thrown, not a rest of half the attack_rest.
+	var option := _option(&"palm", 0.0, 1.0, PackedStringArray(), 3.0)
+	var def := _brain_def(BRAINS[0], [option])
+	def.notice_time = 0.1
+	def.attack_rest = 0.2
+	def.reangle_after = 0.5
+	var runner := Runner.new()
+	var run := _fight(def, Vector3(0, 0, 3.0), PI, runner)
+	var knuckle: Actor = run["knuckle"]
+	var brain: EnemyBrain = run["brain"]
+	runner.foe = knuckle
+	var chosen := []  # the frames a plan was made on
+	var dropped := []
+	var had := false
+	for i in 60 * 14:
+		await frames(1)
+		var has := brain.plan() != null
+		if has and not had:
+			chosen.append(i)
+		if had and not has:
+			dropped.append(i)
+		had = has
+	assert_true(chosen.size() >= 2, "it chose its attack more than once (%s)" % [chosen])
+	assert_eq(knuckle.runner.current, null, "and never threw it: the target was out of reach throughout")
+	for k in range(1, chosen.size()):
+		assert_true(chosen[k] - dropped[k - 1] >= roundi(option.cooldown * 60.0) - 2,
+				"the plan dropped on frame %d was chosen again on %d: %d frames, its cooldown is %d" % [dropped[k - 1], chosen[k], chosen[k] - dropped[k - 1], roundi(option.cooldown * 60.0)])
+
+
+## Abarax for the yard-fight test: he circles the Knuckle (sideways to it, facing it), at a walk, as a player does who looks for
+## an opening; the Knuckle's own spacing decides how far off that is.
+class Circler extends Brain:
+	var foe: Actor
+
+	func think(actor: Actor, _delta: float) -> Intent:
+		var intent := Intent.new()
+		if foe == null:
+			return intent
+		var to := Vector2(foe.global_position.x - actor.global_position.x, foe.global_position.z - actor.global_position.z)
+		intent.face_target = foe.global_position
+		if to.length() > 0.01:
+			intent.move = to.normalized().rotated(PI * 0.5) * 0.35
+		return intent
+
+
+func test_every_perilous_attack_is_thrown_in_ordinary_yard_fights() -> void:
+	# Twenty seeded fights of 1800 frames (thirty seconds) each against an Abarax who circles it, 2 m off to begin with: every brain that has a
+	# sweep, a thrust or a grab throws each at least once.
+	var seen := {}  # tier -> {move id: how many times started}
+	for tier in [1, 2, 3]:
+		var def := _brain_def(BRAINS[tier - 1])
+		var wanted := []
+		for option: AttackOption in def.attacks:
+			var move := Registry.fetch(&"moves", (load(KNUCKLES[tier - 1]) as ActorDef).moveset[option.action]) as MoveData
+			for profile: HitProfile in move.hits.values():
+				if profile.perilous != HitProfile.Perilous.NONE:
+					wanted.append(move.id)
+		seen[tier] = {}
+		for id in wanted:
+			seen[tier][id] = 0
+		var runs := []
+		for seed_value in range(1, 21):
+			var circler := Circler.new()
+			var run := _fight(def, Vector3(0, 0, 3.0), PI, circler, tier, seed_value, Vector3(seed_value * 50.0, 0, 0))
+			circler.foe = run["knuckle"]
+			(run["knuckle"] as Actor).runner.move_started.connect(func(m: MoveData) -> void:
+				if seen[tier].has(m.id):
+					seen[tier][m.id] += 1)
+			runs.append(run)
+		for step in 60:  # the 1800 frames, in halves of a second; no more once every one has been thrown
+			await frames(30)
+			if (seen[tier] as Dictionary).values().all(func(n: int) -> bool: return n >= 1):
+				break
+		for run: Dictionary in runs:
+			(run["arena"] as Node).queue_free()
+		await frames(1)
+	for tier in [1, 2, 3]:
+		assert_false((seen[tier] as Dictionary).is_empty() and tier > 1, "knuckle_%d has perilous attacks" % tier)
+		for id: StringName in seen[tier]:
+			assert_true(seen[tier][id] >= 1, "knuckle_%d threw %s %d times in twenty fights of 30 s against an Abarax circling it (%s)" % [tier, id, seen[tier][id], seen[tier]])
+
+
+func test_the_sweep_lands_at_both_ends_of_its_new_range() -> void:
+	var sweeps := 0
+	for tier in [1, 2, 3]:
+		var brain := load(BRAINS[tier - 1]) as BrainDef
+		for option: AttackOption in brain.attacks:
+			if option.action != &"gift":
+				continue
+			sweeps += 1
+			for gap: float in [maxf(option.min_range, CONTACT), option.max_range]:
+				var blows: int = await _fire(tier, option.action, option.combo, gap)
+				assert_eq(blows, 1, "knuckle_%d's sweep from %.2f m lands" % [tier, gap])
+			var beyond: int = await _fire(tier, option.action, option.combo, option.max_range + 0.8)
+			assert_eq(beyond, 0, "knuckle_%d's sweep from %.2f m, 0.8 m past its range, does not" % [tier, option.max_range + 0.8])
+			assert_true(option.min_range <= 3.0, "knuckle_%d's sweep is thrown from %.2f m: ordinary range (a Knuckle spaces itself 1.8 to 2.8 m from its foe)" % [tier, option.min_range])
+	assert_eq(sweeps, 3, "every tier has a sweep")
+
+
+func test_a_feint_leads_only_into_the_attack_it_stands_for() -> void:
+	# A feint's window takes the actions of the Knuckle's own moveset (palm: the jab, heavy: the thrust). An actor whose palm or
+	# heavy is another move (the Drummer's string, its short jab) is not feinted into them: it would throw the Knuckle's jab, or a thrust it
+	# does not have, for the attack it chose.
+	var drummer := load("res://data/actors/knuckle_drummer.tres") as ActorDef
+	var arena := TestArena.make(self)
+	var actor := TestArena.spawn(arena, drummer, Brain.new(), Vector3.ZERO, "Drummer")
+	var brain := EnemyBrain.new(load("res://data/brains/knuckle_drummer.tres") as BrainDef, 1)
+	for action in [&"palm", &"heavy"]:
+		assert_false(brain._feint_takes(actor, action), "no feint into the Drummer's %s" % action)
+	var knuckle := TestArena.spawn(arena, load(KNUCKLES[1]) as ActorDef, Brain.new(), Vector3(5, 0, 0), "Knuckle")
+	var knuckle_brain := EnemyBrain.new(load(BRAINS[1]) as BrainDef, 1)  # (a brain remembers what it read of its actor's feint)
+	for action in [&"palm", &"heavy"]:
+		assert_true(knuckle_brain._feint_takes(knuckle, action), "a tier II Knuckle still feints into its own %s" % action)
 
 
 # --- tiers ---
