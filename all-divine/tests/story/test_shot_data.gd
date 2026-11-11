@@ -86,7 +86,9 @@ func _full_scene() -> SceneShots:
 	shot.cues = [cue] as Array[CueEvent]
 	scene.shots = [shot] as Array[Shot]
 	var timeline := PackedScene.new()
-	timeline.pack(Node.new())
+	var root := Node.new()
+	timeline.pack(root)
+	root.free()
 	scene.timeline = timeline
 	return scene
 

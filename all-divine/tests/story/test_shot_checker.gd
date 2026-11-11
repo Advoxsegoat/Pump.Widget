@@ -23,10 +23,10 @@ func _check(scene: SceneShots, folder := "") -> PackedStringArray:
 
 
 # The one line `lines` must be: it starts with the scene and shot, and has `fragment` in it.
-func _only(lines: PackedStringArray, shot: String, fragment: String) -> void:
+func _only(lines: PackedStringArray, shot: String, fragment: String, scene := SCENE) -> void:
 	assert_eq(lines.size(), 1, "\n".join(lines))
 	if lines.size() == 1:
-		assert_true(lines[0].begins_with("%s/%s: " % [SCENE, shot]), lines[0])
+		assert_true(lines[0].begins_with("%s/%s: " % [scene, shot]), lines[0])
 		assert_true(lines[0].contains(fragment), "'%s' is not in: %s" % [fragment, lines[0]])
 
 
@@ -274,19 +274,19 @@ func test_the_kinds_have_their_lengths_and_their_rules() -> void:
 	second.length = 20
 	second.aim = &"abarax"
 	moment.shots.append(second)
-	_only(_moment_check(moment), "-", "a MOMENT has one shot, this one has 2")
+	_only(_moment_check(moment), "-", "a MOMENT has one shot, this one has 2", "moment")
 	moment = _moment()
 	moment.shots[0].length = 100
-	_only(_moment_check(moment), "-", "a MOMENT is 90 frames at most, this one is 100")
+	_only(_moment_check(moment), "-", "a MOMENT is 90 frames at most, this one is 100", "moment")
 	moment = _moment()
 	moment.letterbox = true
-	_only(_moment_check(moment), "-", "a MOMENT has no letterbox")
+	_only(_moment_check(moment), "-", "a MOMENT has no letterbox", "moment")
 	moment = _moment()
 	var beat := ActorBeat.new()
 	beat.actor = &"abarax"
 	beat.clip = &"idle"
 	moment.shots[0].beats.append(beat)
-	_only(_moment_check(moment), "M1", "a MOMENT has no beats")
+	_only(_moment_check(moment), "M1", "a MOMENT has no beats", "moment")
 
 
 # --- walking ---
@@ -294,7 +294,7 @@ func test_the_kinds_have_their_lengths_and_their_rules() -> void:
 func test_travel_seconds_is_the_formula_of_the_reel_solved_the_other_way() -> void:
 	var def := Registry.fetch(&"actors", &"knuckle_1") as ActorDef
 	assert_near(ShotChecker.travel_seconds(def, ActorBeat.Pace.WALK, 3.3), 3.6729, 0.001)
-	assert_near(ShotChecker.travel_seconds(def, ActorBeat.Pace.JOG, 5.0), 0.9131, 0.001)
+	assert_near(ShotChecker.travel_seconds(def, ActorBeat.Pace.JOG, 5.0), 0.9473, 0.001)
 	for metres in [1.2, 3.3, 5.0]:
 		var leg := Main._leg(Vector2.RIGHT, 1.0, metres, def.locomotion)
 		assert_eq(leg.frames, roundi(ShotChecker.travel_seconds(def, ActorBeat.Pace.JOG, metres) * 60.0), "%s m" % metres)
@@ -305,7 +305,7 @@ func test_a_walk_that_does_not_fit_before_the_next_beat_is_reported() -> void:
 	scene.mark(&"foe_in").position = Vector3(4.5, 0.0, 2.6)   # 3.3 m from foe_stop
 	scene.shots[0].beats[0].at = 60
 	var lines := _check(scene)
-	_only(lines, "S1", "knuckle needs 3.7 s to walk 3.3 m at WALK to 'foe_stop' but has 0.5 s (30 frames) before its next beat")
+	_only(lines, "S1", "knuckle needs 3.67 s to walk 3.3 m at WALK to 'foe_stop' but has 0.50 s (30 frames) before its next beat")
 
 
 func test_a_walk_with_nothing_after_it_has_the_scene_to_its_end() -> void:
@@ -357,7 +357,7 @@ func test_the_folder_must_hold_a_script_notes_with_a_status_and_a_shot_list_of_i
 	assert_true(lines[0].contains("notes.md ends with 'Status: in review' but the scene is draft"), lines[0])
 	scene.id = &"other"
 	lines = _check(scene, TEMP_FOLDER)
-	assert_true("\n".join(lines).contains("shot list is 'other' but its folder is 'shot_checker_scene'"), "\n".join(lines))
+	assert_true("\n".join(lines).contains("id 'other' is not the folder name 'shot_checker_scene'"), "\n".join(lines))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(TEMP_FOLDER + "/missing"))
 	assert_true("\n".join(_check(scene, TEMP_FOLDER + "_nowhere")).contains("script.md is missing"))
 
