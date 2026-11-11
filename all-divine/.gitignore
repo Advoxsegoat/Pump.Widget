@@ -5,3 +5,4 @@ out/*
 !out/.gdignore
 tools/.venv/
 __pycache__/
+override.cfg
