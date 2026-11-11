@@ -160,3 +160,17 @@ func test_liquor_is_a_dark_brown_flat_material() -> void:
 	var colour := texture.gradient.colors[0]
 	assert_eq(colour.to_html(false), "4a3a2e", "the liquor's brown")
 	assert_true(colour.v <= 0.35, "dark")
+
+
+# F0 set every ground texture's import so that the editor never switches it to lossy VRAM compression when it is drawn in
+# 3D: that would blur the exact colours (and leave a dirty tree after the first editor session).
+func test_no_ground_texture_is_recompressed_by_the_editor() -> void:
+	var seen := 0
+	for file in DirAccess.get_files_at("res://assets/env/textures"):
+		if not file.ends_with(".png.import"):
+			continue
+		seen += 1
+		var config := ConfigFile.new()
+		assert_eq(config.load("res://assets/env/textures/" + file), OK, file)
+		assert_eq(config.get_value("params", "detect_3d/compress_to", -1), 0, "%s: detect_3d/compress_to" % file)
+	assert_true(seen >= 5, "the textures' imports were found (%d)" % seen)

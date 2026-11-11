@@ -384,3 +384,24 @@ func _same_scene(layout: String, scene: String, root_name: String) -> void:
 func test_the_old_layouts_still_build_the_same_scenes() -> void:
 	_same_scene("res://world/courtyard/layout.txt", "res://world/courtyard/courtyard.tscn", "Courtyard")
 	_same_scene("res://world/training_yard/layout.txt", "res://world/training_yard/training_yard.tscn", "TrainingYard")
+
+
+# Every piece the kit's list names loads with the world's toon material in place of the pack's own, so a piece added to the
+# list without its import setting (the importer does not write it) is caught here.
+func test_every_listed_kenney_piece_is_in_the_toon_material() -> void:
+	var listed := 0
+	for line in FileAccess.get_file_as_string("res://tools/assets/kenney_town_pieces.txt").split("\n"):
+		var name := line.strip_edges()
+		if name.is_empty() or name.begins_with("#"):
+			continue
+		listed += 1
+		var scene := (load(KENNEY % name) as PackedScene).instantiate()
+		var meshes := scene.find_children("*", "MeshInstance3D", true, false)
+		assert_true(meshes.size() > 0, "%s has a mesh" % name)
+		for mesh: MeshInstance3D in meshes:
+			for i in mesh.mesh.get_surface_count():
+				# The fountain's water has a material of its own.
+				var expected := _material("kenney_water") if name.begins_with("fountain-round") and mesh.get_active_material(i) == _material("kenney_water") else _material("kenney_town")
+				assert_eq(mesh.get_active_material(i), expected, "%s surface %d" % [name, i])
+		scene.free()
+	assert_true(listed >= 43, "the list was read (%d pieces)" % listed)
