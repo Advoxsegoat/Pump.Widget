@@ -13,6 +13,9 @@ extends Node
 ## not by distance: the camera is 20 m from everything it sees, and an arena fight should not get quieter for
 ## being across it.
 ##
+## A pitch can be asked for (play's third argument, 1 is the file's own): it multiplies the cue's own jitter, so a cue that is
+## to climb in steps (the evade's whoosh) has no jitter.
+##
 ## A cue id that is empty plays nothing, as the voice of an actor that has none; one no cue has is a warning
 ## (and is recorded, see last_unknown). last_played and playing_nodes are for tests.
 
@@ -37,6 +40,7 @@ var _voices: Array[Voice] = []
 var _plays := 0
 var _last_play_msec := -1  # when a sound last started, by Time.get_ticks_msec
 var _played: Array[StringName] = []
+var _pitches: Array[float] = []  # the pitch each of _played was asked for at
 var _unknown: Array[StringName] = []
 var _last_variant := {}  # cue id -> the index of the file it played last
 var _rng := RandomNumberGenerator.new()
@@ -58,6 +62,7 @@ func _ready() -> void:
 
 func _physics_process(_delta: float) -> void:
 	_played.clear()
+	_pitches.clear()
 	_unknown.clear()
 
 
@@ -74,8 +79,9 @@ func _exit_tree() -> void:
 		OS.delay_msec(SHUTDOWN_WAIT_MSEC)
 
 
-## Plays the cue `id` (an id in the Registry kind `sounds`): at the point `at` if it is a Vector3, flat otherwise.
-func play(id: StringName, at: Variant = null) -> void:
+## Plays the cue `id` (an id in the Registry kind `sounds`): at the point `at` if it is a Vector3, flat otherwise, `pitch` times the
+## file's own (and the jitter's).
+func play(id: StringName, at: Variant = null, pitch := 1.0) -> void:
 	if id == &"":
 		return
 	if not Registry.ids(&"sounds").has(String(id)):
@@ -86,6 +92,7 @@ func play(id: StringName, at: Variant = null) -> void:
 	if cue == null:
 		return
 	_played.append(id)
+	_pitches.append(pitch)
 	if cue.streams.is_empty():
 		return
 	var voice := _take_voice()
@@ -102,7 +109,7 @@ func play(id: StringName, at: Variant = null) -> void:
 	player.stream = cue.streams[_pick(id, cue.streams.size())]
 	player.bus = cue.bus
 	player.volume_db = cue.volume_db
-	player.pitch_scale = 1.0 + _rng.randf_range(-cue.pitch_jitter, cue.pitch_jitter)
+	player.pitch_scale = pitch * (1.0 + _rng.randf_range(-cue.pitch_jitter, cue.pitch_jitter))
 	player.play()
 
 
@@ -111,6 +118,11 @@ func play(id: StringName, at: Variant = null) -> void:
 ## id and an unknown one are not in it.
 func last_played() -> Array[StringName]:
 	return _played
+
+
+## The pitch each of last_played() was asked for at, in the same order (1 where none was asked).
+func last_pitches() -> Array[float]:
+	return _pitches
 
 
 ## The ids asked for since the frame began that no cue has (each one also warned).

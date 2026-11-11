@@ -129,6 +129,26 @@ func test_pitch_and_volume_follow_the_cue() -> void:
 		assert_true(seen.size() > 1, "the pitch varies from play to play")
 
 
+func test_a_pitch_asked_for_multiplies_the_cues_own_and_is_reported() -> void:
+	var cue := _cue(&"tell_glint")
+	for pitch in [0.5, 1.0, 2.0]:
+		Sfx.play(&"tell_glint", null, pitch)
+		var voice := Sfx.playing_nodes()[0] as AudioStreamPlayer
+		assert_true(absf(voice.pitch_scale - pitch) <= pitch * cue.pitch_jitter + 1e-6, "asked %s, played %s within the jitter's %s" % [pitch, voice.pitch_scale, cue.pitch_jitter])
+		_silence()
+	var at := Vector3(1.0, 0.0, 2.0)
+	Sfx.play(&"tell_glint", at, 1.5)
+	var spatial := Sfx.playing_nodes()[0] as AudioStreamPlayer3D
+	assert_true(absf(spatial.pitch_scale - 1.5) <= 1.5 * cue.pitch_jitter + 1e-6, "a positional sound takes it too")
+	_silence()
+	await frames(1)
+	Sfx.play(&"tell_glint", null, 1.5)
+	Sfx.play(&"tell_glint")
+	assert_eq(Sfx.last_pitches(), [1.5, 1.0] as Array[float], "the pitches asked for, one for each play of the frame, in order (1.0 for none asked)")
+	await frames(1)
+	assert_eq(Sfx.last_pitches().size(), 0, "forgotten with the frame, as the ids are")
+
+
 func test_a_cue_with_variants_does_not_repeat_the_one_it_just_played() -> void:
 	var last: AudioStream = null
 	for i in 12:
