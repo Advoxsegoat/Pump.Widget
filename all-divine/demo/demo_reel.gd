@@ -10,6 +10,11 @@ extends Main
 ## a parry (the answer to a thrust), lands a charged heavy, dash-steps in, breaks the Knuckle's posture with a jab and a
 ## cross and finishes it with the Open Hand.
 ##
+## After the riposte (DEFENCE_AT) comes the defence: the Knuckle throws a jab that Abarax parries, then a jab, a cross and a hook
+## that he sways, sways and ducks (the chain climbs to Flurry on the way: the rim, the afterimages, the whoosh, the slow-down),
+## and he answers the last with the counter the duck gives. DEFENCE_FOE and DEFENCE_ABARAX are that segment's beats, in seconds from
+## its start; every beat of the other tables from DEFENCE_AT on is put back by DEFENCE_SECONDS to make room for it.
+##
 ## For a reel that fits in half a minute the Knuckle is a copy of tier II with more HP and a posture of its own, so that
 ## the break comes in the last seconds and the earlier blows do not kill it first. (A catch takes 50 posture off the
 ## attacker, so its posture is 50 more than the blows after it can break.)
@@ -83,6 +88,36 @@ const BEATS := [
 	{t = 17.5},
 ]
 
+## Where the defence comes in (the riposte is over and the Knuckle has not yet backed off), and how long it takes.
+const DEFENCE_AT := 7.5
+const DEFENCE_SECONDS := 6.2
+const DEFENCE_FOE := [
+	{t = 0.0, move = EAST * 0.45},
+	{t = 0.2},
+	{t = 0.4, press = [&"palm"]},
+	{t = 0.45},
+	{t = 1.2, move = EAST * 0.45},
+	{t = 1.3},
+	{t = 1.4, press = [&"palm"]},
+	{t = 1.45},
+	{t = 1.75, press = [&"palm"]},
+	{t = 1.8},
+	{t = 2.5, press = [&"palm"]},
+	{t = 2.55},
+]
+const DEFENCE_ABARAX := [
+	{t = 0.65, press = [&"guard"]},
+	{t = 0.7},
+	{t = 1.65, press = [&"sway"]},
+	{t = 1.7},
+	{t = 2.25, press = [&"sway"]},
+	{t = 2.3},
+	{t = 3.1, press = [&"duck"]},
+	{t = 3.15},
+	{t = 3.55, press = [&"palm"]},
+	{t = 3.6},
+]
+
 var foe: Actor
 var _logging := false
 
@@ -101,7 +136,7 @@ func _ready() -> void:
 	foe = (load("res://actors/actor.tscn") as PackedScene).instantiate() as Actor
 	foe.name = "Knuckle"
 	foe.def = def
-	var foe_steps := steps_of(FOE_BEATS)
+	var foe_steps := steps_of(with_defence(FOE_BEATS, DEFENCE_FOE))
 	for step: Dictionary in foe_steps:
 		step["face_target"] = player
 		step["look_target"] = player
@@ -109,10 +144,10 @@ func _ready() -> void:
 	foe.set_brain(ScriptBrain.new(foe_steps))
 	player.get_parent().add_child(foe)
 	foe.place(Transform3D(Basis(Vector3.UP, PI / 2.0), KNUCKLE_AT))
-	var beats := BEATS
+	var beats := with_defence(BEATS, DEFENCE_ABARAX)
 	if OS.get_cmdline_user_args().has("--reel-control"):
 		# A control run: the same fight with Abarax never dodging, to see that each dodge turned a blow away.
-		beats = BEATS.map(func(b: Dictionary) -> Dictionary:
+		beats = beats.map(func(b: Dictionary) -> Dictionary:
 			var copy := b.duplicate()
 			var press: Array = copy.get("press", [])
 			press = press.filter(func(a: StringName) -> bool: return a != &"dodge")
@@ -133,6 +168,26 @@ func _ready() -> void:
 func _physics_process(_delta: float) -> void:
 	if _logging and Engine.get_physics_frames() % 30 == 0 and OS.get_cmdline_user_args().has("--reel-trace"):
 		print("%6.2f   at Abarax (%.2f, %.2f) Knuckle (%.2f, %.2f) %.2f m   Knuckle %s" % [_clock(), player.global_position.x, player.global_position.z, foe.global_position.x, foe.global_position.z, player.global_position.distance_to(foe.global_position), foe.runner.current.id if foe.runner.current else "-"])
+
+
+## `beats` with the defence's `inserted` beats (seconds from DEFENCE_AT) in, and every beat of `beats` from DEFENCE_AT on put back
+## by DEFENCE_SECONDS.
+static func with_defence(beats: Array, inserted: Array) -> Array:
+	var out := []
+	var after := []
+	for beat: Dictionary in beats:
+		if float(beat["t"]) >= DEFENCE_AT:
+			var late := beat.duplicate()
+			late["t"] = float(beat["t"]) + DEFENCE_SECONDS
+			after.append(late)
+		else:
+			out.append(beat)
+	for beat: Dictionary in inserted:
+		var at := beat.duplicate()
+		at["t"] = DEFENCE_AT + float(beat["t"])
+		out.append(at)
+	out.append_array(after)
+	return out
 
 
 ## The ScriptBrain steps of `beats`: each lasts until the next one starts (the last one a frame).

@@ -34,7 +34,7 @@ Read with it:
 - Frames are 1/60 s physics ticks:
   - input response is **2 frames at most**;
   - the input buffer is **9 frames (150 ms)**;
-  - the dodge has **13 invulnerable frames of 30** (`dodge_roll`, iframes on frames 3–15);
+  - the dodge: the roll and its 13 invulnerable frames are gone; sways and ducks have evade windows of 6 to 12 frames by tempo, and the dash-step is never invulnerable (see the table in [`2026-11-10-all-divine-sway-defence.md`](2026-11-10-all-divine-sway-defence.md), Global Constraints);
   - hit-stop is **3–6 frames**.
 - Every system has tests that run headless in the container, with our own runner.
 - Green runs print no `ERROR:` or `WARNING:` lines (Ruling R1: error paths are asserted through `quietly()` and returned data).

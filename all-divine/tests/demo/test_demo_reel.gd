@@ -28,16 +28,19 @@ func test_every_beat_of_the_reel_happens() -> void:
 	abarax.hit_landed.connect(func(r: HitResult, _e: HitEvent) -> void: landed.append(r.outcome))
 	var charged := [0]
 	abarax.runner.charged.connect(func(_m: MoveData) -> void: charged[0] += 1)
-	await frames(60 * 20)
-	assert_eq(mine, [&"palm_jab", &"palm_cross", &"palm_hook", &"guard_raise", &"parry", &"palm_jab", &"hop", &"guard_raise", &"catch",
+	await frames(60 * 27)
+	assert_eq(mine, [&"palm_jab", &"palm_cross", &"palm_hook", &"guard_raise", &"parry", &"palm_jab",
+			&"guard_raise", &"parry", &"sway_left_slip", &"sway_left_quick", &"duck_quick", &"counter_rise", &"hop", &"guard_raise", &"catch",
 			&"palm_heavy", &"dash_step", &"palm_jab", &"palm_cross", &"finisher"], "Abarax's moves, in order")
-	assert_eq(theirs, [&"flinch", &"knuckle_jab", &"parried", &"knuckle_sweep", &"knuckle_thrust", &"caught", &"stagger", &"posture_broken",
+	assert_eq(theirs, [&"flinch", &"knuckle_jab", &"parried", &"knuckle_jab", &"parried", &"knuckle_jab", &"knuckle_cross", &"knuckle_hook", &"posture_broken", &"knuckle_sweep", &"knuckle_thrust", &"caught", &"stagger", &"posture_broken",
 			&"finisher_victim"], "the Knuckle's, in order")
 	assert_eq(abarax.stats.hp, abarax.stats.max_hp, "not one blow hurt him")
 	assert_true(taken.has(O.PARRIED), "he parried the jab")
 	assert_true(taken.has(O.CAUGHT), "he caught the thrust")
 	assert_true(taken.has(O.WHIFF), "the sweep came to nothing")
 	assert_false(taken.has(O.HIT) or taken.has(O.GUARDED), "and nothing else came to anything")
+	assert_eq(taken.count(O.EVADED), 3, "two sways and a duck turned the jab, cross and hook away")
+	assert_eq(taken.count(O.PARRIED), 2, "and he parried twice")
 	assert_eq(charged[0], 1, "the heavy was charged")
 	assert_true(landed.count(O.HIT) >= 8, "his blows landed (%d)" % landed.count(O.HIT))
 	assert_true(knuckle.dead, "the finisher killed the Knuckle")

@@ -11,17 +11,17 @@
 # The Movie Maker records at the size the window has when the game starts, which a command-line --resolution does not
 # change under the project's fullscreen setting; so the run is given a temporary override.cfg (removed at the end)
 # that makes the window the 640x360 picture itself, and ffmpeg then scales that up 2x with nearest-neighbour.
-# REEL_FRAMES (default 640, about 21 s at 30 fps) is how long it records; REEL_STILLS is a space-separated list of
+# REEL_FRAMES (default 780, about 26 s at 30 fps) is how long it records; REEL_STILLS is a space-separated list of
 # the seconds to save stills at.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="${1:-$ROOT/out/demo}"
-FRAMES="${REEL_FRAMES:-640}"
-STILLS="${REEL_STILLS:-2.5 4.1 6.9 11.0 14.0 15.6 18.4 20.0}"
+FRAMES="${REEL_FRAMES:-780}"
+STILLS="${REEL_STILLS:-2.5 4.1 6.9 8.3 9.5 10.7 11.3 17.2 21.0 22.5 24.6}"
 # The tell clip: where (seconds) it starts and how long it is, and the box of the 640x360 picture it shows (the sweep is
-# pressed at 10.28 s; the Knuckle then stands left of the middle of the picture and Abarax right of it).
-TELL_FROM="${REEL_TELL_FROM:-10.1}"
+# pressed at 16.48 s; the Knuckle then stands left of the middle of the picture and Abarax right of it).
+TELL_FROM="${REEL_TELL_FROM:-16.3}"
 TELL_SECONDS="${REEL_TELL_SECONDS:-3}"
 TELL_CROP="${REEL_TELL_CROP:-256:144:150:88}"
 command -v ffmpeg >/dev/null || { echo "record_reel.sh: ffmpeg is needed" >&2; exit 1; }
