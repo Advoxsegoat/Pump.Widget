@@ -21,7 +21,7 @@ impact_sound = &"impact_palm"
 script = ExtResource("1_move")
 id = &"blade_cut"
 clip = &"blade_cut"
-root_motion_scale = 0.6
+root_motion_scale = 1.0
 hits = {
 &"cut": SubResource("Resource_cut")
 }

@@ -6,7 +6,7 @@
 [sub_resource type="Resource" id="Option_cut"]
 script = ExtResource("1_opt")
 action = &"palm"
-max_range = 1.9
+max_range = 1.85
 combo = PackedStringArray("palm")
 
 [sub_resource type="Resource" id="Option_chop"]

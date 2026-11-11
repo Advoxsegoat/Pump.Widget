@@ -28,8 +28,11 @@ const MOVES := {
 }
 ## A blow leaves at least this many frames before the move ends, after its hitbox goes off: room for a jab to land.
 const RECOVERY := 24
-## How far the counters go after a dodge (metres, centre to centre): the hook to about 1.2, the rising palm to about 1.3.
-const COUNTER_REACH := 1.3
+## How near he stands (metres, centre to centre) when a counter starts after a perfect dodge of his cut or chop: the hook
+## lands to about 1.1 m, the rising palm to 1.28 m.
+const COUNTER_GAP := 1.10
+## Where the whole attack of an action stops landing on a standing Abarax (he steps through the cut and the chop; measured to 2.3 and 2.8 m).
+const MISSES_FROM := {&"palm": 2.7, &"gift": 3.1}
 
 
 # --- helpers ---
@@ -201,7 +204,7 @@ func test_the_blade_moves_and_the_blade_knuckle_have_their_numbers() -> void:
 	assert_eq([brain.preferred_range, brain.attack_rest, brain.track_dodges], [2.6, 0.9, false], "his spacing, rest and tracking")
 	assert_eq(brain.attacks.size(), 3, "three options")
 	var cut := brain.attacks[0]
-	assert_eq([cut.action, cut.combo, cut.weight, cut.max_range], [&"palm", PackedStringArray(["palm"]), 1.0, 1.9], "cut then backcut")
+	assert_eq([cut.action, cut.combo, cut.weight, cut.max_range], [&"palm", PackedStringArray(["palm"]), 1.0, 1.85], "cut then backcut")
 	var chop := brain.attacks[1]
 	assert_eq([chop.action, chop.weight, chop.max_range], [&"gift", 0.5, 2.0], "the chop")
 	assert_eq(brain.delay_chance, 0.5, "he delays the chop half the time")
@@ -271,13 +274,14 @@ func test_each_blade_move_lands_at_both_ends_of_its_range_and_misses_beyond_it()
 		for gap: float in [lo, option.max_range]:
 			var blows: int = await _blows(def, option.action, Array(option.combo), gap)
 			assert_true(blows >= need, "%s %s from %.2f m: %d of %d blows connect" % [option.action, option.combo, gap, blows, need])
-		var beyond: int = await _blows(def, option.action, Array(option.combo), option.max_range + 0.3)
-		assert_true(beyond < need, "%s %s from %.2f m, 0.3 m beyond its range: %d of %d blows connect (it misses)" % [option.action, option.combo, option.max_range + 0.3, beyond, need])
+		# He steps through his cut and chop, so the blow carries far beyond the range he throws from; where it stops is MISSES_FROM.
+		var beyond: int = await _blows(def, option.action, Array(option.combo), float(MISSES_FROM.get(option.action, option.max_range + 0.3)))
+		assert_true(beyond < need, "%s %s from %.2f m: %d of %d blows connect (it misses)" % [option.action, option.combo, float(MISSES_FROM.get(option.action, option.max_range + 0.3)), beyond, need])
 
 func test_a_cut_reaches_further_than_a_fist() -> void:
 	# From 1.9 m the blade's cut lands; none of the fist Knuckles' jab does, nor does Abarax's own.
 	var reach := (_def().brain.attacks[0]) as AttackOption
-	assert_eq(reach.max_range, 1.9, "the cut's range is 1.9 m")
+	assert_eq(reach.max_range, 1.85, "the cut is thrown from 1.85 m")
 	for path: String in FISTS:
 		var fist := load(path) as ActorDef
 		var jab := fist.brain.attacks[0]
@@ -376,36 +380,36 @@ func test_each_blow_leaves_a_recovery_a_jab_can_punish() -> void:
 
 
 func test_a_counter_after_a_dodged_cut_reaches_him() -> void:
-	# The hook after a sway and the rising palm after a duck, from where a dodge of a cut leaves Abarax. A cut thrown from
-	# 1.5 m is answered by both. A cut thrown from 1.9 m, its reach, leaves the blade Knuckle further than the counters go
-	# (the hook lands to about 1.2 m, the rise to about 1.3): the dodge is perfect and the counter starts but does not
-	# land, which the report of Task 14c puts to the controller (his cuts step in, or the counters do). This test holds
-	# what is so, and records the distances.
-	var far := {}
-	for case: Array in [[&"duck", Vector2.ZERO, &"counter_rise"], [&"sway", Vector2(1, 0), &"counter_hook"]]:
-		for throw: float in [1.5, 1.9]:
-			var b_def := _def()
-			var lands: int = await _lands_on(b_def, &"palm", throw)
-			assert_true(lands > 7, "the cut lands on a standing Abarax from %.1f m (frame %d)" % [throw, lands])
-			var run := _duel([{"frames": lands - 7}, {"frames": 1, "press": [case[0]], "evade_dir": case[1]}, {"frames": 13}, {"frames": 1, "press": [&"palm"]}, {"frames": 100}],
-					_press_on_1(&"palm"), throw, b_def)
-			var a: Actor = run["a"]
-			var b: Actor = run["b"]
-			var gaps := []  # the ground gap between them on the frame the counter starts
-			a.runner.move_started.connect(func(m: MoveData) -> void:
-				if m.id == case[2]:
-					gaps.append(Vector2(a.global_position.x - b.global_position.x, a.global_position.z - b.global_position.z).length()))
-			await frames(200)
-			var hits: Array = (run["landed"] as Array).filter(func(l: Array) -> bool: return l[2] == case[2] and l[1] == "HIT")
-			assert_eq(gaps.size(), 1, "%s starts after a %s of the cut thrown from %.1f m" % [case[2], case[0], throw])
-			if throw < 1.6:
-				assert_false(hits.is_empty(), "%s lands on him from %.2f m after a cut thrown from %.1f m" % [case[2], gaps[0], throw])
-			else:
-				far[case[2]] = [gaps[0], hits.size()]
-				assert_true(gaps[0] > COUNTER_REACH, "after a cut thrown from %.1f m the blade Knuckle stands %.2f m from him, beyond the counters' %.1f m" % [throw, gaps[0], COUNTER_REACH])
-				assert_true(hits.is_empty(), "so %s does not land" % case[2])
-			await _free(run)
-	print("blade counters after a dodged 1.9 m cut (gap when started, hits): %s" % [far])
+	# He steps through his cut and his chop, so that after a perfect dodge he is inside the reach of an open hand: from
+	# 1.2 m, from the option's max_range and from 0.1 m beyond it, the gap when the counter starts is at most COUNTER_GAP,
+	# and the counter lands: the rising palm after a duck, the hook after a sway (Slip).
+	var brain := _def().brain
+	var table := []
+	for blow: Array in [[&"palm", brain.attacks[0]], [&"gift", brain.attacks[1]]]:
+		for dodge: Array in [[&"duck", Vector2.ZERO, &"counter_rise"], [&"sway", Vector2(1, 0), &"counter_hook"]]:
+			for throw: float in [1.2, (blow[1] as AttackOption).max_range, (blow[1] as AttackOption).max_range + 0.1]:
+				var b_def := _def()
+				var lands: int = await _lands_on(b_def, blow[0], throw)
+				assert_true(lands > 7, "%s lands on a standing Abarax from %.1f m (frame %d)" % [blow[0], throw, lands])
+				var run := _duel([{"frames": lands - 7}, {"frames": 1, "press": [dodge[0]], "evade_dir": dodge[1]}, {"frames": 13}, {"frames": 1, "press": [&"palm"]}, {"frames": 100}],
+						_press_on_1(blow[0]), throw, b_def)
+				var a: Actor = run["a"]
+				var b: Actor = run["b"]
+				var gaps := []  # the ground gap between them on the frame the counter starts
+				a.runner.move_started.connect(func(m: MoveData) -> void:
+					if m.id == dodge[2]:
+						gaps.append(Vector2(a.global_position.x - b.global_position.x, a.global_position.z - b.global_position.z).length()))
+				await frames(200)
+				var hits: Array = (run["landed"] as Array).filter(func(l: Array) -> bool: return l[2] == dodge[2] and l[1] == "HIT")
+				var evaded: Array = (run["got"] as Array).filter(func(g: Array) -> bool: return g[1] == "EVADED")
+				assert_false(evaded.is_empty(), "%s thrown from %.2f m is evaded by the %s" % [blow[0], throw, dodge[0]])
+				assert_eq(gaps.size(), 1, "%s starts after a %s of %s thrown from %.2f m" % [dodge[2], dodge[0], blow[0], throw])
+				if gaps.size() == 1:
+					table.append("%s %s %.2f m: %.2f m, %s" % [blow[0], dodge[0], throw, gaps[0], "hit" if not hits.is_empty() else "MISS"])
+					assert_true(gaps[0] <= COUNTER_GAP, "%s of %s thrown from %.2f m: he stands %.2f m from Abarax (at most %.2f)" % [dodge[0], blow[0], throw, gaps[0], COUNTER_GAP])
+					assert_false(hits.is_empty(), "%s lands on him from %.2f m after %s thrown from %.2f m" % [dodge[2], gaps[0], blow[0], throw])
+				await _free(run)
+	print("blade counters: %s" % ["; ".join(table)])
 
 
 # --- the clips ---
