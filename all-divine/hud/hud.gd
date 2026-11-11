@@ -62,7 +62,7 @@ const HINT_MARGIN := 6
 ## The wave pips' states, as pip_states() gives them.
 enum Pip { COMING, ON, CLEARED }
 ## The unblockable icon of each answer, as 9 rows of 9 cells, an X where the glyph is drawn: a sweep is an upward chevron
-## over a low bar (hop it), a thrust a point between two brackets (catch it), a grab a sideways double chevron (sway or duck it).
+## over a low bar (hop it), a thrust a point between two brackets (catch it), a grab a body leaning off a line (lean out of its way: sway or duck it).
 const ICON_CELLS := {
 	HitProfile.Perilous.SWEEP: [
 		"....X....",
@@ -87,15 +87,15 @@ const ICON_CELLS := {
 		"XX.....XX",
 	],
 	HitProfile.Perilous.GRAB: [
-		".........",
-		"XX..XX...",
-		".XX..XX..",
-		"..XX..XX.",
-		"...XX..XX",
-		"..XX..XX.",
-		".XX..XX..",
-		"XX..XX...",
-		".........",
+		"X....XX..",
+		"X....XX..",
+		"X...XXX..",
+		"X..XXXXX.",
+		"X..XXX...",
+		"X.XXX....",
+		"X.XX.X...",
+		"X.X...X..",
+		"X........",
 	],
 }
 

@@ -112,7 +112,7 @@ func test_each_unblockable_icon_is_drawn_cell_for_cell() -> void:
 
 
 ## The grab's glyph: a body leaning off a line (it is slipped by leaning out of its way), nine by nine.
-const GRAB_GLYPH := [
+const GRAB_GLYPH: Array[String] = [
 	"X....XX..",
 	"X....XX..",
 	"X...XXX..",
@@ -138,7 +138,7 @@ func test_the_grabs_icon_draws_its_new_glyph() -> void:
 	var filled := 0
 	for y in 9:
 		for x in 9:
-			var want := GRAB_GLYPH[y][x] == "X"
+			var want: bool = (GRAB_GLYPH[y] as String)[x] == "X"
 			var cell := rect.position + Vector2i(x, y)
 			if want:
 				filled += 1
