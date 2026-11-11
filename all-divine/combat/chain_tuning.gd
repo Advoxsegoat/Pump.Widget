@@ -9,7 +9,7 @@ extends Resource
 @export var flurry_at := 7
 ## Frames (on the actor's own clock, which stands still while it is frozen) without a defence that succeeds before the
 ## chain is gone.
-@export var timeout_frames := 60
+@export var timeout_frames := 90
 ## What a perfect dodge adds to the chain (any other evade, a parry and a catch add 1).
 @export var perfect_links := 2
 ## Stamina a perfect dodge gives back beyond its own cost.

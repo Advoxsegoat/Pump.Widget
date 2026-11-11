@@ -96,6 +96,7 @@ var charging := false
 ## &"" until then.
 var charge_profile := &""
 
+var _refunded := false  # the current move's refund was paid (take_refund)
 var _dodge: MoveData  # the latest sway or duck started (a move with an evade), and while it bars another (see _redodge_barred)
 var _dodge_started := 0  # the actor's buffer_frame when it started
 var _dodge_evaded := false  # it evaded a blow, so it bars nothing
@@ -118,6 +119,15 @@ var _strike_at_hit := 0.0  # where the target should stand from the body when th
 ## Seconds of its charge_hold the clip still has to stand at its mark (0 when none is held).
 func charge_left() -> float:
 	return maxf(_charge_left, 0.0) if charging else 0.0
+
+
+## Whether the current move's stamina refund (a perfect dodge gives its cost back) is still to be paid, and the claim: true the
+## first time it is asked for in a move, false after, so a sway that slips three blows at once pays back once.
+func take_refund() -> bool:
+	if _refunded:
+		return false
+	_refunded = true
+	return true
 
 
 ## A blow was evaded during the current move (HitIntake): the flag is set, and the whiff rule is lifted for this dodge.
@@ -225,6 +235,7 @@ func _start(move: MoveData, intent: Intent, force := false) -> void:
 	current = move
 	time = 0.0
 	evaded = false
+	_refunded = false
 	if move.evade != MoveData.Evade.NONE:
 		_dodge = move
 		_dodge_started = actor.buffer_frame

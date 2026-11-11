@@ -400,9 +400,10 @@ func start_finisher_on(action: StringName) -> bool:
 
 
 ## The move the press of `action` starts now: `named` (what the open cancel window says for it) or else the actor's moveset
-## move for it (for a sway or duck of an actor with a chain: the base move of the chain's present tempo), then that move's `directional` variant for the side asked for: of `evade_dir` for a sway or duck, of the
-## intent's stick for anything else (a dash-step). The side is measured against the way he faces (MoveData.side_of); a
-## move with no variant for it, or none at all, is the move itself. The runner calls this at both places it starts a
+## move for it (for a sway or duck of an actor with a chain: the base move of the chain's present tempo), then that move's
+## `directional` variant for the side asked for: of `evade_dir` for a sway or duck, of the intent's stick for anything else
+## (a dash-step). The side is measured against the way he faces (MoveData.side_of); a move with no variant for it, or none at
+## all, is the move itself. The runner calls this at both places it starts a
 ## consumed press, so a window and a rest start the same move. Null for a press the actor has no move for.
 func move_for(action: StringName, intent: Intent, named: StringName = &"") -> MoveData:
 	var id: StringName = named if named != &"" else StringName(str(def.moveset.get(action, &"")))
@@ -601,10 +602,15 @@ func _on_move_started_chain(move: MoveData) -> void:
 	cashed_tempo = DodgeChain.Tempo.SLIP
 	if chain == null:
 		return
-	if move.kind == MoveData.Kind.ATTACK:
+	if move.kind == MoveData.Kind.ATTACK or _is_finisher(move):
 		cashed_tempo = chain.cash()
 	elif _is_footwork(move):
 		chain.end()
+
+
+# Whether `move` is the lead move of the finisher the actor has just started (a pair, which Pairing starts as a forced move).
+func _is_finisher(move: MoveData) -> bool:
+	return def.finisher != null and pair == def.finisher and move.id == def.finisher.lead_move
 
 
 # Whether `move` is a dash-step (a dodge with no evade) or the hop its dodge starts with the stick at rest (its neutral variant).

@@ -73,6 +73,11 @@ func _play(run: Dictionary, blows: Array, last: int) -> void:
 		await frames(1)
 
 
+# How many frames of no success the chain lives, from the tuning.
+static func _timeout() -> int:
+	return (load(TUNING) as ChainTuning).timeout_frames
+
+
 static func _signals(run: Dictionary, which: StringName) -> Array:
 	return (run["log"] as Array).filter(func(l: Array) -> bool: return l[0] == which)
 
@@ -103,6 +108,8 @@ func test_an_evade_and_a_parry_add_one_and_a_perfect_dodge_adds_two() -> void:
 
 
 func test_the_tempo_is_slip_to_two_quick_to_six_flurry_from_seven() -> void:
+	assert_eq(ChainTuning.new().timeout_frames, 90, "the default timeout")
+	assert_eq(_timeout(), 90, "and Abarax's")
 	var chain := DodgeChain.new(load(TUNING) as ChainTuning)
 	var changes := []
 	chain.changed.connect(func(count: int, tempo: DodgeChain.Tempo) -> void: changes.append([count, tempo]))
@@ -294,13 +301,13 @@ func test_what_ends_the_chain() -> void:
 	assert_eq((walk["a"] as Actor).chain.count, 5, "standing still ends nothing")
 	await _play(walk, [], 14)
 	assert_eq((walk["a"] as Actor).chain.count, 0, "a walk does")
-	# sixty frames with no success
+	# the timeout with no success
 	var late := _world()
 	_prime(late, 5)
-	await _play(late, [], 59)
-	assert_eq((late["a"] as Actor).chain.count, 5, "f59")
-	await _play(late, [], 60)
-	assert_eq((late["a"] as Actor).chain.count, 0, "sixty frames after the last link it is gone")
+	await _play(late, [], _timeout() - 1)
+	assert_eq((late["a"] as Actor).chain.count, 5, "one frame short of the timeout")
+	await _play(late, [], _timeout())
+	assert_eq((late["a"] as Actor).chain.count, 0, "the timeout's frames after the last link it is gone")
 	# a broken guard: guard held through, with less stamina than the blow's guard cost
 	var broken := _world(_script([[1, [&"guard"], {"frames": 40, "hold": [&"guard"]}]]))
 	var held: Actor = broken["a"]
@@ -327,18 +334,18 @@ func test_frozen_frames_do_not_run_the_timeout() -> void:   # Review Focus 3
 	var a: Actor = run["a"]
 	_prime(run, 3)
 	a.freeze(80)
-	await _play(run, [], 139)
-	assert_eq(a.buffer_frame, 59, "eighty of the frames were frozen")
+	await _play(run, [], 80 + _timeout() - 1)
+	assert_eq(a.buffer_frame, _timeout() - 1, "eighty of the frames were frozen")
 	assert_eq(a.chain.count, 3, "a chain neither times out nor ages while the fight is held")
-	await _play(run, [], 140)
-	assert_eq(a.chain.count, 0, "it goes sixty live frames after its last link")
+	await _play(run, [], 80 + _timeout())
+	assert_eq(a.chain.count, 0, "it goes the timeout's live frames after its last link")
 	# and the counting alone: tick takes the actor's own clock
 	var chain := DodgeChain.new(load(TUNING) as ChainTuning)
 	chain.link(false, 10)
-	chain.tick(69)
-	assert_eq(chain.count, 1, "69 is 59 frames on")
-	chain.tick(70)
-	assert_eq(chain.count, 0, "70 is 60")
+	chain.tick(10 + _timeout() - 1)
+	assert_eq(chain.count, 1, "one frame short")
+	chain.tick(10 + _timeout())
+	assert_eq(chain.count, 0, "the timeout's frames on")
 	chain.tick(500)
 	assert_eq(chain.count, 0, "an empty chain has nothing to time out")
 	assert_eq(_signals(run, &"knocked_out"), [], "the timeout is no knock-out")
@@ -382,3 +389,96 @@ func test_after_a_miss_a_dash_step_waits_too() -> void:
 	var starts: Array = run["started"]
 	assert_eq(starts.size(), 2, str(starts))
 	assert_eq(starts[1][0], 30, "a dash-step or hop is left in the buffer until the sway's 20 frames are gone: %s" % [starts])
+
+
+# --- fix round 1 ---
+
+func test_one_sway_through_three_blows_is_refunded_once_and_links_three_times() -> void:
+	for blows in [1, 2, 3]:
+		var run := _world(_script([[10, [SWAY]]]))
+		var a: Actor = run["a"]
+		a.stats.spend_stamina(50.0)
+		var posted := []
+		for i in blows:
+			posted.append([14, {}])
+		await _play(run, posted, 20)
+		assert_eq(a.stats.stamina, 54.0, "%d blows: one sway, paid for once: 50 less 6, plus 6 and 4 back" % blows)
+		assert_eq(a.chain.count, 2 * blows, "%d blows: the chain links per blow" % blows)
+
+
+func test_a_finisher_cashes_the_chain() -> void:
+	var run := _world(_script([[8, [&"palm"]]]))
+	var a: Actor = run["a"]
+	var b: Actor = run["b"]
+	track(PostureBreaker.make(a, b))
+	await _play(run, [], 2)
+	assert_true(b.is_in_group(Actor.FINISHABLE_GROUP), "the foe's posture is broken")
+	_prime(run, 3)
+	await _play(run, [], 10)
+	assert_true(a.paired_with == b, "the palm started the finisher")
+	assert_eq(a.chain.count, 0, "and it cashed the chain")
+	assert_eq(_signals(run, &"cashed"), [[&"cashed", T.QUICK]])
+	assert_eq(a.cashed_tempo, T.QUICK, "at the tempo it had")
+
+
+func test_what_does_not_end_the_chain() -> void:
+	# a push (knockback), body spacing (a foe 0.45 m away), a planted guard with the stick held, a turn on the spot
+	var push := _world()
+	_prime(push, 5)
+	(push["a"] as Actor).push(Vector3(0, 0, -6))
+	await _play(push, [], 30)
+	assert_true((push["a"] as Actor).global_position.z < -0.05, "he was pushed")
+	assert_eq((push["a"] as Actor).chain.count, 5, "a push is no walk")
+	var crowd := Duel.make(self, [], [], 0.45)
+	(crowd["a"] as Actor).chain.link(false, 0)
+	(crowd["a"] as Actor).chain.link(false, 0)
+	await _play({"a": crowd["a"], "b": crowd["b"]}, [], 30)
+	assert_eq((crowd["a"] as Actor).chain.count, 2, "being kept apart from a body is no walk")
+	var planted := _world([{"frames": 40, "move": Vector2(1, 0), "hold": [&"guard"], "press": [&"guard"]}])
+	_prime(planted, 5)
+	await _play(planted, [], 30)
+	assert_eq((planted["a"] as Actor).chain.count, 5, "a stick held under a planted guard is no walk")
+	var turn := _world([{"frames": 40, "face_target": Vector3(5, 0, 0)}])
+	_prime(turn, 5)
+	await _play(turn, [], 30)
+	assert_eq((turn["a"] as Actor).chain.count, 5, "turning on the spot is no walk")
+
+
+func test_a_grab_that_takes_hold_knocks_him_out() -> void:
+	var run := _world([], load("res://data/actors/knuckle_1.tres") as ActorDef)
+	var b: Actor = run["b"]
+	b.set_brain(ScriptBrain.new([{"frames": 1, "press": [&"interact"]}, {"frames": 200}]))
+	var a: Actor = run["a"]
+	_prime(run, 3)
+	await _play(run, [], 50)
+	assert_true(a.paired_with == b, "the grab took hold")
+	assert_eq(a.chain.count, 0, "and knocked him out of the chain")
+	assert_eq(_signals(run, &"knocked_out"), [[&"knocked_out", T.QUICK]])
+
+
+func test_his_death_ends_the_chain() -> void:
+	var run := _world()
+	_prime(run, 4)
+	(run["a"] as Actor).die()
+	assert_eq((run["a"] as Actor).chain.count, 0)
+	assert_eq(_signals(run, &"knocked_out"), [], "no loss to tell of")
+
+
+func test_an_actor_with_no_chain_is_as_it_was() -> void:
+	var knuckle := load("res://data/actors/knuckle_1.tres") as ActorDef
+	var run := Duel.make(self, [], [], 1.0, null, knuckle)
+	var k: Actor = run["a"]
+	assert_true(k.chain == null, "a Knuckle has no chain")
+	assert_eq(k.cashed_tempo, T.SLIP)
+	var d := Defense.of(k)
+	assert_eq([d.chain_tempo, d.evade_chip], [0, 0.0])
+	await _play(run, [[5, {"poise_damage": 1.0}]], 5)
+	assert_true(k.runner.current == null, "a blow under its poise still does not flinch it")
+	# a body with a sway but no chain is refunded nothing for a perfect dodge
+	var plain := Duel.def(ActorDef.Team.PLAYER, 5.0)
+	plain.chain = null
+	var world := Duel.make(self, _script([[10, [SWAY]]]), [], 1.0, null, plain)
+	var a: Actor = world["a"]
+	a.stats.spend_stamina(50.0)
+	await _play(world, [[14, {}]], 20)
+	assert_eq(a.stats.stamina, 44.0, "50 less the sway's 6, and nothing back")

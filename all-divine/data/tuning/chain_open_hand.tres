@@ -6,7 +6,7 @@
 script = ExtResource("1_chain")
 quick_at = 3
 flurry_at = 7
-timeout_frames = 60
+timeout_frames = 90
 perfect_links = 2
 perfect_refund = 4.0
 posture_chip = PackedFloat32Array(0, 4, 8)

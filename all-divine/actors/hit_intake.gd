@@ -68,7 +68,7 @@ func _init(actor: Actor) -> void:
 ## The dodge chain (Actor.chain) is fed once, after every blow of the frame is counted, so the frame has one outcome: if any
 ## blow landed (a HIT, a GRABBED, a GUARD_BREAK) he is knocked out of it, and no evade of that frame counts (the runner's
 ## `evaded` stays false, and nothing is linked or given back); otherwise every EVADED, PARRIED and CAUGHT blow links it, and
-## a perfect dodge gives its stamina back (the dodge's cost and the chain's perfect_refund). A GUARDED blow does nothing.
+## a perfect dodge gives its stamina back once, for the whole dodge (its cost and the chain's perfect_refund; a body with no chain gets nothing back). A GUARDED blow does nothing.
 ## A turned blow, and an evaded one that took posture from its attacker, reaches the attacker as posture damage; only the
 ## turned blow also gives it a reaction.
 func take(events: Array[HitEvent], results: Array[HitResult], turned: Array[HitEvent] = [],
@@ -177,8 +177,8 @@ func get_up() -> void:
 
 # What the frame's blows did to the dodge chain, decided once: a blow that landed (`landed`) knocks him out of it, and the
 # evades of that frame do not count; with none, each blow in `defended` (evaded, parried or caught, in the order they came)
-# links it, and a perfect dodge gives its stamina back. A body with no chain still notes that it evaded (the runner's flag
-# and the whiff rule read it) and gets its dodge's cost back for a perfect one.
+# links it, and the first perfect dodge of a sway or duck gives its stamina back (the other blows it slips pay nothing more).
+# A body with no chain still notes that it evaded (the runner's flag and the whiff rule read it) but is given nothing back.
 func _feed_chain(landed: bool, defended: Array[HitResult]) -> void:
 	var chain := _actor.chain
 	if landed:
@@ -189,9 +189,9 @@ func _feed_chain(landed: bool, defended: Array[HitResult]) -> void:
 		var perfect := r.outcome == HitResult.Outcome.EVADED and r.perfect
 		if r.outcome == HitResult.Outcome.EVADED:
 			_actor.runner.note_evaded()
-		if perfect:
+		if perfect and chain != null and _actor.runner.take_refund():
 			var cost := _actor.runner.current.stamina_cost if _actor.runner.current != null else 0.0
-			_actor.stats.refund_stamina(cost + (_actor.def.chain.perfect_refund if chain != null else 0.0))
+			_actor.stats.refund_stamina(cost + _actor.def.chain.perfect_refund)
 		if chain != null:
 			chain.link(perfect, _actor.buffer_frame)
 

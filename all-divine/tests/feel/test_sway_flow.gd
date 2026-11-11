@@ -133,3 +133,27 @@ func test_mashed_sways_evade_at_most_half_the_frames_at_every_tempo() -> void:  
 				open += 1
 		assert_true(open * 2 <= 120, "%s mashed for two seconds: %d of 120" % [action, open])
 		assert_eq(a.chain.count, 0)
+
+
+func test_mashing_through_the_seven_blow_string_loses_to_timing() -> void:
+	# a sway pressed on every frame through the same string: windows are open half the frames, a blow that lands knocks him out
+	# of any chain, so he evades fewer than half the blows and never gets as far as Quick
+	var steps := []
+	for i in 175:
+		steps.append({"frames": 1, "press": [&"sway"]})
+	var run := Duel.make(self, steps, [], 1.0, load(KNUCKLE) as ActorDef)
+	var a: Actor = run["a"]
+	var b: Actor = run["b"]
+	var outcomes := []
+	a.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void: outcomes.append(HitResult.Outcome.keys()[r.outcome]))
+	var index := 0
+	var highest := 0
+	while a.frame < 175:
+		if index < STRING.size() and STRING[index][0] == a.frame + 1:
+			Blows.post(b, a, {"line": ROUND} if STRING[index][1] == "R" else {})
+			index += 1
+		await frames(1)
+		highest = maxi(highest, a.chain.tempo())
+	var evaded := outcomes.count("EVADED")
+	assert_true(evaded * 2 < STRING.size(), "%d of %d blows evaded: %s" % [evaded, STRING.size(), outcomes])
+	assert_eq(highest, T.SLIP, "the chain never reached Quick")

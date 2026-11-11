@@ -962,3 +962,41 @@ func test_the_moves_only_the_chain_starts_are_reached_and_checked() -> void:
 	def.chain.duck_moves = [&"duck_slip", &"duck_quik", &"duck_flurry"]
 	var wrong := ClipChecker.new().check_actor(def)
 	assert_true(_has_problem(wrong, ["fixture", "chain", "duck_moves", "unknown move", "duck_quik"]), "\n".join(wrong))
+
+
+# A fixture actor on Abarax's rig with a chain of `sways` and `ducks` (move ids).
+func _chained(sways: Array, ducks: Array) -> ActorDef:
+	var def := _actor(load(RIG), {&"palm": &"palm_jab"})
+	def.chain = ChainTuning.new()
+	def.chain.sway_moves.assign(sways)
+	def.chain.duck_moves.assign(ducks)
+	return def
+
+
+const SWAYS := [&"sway_left_slip", &"sway_left_quick", &"sway_left_flurry"]
+const DUCKS := [&"duck_slip", &"duck_quick", &"duck_flurry"]
+
+
+func test_a_chains_lists_have_three_entries() -> void:
+	for lists: Array in [[SWAYS.slice(0, 2), DUCKS, "sway_moves"], [SWAYS, DUCKS.slice(0, 1), "duck_moves"], [[], [], "sway_moves"], [[], [], "duck_moves"]]:
+		var problems := ClipChecker.new().check_actor(_chained(lists[0], lists[1]))
+		assert_true(_has_problem(problems, ["chain", lists[2], "three"]), "%s: \n%s" % [lists[2], "\n".join(problems)])
+
+
+func test_a_chains_sway_entry_must_be_a_sway_and_a_duck_entry_a_duck() -> void:
+	for row: Array in [["sway_moves", [&"sway_left_slip", &"palm_jab", &"sway_left_flurry"], DUCKS, "palm_jab", "SWAY"],
+			["sway_moves", [&"sway_left_slip", &"duck_quick", &"sway_left_flurry"], DUCKS, "duck_quick", "SWAY"],
+			["duck_moves", SWAYS, [&"duck_slip", &"dash_step", &"duck_flurry"], "dash_step", "DUCK"],
+			["duck_moves", SWAYS, [&"duck_slip", &"sway_left_quick", &"duck_flurry"], "sway_left_quick", "DUCK"]]:
+		var problems := ClipChecker.new().check_actor(_chained(row[1], row[2]))
+		assert_true(_has_problem(problems, ["chain", row[0], row[3], row[4]]), "%s: \n%s" % [row[3], "\n".join(problems)])
+	assert_eq(ClipChecker.new().check_actor(_chained(SWAYS, DUCKS)), PackedStringArray(), "the real lists are fine")
+
+
+func test_a_chains_entry_needs_an_evade_window_in_its_clip() -> void:
+	var quick := Registry.fetch(&"moves", &"sway_left_quick") as MoveData
+	var clip := quick.clip
+	quick.clip = &"palm_jab"  # a clip with no evade window, under a move that still says SWAY
+	var problems := ClipChecker.new().check_actor(_chained(SWAYS, DUCKS))
+	quick.clip = clip
+	assert_true(_has_problem(problems, ["chain", "sway_moves", "sway_left_quick", "evade_on"]), "\n".join(problems))

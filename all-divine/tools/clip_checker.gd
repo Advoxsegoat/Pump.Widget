@@ -445,6 +445,32 @@ func _start_moves(def: ActorDef, move_ids: PackedStringArray, out: PackedStringA
 	return found
 
 
+# The problems of `def`'s dodge chain lists: each holds exactly three entries (Slip, Quick, Flurry); each entry is a move (an
+# unknown one is reported by _start_moves), a sway's evade is SWAY and a duck's DUCK, and its clip has an evade_on and an evade_off
+# mark. A wrong entry would throw some other move when the key is pressed at that tempo, and a short list would fall back to Slip.
+func _check_chain(def: ActorDef, tree: AnimationTree, move_ids: PackedStringArray, out: PackedStringArray) -> void:
+	if def.chain == null:
+		return
+	for role: String in ["sway_moves", "duck_moves"]:
+		var list: Array = def.chain.get(role)
+		var want := MoveData.Evade.SWAY if role == "sway_moves" else MoveData.Evade.DUCK
+		var want_name := "SWAY" if role == "sway_moves" else "DUCK"
+		if list.size() != 3:
+			out.append("%s: its chain's %s holds %d moves, not three (Slip, Quick, Flurry)" % [def.id, role, list.size()])
+		for move_id: StringName in list:
+			if not move_ids.has(String(move_id)):
+				continue
+			var move := Registry.fetch(&"moves", move_id) as MoveData
+			if move == null:
+				continue
+			if move.evade != want:
+				out.append("%s: its chain's %s names '%s', whose evade is not %s" % [def.id, role, move_id, want_name])
+			if tree.has_animation(move.clip):
+				var marks := Marks.read(tree.get_animation(move.clip))
+				if _of_kind(marks, &"evade_on").is_empty() or _of_kind(marks, &"evade_off").is_empty():
+					out.append("%s: its chain's %s names '%s', whose clip has no evade_on and evade_off marks" % [def.id, role, move_id])
+
+
 # The moves one can get to from `move` (whose clip is `anim`) while the actor of `def` plays it, as ids: the targets of
 # its cancel windows as they open for that actor (MoveRunner.window_of: a shared reaction's only into the actor's own
 # moves), and its neutral variant. Only moves that exist; a name that is not one is check_move's problem.
@@ -564,6 +590,7 @@ func _check_actor(def: ActorDef, reached: Dictionary, paired: Dictionary) -> Pac
 			out.append_array(check_move(move, anim, hitbox_ids, move_ids, def.team, bone_names))
 			_check_imitated(move, tree, move_ids, id, out)
 			queue.append_array(_moves_after(move, anim, move_ids, def))
+	_check_chain(def, tree, move_ids, out)
 	out.append_array(_check_combos(def, tree, move_ids))
 	for pair in _pairs_of(def):
 		paired[String(pair.id)] = true
