@@ -413,8 +413,10 @@ func _save_strip(pictures: Array[Image], name: String, box: Rect2i) -> void:
 	_save(strip, name)
 
 
-# The Quick rim keeps the gold of the Flurry rim, on the dark ground and on the lamplit one, at about half its brightness.
-func test_the_quick_rim_keeps_its_gold_hue_on_the_dark_floor_and_the_lamplit() -> void:
+# The Quick rim is the Flurry rim's white-gold, which breathes: at the peak of its cycle its colour is near the Flurry rim's, and at the trough
+# it is still lighter than the ground beside it (never a dark outline), on the dark ground and on the lamplit one. His clock is held
+# (the yard's actors are frozen), so the phase of the cycle is chosen by setting it.
+func test_the_quick_rim_breathes_in_the_flurry_rims_gold_on_the_dark_floor_and_the_lamplit() -> void:
 	for place: Array in [["dark", DARK], ["lit", LIT]]:
 		var run := await _yard(place[1])
 		var main: Main = run["main"]
@@ -425,28 +427,73 @@ func test_the_quick_rim_keeps_its_gold_hue_on_the_dark_floor_and_the_lamplit() -
 		await _draw()
 		var without := _world(main)
 		var rims := {}
-		for tempo: Array in [["quick", 3], ["flurry", 7]]:
+		var strip := []
+		for case: Array in [["quick peak", 7, 12], ["quick trough", 3, 0], ["flurry", 7, 0]]:
 			player.chain.end()
-			for i in tempo[1]:
+			for i in case[1]:
 				player.chain.link(false, player.buffer_frame)
+			Melee.slow(0, 1.0)
+			player.buffer_frame = case[2]
 			await frames(2)
 			await _draw()
 			var with := _world(main)
+			strip.append(with)
 			var changed := ShotMasks.diff(with, without, box)
 			var sum := Vector3.ZERO
+			var floor_sum := Vector3.ZERO
 			var n := 0
 			for p: Vector2i in changed:
 				var c := with.get_pixelv(p)
+				var f := without.get_pixelv(p)
 				if maxf(c.r, maxf(c.g, c.b)) > 0.12:
 					sum += Vector3(c.r, c.g, c.b)
+					floor_sum += Vector3(f.r, f.g, f.b)
 					n += 1
-			assert_true(n >= 30, "%s floor, %s: the rim has pixels (%d)" % [place[0], tempo[0], n])
+			assert_true(n >= 30, "%s floor, %s: the rim has pixels (%d)" % [place[0], case[0], n])
+			rims[case[0]] = [Color(sum.x / maxf(n, 1.0), sum.y / maxf(n, 1.0), sum.z / maxf(n, 1.0)), Color(floor_sum.x / maxf(n, 1.0), floor_sum.y / maxf(n, 1.0), floor_sum.z / maxf(n, 1.0))]
+		# Flurry is steady at the cycle's peak, which Quick reaches: the same gold
+		# (the chain's level at "quick peak" is a chain of 7, which is Flurry: so the peak is compared on a real Quick below)
+		player.chain.end()
+		for i in 3:
+			player.chain.link(false, player.buffer_frame)
+		Melee.slow(0, 1.0)
+		player.buffer_frame = 12
+		await frames(2)
+		await _draw()
+		var peak := _world(main)
+		player.buffer_frame = 0
+		await frames(2)
+		await _draw()
+		var trough := _world(main)
+		var gold_flurry: Color = rims["flurry"][0]
+		for case: Array in [["peak", peak], ["trough", trough]]:
+			var changed := ShotMasks.diff(case[1], without, box)
+			var sum := Vector3.ZERO
+			var floor_sum := Vector3.ZERO
+			var n := 0
+			for p: Vector2i in changed:
+				var c := (case[1] as Image).get_pixelv(p)
+				var f := without.get_pixelv(p)
+				if maxf(c.r, maxf(c.g, c.b)) > 0.12:
+					sum += Vector3(c.r, c.g, c.b)
+					floor_sum += Vector3(f.r, f.g, f.b)
+					n += 1
 			var mean := Color(sum.x / maxf(n, 1.0), sum.y / maxf(n, 1.0), sum.z / maxf(n, 1.0))
-			rims[tempo[0]] = mean
-			var hue_off := absf(wrapf(mean.h * 360.0 - GOLD.h * 360.0, -180.0, 180.0))
-			assert_true(hue_off <= 15.0, "%s floor, %s: the rim's hue is %.0f deg, the gold's is %.0f (within 15)" % [place[0], tempo[0], mean.h * 360.0, GOLD.h * 360.0])
-		var quick: Color = rims["quick"]
-		var flurry: Color = rims["flurry"]
-		assert_true(quick.v < flurry.v * 0.8 and quick.v > flurry.v * 0.3, "%s floor: the Quick rim is dimmer than the Flurry's (%.2f against %.2f)" % [place[0], quick.v, flurry.v])
+			var ground := Color(floor_sum.x / maxf(n, 1.0), floor_sum.y / maxf(n, 1.0), floor_sum.z / maxf(n, 1.0))
+			assert_true(n >= 30, "%s floor, Quick %s: the rim has pixels (%d)" % [place[0], case[0], n])
+			if case[0] == "peak":
+				var distance := absf(mean.r - gold_flurry.r) + absf(mean.g - gold_flurry.g) + absf(mean.b - gold_flurry.b)
+				assert_true(distance <= 0.12, "%s floor: at the peak of its cycle the Quick rim is the Flurry rim's gold (distance %.2f: %s against %s)" % [place[0], distance, mean, gold_flurry])
+			else:
+				assert_true(mean.get_luminance() > ground.get_luminance() + 0.03, "%s floor: at the trough it is still lighter than the ground beside it (%.2f against %.2f)" % [place[0], mean.get_luminance(), ground.get_luminance()])
+				var hue_off := absf(wrapf(mean.h * 360.0 - GOLD.h * 360.0, -180.0, 180.0))
+				assert_true(hue_off <= 25.0 or mean.s < 0.2, "%s floor: and not olive (hue %.0f, gold %.0f)" % [place[0], mean.h * 360.0, GOLD.h * 360.0])
+		var tiles := [peak, trough, strip[2]]
+		var sheet := Image.create(120 * 3, 100, false, Image.FORMAT_RGBA8)
+		for i in 3:
+			var crop := (tiles[i] as Image).get_region(Rect2i(_feet(main, place[1]) - Vector2i(60, 75), Vector2i(120, 100)))
+			crop.convert(Image.FORMAT_RGBA8)
+			sheet.blit_rect(crop, Rect2i(Vector2i.ZERO, crop.get_size()), Vector2i(i * 120, 0))
+		_save(sheet, "rim_quick_%s_peak_trough_flurry" % place[0])
 		main.queue_free()
 		await frames(2)

@@ -326,11 +326,11 @@ func test_the_rim_is_off_at_slip_half_at_quick_full_at_flurry_and_gone_when_knoc
 	_links(a, 1)
 	await frames(1)
 	assert_true(rig.aura_active(), "a rim at Quick (count 3)")
-	assert_near(rig.aura_level(), 1.0, 1e-5, "the hull is drawn solid: half strength is half the brightness, not half the opacity, which would grey on the dark ground")
-	assert_true(rig.aura_color().is_equal_approx(Color(GOLD.r * 0.5, GOLD.g * 0.5, GOLD.b * 0.5)), "white-gold at half the brightness (%s)" % rig.aura_color())
+	assert_true(rig.aura_level() >= 0.35 - 1e-5 and rig.aura_level() <= 1.0 + 1e-5, "its strength breathes between the tuning's low and 1 (%.2f)" % rig.aura_level())
+	assert_true(rig.aura_color().is_equal_approx(GOLD), "in the same white-gold as Flurry's, not dimmed (%s)" % rig.aura_color())
 	_links(a, 3)
 	await frames(1)
-	assert_true(rig.aura_color().is_equal_approx(Color(GOLD.r * 0.5, GOLD.g * 0.5, GOLD.b * 0.5)), "still half at count 6")
+	assert_true(rig.aura_color().is_equal_approx(GOLD), "still gold at count 6")
 	_links(a, 1)
 	await frames(1)
 	assert_near(rig.aura_level(), 1.0, 1e-5, "full at Flurry")
@@ -350,6 +350,47 @@ func test_the_rim_is_off_at_slip_half_at_quick_full_at_flurry_and_gone_when_knoc
 	a.chain.cash()
 	await frames(1)
 	assert_false(rig.aura_active(), "and when it is cashed in")
+
+
+func test_the_quick_rim_breathes_on_his_clock_and_the_flurry_rim_is_steady() -> void:
+	var run := _world()
+	var a: Actor = run["a"]
+	_links(a, 3)
+	await frames(1)
+	var levels := {}  # his clock -> the rim's strength on it
+	var held_still := true
+	for i in 60:
+		if i == 20:
+			a.freeze(6)
+		var before := a.buffer_frame
+		var level_before := a.rig.aura_level()
+		await frames(1)
+		if a.buffer_frame == before and absf(a.rig.aura_level() - level_before) > 1e-6:
+			held_still = false
+		levels[a.buffer_frame] = a.rig.aura_level()
+	var low := 9.0
+	var high := 0.0
+	for clock: int in levels:
+		low = minf(low, levels[clock])
+		high = maxf(high, levels[clock])
+	assert_near(high, 1.0, 0.01, "it reaches full strength")
+	assert_near(low, 0.35, 0.01, "and falls to the tuning's 0.35")
+	var repeats := 0
+	for clock: int in levels:
+		if levels.has(clock + 24):
+			assert_near(levels[clock + 24], levels[clock], 1e-5, "the same 24 frames of his clock later (clock %d)" % clock)
+			repeats += 1
+	assert_true(repeats >= 20, "and it repeats (%d frames compared)" % repeats)
+	assert_true(held_still, "a frame he is held on does not move it")
+	# at Flurry it is steady
+	_links(a, 4)
+	Melee.slow(0, 1.0)
+	await frames(2)
+	var steady := true
+	for i in 48:
+		await frames(1)
+		steady = steady and absf(a.rig.aura_level() - 1.0) < 1e-6
+	assert_true(steady, "steady at full strength through 48 frames of Flurry")
 
 
 func test_the_rim_gives_way_to_his_parry_burst_and_to_a_tell_and_comes_back() -> void:
@@ -535,7 +576,8 @@ func test_the_tuning_is_data_for_the_chain() -> void:
 	assert_eq(t.afterimage_frames, 12)
 	assert_eq(t.slow_frames, 12)
 	assert_near(t.slow_share, 0.4, 1e-6)
-	assert_near(t.chain_rim_quick, 0.5, 1e-6)
+	assert_near(t.chain_rim_quick_low, 0.35, 1e-6)
+	assert_eq(t.chain_rim_quick_period, 24)
 	assert_near(t.chain_rim_flurry, 1.0, 1e-6)
 	assert_eq(t.trail_scales, PackedFloat32Array([1.0, 1.25, 1.5]))
 	assert_true(t.afterimage_color.a > 0.0 and t.afterimage_color.a <= 1.0, "the afterimage has an opacity")
