@@ -93,7 +93,7 @@ func test_a_dash_step_into_a_knuckle_stops_at_it() -> void:
 func test_a_hop_over_the_sweep_whiffs_and_the_knuckle_slides_beneath() -> void:
 	# The sweep's foot is live from its f40 to f60; a hop pressed 36 frames after it is airborne from its f2 to f28,
 	# frames 38 to 64 of the sweep.
-	var run := _pair(4.2, [{"frames": 1, "press": [&"gift"]}, {"frames": 150}],
+	var run := _pair(1.6, [{"frames": 1, "press": [&"gift"]}, {"frames": 150}],
 			[{"frames": 36}, {"frames": 1, "press": [&"dodge"]}, {"frames": 150}], KNUCKLE_1)
 	var abarax: Actor = run["abarax"]
 	var knuckle: Actor = run["knuckle"]

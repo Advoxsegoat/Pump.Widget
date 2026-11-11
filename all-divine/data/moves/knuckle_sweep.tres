@@ -20,6 +20,7 @@ impact_sound = &"impact_heavy"
 script = ExtResource("1_move")
 id = &"knuckle_sweep"
 clip = &"knuckle_sweep"
+root_motion_scale = 0.4
 hits = {
 &"sweep": SubResource("Resource_sweep")
 }

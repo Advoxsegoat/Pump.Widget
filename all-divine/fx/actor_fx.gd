@@ -7,15 +7,16 @@ extends Node
 ## The marks (MoveRunner.mark):
 ##   fx {name, bone?}   shows the FxDef `name`, riding the bone the def names (or `bone`, which a mark may give to
 ##                      ride another: the cross's trail follows its right hand), or left at the actor's feet
-##   sfx {name}         plays the cue `name` at the actor
+##   sfx {name, pitch?} plays the cue `name` at the actor, at `pitch` times its own (1 when the mark gives none)
 ##   shake {strength}   shakes the camera
-##   tell {kind}        `glint`: the glint FxDef and the cue tell_glint; `perilous`: the FxDef perilous_rose and the
+##   tell {kind, color?}  `glint`: the glint FxDef and the cue tell_glint; `perilous`: the FxDef perilous_rose and the
 ##                      cue perilous_sting. And the readability pass (data/tuning/readability.tres), which keeps a
 ##                      tell off the body's inside: a rim on the silhouette (Rig.aura) from the tell to the end mark
 ##                      (the blow's first hitbox_on for a glint, the last hitbox_off for a perilous one), blue-white
 ##                      for a parryable attack and a heavy one, rose for a perilous one; a red wave on the ground from
 ##                      the attacker's feet (GroundWave) under a perilous attack and a heavy one (smaller); and, for a
-##                      perilous attack, `icon_shape` over the tell's window, which the Hud draws over the head
+##                      perilous attack, `icon_shape` over the tell's window, which the Hud draws over the head. A tell's `color` (a
+##                      hex string on the mark) is the rim's colour in place of the tuning's: the Drummer's string starts in its own red
 ## A move the actor was refused (Actor.move_refused: a press it had no stamina for): the player's actor sounds the soft
 ## cue stamina_refused, so that a press that does nothing says so (the HUD blinks the stamina bar as well).
 ## A charge that fills (MoveRunner.charged): the FxDef charge_glow on the chest and the cue charge_hum, once, as it fills.
@@ -105,11 +106,11 @@ func _on_mark(kind: StringName, args: Dictionary) -> void:
 		&"fx":
 			show_fx(StringName(args.get("name", &"")), null, StringName(args.get("bone", &"")))
 		&"sfx":
-			Sfx.play(StringName(args.get("name", &"")), _actor.global_position)
+			Sfx.play(StringName(args.get("name", &"")), _actor.global_position, float(args.get("pitch", 1.0)))
 		&"shake":
 			shake_camera(float(args.get("strength", 0.0)))
 		&"tell":
-			_tell(StringName(args.get("kind", &"")))
+			_tell(StringName(args.get("kind", &"")), args)
 		&"hitbox_on":
 			if _tell_end == &"hitbox_on":
 				end_tell()
@@ -133,12 +134,12 @@ func _on_charged(_move: MoveData) -> void:
 	Sfx.play(&"charge_hum", _actor.global_position)
 
 
-func _tell(kind: StringName) -> void:
+func _tell(kind: StringName, args := {}) -> void:
 	match kind:
 		&"glint":
 			show_fx(TELL_FX[kind])
 			Sfx.play(&"tell_glint", _actor.global_position)
-			_show_tell(false)
+			_show_tell(false, Color(String(args["color"])) if args.has("color") else null)
 		&"perilous":
 			show_fx(TELL_FX[kind])
 			Sfx.play(&"perilous_sting", _actor.global_position)
@@ -165,7 +166,7 @@ func _on_move_ended(_move: MoveData, _cancelled: bool) -> void:
 # shows is what the move's clip says is coming: its first hitbox_on (and the profile that blow carries) for a glint,
 # its last hitbox_off for a perilous one. A move that `imitates` another reads the clip of that one instead, so a feint's
 # rim is its model's frame for frame, and ends where the blow would be.
-func _show_tell(perilous: bool) -> void:
+func _show_tell(perilous: bool, color: Variant = null) -> void:
 	var move := _actor.runner.current
 	if move == null or not _actor.rig.tree.has_animation(move.clip):
 		return
@@ -227,7 +228,7 @@ func _show_tell(perilous: bool) -> void:
 			return
 		_tell_end = &"hitbox_on"
 		if tuning.parry_aura_on:
-			_plan = {color = tuning.parry_rim_color, start = tuning.rim_start_strength, own_start = now, clip_tell = clip_tell,
+			_plan = {color = color if color is Color else tuning.parry_rim_color, start = tuning.rim_start_strength, own_start = now, clip_tell = clip_tell,
 					first_on = first_on, hold_at = hold_at, hold_seconds = hold_seconds, imitating = source != move}
 			_drive_rim()
 		if tuning.heavy_wave_on and is_heavy(profile):

@@ -12,10 +12,10 @@ combo = PackedStringArray("palm", "palm")
 [sub_resource type="Resource" id="Resource_fc6nj"]
 script = ExtResource("1_koogs")
 action = &"gift"
-min_range = 5.4
-max_range = 5.6
-cooldown = 3.0
-weight = 0.4
+min_range = 2.6
+max_range = 2.85
+cooldown = 25.0
+weight = 0.15
 combo = PackedStringArray()
 
 [resource]

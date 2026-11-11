@@ -1,118 +1,132 @@
 [gd_resource type="AnimationLibrary" format=3]
 
-[ext_resource type="Animation" path="res://assets/anim/abarax/catch.tres" id="1_ixha3"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/caught.tres" id="2_3s0ya"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/clear_backpalm.tres" id="3_7c0ea"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/clear_wave.tres" id="4_owwo5"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/counter_hook.tres" id="5_xjhat"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/counter_rise.tres" id="6_h6pwb"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/dash_step.tres" id="7_vqkqn"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/dash_step_back.tres" id="8_wtmwr"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/dash_step_left.tres" id="9_oglkp"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/dash_step_right.tres" id="10_npfij"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/death.tres" id="11_rb34w"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/duck_flurry.tres" id="12_ynqso"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/duck_quick.tres" id="13_lx42w"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/duck_slip.tres" id="14_yhhar"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/finisher.tres" id="15_gqixc"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/finisher_victim.tres" id="16_jlwms"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/flinch.tres" id="17_llp5b"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/getup.tres" id="18_tgccc"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/grabbed.tres" id="19_uwiet"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/guard_break.tres" id="20_hpnpg"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/guard_hit.tres" id="21_cpo68"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/guard_hold.tres" id="22_dr051"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/guard_raise.tres" id="23_l7mml"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/hop.tres" id="24_1snwc"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/idle.tres" id="25_e2nrx"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/jog.tres" id="26_uouax"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_cross.tres" id="27_y2gny"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_feint.tres" id="28_s11d7"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_grab.tres" id="29_ah1b0"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_grab_hold.tres" id="30_2l48o"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_hook.tres" id="31_wtpws"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_hook_2.tres" id="32_lrggv"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_idle.tres" id="33_quau3"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_jab.tres" id="34_0toy1"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_sweep.tres" id="35_6allv"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_thrust.tres" id="36_hlcto"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/palm_cross.tres" id="37_234nw"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/palm_heavy.tres" id="38_680nn"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/palm_hook.tres" id="39_qhb1s"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/palm_jab.tres" id="40_uxnbf"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/parried.tres" id="41_og06o"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/parry.tres" id="42_sop7q"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/posture_broken.tres" id="43_kyb3h"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/sprint.tres" id="44_boq3t"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/stagger.tres" id="45_3c2c7"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/sway_back_flurry.tres" id="46_3peva"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/sway_back_quick.tres" id="47_o3x50"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/sway_back_slip.tres" id="48_4dkm0"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/sway_left_flurry.tres" id="49_0ix1y"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/sway_left_quick.tres" id="50_vo7yd"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/sway_left_slip.tres" id="51_uwpnw"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/sway_right_flurry.tres" id="52_s12cg"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/sway_right_quick.tres" id="53_kc2ff"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/sway_right_slip.tres" id="54_f53f0"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/t_pose.tres" id="55_fryb5"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/walk.tres" id="56_j2x43"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/catch.tres" id="1_wtmwr"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/caught.tres" id="2_oglkp"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/clear_backpalm.tres" id="3_npfij"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/clear_wave.tres" id="4_rb34w"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/counter_hook.tres" id="5_ynqso"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/counter_rise.tres" id="6_lx42w"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/dash_step.tres" id="7_yhhar"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/dash_step_back.tres" id="8_gqixc"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/dash_step_left.tres" id="9_jlwms"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/dash_step_right.tres" id="10_llp5b"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/death.tres" id="11_tgccc"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/drum_1.tres" id="12_uwiet"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/drum_2.tres" id="13_hpnpg"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/drum_3.tres" id="14_cpo68"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/drum_4.tres" id="15_dr051"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/drum_5.tres" id="16_l7mml"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/drum_6.tres" id="17_1snwc"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/drum_7.tres" id="18_e2nrx"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/duck_flurry.tres" id="19_uouax"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/duck_quick.tres" id="20_y2gny"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/duck_slip.tres" id="21_s11d7"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/finisher.tres" id="22_ah1b0"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/finisher_victim.tres" id="23_2l48o"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/flinch.tres" id="24_wtpws"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/getup.tres" id="25_lrggv"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/grabbed.tres" id="26_quau3"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/guard_break.tres" id="27_0toy1"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/guard_hit.tres" id="28_6allv"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/guard_hold.tres" id="29_hlcto"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/guard_raise.tres" id="30_234nw"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/hop.tres" id="31_680nn"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/idle.tres" id="32_qhb1s"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/jog.tres" id="33_uxnbf"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_cross.tres" id="34_og06o"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_feint.tres" id="35_sop7q"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_grab.tres" id="36_kyb3h"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_grab_hold.tres" id="37_boq3t"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_hook.tres" id="38_3c2c7"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_hook_2.tres" id="39_3peva"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_idle.tres" id="40_o3x50"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_jab.tres" id="41_4dkm0"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_sweep.tres" id="42_0ix1y"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/knuckle_thrust.tres" id="43_vo7yd"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/palm_cross.tres" id="44_uwpnw"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/palm_heavy.tres" id="45_s12cg"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/palm_hook.tres" id="46_kc2ff"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/palm_jab.tres" id="47_f53f0"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/parried.tres" id="48_fryb5"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/parry.tres" id="49_j2x43"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/posture_broken.tres" id="50_mldqd"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/sprint.tres" id="51_f4j22"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/stagger.tres" id="52_eqyaf"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/sway_back_flurry.tres" id="53_usku6"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/sway_back_quick.tres" id="54_84biw"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/sway_back_slip.tres" id="55_7dsua"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/sway_left_flurry.tres" id="56_oa84u"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/sway_left_quick.tres" id="57_aoryq"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/sway_left_slip.tres" id="58_3sgp7"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/sway_right_flurry.tres" id="59_80hre"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/sway_right_quick.tres" id="60_kebda"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/sway_right_slip.tres" id="61_ycjha"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/t_pose.tres" id="62_12mba"]
+[ext_resource type="Animation" path="res://assets/anim/abarax/walk.tres" id="63_mry3d"]
 
 [resource]
 _data = {
-&"catch": ExtResource("1_ixha3"),
-&"caught": ExtResource("2_3s0ya"),
-&"clear_backpalm": ExtResource("3_7c0ea"),
-&"clear_wave": ExtResource("4_owwo5"),
-&"counter_hook": ExtResource("5_xjhat"),
-&"counter_rise": ExtResource("6_h6pwb"),
-&"dash_step": ExtResource("7_vqkqn"),
-&"dash_step_back": ExtResource("8_wtmwr"),
-&"dash_step_left": ExtResource("9_oglkp"),
-&"dash_step_right": ExtResource("10_npfij"),
-&"death": ExtResource("11_rb34w"),
-&"duck_flurry": ExtResource("12_ynqso"),
-&"duck_quick": ExtResource("13_lx42w"),
-&"duck_slip": ExtResource("14_yhhar"),
-&"finisher": ExtResource("15_gqixc"),
-&"finisher_victim": ExtResource("16_jlwms"),
-&"flinch": ExtResource("17_llp5b"),
-&"getup": ExtResource("18_tgccc"),
-&"grabbed": ExtResource("19_uwiet"),
-&"guard_break": ExtResource("20_hpnpg"),
-&"guard_hit": ExtResource("21_cpo68"),
-&"guard_hold": ExtResource("22_dr051"),
-&"guard_raise": ExtResource("23_l7mml"),
-&"hop": ExtResource("24_1snwc"),
-&"idle": ExtResource("25_e2nrx"),
-&"jog": ExtResource("26_uouax"),
-&"knuckle_cross": ExtResource("27_y2gny"),
-&"knuckle_feint": ExtResource("28_s11d7"),
-&"knuckle_grab": ExtResource("29_ah1b0"),
-&"knuckle_grab_hold": ExtResource("30_2l48o"),
-&"knuckle_hook": ExtResource("31_wtpws"),
-&"knuckle_hook_2": ExtResource("32_lrggv"),
-&"knuckle_idle": ExtResource("33_quau3"),
-&"knuckle_jab": ExtResource("34_0toy1"),
-&"knuckle_sweep": ExtResource("35_6allv"),
-&"knuckle_thrust": ExtResource("36_hlcto"),
-&"palm_cross": ExtResource("37_234nw"),
-&"palm_heavy": ExtResource("38_680nn"),
-&"palm_hook": ExtResource("39_qhb1s"),
-&"palm_jab": ExtResource("40_uxnbf"),
-&"parried": ExtResource("41_og06o"),
-&"parry": ExtResource("42_sop7q"),
-&"posture_broken": ExtResource("43_kyb3h"),
-&"sprint": ExtResource("44_boq3t"),
-&"stagger": ExtResource("45_3c2c7"),
-&"sway_back_flurry": ExtResource("46_3peva"),
-&"sway_back_quick": ExtResource("47_o3x50"),
-&"sway_back_slip": ExtResource("48_4dkm0"),
-&"sway_left_flurry": ExtResource("49_0ix1y"),
-&"sway_left_quick": ExtResource("50_vo7yd"),
-&"sway_left_slip": ExtResource("51_uwpnw"),
-&"sway_right_flurry": ExtResource("52_s12cg"),
-&"sway_right_quick": ExtResource("53_kc2ff"),
-&"sway_right_slip": ExtResource("54_f53f0"),
-&"t_pose": ExtResource("55_fryb5"),
-&"walk": ExtResource("56_j2x43")
+&"catch": ExtResource("1_wtmwr"),
+&"caught": ExtResource("2_oglkp"),
+&"clear_backpalm": ExtResource("3_npfij"),
+&"clear_wave": ExtResource("4_rb34w"),
+&"counter_hook": ExtResource("5_ynqso"),
+&"counter_rise": ExtResource("6_lx42w"),
+&"dash_step": ExtResource("7_yhhar"),
+&"dash_step_back": ExtResource("8_gqixc"),
+&"dash_step_left": ExtResource("9_jlwms"),
+&"dash_step_right": ExtResource("10_llp5b"),
+&"death": ExtResource("11_tgccc"),
+&"drum_1": ExtResource("12_uwiet"),
+&"drum_2": ExtResource("13_hpnpg"),
+&"drum_3": ExtResource("14_cpo68"),
+&"drum_4": ExtResource("15_dr051"),
+&"drum_5": ExtResource("16_l7mml"),
+&"drum_6": ExtResource("17_1snwc"),
+&"drum_7": ExtResource("18_e2nrx"),
+&"duck_flurry": ExtResource("19_uouax"),
+&"duck_quick": ExtResource("20_y2gny"),
+&"duck_slip": ExtResource("21_s11d7"),
+&"finisher": ExtResource("22_ah1b0"),
+&"finisher_victim": ExtResource("23_2l48o"),
+&"flinch": ExtResource("24_wtpws"),
+&"getup": ExtResource("25_lrggv"),
+&"grabbed": ExtResource("26_quau3"),
+&"guard_break": ExtResource("27_0toy1"),
+&"guard_hit": ExtResource("28_6allv"),
+&"guard_hold": ExtResource("29_hlcto"),
+&"guard_raise": ExtResource("30_234nw"),
+&"hop": ExtResource("31_680nn"),
+&"idle": ExtResource("32_qhb1s"),
+&"jog": ExtResource("33_uxnbf"),
+&"knuckle_cross": ExtResource("34_og06o"),
+&"knuckle_feint": ExtResource("35_sop7q"),
+&"knuckle_grab": ExtResource("36_kyb3h"),
+&"knuckle_grab_hold": ExtResource("37_boq3t"),
+&"knuckle_hook": ExtResource("38_3c2c7"),
+&"knuckle_hook_2": ExtResource("39_3peva"),
+&"knuckle_idle": ExtResource("40_o3x50"),
+&"knuckle_jab": ExtResource("41_4dkm0"),
+&"knuckle_sweep": ExtResource("42_0ix1y"),
+&"knuckle_thrust": ExtResource("43_vo7yd"),
+&"palm_cross": ExtResource("44_uwpnw"),
+&"palm_heavy": ExtResource("45_s12cg"),
+&"palm_hook": ExtResource("46_kc2ff"),
+&"palm_jab": ExtResource("47_f53f0"),
+&"parried": ExtResource("48_fryb5"),
+&"parry": ExtResource("49_j2x43"),
+&"posture_broken": ExtResource("50_mldqd"),
+&"sprint": ExtResource("51_f4j22"),
+&"stagger": ExtResource("52_eqyaf"),
+&"sway_back_flurry": ExtResource("53_usku6"),
+&"sway_back_quick": ExtResource("54_84biw"),
+&"sway_back_slip": ExtResource("55_7dsua"),
+&"sway_left_flurry": ExtResource("56_oa84u"),
+&"sway_left_quick": ExtResource("57_aoryq"),
+&"sway_left_slip": ExtResource("58_3sgp7"),
+&"sway_right_flurry": ExtResource("59_80hre"),
+&"sway_right_quick": ExtResource("60_kebda"),
+&"sway_right_slip": ExtResource("61_ycjha"),
+&"t_pose": ExtResource("62_12mba"),
+&"walk": ExtResource("63_mry3d")
 }
