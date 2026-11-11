@@ -16,11 +16,15 @@ extends SceneTree
 # By path rather than by class name, so the tool also runs before the project has been imported.
 const REGION := preload("res://world/region.gd")
 const LAYERS := preload("res://core/layers.gd")
+const BLOCKS := preload("res://tools/world/region_blocks.gd")
 const FLAGSTONE := preload("res://world/materials/flagstone.tres")
-## The stones a curb can be made of, by the name a layout gives.
+## The stones a curb or a ground plate can be made of, by the name a layout gives.
 const STONES := {
 	"flagstone": FLAGSTONE,
 	"slate": preload("res://world/materials/slate.tres"),
+	"cobble": preload("res://world/materials/cobble.tres"),
+	"tan_earth": preload("res://world/materials/tan_earth.tres"),
+	"snow": preload("res://world/materials/snow.tres"),
 }
 const KENNEY := "res://assets/env/kenney_town/%s.glb"
 ## Kenney pieces are this many times their size: a tile of 2.5 m, a wall 2.5 m tall.
@@ -36,6 +40,9 @@ const MODELS := {
 	"lantern": "post",
 	"tree": "trunk",
 	"tree-high-round": "trunk",
+	"planks": "none",
+	"chimney": "none",
+	"pillar-wood": "post",
 }
 const POST_RADIUS := 0.27
 const TRUNK_RADIUS := 0.3
@@ -108,7 +115,9 @@ class Builder:
 
 	var _root: Node3D
 	var _terraces: Array[Dictionary] = []  # {rect: Rect2 over (x, z), height}
-	var _lamp := {}  # the `lamps` line: colour, range, energy, up
+	var _lamp := {}  # the `lamps` line: colour, range, energy, up, world
+	var _blocks  # the helper for ground, block, water and vat (region_blocks.gd)
+	var _boxes := {}  # the bounds of each Kenney piece loaded so far, by name
 	var _counts := {}  # how many nodes of each name so far
 	var _line := 0
 	var _world_and_feet := 0  # the collision bits of `world` and `ik_surface`
@@ -117,6 +126,7 @@ class Builder:
 	func build(text: String, root_name: String) -> Node3D:
 		_world_and_feet = LAYERS.WORLD | LAYERS.IK_SURFACE
 		_feet = LAYERS.IK_SURFACE
+		_blocks = BLOCKS.new(self, STONES, SCALE)
 		_root = Node3D.new()
 		_root.name = root_name
 		_root.set_script(REGION)
@@ -132,6 +142,8 @@ class Builder:
 				if (pass_kind == "ground") == is_ground:
 					_command(words)
 		_own(_root, _root)
+		# The helper holds the builder and the builder the helper: let go, or neither is ever freed.
+		_blocks = null
 		return _root
 
 	# --- commands ---
@@ -186,11 +198,12 @@ class Builder:
 				if n.size() == 5:
 					_curb(_rect(n), n[4], STONES[options[0]] if options.size() == 1 else FLAGSTONE, moonlit)
 			"lamps":
-				var n := _numbers(args.slice(1), 3, 3)
-				if args.size() == 4 and n.size() == 3:
-					_lamp = {colour = Color(args[0]), range = n[0], energy = n[1], up = n[2]}
+				var world := args.size() == 5 and args[4] == "world"
+				var n := _numbers(args.slice(1, 4), 3, 3)
+				if (args.size() == 4 or world) and n.size() == 3:
+					_lamp = {colour = Color(args[0]), range = n[0], energy = n[1], up = n[2], world = world}
 				else:
-					_problem("lamps needs COLOUR RANGE ENERGY UP")
+					_problem("lamps needs COLOUR RANGE ENERGY UP [world]")
 			"lantern":
 				var n := _numbers(PackedStringArray(Array(args).filter(func(a: String) -> bool: return a != "shadow")), 2, 2)
 				if n.size() == 2:
@@ -221,6 +234,38 @@ class Builder:
 					_moon(n[0], n[1], Color(args[2]), n[2])
 				else:
 					_problem("moon needs PITCH YAW COLOUR ENERGY")
+			"fill":
+				if args.size() != 4:
+					_problem("fill needs PITCH YAW COLOUR ENERGY")
+					return
+				var n := _numbers(args.slice(0, 2) + args.slice(3), 3, 3)
+				if n.size() == 3:
+					_fill(n[0], n[1], Color(args[2]), n[2])
+			"ground":
+				var n := _numbers(args.slice(0, 4), 4, 4)
+				var visual := args.size() == 6 and args[5] == "visual"
+				if args.size() < 5 or args.size() > 6 or (args.size() == 6 and not visual):
+					_problem("ground needs X0 Z0 X1 Z1 STONE [visual]")
+				elif n.size() == 4:
+					_blocks.ground(_rect(n), args[4], visual)
+			"block":
+				var n := _numbers(args.slice(0, 5), 5, 5)
+				var solid := args.size() == 8 and args[7] == "solid"
+				if args.size() < 7 or args.size() > 8 or (args.size() == 8 and not solid):
+					_problem("block needs X0 Z0 X1 Z1 STOREYS STYLE ROOF [solid]")
+				elif n.size() == 5:
+					_blocks.block(_rect(n), n[4], args[5], args[6], solid)
+			"water":
+				var n := _numbers(args.slice(0, 5), 5, 5)
+				var liquor := args.size() == 6 and args[5] == "liquor"
+				if args.size() < 5 or args.size() > 6 or (args.size() == 6 and not liquor):
+					_problem("water needs X0 Z0 X1 Z1 Y [liquor]")
+				elif n.size() == 5:
+					_blocks.water(_rect(n), n[4], liquor)
+			"vat":
+				var n := _numbers(args, 2, 2)
+				if n.size() == 2:
+					_blocks.vat(Vector2(n[0], n[1]))
 			"sky":
 				if args.size() == 1:
 					_environment().background_color = Color(args[0])
@@ -411,6 +456,8 @@ class Builder:
 		lamp.omni_range = _lamp.range
 		lamp.shadow_enabled = shadow
 		lamp.shadow_caster_mask = 0xFFFFFFFF & ~LANTERN_LAYER
+		if _lamp.world:
+			lamp.light_cull_mask = LAYERS.RENDER_WORLD
 		holder.add_child(lamp)
 
 	func _marker(marker_name: String, at: Vector2, up: float, yaw: float, poi: bool) -> void:
@@ -437,22 +484,30 @@ class Builder:
 	# The moon: a light for the bodies of actors only (the render layer `bodies`), with no shadows. A night's own light is
 	# too dim to show a fighter's outfit between the lantern pools; this fills the bodies and leaves the ground dark.
 	func _moon(pitch: float, yaw: float, colour: Color, energy: float) -> void:
-		var moon := DirectionalLight3D.new()
-		moon.name = "Moon"
-		moon.rotation_degrees = Vector3(pitch, yaw, 0)
-		moon.light_color = colour
-		moon.light_energy = energy
-		moon.shadow_enabled = false
-		moon.light_cull_mask = LAYERS.RENDER_BODIES
-		_root.add_child(moon)
+		_bodies_light("Moon", pitch, yaw, colour, energy)
+
+	# The fill: the moon's light under another name, for a day's regions: an overcast noon's own light is even and soft, and
+	# a body lit by the fill alone is the same brightness on every ground.
+	func _fill(pitch: float, yaw: float, colour: Color, energy: float) -> void:
+		_bodies_light("Fill", pitch, yaw, colour, energy)
+
+	func _bodies_light(light_name: String, pitch: float, yaw: float, colour: Color, energy: float) -> void:
+		var light := DirectionalLight3D.new()
+		light.name = light_name
+		light.rotation_degrees = Vector3(pitch, yaw, 0)
+		light.light_color = colour
+		light.light_energy = energy
+		light.shadow_enabled = false
+		light.light_cull_mask = LAYERS.RENDER_BODIES
+		_root.add_child(light)
 		_share_the_bodies()
 
-	# In a region with a moon, the sun leaves the bodies to it: it lights everything else, and still casts the bodies'
+	# In a region with a moon or a fill, the sun leaves the bodies to it: it lights everything else, and still casts the bodies'
 	# shadows (its shadow_caster_mask stays whole). Two directional lights on a body would not show the brighter of the two
 	# in Compatibility, where a light that casts shadows is drawn in a pass of its own and added to the rest.
 	func _share_the_bodies() -> void:
 		var sun := _root.get_node_or_null(^"Sun") as DirectionalLight3D
-		if sun != null and _root.has_node(^"Moon"):
+		if sun != null and (_root.has_node(^"Moon") or _root.has_node(^"Fill")):
 			sun.light_cull_mask = 0xFFFFFFFF & ~LAYERS.RENDER_BODIES
 
 	# The region's Environment, made the first time it is asked for: the look's colour maths needs the linear
@@ -504,6 +559,8 @@ class Builder:
 	# The bounds of a Kenney piece's meshes in its own space, unscaled; a zero box (and a problem) if there is
 	# no such piece.
 	func _local_box(piece: String) -> AABB:
+		if _boxes.has(piece):
+			return _boxes[piece]
 		var path := KENNEY % piece
 		if not ResourceLoader.exists(path):
 			_problem("no Kenney piece '%s' (%s)" % [piece, path])
@@ -518,6 +575,7 @@ class Builder:
 		var box := boxes[0]
 		for b in boxes:
 			box = box.merge(b)
+		_boxes[piece] = box
 		return box
 
 	# The bounds of each mesh under `node`, in the space `to_root` takes `node`'s space to.
