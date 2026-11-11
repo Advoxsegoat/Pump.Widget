@@ -104,8 +104,8 @@ func _drummer() -> ActorDef:
 
 # {a, b, log}: Abarax and a Drummer `gap` metres in front of him; `log` has the outcomes of the blows on Abarax as [the
 # Drummer's frame, move id, outcome], and the moves the Drummer started as [its frame, id].
-func _stage(b_brain: Brain, a_brain: Brain, gap := RANGE, slow := false) -> Dictionary:
-	var run := Duel.make(self, [], [], gap, _drummer(), load(ABARAX) as ActorDef)
+func _stage(b_brain: Brain, a_brain: Brain, gap := RANGE, slow := false, real_hp := false) -> Dictionary:
+	var run := Duel.make(self, [], [], gap, load(DRUMMER) as ActorDef if real_hp else _drummer(), load(ABARAX) as ActorDef)
 	if not slow:
 		Duel.without_slow(run)
 	var a: Actor = run["a"]
@@ -345,6 +345,18 @@ func test_dodged_perfectly_the_string_takes_him_to_flurry_and_breaks_the_drummer
 	assert_eq(a.chain.tempo(), T.FLURRY)
 	assert_true(b.stats.posture_broken, "the Drummer's posture is broken: %s" % b.stats.posture)
 	assert_true(b.is_in_group(Actor.FINISHABLE_GROUP), "and it can be finished")
+
+
+func test_the_palm_on_a_broken_drummer_kills_him() -> void:
+	# Seven perfect dodges break him; the finisher it opens is the end of him (60 HP).
+	var run := _stage(_real_brain(), Presser.new(), 1.6, false, true)
+	var a: Actor = run["a"]
+	var b: Actor = run["b"]
+	await _play(run, func(_n: int, line: int) -> StringName: return _perfect(line))
+	assert_true(b.stats.posture_broken and not b.dead, "he is broken and standing")
+	(a.brain as Presser).queue.append([&"palm", Vector2.ZERO])
+	await frames(150)
+	assert_true(b.dead, "the palm finished him (hp %s)" % b.stats.hp)
 
 
 func test_dodged_with_the_wrong_dodge_it_is_still_survived() -> void:
