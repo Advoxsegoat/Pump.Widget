@@ -54,3 +54,30 @@ func test_no_planted_foot_is_dragged_when_a_counter_starts() -> void:
 		for from: StringName in DODGES + [&"guard", &"rest"]:
 			var worst: Array = await _worst(move, from)
 			assert_true(worst[0] <= MOST, "%s out of %s: the %s moves %.3f m along the ground on frame %d (at most %.2f)" % [move, from, worst[1], worst[0], worst[2], MOST])
+
+
+# The hold of the feet lasts a few ticks from a counter's start; a blow that lands inside it starts a flinch or a stagger, and the
+# feet must not be pinned for its first frames. Any other move starting lets them go (a reaction is one), and so does dying.
+func test_a_held_foot_is_let_go_when_anything_else_starts() -> void:
+	var run := Duel.make(self, [], [], 1.0, Duel.def(ActorDef.Team.ENEMY, 5.0))
+	var a: Actor = run["a"]
+	var b: Actor = run["b"]
+	await frames(30)
+	a.runner.start(_move(&"counter_hook"))
+	await frames(1)
+	assert_false(a.rig.foot_planter.holds.is_empty(), "the feet are held after the counter starts (the control)")
+	Blows.post(b, a, {})
+	await frames(1)
+	assert_true(a.runner.current != null and a.runner.current.kind == MoveData.Kind.REACTION, "the blow on his f2 started a reaction (%s)" % [a.runner.current.id if a.runner.current != null else &""])
+	assert_true(a.rig.foot_planter.holds.is_empty(), "and on that frame no foot is held")
+	# dying lets them go at once, even with no clip to start
+	run["arena"].queue_free()
+	await frames(2)
+	var run2 := Duel.make(self, [], [], 1.0, Duel.def(ActorDef.Team.ENEMY, 5.0))
+	var c: Actor = run2["a"]
+	await frames(30)
+	c.runner.start(_move(&"counter_hook"))
+	await frames(2)
+	assert_false(c.rig.foot_planter.holds.is_empty(), "held again")
+	c.die()
+	assert_true(c.rig.foot_planter.holds.is_empty(), "he dies: nothing is held")

@@ -259,6 +259,17 @@ func test_a_flurry_counter_staggers_a_foe_whose_poise_would_shrug_it_off() -> vo
 	assert_eq((run["b"] as Actor).runner.current.id, &"flinch", "the hook flinches a foe of poise 5")
 
 
+func test_the_rising_palm_reaches_a_foe_one_point_two_metres_off() -> void:
+	var run := Duel.make(self, [], [], 1.2, Duel.def(ActorDef.Team.ENEMY, 5.0))
+	var a: Actor = run["a"]
+	var seen := []
+	a.hit_landed.connect(func(r: HitResult, _e: HitEvent) -> void: seen.append(r.outcome))
+	a.runner.start(_move(&"counter_rise"))
+	await frames(30)
+	assert_true(seen.has(HitResult.Outcome.HIT), "the rising palm lands on a foe 1.2 m off (%s)" % [seen])
+	await _free(run)
+
+
 # --- the clear-outs ---
 
 func test_the_rig_has_the_clear_outs_two_hitboxes_at_its_root() -> void:

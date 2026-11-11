@@ -8,7 +8,7 @@ extends TestCase
 ##   at the wave's `hitbox_on` its striking hand is within 0.25 m of the floor, where the ring starts
 
 const RIG := "res://actors/abarax/abarax_rig.tscn"
-const JOINTS: Array[StringName] = [&"hand_l", &"hand_r", &"upperarm_l", &"upperarm_r"]
+const JOINTS: Array[StringName] = [&"hand_l", &"hand_r", &"upperarm_l", &"upperarm_r", &"pelvis", &"Head"]
 ## How far the striking hand must move over 8 frames while the move recovers, in metres.
 const MOVING := 0.05
 
@@ -79,3 +79,30 @@ func test_the_waves_palm_is_at_the_floor_where_the_ring_starts() -> void:
 	var on := _mark(&"clear_wave", &"hitbox_on")
 	var hand: float = (at[on][&"hand_r"] as Vector3).y
 	assert_true(hand <= 0.25, "f%d: the striking hand is %.2f m off the floor (at most 0.25)" % [on, hand])
+
+
+# The rising palm comes up from the crouch it starts in (out of a duck): the hand is low at the start, comes up through the blow to
+# chin height or more, higher at the blow's last frame than at its first, then down again to the guard.
+func test_the_rising_palm_rises_from_the_crouch() -> void:
+	var clip := &"counter_rise"
+	var at := _poses(clip)
+	var on := _mark(clip, &"hitbox_on")
+	var off := _mark(clip, &"hitbox_off")
+	var low: float = (at[2][&"hand_r"] as Vector3).y
+	var hip: float = (at[2][&"pelvis"] as Vector3).y
+	assert_true(low < hip, "f2: the striking hand is at %.2f m, not below the hips (%.2f m)" % [low, hip])
+	var highest := false
+	var best := -INF
+	for frame in range(on, off + 1):
+		var hand: Vector3 = at[frame][&"hand_r"]
+		var shoulder: float = (at[frame][&"upperarm_r"] as Vector3).y
+		var chin: float = (at[frame][&"Head"] as Vector3).y - 0.25
+		best = maxf(best, hand.y - maxf(shoulder, chin))
+		highest = highest or (hand.y > shoulder and hand.y >= chin)
+	assert_true(highest, "no frame of the blow (f%d to f%d) has the hand above the shoulder and at chin height (the nearest is %.2f m short)" % [on, off, -best])
+	var rise: float = (at[off][&"hand_r"] as Vector3).y - (at[on][&"hand_r"] as Vector3).y
+	assert_true(rise >= 0.25, "the hand rises %.2f m from f%d to f%d (at least 0.25)" % [rise, on, off])
+	for frame in range(off + 8, _last(clip) + 1):
+		var hand: float = (at[frame][&"hand_r"] as Vector3).y
+		var shoulder: float = (at[frame][&"upperarm_r"] as Vector3).y
+		assert_true(hand < shoulder, "f%d: the hand is at %.2f m, not back below its shoulder (%.2f m)" % [frame, hand, shoulder])
