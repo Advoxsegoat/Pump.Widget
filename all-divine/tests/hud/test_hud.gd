@@ -232,7 +232,7 @@ func test_prompt_shows_only_for_a_finishable_foe_in_reach() -> void:
 func test_the_wave_shows_as_pips() -> void:
 	var main := _main()
 	var hud := main.hud
-	assert_eq(hud.pip_states(), [Hud.Pip.ON, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING] as Array[int], "six waves, the first on")
+	assert_eq(hud.pip_states(), [Hud.Pip.ON, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING] as Array[int], "eight waves, the first on")
 	_foe(main).die()
 	assert_eq(hud.pip_states()[0], Hud.Pip.CLEARED, "the first cleared")
 	await frames(190)

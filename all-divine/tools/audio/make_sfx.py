@@ -368,16 +368,34 @@ def perfect_dodge(rng):
 
 
 def knocked_out(rng):
-    """Being knocked out of a chain: a hard low thump, a dull crack and a low rumble, driven a little, no swell: the loss
-    is plain and arrives at once. It sounds when the blow's hit-stop is over, at least 3 frames after the blow's own impact (up to
-    -1.5 dBFS) on a bus with no limiter; the heavy impacts ring on at 0.6 of full scale, so -10 dBFS is the loudest at which the two
-    stay under -1 dBFS."""
+    """Being knocked out of a chain: a hard low thump and a low rumble, driven a little, no swell, and over them a short crack in its
+    own band (1.5 to 5 kHz, about 40 ms, not driven): the loss is plain and arrives at once. The crack is where the impacts it
+    follows have nothing, so that the cue is heard over a thrust's or a sweep's low tail. It sounds when the blow's hit-stop is over, at
+    least 3 frames after the blow's own impact (up to -1.5 dBFS) on a bus with no limiter; the heavy impacts ring on at 0.6 of full
+    scale, so -10 dBFS (the crack's peak; the thump under it is about -18) is the loudest at which the two stay under -1 dBFS while
+    the crack stays 10 dB above their tails."""
     n = samples_in(0.4)
-    return saturate(mix([
+    body = saturate(mix([
         (layer(thump(n, 90.0, 55.0, 0.03, 0.06), 1.0), 0.0),
-        (layer(burst(rng, n, 1700.0, 1.0, 0.018, 0.0003), 0.55), 0.0),
         (layer(times(lowpass(noise(rng, n), 350.0), decay(n, 0.08, 0.001)), 0.5), 0.0),
     ], n), 2.0)
+    body = lowpass(body, 600.0)
+    knock = partials(n, 2100.0, [1.0, 1.47, 2.1], [1.0, 0.8, 0.6], [100.0, 100.0, 100.0])
+    hold = samples_in(CRACK_TAU)
+    fade = samples_in(0.012)
+    shape = [min(1.0, i / samples_in(0.001)) * (1.0 if i < hold else max(0.0, math.cos(math.pi / 2.0 * (i - hold) / fade)) if i < hold + fade else 0.0) for i in range(n)]
+    knock = times(knock, shape)
+    click = times(lowpass(highpass(noise(rng, n), 1500.0), 5000.0), decay(n, 0.004, 0.0003))
+    crack = mix([(layer(knock, 1.0), 0.0), (layer(click, CLICK_GAIN), 0.0)], n)
+    return mix([(layer(body, BODY_GAIN), 0.0), (layer(crack, CRACK_GAIN), CRACK_DELAY)], n)
+
+
+#: The knocked_out crack's decay (seconds) and its weight against the body's peak.
+CRACK_TAU = 0.035
+CRACK_GAIN = 0.6
+BODY_GAIN = 0.3
+CRACK_DELAY = 0.004
+CLICK_GAIN = 0.4
 
 
 def stamina_refused(rng):
