@@ -9,29 +9,13 @@ func after_each() -> void:
 	Game.reset()
 
 
-# A move of Abarax's heavy that never ends: its clip (a copy, put in the actor's rig) holds its charge for 100,000 frames and the
-# brain holds the button down. Started on `actor`.
-func _never_ending_move(actor: Actor) -> MoveData:
-	var clip := actor.rig.tree.get_animation(&"palm_heavy").duplicate(true) as Animation
-	var marks := Marks.read(clip)
-	for mark in marks:
-		if mark["kind"] == &"charge_hold":
-			mark["args"]["frames"] = 100000
-	Marks.write(clip, marks)
-	actor.rig.tree.get_animation_library(&"").add_animation(&"endless_heavy", clip)
-	var move := (Registry.fetch(&"moves", &"palm_heavy") as MoveData).duplicate() as MoveData
-	move.id = &"endless_heavy"
-	move.clip = &"endless_heavy"
-	return move
-
-
 func test_a_move_that_outlasts_its_clip_by_a_second_is_a_soft_lock_on_the_actors_own_clock() -> void:
 	var run := Duel.make(self, [], [{"frames": 100000, "hold": [&"heavy"]}], 3.0)
 	var a: Actor = run["a"]
 	var b: Actor = run["b"]
 	var watch := BotWatch.new()
-	b.runner.start(_never_ending_move(b))
-	var clip_frames := ceili(b.rig.tree.get_animation(&"endless_heavy").length * 60.0)
+	b.runner.start(EndlessMove.make(b, &"palm_heavy")["move"])
+	var clip_frames := ceili(b.rig.tree.get_animation(&"endless_palm_heavy").length * 60.0)
 	var problems := PackedStringArray()
 	var frames_seen := 0
 	while problems.is_empty() and frames_seen < clip_frames + 200:
@@ -39,7 +23,7 @@ func test_a_move_that_outlasts_its_clip_by_a_second_is_a_soft_lock_on_the_actors
 		frames_seen += 1
 		problems.append_array(watch.check(frames_seen, a, [a, b]))
 	assert_eq(problems.size(), 1, "one problem: %s" % [problems])
-	assert_true(String(problems[0]).contains("endless_heavy"), "it names the move: %s" % [problems])
+	assert_true(String(problems[0]).contains("endless_palm_heavy"), "it names the move: %s" % [problems])
 	assert_true(frames_seen > clip_frames + 55 and frames_seen < clip_frames + 80, "after the clip and a second: %d against a clip of %d" % [frames_seen, clip_frames])
 	for i in 100:
 		await frames(1)

@@ -16,6 +16,11 @@ extends Node
 ## Start) pauses and resumes, and "Paused" shows while it is paused (PauseLabel). This node runs while the game
 ## is paused (to hear the menu button); the stage, and so the world in it, stops.
 ##
+## With --record=<path> the controls are written down (tools/replay/recorder.gd) and saved to the path when the game ends, and with
+## --replay=<path> that recording is played back into Abarax through the real input path (its seed's dice rolled first), the
+## arena's state hash printed when it is over, and, in a headless run, the game quits. Both load their scripts by path, since the
+## exports leave tools/ out.
+##
 ## With --selftest (a user argument: godot -- --selftest) Abarax fights one tier I Knuckle in the yard through a
 ## scripted circuit instead (selftest_circuit: approach, jab, cross, hook, sway, duck, dash-step, guard, heavy) for SELFTEST_FRAMES
 ## physics frames, and the arena does nothing by itself but send that one Knuckle; the SelfTest autoload
@@ -45,6 +50,9 @@ const SELFTEST_GUARD_FRAMES := 50
 const SELFTEST_GUARD_REPEAT := 10
 const SELFTEST_HEAVY_FRAMES := 70
 
+const RECORDER := "res://tools/replay/recorder.gd"
+const REPLAYER := "res://tools/replay/replayer.gd"
+
 @onready var stage: PixelStage = $PixelStage
 @onready var region: Region = $PixelStage/World/Region
 @onready var hud: Hud = $PixelStage/Hud/Hud
@@ -56,6 +64,11 @@ const SELFTEST_HEAVY_FRAMES := 70
 var look_on := true
 ## The window F11 and Alt+Enter switch: the game's own, unless a test gives it another.
 @onready var window: Window = get_window()
+
+var _recorder: Node  # the InputRecorder of --record, or null
+var _record_path := ""
+var _replayer: Node  # the InputReplayer playing a recording, or null
+var _quit_after_replay := false  # --replay was given: a headless game ends with the recording
 
 
 func _ready() -> void:
@@ -70,9 +83,20 @@ func _ready() -> void:
 	camera_rig.snap_now()
 	overlay.actor = player
 	_apply_look()
+	var arguments := parse_arguments(OS.get_cmdline_user_args())
+	var replaying := _load_recording(arguments["replay"])
 	_enter_region()
 	if SelfTest.active:
 		start_selftest()
+	elif replaying != null:
+		_quit_after_replay = true
+		start_replay(replaying)
+	elif not arguments["record"].is_empty():
+		start_recording(arguments["record"])
+
+
+func _exit_tree() -> void:
+	save_recording()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -116,6 +140,65 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif Game.state == Game.State.PAUSE:
 			Game.change(Game.State.PLAY)
 		get_viewport().set_input_as_handled()
+
+
+## The paths --record= and --replay= give, in the user arguments (&"" for one not given): {record, replay}.
+static func parse_arguments(args: PackedStringArray) -> Dictionary:
+	var found := {"record": "", "replay": ""}
+	for arg in args:
+		for key: String in found:
+			if arg.begins_with("--%s=" % key):
+				found[key] = arg.trim_prefix("--%s=" % key)
+	return found
+
+
+## Starts writing down the controls, to be saved to `path` by save_recording (the game's end does it). The recording is of the fight
+## from the arena's first wave: its seed is the round the dice began at (0, as the game starts) and its region this one's scene.
+func start_recording(path: String) -> void:
+	_record_path = path
+	_recorder = (load(RECORDER) as GDScript).new() as Node
+	_recorder.name = &"Recorder"
+	add_child(_recorder)
+	_recorder.begin(region.scene_file_path, 0, 0)
+
+
+## Saves the recording --record began, if there is one; OK if there is none to save.
+func save_recording() -> Error:
+	if _recorder == null or _record_path.is_empty() or not is_instance_valid(_recorder):
+		return OK
+	var result: Error = _recorder.save(_record_path)
+	if result != OK:
+		push_error("Main: cannot save the recording to %s (%s)" % [_record_path, error_string(result)])
+	return result
+
+
+## Plays `rec` into Abarax from the next frame, through the real input path (tools/replay/replayer.gd); when it is over the arena's
+## state hash is printed, and a headless game quits. The recording's dice are rolled before the first wave is sent (_ready), so a
+## replay started here, after it, is the recording's fight only if the game began with its seed.
+func start_replay(rec: Resource) -> void:
+	_replayer = (load(REPLAYER) as GDScript).new() as Node
+	_replayer.name = &"Replayer"
+	add_child(_replayer)
+	_replayer.finished.connect(_on_replay_finished)
+	_replayer.play(rec)
+
+
+# The recording at `path`, with its seed's dice set for the first wave; null with no path or none that loads.
+func _load_recording(path: String) -> Resource:
+	if path.is_empty():
+		return null
+	var rec := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
+	if rec == null or not "frames" in rec:
+		push_error("Main: cannot read the recording %s" % path)
+		return null
+	Arena.reset_spawn_counts(int(rec.get("seed")))
+	return rec
+
+
+func _on_replay_finished() -> void:
+	print("replay: finished, state hash %d" % (arena().state_hash() if arena() != null else 0))
+	if _quit_after_replay and DisplayServer.get_name() == "headless":
+		get_tree().quit()
 
 
 ## The arena of the region, or null when it is not one (the courtyard).

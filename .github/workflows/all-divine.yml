@@ -62,6 +62,9 @@ jobs:
       - name: Clip checker
         run: tools/godot.sh -s res://tools/clip_check.gd
 
+      - name: Combat bot
+        run: tools/godot.sh -s res://tools/bot/run_bot.gd -- --seeds=1-2 --frames=3600 --policy=mixed
+
       - name: Python tools' tests
         run: |
           python3 -I -m unittest discover -s tools/assets/tests

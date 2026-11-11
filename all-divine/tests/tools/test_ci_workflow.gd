@@ -27,6 +27,14 @@ func test_the_builds_wait_for_the_tests() -> void:
 	assert_true(export_job.has("    needs: [test]"), "the export job needs the test job (headless suite and clip checker)")
 
 
+func test_the_headless_job_plays_the_combat_bot_over_two_seeds() -> void:
+	var steps := _steps(_block(_lines(), "  test:", 2))
+	var bot: Array = Array(steps).filter(func(text: String) -> bool: return text.contains("name: Combat bot"))
+	assert_eq(bot.size(), 1, "the headless job has a bot step")
+	if bot.size() == 1:
+		assert_true(bot[0].contains("run_bot.gd -- --seeds=1-2 --frames=3600 --policy=mixed"), "seeds 1 and 2, 3,600 frames, the mixed policy: %s" % bot[0])
+
+
 func test_the_builds_are_uploaded_before_the_linux_build_runs() -> void:
 	var steps := _steps(_block(_lines(), "  export:", 2))
 	var uploads: Array[int] = []

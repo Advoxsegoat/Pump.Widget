@@ -218,3 +218,67 @@ func test_it_presses_the_finisher_when_the_prompt_shows() -> void:
 	assert_true(_ids(run).has(&"finisher"), "he finished it: %s" % [_ids(run)])
 	assert_false(_ids(run).has(&"palm_jab"), "and did not jab: %s" % [_ids(run)])
 	await _end(run)
+
+
+# --- the whole game: Main, its yard and its waves ---
+
+func test_bot_two_seeds_no_problems() -> void:
+	for seed_number in [1, 2]:
+		var game := BotWorld.make(self, seed_number)
+		var bot := track(CombatBot.new()) as CombatBot
+		bot.listen_for_errors = true
+		bot.begin(game.player, game.arena(), seed_number)
+		await frames(3600)
+		bot.finish()
+		assert_eq(bot.problems, PackedStringArray(), "seed %d: %s" % [seed_number, bot.summary()])
+		assert_true(bot.damage_dealt > 0.0, "he fought: %s" % bot.summary())
+		bot.queue_free()
+		game.queue_free()
+		await frames(2)
+		InputFeed.release()
+
+
+func test_bot_reports_a_soft_lock_and_saves_its_replay() -> void:
+	var game := BotWorld.make(self, 9001)
+	var arena := game.arena()
+	var foe := arena.enemies()[0]
+	var stuck := EndlessMove.make(foe, &"knuckle_jab")
+	foe.set_brain(ScriptBrain.new([{"frames": 100000, "hold": [stuck["action"]]}]))
+	foe.runner.start(stuck["move"], true)
+	var bot := track(CombatBot.new()) as CombatBot
+	bot.begin(game.player, arena, 9001)
+	var heard := []
+	bot.problem_found.connect(func(line: String) -> void: heard.append(line))
+	await frames(260)
+	bot.finish()
+	assert_false(bot.problems.is_empty(), "a foe whose move never ends is a problem")
+	assert_true(bot.problems[0].begins_with("bot: seed 9001 frame "), bot.problems[0])
+	assert_true(bot.problems[0].contains("endless_knuckle_jab"), bot.problems[0])
+	assert_eq(heard.size(), bot.problems.size(), "and it was said as it was found")
+	var path := "%s/seed_9001.tres" % REPLAYS
+	assert_true(FileAccess.file_exists(path), "the run's recording is saved to %s" % path)
+	var rec := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as InputRecording
+	assert_true(rec != null and rec.seed == 9001 and rec.frames.size() > 100, "and it is the run's")
+	assert_eq(rec.region, game.region.scene_file_path)
+	bot.queue_free()
+	game.queue_free()
+	await frames(2)
+
+
+func test_the_same_seed_plays_the_same_fight_and_another_plays_another() -> void:
+	var runs := []
+	for seed_number in [4, 4, 5]:
+		var game := BotWorld.make(self, seed_number)
+		var bot := track(CombatBot.new()) as CombatBot
+		bot.begin(game.player, game.arena(), seed_number)
+		await frames(700)
+		bot.finish()
+		runs.append([bot.recorder.recording().frames.duplicate(), game.arena().state_hash(), bot.summary()])
+		bot.queue_free()
+		game.queue_free()
+		await frames(2)
+		InputFeed.release()
+	var n := mini(runs[0][0].size(), runs[1][0].size())
+	assert_eq(runs[0][0].slice(0, n), runs[1][0].slice(0, n), "a seed plays the same controls")
+	assert_eq(runs[0][1], runs[1][1], "and ends in the same state")
+	assert_ne(runs[0][1], runs[2][1], "another seed does not")

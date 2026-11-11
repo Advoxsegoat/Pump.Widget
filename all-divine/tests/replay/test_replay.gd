@@ -12,6 +12,8 @@ const FRAMES := 600
 ## A screen direction: left, and down the screen (a duck).
 const LEFT := Vector2(-1, 0)
 const DOWN := Vector2(0, 1)
+## A seed whose fight, played by the counter policy, has a perfect dodge in its first 900 frames (the slow-down).
+const SLOW_SEED := 1
 
 ## The fixture's blows, [frame of the player's clock it lands on, line]: a straight one (parried), a straight one (swayed), a round one
 ## (ducked).
@@ -251,3 +253,31 @@ func test_a_recording_replays_to_the_same_hash_from_a_file_and_whenever_it_is_pl
 	await frames(100)
 	assert_eq(Engine.get_physics_frames(), at + 100)
 	assert_eq(await _replay_game(rec), recorded[1], "played from the file, a hundred frames later")
+
+
+# --- a fight the bot plays, with the slow-down ---
+
+# Plays `how` for the bot in a new game of `seed` until it has `count` frames recorded: [the recording, the state hash at the end, whether
+# the fight was ever slowed (ChainSlow, on a perfect dodge). The game is freed.
+func _record_bot(seed: int, how: CombatBot.Policy, count: int) -> Array:
+	var game := _game(seed)
+	var bot := track(CombatBot.new()) as CombatBot
+	bot.begin(game.player, game.arena(), seed, how)
+	var slowed := false
+	while bot.recorder.recording().frames.size() < count:
+		await frames(1)
+		slowed = slowed or Melee.slowed()
+	var result := [bot.recorder.recording(), game.arena().state_hash(), slowed]
+	bot.recorder.set_physics_process(false)
+	bot.set_physics_process(false)
+	for node: Node in [bot, game]:
+		node.queue_free()
+	await frames(2)
+	InputFeed.release()
+	return result
+
+
+func test_a_fight_the_bot_played_with_the_slow_down_on_replays_to_the_same_hash() -> void:
+	var recorded := await _record_bot(SLOW_SEED, CombatBot.Policy.COUNTER, 900)
+	assert_true(recorded[2], "the fight was slowed by a perfect dodge, so the replay has to meet the slow-down")
+	assert_eq(await _replay_game(recorded[0]), recorded[1], "and it replays to the same hash")
