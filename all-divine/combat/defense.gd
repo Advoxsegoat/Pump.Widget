@@ -26,6 +26,11 @@ var poise := 0.0
 var stamina := 0.0
 var posture_broken := false
 var dead := false
+## The tempo of the defender's dodge chain (DodgeChain.Tempo as an int; 0, Slip, with no chain or an empty one): a blow that
+## lands at 1 or more staggers whatever its weight.
+var chain_tempo := 0
+## What an evade of this defender takes from the blow's attacker: its chain's posture chip at that tempo (0 with no chain).
+var evade_chip := 0.0
 ## In a paired move (a finisher, a grab; Actor.paired_with), where no one else's blow lands.
 var paired := false
 
@@ -47,4 +52,8 @@ static func of(actor: Actor) -> Defense:
 	d.posture_broken = actor.stats.posture_broken
 	d.dead = actor.dead
 	d.paired = actor.paired_with != null
+	if actor.chain != null:
+		d.chain_tempo = actor.chain.tempo()
+		var chip := actor.def.chain.posture_chip
+		d.evade_chip = chip[d.chain_tempo] if d.chain_tempo < chip.size() else 0.0
 	return d

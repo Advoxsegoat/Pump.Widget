@@ -59,6 +59,14 @@ func spend_stamina(amount: float) -> void:
 		exhausted = true
 
 
+## Gives back `amount` of stamina (up to the maximum): what a perfect dodge returns. It is no spend and no rest, so it leaves
+## the wait before regeneration where it was: stamina that comes back this way does not hold the rest back, nor hurry it.
+func refund_stamina(amount: float) -> void:
+	if amount <= 0.0:
+		return
+	stamina = minf(stamina + amount, max_stamina)
+
+
 ## Takes `rate` stamina a second for `delta` seconds: what sprinting costs, a frame at a time. As a spend,
 ## it restarts the wait, so stamina does not come back while it goes on.
 func drain_stamina(rate: float, delta: float) -> void:

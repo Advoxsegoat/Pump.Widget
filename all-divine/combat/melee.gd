@@ -32,6 +32,8 @@ extends Node
 ## A blow that was evaded (EVADED) is spent: it is not handed back to the scanner (so the same swing cannot land
 ## on the body later, when the window has closed), nobody freezes, nobody is pushed and no grab pair starts. Its target
 ## and its attacker both hear of it (got_hit, hit_landed), and the target's runner notes that it evaded (HitIntake.take).
+## When the target's chain is at Quick or Flurry the evade also takes posture from the attacker, which reaches it as
+## a turned blow does but with no reaction of its own, unless its posture breaks.
 ##
 ## A blow that landed also has weight (_weigh): both fighters freeze for the profile's `hitstop_frames` and the
 ## target is pushed along the blow by its `knockback`. A trade freezes both for the longer of the two blows'
@@ -140,6 +142,8 @@ func _apply_posted() -> void:
 	for i in events.size():
 		if results[i] != null and results[i].outcome == HitResult.Outcome.GRABBED and _grab(events[i]):
 			results[i] = null  # the pair takes it from here
+			if events[i].target.chain != null:
+				events[i].target.chain.knock_out()  # a grab that took hold is a blow that landed
 	# body -> [the indices of the blows it took, those of its own blows turned back], the bodies in the order met
 	var bodies := {}
 	for i in events.size():
@@ -150,7 +154,7 @@ func _apply_posted() -> void:
 			r = HitResult.new()  # no one else's blow lands on a paired body
 			results[i] = r
 		_note(bodies, events[i].target, 0, i)
-		if TURNED_BACK.has(r.outcome):
+		if TURNED_BACK.has(r.outcome) or (r.outcome == HitResult.Outcome.EVADED and r.attacker_posture_damage > 0.0):
 			_note(bodies, events[i].attacker, 1, i)
 	for body: Actor in bodies:
 		var taken: Array[HitEvent] = []

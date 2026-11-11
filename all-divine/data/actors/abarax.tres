@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="ActorDef" load_steps=7 format=3]
+[gd_resource type="Resource" script_class="ActorDef" load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://actors/actor_def.gd" id="1_def"]
 [ext_resource type="PackedScene" path="res://actors/abarax/abarax_rig.tscn" id="2_rig"]
@@ -6,6 +6,7 @@
 [ext_resource type="Resource" path="res://data/palettes/abarax.tres" id="4_palette"]
 [ext_resource type="Resource" path="res://data/tuning/combat_abarax.tres" id="5_combat"]
 [ext_resource type="Resource" path="res://data/pairs/finisher_open_hand.tres" id="6_finisher"]
+[ext_resource type="Resource" path="res://data/tuning/chain_open_hand.tres" id="7_chain"]
 
 [resource]
 script = ExtResource("1_def")
@@ -23,6 +24,7 @@ moveset = {
 }
 locomotion = ExtResource("3_tuning")
 combat = ExtResource("5_combat")
+chain = ExtResource("7_chain")
 reactions = {
 &"catch": &"catch",
 &"caught": &"caught",

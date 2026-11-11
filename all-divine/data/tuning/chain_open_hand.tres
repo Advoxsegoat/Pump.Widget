@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ChainTuning" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://combat/chain_tuning.gd" id="1_chain"]
+
+[resource]
+script = ExtResource("1_chain")
+quick_at = 3
+flurry_at = 7
+timeout_frames = 60
+perfect_links = 2
+perfect_refund = 4.0
+posture_chip = PackedFloat32Array(0, 4, 8)
+cash_scale = PackedFloat32Array(1, 1.5, 2)
+clearout_throw = PackedFloat32Array(2, 2.5, 3)
+sway_moves = Array[StringName]([&"sway_left_slip", &"sway_left_quick", &"sway_left_flurry"])
+duck_moves = Array[StringName]([&"duck_slip", &"duck_quick", &"duck_flurry"])

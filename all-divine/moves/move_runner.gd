@@ -26,6 +26,12 @@ extends Node
 ## intent's stick is at rest, from rest and from a cancel window alike. The variant is checked as the move that was
 ## asked for (a hop is refused where a dash-step would be) and spends its own stamina_cost.
 ##
+## The whiff rule: after a sway or duck that avoided nothing, no sway, duck or dash-step starts before that dodge's
+## `redodge_frame` (twice its window), counted on the actor's own frame clock from the dodge's start, whatever plays in between
+## (a guard tapped out of the dodge's cancel window opens a sway window of its own, which does not shorten it) and not counting
+## frozen frames. Presses of those actions stay in the buffer meanwhile, as long as the buffer keeps them. A dodge that
+## evaded a blow bars nothing: its cancel window, from its evade_off, lets them through.
+##
 ## A move can be charged. At a charge_hold mark, if the player is holding the mark's action, the clip stops at the
 ## mark (its time stands still, so the pose holds) until the action is let go, or the mark's `frames` have passed:
 ## then the move is charged (`charge_profile` is the mark's `profile`, which every hitbox_on after it uses in place of
@@ -49,6 +55,8 @@ signal charged(move: MoveData)
 ## them listens here.
 signal mark(kind: StringName, args: Dictionary)
 
+## The presses the whiff rule holds back: the sways, the ducks and the dodge (the dash-step and the hop).
+const BARRED_ACTIONS: Array[StringName] = [&"sway", &"duck", &"dodge"]
 ## The first pass over a move's marks starts here, below 0, so the marks at time 0 are met
 ## (Marks.between is half-open: it leaves out its start).
 const BEFORE_START := -1.0
@@ -71,8 +79,8 @@ var parry_window := false
 ## rule 3), else NONE. Cleared when the move ends.
 var evading: MoveData.Evade = MoveData.Evade.NONE
 ## True once a blow was evaded during the current move; false again when the next move starts (HitIntake.take sets it).
-## When an evaded blow and a landed one reach the body on the same frame the landed one wins: its reaction starts a
-## move, so this ends false, and no counter follows a dodge that got him hit.
+## When an evaded blow and a landed one reach the body on the same frame the landed one wins: HitIntake notes nothing
+## evaded for that frame, so this stays false, and no counter follows a dodge that got him hit.
 var evaded := false
 ## True between a guard_on and a guard_off mark: the move holds a guard up (guard_raise from its f4).
 var guard_window := false
@@ -88,6 +96,9 @@ var charging := false
 ## &"" until then.
 var charge_profile := &""
 
+var _dodge: MoveData  # the latest sway or duck started (a move with an evade), and while it bars another (see _redodge_barred)
+var _dodge_started := 0  # the actor's buffer_frame when it started
+var _dodge_evaded := false  # it evaded a blow, so it bars nothing
 var _anim: Animation  # the current move's clip
 var _marks: Array[Dictionary] = []  # its marks (Marks.read)
 var _root_track := -1  # its root position track, or -1 when the move has no root motion
@@ -107,6 +118,13 @@ var _strike_at_hit := 0.0  # where the target should stand from the body when th
 ## Seconds of its charge_hold the clip still has to stand at its mark (0 when none is held).
 func charge_left() -> float:
 	return maxf(_charge_left, 0.0) if charging else 0.0
+
+
+## A blow was evaded during the current move (HitIntake): the flag is set, and the whiff rule is lifted for this dodge.
+func note_evaded() -> void:
+	evaded = true
+	if current != null and current == _dodge:
+		_dodge_evaded = true
 
 
 ## True while a move plays.
@@ -154,16 +172,28 @@ func tick(intent: Intent, delta: float) -> Vector3:
 			if not hold.is_empty() and current == move:
 				_begin_charge(hold["args"])
 	if current != null and not window.is_empty():
-		var action := actor.buffer.consume(window.keys(), actor.buffer_frame)
+		var action := actor.buffer.consume(_unbarred(window.keys()), actor.buffer_frame)
 		if action != &"" and not actor.start_finisher_on(action):
 			_start(actor.move_for(action, intent, StringName(str(window[action]))), intent)
 	if current != null and time >= _anim.length - Marks.EPSILON:
 		_end(false)
 	if current == null:
-		var action := actor.buffer.consume(actor.def.moveset.keys(), actor.buffer_frame)
+		var action := actor.buffer.consume(_unbarred(actor.def.moveset.keys()), actor.buffer_frame)
 		if action != &"" and not actor.start_finisher_on(action):
 			_start(actor.move_for(action, intent), intent)
 	return velocity
+
+
+# `actions` without the sway, duck and dodge while the whiff rule bars them (see the top).
+func _unbarred(actions: Array) -> Array:
+	if not _redodge_barred():
+		return actions
+	return actions.filter(func(action: Variant) -> bool: return not BARRED_ACTIONS.has(action))
+
+
+# Whether the latest sway or duck avoided nothing and has not yet had its redodge_frame on the actor's clock.
+func _redodge_barred() -> bool:
+	return _dodge != null and not _dodge_evaded and actor.buffer_frame - _dodge_started < _dodge.redodge_frame
 
 
 # Starts `move`, unless it is an attack or a dodge, the actor cannot act (no stamina, or exhausted) and it is not
@@ -195,6 +225,10 @@ func _start(move: MoveData, intent: Intent, force := false) -> void:
 	current = move
 	time = 0.0
 	evaded = false
+	if move.evade != MoveData.Evade.NONE:
+		_dodge = move
+		_dodge_started = actor.buffer_frame
+		_dodge_evaded = false
 	_anim = rig.tree.get_animation(move.clip)
 	_marks = Marks.read(_anim)
 	if _marks.any(func(m: Dictionary) -> bool: return m["kind"] == &"parry_on"):

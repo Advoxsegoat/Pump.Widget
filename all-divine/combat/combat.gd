@@ -11,7 +11,8 @@ extends RefCounted
 ##   2. a LOW blow on the airborne: WHIFF (it passes under)
 ##   3. an evade window open (d.evading) against an ordinary blow or a GRAB: EVADED. The blow is spent: it does nothing
 ##      to the target, whatever guard or parry is up too. `perfect` says whether the dodge matched (is_perfect). A
-##      SWEEP and a THRUST are not avoided and go on down the rules
+##      SWEEP and a THRUST are not avoided and go on down the rules. An evade of a defender with a chain at Quick or Flurry
+##      takes posture from the attacker (d.evade_chip, doubled when perfect: attacker_posture_damage)
 ##   4. a GRAB: GRABBED, which starts the attacker's grab pair (Melee); for an attacker without one it is taken as a
 ##      HIT that staggers, so it carries the blow's damage and posture and a STAGGER
 ##   5. a parry with the attacker inside the arc: an ordinary blow is PARRIED (the attacker loses the blow's
@@ -20,9 +21,10 @@ extends RefCounted
 ##   6. a guard with the attacker inside the arc, against a blow a guard can take (an ordinary one): GUARDED,
 ##      paying the blow's guard_stamina, or GUARD_BREAK when there is less stamina than that (all of it is
 ##      spent); either way the guard takes the blow's posture damage
-##   7. otherwise a HIT: the blow's damage and posture damage, and a reaction: none under hyper-armour; else,
-##      once the poise damage reaches the target's poise, a STAGGER if the blow staggers or else a FLINCH;
-##      below the poise, none
+##   7. otherwise a HIT: the blow's damage and posture damage, and a reaction: none under hyper-armour; else a STAGGER
+##      whatever the blow's weight when the target's dodge chain is at Quick or Flurry (d.chain_tempo; the longer he
+##      stood and dodged, the more the blow that finds him costs); else, once the poise damage reaches the target's
+##      poise, a STAGGER if the blow staggers or else a FLINCH; below the poise, none
 ## The arc is guard_arc_deg either side of the defender's facing, toward where the attacker stands (back
 ## along the blow's direction).
 static func resolve(e: HitEvent, d: Defense, tuning: CombatTuning) -> HitResult:
@@ -35,6 +37,7 @@ static func resolve(e: HitEvent, d: Defense, tuning: CombatTuning) -> HitResult:
 	if d.evading != MoveData.Evade.NONE and (p.perilous == HitProfile.Perilous.NONE or p.perilous == HitProfile.Perilous.GRAB):
 		r.outcome = HitResult.Outcome.EVADED
 		r.perfect = is_perfect(d.evading, p)
+		r.attacker_posture_damage = d.evade_chip * (2.0 if r.perfect else 1.0)
 		return r
 	if p.perilous == HitProfile.Perilous.GRAB:
 		r.outcome = HitResult.Outcome.GRABBED
@@ -63,7 +66,11 @@ static func resolve(e: HitEvent, d: Defense, tuning: CombatTuning) -> HitResult:
 	r.outcome = HitResult.Outcome.HIT
 	r.hp_damage = p.damage
 	r.posture_damage = p.posture_damage
-	if d.hyperarmour or p.poise_damage < d.poise:
+	if d.hyperarmour:
+		r.reaction = HitResult.Reaction.NONE
+	elif d.chain_tempo >= 1:
+		r.reaction = HitResult.Reaction.STAGGER
+	elif p.poise_damage < d.poise:
 		r.reaction = HitResult.Reaction.NONE
 	elif p.staggers:
 		r.reaction = HitResult.Reaction.STAGGER

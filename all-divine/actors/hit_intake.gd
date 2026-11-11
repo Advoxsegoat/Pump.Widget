@@ -20,6 +20,9 @@ const HIT_REACT_BASE := 0.5
 const HIT_REACT_POISE := 20.0
 ## The outcomes whose blow kicks the upper body: those that reached it, or the guard in front of it.
 const KICKS: Array[HitResult.Outcome] = [HitResult.Outcome.HIT, HitResult.Outcome.GUARDED, HitResult.Outcome.GRABBED]
+## The outcomes that link the dodge chain (a defence that succeeded) and those that knock him out of it.
+const CHAIN_SUCCESSES: Array[HitResult.Outcome] = [HitResult.Outcome.EVADED, HitResult.Outcome.PARRIED, HitResult.Outcome.CAUGHT]
+const CHAIN_BREAKS: Array[HitResult.Outcome] = [HitResult.Outcome.HIT, HitResult.Outcome.GRABBED, HitResult.Outcome.GUARD_BREAK]
 ## The reactions a frame's blows can leave the body with, weakest first: of all of them, the strongest plays, once.
 ## Its own answers (parry, catch) give way to anything done to it; a guarded blow to one that got through; a flinch
 ## to its own blow turned back (parried) and that to a stagger; then being caught, a broken guard, and last a broken
@@ -61,6 +64,13 @@ func _init(actor: Actor) -> void:
 ## decides when it is over). A WHIFF changes nothing, nor does anything on the dead; an EVADED blow changes only the
 ## runner's `evaded` flag: nothing comes off the body, it is not kicked and it reacts to nothing. got_hit is emitted for each blow
 ## that landed after, whatever its outcome.
+##
+## The dodge chain (Actor.chain) is fed once, after every blow of the frame is counted, so the frame has one outcome: if any
+## blow landed (a HIT, a GRABBED, a GUARD_BREAK) he is knocked out of it, and no evade of that frame counts (the runner's
+## `evaded` stays false, and nothing is linked or given back); otherwise every EVADED, PARRIED and CAUGHT blow links it, and
+## a perfect dodge gives its stamina back (the dodge's cost and the chain's perfect_refund). A GUARDED blow does nothing.
+## A turned blow, and an evaded one that took posture from its attacker, reaches the attacker as posture damage; only the
+## turned blow also gives it a reaction.
 func take(events: Array[HitEvent], results: Array[HitResult], turned: Array[HitEvent] = [],
 		turned_results: Array[HitResult] = []) -> void:
 	if not _actor.dead:
@@ -68,12 +78,17 @@ func take(events: Array[HitEvent], results: Array[HitResult], turned: Array[HitE
 		var killed := false
 		var broke := false
 		var strongest := -1  # in REACTIONS
+		var landed := false
+		var defended: Array[HitResult] = []  # the blows that were evaded, parried or caught, in order
 		for i in events.size():
 			var r := results[i]
 			if r.outcome == HitResult.Outcome.WHIFF:
 				continue
+			if CHAIN_SUCCESSES.has(r.outcome):
+				defended.append(r)
+			elif CHAIN_BREAKS.has(r.outcome):
+				landed = true
 			if r.outcome == HitResult.Outcome.EVADED:
-				_actor.runner.evaded = true
 				continue
 			if KICKS.has(r.outcome):
 				_actor.rig.hit_react(events[i].direction, HIT_REACT_BASE + events[i].profile.poise_damage / HIT_REACT_POISE)
@@ -86,7 +101,10 @@ func take(events: Array[HitEvent], results: Array[HitResult], turned: Array[HitE
 			var r := turned_results[i]
 			if r.attacker_posture_damage > 0.0:
 				broke = stats.damage_posture(r.attacker_posture_damage) or broke
+			if r.outcome == HitResult.Outcome.EVADED:
+				continue  # no reaction of its own: its blow found nothing, and only a broken posture reels
 			strongest = maxi(strongest, REACTIONS.find(&"caught" if r.outcome == HitResult.Outcome.CAUGHT else &"parried"))
+		_feed_chain(landed, defended)
 		if broke:
 			strongest = REACTIONS.find(&"posture_broken")
 		if _actor.paired_with != null:
@@ -115,6 +133,8 @@ func die(lying := false) -> void:
 	_actor.remove_from_group(Actor.LOCKABLE_GROUP)
 	_actor.remove_from_group(Actor.FINISHABLE_GROUP)
 	_actor.buffer.clear()
+	if _actor.chain != null:
+		_actor.chain.end()
 	_actor.rig.set_lifeless(true)
 	_actor.rig.hurtbox.collision_layer = 0
 	_death = null if lying else _reaction_move(&"death")
@@ -153,6 +173,27 @@ func restore_posture() -> void:
 func get_up() -> void:
 	if _react(&"getup") == null:
 		_actor.rig.stop_move(GET_UP_FADE)
+
+
+# What the frame's blows did to the dodge chain, decided once: a blow that landed (`landed`) knocks him out of it, and the
+# evades of that frame do not count; with none, each blow in `defended` (evaded, parried or caught, in the order they came)
+# links it, and a perfect dodge gives its stamina back. A body with no chain still notes that it evaded (the runner's flag
+# and the whiff rule read it) and gets its dodge's cost back for a perfect one.
+func _feed_chain(landed: bool, defended: Array[HitResult]) -> void:
+	var chain := _actor.chain
+	if landed:
+		if chain != null:
+			chain.knock_out()
+		return
+	for r in defended:
+		var perfect := r.outcome == HitResult.Outcome.EVADED and r.perfect
+		if r.outcome == HitResult.Outcome.EVADED:
+			_actor.runner.note_evaded()
+		if perfect:
+			var cost := _actor.runner.current.stamina_cost if _actor.runner.current != null else 0.0
+			_actor.stats.refund_stamina(cost + (_actor.def.chain.perfect_refund if chain != null else 0.0))
+		if chain != null:
+			chain.link(perfect, _actor.buffer_frame)
 
 
 # The reaction a blow that landed on the actor asks for (a name in REACTIONS), or &"" for none.

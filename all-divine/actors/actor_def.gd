@@ -27,6 +27,8 @@ enum Team { PLAYER, ENEMY }
 @export var locomotion: LocomotionTuning
 ## The numbers of its fighting that are not part of any one blow (see combat/combat_tuning.gd).
 @export var combat: CombatTuning
+## The numbers of its dodge chain (combat/chain_tuning.gd); none: it has no chain, and Actor.chain is null.
+@export var chain: ChainTuning
 ## Reaction name -> move id: what the actor plays when it is flinched, staggered, guard-hit, guard-broken,
 ## parried, caught, posture-broken, killed or got up (`flinch`, `stagger`, `guard_hit`, `guard_break`,
 ## `parried`, `caught`, `posture_broken`, `death` and `getup`), and its own answers to a blow, `parry` and

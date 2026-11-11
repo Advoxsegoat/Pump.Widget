@@ -10,7 +10,8 @@ extends RefCounted
 ## PARRIED     a parry turned it back: the attacker loses posture
 ## CAUGHT      a parry caught a thrust: the attacker loses a set amount of posture
 ## EVADED      an evade window (a sway or a duck) avoided an ordinary blow or a grab: the blow is spent, with no weight and
-##             nothing taken off either side, and both fighters hear of it (`perfect` says whether the dodge matched)
+##             nothing taken off the target, and both fighters hear of it (`perfect` says whether the dodge matched). A
+##             target whose chain is at Quick or Flurry takes posture from the attacker for it (attacker_posture_damage)
 ## GRABBED     a grab took hold: Melee starts the attacker's grab pair, and the blow itself does nothing more; an
 ##             attacker without a grab pair has it taken as a HIT that staggers
 enum Outcome { WHIFF, HIT, GUARDED, GUARD_BREAK, PARRIED, CAUGHT, GRABBED, EVADED }
@@ -27,5 +28,5 @@ var hp_damage := 0.0
 var posture_damage := 0.0
 ## Taken off the target's stamina (a guard paying for the blow).
 var stamina_cost := 0.0
-## Taken off the attacker's posture (a parry or a catch).
+## Taken off the attacker's posture (a parry or a catch, or an evade by a body whose chain is at Quick or Flurry).
 var attacker_posture_damage := 0.0

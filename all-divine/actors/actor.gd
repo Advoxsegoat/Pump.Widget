@@ -171,6 +171,10 @@ var evade_dir := Vector2.ZERO
 var paired_with: Actor
 ## The paired move the actor is in, or null.
 var pair: PairedMove
+## The chain of defences that succeeded in a row (DodgeChain), null for an actor whose def has no `chain`.
+var chain: DodgeChain
+## The tempo the chain had when the attack now playing started (SLIP for any other move): what the counters read.
+var cashed_tempo: DodgeChain.Tempo = DodgeChain.Tempo.SLIP
 ## Keeps its body out of other actors' (step 7): its motion on the ground stops at their capsules.
 var spacing: BodySpacing
 
@@ -202,6 +206,8 @@ func _ready() -> void:
 	rig.set_model_scale(def.model_scale)
 	stats = Stats.from_def(def)
 	locomotion = Locomotion.new(def.locomotion)
+	if def.chain != null:
+		chain = DodgeChain.new(def.chain)
 	locomotion.facing_yaw = rotation.y
 	runner.actor = self
 	runner.move_started.connect(_on_move_started)
@@ -394,14 +400,19 @@ func start_finisher_on(action: StringName) -> bool:
 
 
 ## The move the press of `action` starts now: `named` (what the open cancel window says for it) or else the actor's moveset
-## move for it, then that move's `directional` variant for the side asked for: of `evade_dir` for a sway or duck, of the
+## move for it (for a sway or duck of an actor with a chain: the base move of the chain's present tempo), then that move's `directional` variant for the side asked for: of `evade_dir` for a sway or duck, of the
 ## intent's stick for anything else (a dash-step). The side is measured against the way he faces (MoveData.side_of); a
 ## move with no variant for it, or none at all, is the move itself. The runner calls this at both places it starts a
 ## consumed press, so a window and a rest start the same move. Null for a press the actor has no move for.
 func move_for(action: StringName, intent: Intent, named: StringName = &"") -> MoveData:
 	var id: StringName = named if named != &"" else StringName(str(def.moveset.get(action, &"")))
+	# The chain's tempo picks the base move of a sway or duck (Slip, Quick or Flurry), in place of the one the moveset or the
+	# window names; an actor with no chain keeps what they name.
+	if chain != null and (action == SWAY_ACTION or action == DUCK_ACTION):
+		var bases := def.chain.sway_moves if action == SWAY_ACTION else def.chain.duck_moves
+		if chain.tempo() < bases.size():
+			id = bases[chain.tempo()]
 	var move := Registry.fetch(&"moves", id) as MoveData
-	# The chain (the tempo of the dodge before) picks a Quick or Flurry move in place of `move` here.
 	if move == null or move.directional.is_empty():
 		return move
 	var asked := evade_dir if action == SWAY_ACTION or action == DUCK_ACTION else intent.move
@@ -486,6 +497,8 @@ func _physics_process(delta: float) -> void:
 	if frozen > 0:
 		frozen -= 1
 		return
+	if chain != null:
+		chain.tick(buffer_frame)  # a frozen frame is not counted: buffer_frame stood still
 	var moved_by_move := runner.busy()
 	var facing_before := locomotion.facing_yaw
 	var planar := runner.tick(intent, delta)
@@ -519,6 +532,8 @@ func _physics_process(delta: float) -> void:
 	var walked := _walked(before, shove, delta) if is_on_wall() else Vector3(spaced.x - shove.x, 0.0, spaced.z - shove.z) * kept
 	if walked.length() < locomotion.speed - LEG_SLACK:
 		locomotion.speed = walked.length()  # blocked: the legs go no faster than the body did
+	if chain != null and not moved_by_move and not runner.busy() and locomotion.speed > STRAFE_MIN_SPEED:
+		chain.end()  # he walks: his own legs take him somewhere (not a push, not a move's travel, not a stick under a planted guard)
 	rotation.y = locomotion.facing_yaw
 	var back := rig.set_strafe(_strafe_angle(intent, walked))
 	rig.set_locomotion(_next_rig_speed(delta), back)
@@ -575,8 +590,31 @@ func _set_guarding(on: bool) -> void:
 
 # Any move but guard_hit takes the guard stance down: an attack, a sway or a dash-step out of it, a reaction, the death.
 func _on_move_started(move: MoveData) -> void:
+	_on_move_started_chain(move)
 	if guarding and move.id != def.reactions.get(GUARD_HIT, &""):
 		_set_guarding(false)
+
+
+# What a move that starts does to the chain: an attack cashes it (cashed_tempo is the tempo it had, for the counters; any other
+# move puts it back to Slip), and a dash-step or hop ends it. A sway, duck, parry, catch, guard raise and reaction leave it.
+func _on_move_started_chain(move: MoveData) -> void:
+	cashed_tempo = DodgeChain.Tempo.SLIP
+	if chain == null:
+		return
+	if move.kind == MoveData.Kind.ATTACK:
+		cashed_tempo = chain.cash()
+	elif _is_footwork(move):
+		chain.end()
+
+
+# Whether `move` is a dash-step (a dodge with no evade) or the hop its dodge starts with the stick at rest (its neutral variant).
+func _is_footwork(move: MoveData) -> bool:
+	if move.kind == MoveData.Kind.DODGE and move.evade == MoveData.Evade.NONE:
+		return true
+	if not def.moveset.has(SPRINT_ACTION):
+		return false
+	var dodge := Registry.fetch(&"moves", StringName(str(def.moveset[SPRINT_ACTION]))) as MoveData
+	return dodge != null and dodge.neutral_variant == move.id
 
 
 # The raise, guard_hit, parry, catch, or a sway or duck played out: the guard stance comes up this frame if guard is still held
