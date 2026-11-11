@@ -60,6 +60,9 @@ const BARRED_ACTIONS: Array[StringName] = [&"sway", &"duck", &"dodge"]
 ## The first pass over a move's marks starts here, below 0, so the marks at time 0 are met
 ## (Marks.between is half-open: it leaves out its start).
 const BEFORE_START := -1.0
+## Frames, on the actor's buffer_frame clock (which stands still while it is frozen), after a blow is evaded during a sway or duck
+## in which a palm or heavy is that dodge's counter or clear-out (MoveData.counters).
+const COUNTER_FRAMES := 24
 ## How far (metres) a warped move may travel further or less than its clip's own root travel.
 const MAX_WARP := 0.3
 

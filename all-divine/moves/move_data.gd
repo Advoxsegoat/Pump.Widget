@@ -47,6 +47,13 @@ enum Evade { NONE, SWAY, DUCK }
 ## (side_of). A sway's side is a lean (30 and 150); a dash-step's four sides are equal quarters (45 and 135).
 @export var side_ahead_deg := 30.0
 @export var side_back_deg := 150.0
+## What a palm or heavy pressed within MoveRunner.COUNTER_FRAMES of an evade during this move starts instead of the move's own
+## cancel into it: action -> move id (a sway's palm is the hook, its heavy the back-palm clear-out; a duck's the rising palm and
+## the wave). Empty for a move that has no counters.
+@export var counters: Dictionary = {}
+## Whether the move is a counter or a clear-out: its blows carry what the chain was worth when it was cashed in (HitEvent.power,
+## always_staggers, throw), which the scanner fills in from the actor's cashed_tempo.
+@export var cashes := false
 ## Seconds over which the move fades in over what the actor was doing, and out to locomotion.
 @export var blend_in := 0.05
 @export var blend_out := 0.15

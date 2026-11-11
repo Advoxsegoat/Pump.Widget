@@ -17,6 +17,10 @@ enum Perilous { NONE, SWEEP, THRUST, GRAB }
 ## only the matching one is a perfect dodge.
 enum Line { STRAIGHT, ROUND }
 
+## Which way a thrown target (`throw`) goes: ALONG_BLOW is the way the blow travels, RADIAL straight away from the attacker, SIDEWAYS
+## to the attacker's right.
+enum ThrowWay { ALONG_BLOW, RADIAL, SIDEWAYS }
+
 ## Hit points taken from the target.
 @export var damage := 0.0
 ## How hard the blow shoves the target's footing: a hit flinches only if this reaches the target's
@@ -40,6 +44,13 @@ enum Line { STRAIGHT, ROUND }
 @export var height: Height = Height.MID
 @export var perilous: Perilous = Perilous.NONE
 @export var line: Line = Line.STRAIGHT
+## How wide the blow reaches round the attacker's facing, in degrees: a target further than half of it from the way the attacker
+## faces is not hit. 360 is all round.
+@export_range(0.0, 360.0) var arc_deg := 360.0
+## Metres the target is thrown in the open (the push travels its speed over the tuning's knockback_decay); 0 leaves the profile's
+## `knockback`. A clear-out's value is scaled by the tempo it was cashed at (HitEvent.throw).
+@export var throw := 0.0
+@export var throw_way: ThrowWay = ThrowWay.ALONG_BLOW
 ## The sound cue played on contact (a name in data/sounds/).
 @export var impact_sound := &"impact_palm"
 

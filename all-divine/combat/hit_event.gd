@@ -21,3 +21,11 @@ var direction: Vector3
 ## A blow of a paired move (a lead's pair_hit mark, on its follower): it was found by no scan, and no Defense judges
 ## it. It lands as a HIT with no reaction (Combat.pair_hit). `hitbox` is empty.
 var paired := false
+## What the blow is worth times: 1 for any blow, and for a move that cashes the chain in (MoveData.cashes) the scale of the tempo the
+## chain had (ChainTuning.cash_scale). A HIT's hp and posture damage are times this.
+var power := 1.0
+## The blow staggers its target whatever the poise: a Flurry counter.
+var always_staggers := false
+## Metres the target is thrown, from the tempo a clear-out was cashed at (ChainTuning.clearout_throw); 0 when the blow throws
+## no one, and the profile's `knockback` is its push.
+var throw := 0.0
