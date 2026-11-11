@@ -13,6 +13,7 @@ knockback = 3.0
 hitstop_frames = 6
 shake = 0.5
 line = 1
+throw = 3.0
 
 [resource]
 script = ExtResource("1_move")
