@@ -210,6 +210,10 @@ func _ready() -> void:
 		rig.apply_palette(def.palette)
 	rig.hide_parts(def.hidden_parts)
 	rig.set_model_scale(def.model_scale)
+	if def.locomotion != null:
+		rig.cadence = def.locomotion.cadence
+	if rig.foot_planter != null:
+		rig.foot_planter.keep_toes_up = def.keep_toes_up
 	stats = Stats.from_def(def)
 	locomotion = Locomotion.new(def.locomotion)
 	if def.chain != null:

@@ -16,6 +16,7 @@ palette = ExtResource("4_palette")
 hidden_parts = PackedStringArray()
 model_scale = 1.18
 pair_reach = 1.24
+keep_toes_up = true
 moveset = {
 &"gift": &"heavy_slam",
 &"palm": &"heavy_haymaker"
