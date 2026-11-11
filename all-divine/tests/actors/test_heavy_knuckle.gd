@@ -23,7 +23,8 @@ const BODY := 0.35
 ## The slam's blow comes on at its f38 and goes off at its f42 (frames 39 to 42).
 const SLAM_ON := 38
 const SLAM_OFF := 42
-const HAYMAKER_ON := 30
+const HAYMAKER_ON := 42
+const HAYMAKER_TELL := 4
 
 
 func after_each() -> void:
@@ -117,10 +118,19 @@ func test_its_moves_have_their_numbers() -> void:
 	assert_eq(h.hits.size(), 1)
 	assert_eq([hook.damage, hook.posture_damage, hook.knockback, hook.staggers, hook.line, hook.height, hook.perilous],
 			[26.0, 24.0, 3.0, true, HitProfile.Line.ROUND, HitProfile.Height.MID, HitProfile.Perilous.NONE], "the haymaker's blow")
-	assert_true(_mark_frame(&"heavy_haymaker", &"hitbox_on") <= 30, "its blow is on by f30")
+	var on := _mark_frame(&"heavy_haymaker", &"hitbox_on")
+	var off := _mark_frame(&"heavy_haymaker", &"hitbox_off")
+	assert_eq(on, HAYMAKER_ON, "its blow comes at f42")
+	assert_eq(_mark_frame(&"heavy_haymaker", &"tell"), HAYMAKER_TELL, "the glint at f4: 38 frames of warning")
+	assert_eq(off - on, 5, "its hitbox is on for 5 frames")
 	assert_eq(_mark_frame(&"heavy_haymaker", &"hyperarmour_on"), 8, "armoured from f8")
-	assert_eq(_mark_frame(&"heavy_haymaker", &"hyperarmour_off"), _mark_frame(&"heavy_haymaker", &"hitbox_off"), "to its hitbox_off")
-	assert_eq(_clip_frames(&"heavy_haymaker") - _mark_frame(&"heavy_haymaker", &"hitbox_off"), 36, "36 frames of recovery")
+	assert_eq(_mark_frame(&"heavy_haymaker", &"hyperarmour_off"), on + 2, "to two frames after the blow comes, so a counter after a dodge is not under it")
+	assert_true(_clip_frames(&"heavy_haymaker") - off >= 40, "at least 40 frames of recovery")
+	assert_true(_clip_frames(&"heavy_haymaker") <= 96, "and at most 96 frames in all")
+	for id: StringName in [&"heavy_haymaker", &"heavy_slam"]:
+		var windows := Marks.read(_clip(id)).filter(func(m: Dictionary) -> bool: return m["kind"] == &"cancel_open")
+		assert_eq(windows.size(), 1, "%s has the one cancel window the clip checker asks of an attack" % id)
+		assert_true(Marks.frame_of(windows[0]["time"]) >= _mark_frame(id, &"recovery") + 30, "%s's is late in its recovery, and his brain never presses into it" % id)
 	var s := _move(&"heavy_slam")
 	var slam: HitProfile = s.hits.values()[0]
 	assert_eq(s.hits.size(), 1)
@@ -167,10 +177,10 @@ func test_its_clips_do_not_pop_and_the_haymaker_strikes_as_its_hand_arrives() ->
 
 # --- hyper-armour ---
 
-func test_a_jab_does_not_stop_its_wind_up_and_a_flurry_counter_does() -> void:
+func test_a_jab_does_not_stop_its_wind_up() -> void:
 	# A jab (6 poise against its 14, and a hook's 12 does not reach it either) is no reason for it to stop: the HIT lands, takes its
-	# HP and posture, and gives it no reaction, so the haymaker goes on to its blow. (A Flurry counter's blow, always_staggers, is
-	# stopped by the armour as Combat.resolve is built: see the report. Here it is held that the armour holds for the small blows.)
+	# HP and posture, and gives it no reaction, so the haymaker goes on to its blow. (A counter that lands in the wind-up does not
+	# stagger it either: test_a_counter_into_his_wind_up_does_not_stagger_him_and_still_hurts.)
 	var run := _fight(1.8, [], _haymaker_steps())
 	var heavy: Actor = run["heavy"]
 	var abarax: Actor = run["abarax"]
@@ -252,6 +262,87 @@ func test_a_broken_heavy_is_finished_and_the_blows_reach_its_larger_body() -> vo
 	assert_true(deepest >= -0.05, "and none is more than 5 cm inside it (%.3f m)" % deepest)
 	assert_true(worst_sink <= 0.05, "and the bodies pass at most %.3f m into each other" % worst_sink)
 	assert_eq(heavy.stats.hp, 140.0 - 60.0, "the finisher took 15, 15 and 30 of its 140 HP")
+
+
+func _counter_after_dodge(evade: StringName, links: int, counter_at: int, duck_at: int) -> Dictionary:
+	# Abarax stands 1.4 m off, dodges the haymaker (the evade started on the heavy's frame `duck_at`), and presses palm on frame
+	# `counter_at`, with the chain at `links` links: the counter's own blow (a rising palm after a duck, a hook after a sway).
+	var run := _fight(1.4, [{"frames": counter_at - 1}, {"frames": 1, "press": [&"palm"]}, {"frames": 200}], _haymaker_steps())
+	var heavy: Actor = run["heavy"]
+	var abarax: Actor = run["abarax"]
+	abarax.chain_slow.tuning = abarax.chain_slow.tuning.duplicate() as ReadabilityTuning
+	abarax.chain_slow.tuning.slowdown_on = false
+	for i in links:
+		abarax.chain.link(false, 0)
+	var info := {"run": run, "armoured_until": -1, "landed": -1, "reaction": &"", "evaded": false}
+	var was := [false]
+	heavy.got_hit.connect(func(r: HitResult, e: HitEvent) -> void:
+		if e.attacker == abarax and r.outcome == O.HIT and info["landed"] < 0:
+			info["landed"] = heavy.frame
+			info["reaction"] = r.reaction)
+	abarax.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void:
+		if r.outcome == O.EVADED:
+			info["evaded"] = true)
+	await Duel.play_to(self, heavy, duck_at)
+	abarax.runner.start(_move(evade))
+	while heavy.frame < 100:
+		await frames(1)
+		if heavy.runner.hyperarmour:
+			was[0] = true
+		elif was[0] and info["armoured_until"] < 0:
+			info["armoured_until"] = heavy.frame
+	return info
+
+
+func test_a_counter_after_a_dodged_haymaker_staggers_him() -> void:
+	# The duck's evade window is its frames 2 to 14 and the sway's 2 to 12, started on the heavy's frame given (the blow's contact
+	# is about frame 44).
+	for case: Array in [[&"duck_slip", &"counter_rise", 0, 30], [&"duck_slip", &"counter_rise", 3, 30], [&"duck_slip", &"counter_rise", 7, 30],
+			[&"sway_left_slip", &"counter_hook", 7, 34]]:
+		var info := await _counter_after_dodge(case[0], case[2], 46, case[3])
+		assert_true(info["evaded"], "%s evaded the haymaker (links %d)" % [case[0], case[2]])
+		assert_true(info["landed"] > 0, "the counter landed (%s, links %d)" % [case[1], case[2]])
+		assert_true(info["armoured_until"] > 0 and info["landed"] - info["armoured_until"] >= 3,
+				"at least 3 frames after his armour ended (it ended on %d, the counter landed on %d)" % [info["armoured_until"], info["landed"]])
+		if case[2] == 7:
+			assert_eq(info["reaction"], R.STAGGER, "a Flurry counter staggers him (%s)" % case[1])
+		_end(info["run"])
+
+
+func test_a_counter_into_his_wind_up_does_not_stagger_him_and_still_hurts() -> void:
+	var run := _fight(1.0, [], _haymaker_steps())
+	var heavy: Actor = run["heavy"]
+	var abarax: Actor = run["abarax"]
+	abarax.chain_slow.tuning = abarax.chain_slow.tuning.duplicate() as ReadabilityTuning
+	abarax.chain_slow.tuning.slowdown_on = false
+	for i in 7:
+		abarax.chain.link(false, 0)
+	var seen: Array = []
+	heavy.got_hit.connect(func(r: HitResult, e: HitEvent) -> void:
+		if e.attacker == abarax:
+			seen.append([r.outcome, r.reaction, heavy.runner.hyperarmour]))
+	await Duel.play_to(self, heavy, 8)
+	var hp := heavy.stats.hp
+	abarax.runner.start(_move(&"counter_rise"))
+	await Duel.play_to(self, heavy, 24)
+	assert_true(not seen.is_empty() and seen[0][0] == O.HIT, "the counter landed: %s" % [seen])
+	assert_eq(seen[0][1], R.NONE, "and starts nothing while he is armoured")
+	assert_eq(heavy.runner.current.id, &"heavy_haymaker", "the haymaker plays on")
+	assert_true(heavy.stats.hp < hp - 20.0, "it still hurts (%.0f HP)" % (hp - heavy.stats.hp))
+
+
+func test_a_player_who_ducks_twenty_five_frames_after_the_tell_is_missed() -> void:
+	# The tell (the glint) is on frame 5 of the actor's life; a duck pressed 25 frames later, on frame 30, is evaded.
+	for gap: float in [1.4, 1.8, 2.2]:
+		var run := _fight(gap, [], _haymaker_steps())
+		var heavy: Actor = run["heavy"]
+		var abarax: Actor = run["abarax"]
+		await Duel.play_to(self, heavy, HAYMAKER_TELL + 1 + 25)
+		abarax.runner.start(_move(&"duck_slip"))
+		await Duel.play_to(self, heavy, 80)
+		var outcomes := _outcomes(run)
+		assert_false(outcomes.has("HIT"), "ducked 25 frames after the tell from %.1f m: not hit (%s)" % [gap, outcomes])
+		_end(run)
 
 
 # --- the slam ---
