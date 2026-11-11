@@ -242,7 +242,7 @@ func test_allies_do_not_hit_each_other() -> void:
 
 func test_a_blow_is_judged_as_the_target_stood_when_the_frame_began() -> void:
 	# A blow posted in the middle of a frame, on a target whose invulnerability changed earlier in that frame (as
-	# a roll's does in its own tick), is judged by what the target was when the frame began.
+	# a dodge's does in its own tick), is judged by what the target was when the frame began.
 	var run := _duel([], [], _foe(5.0))
 	var b: Actor = run["b"]
 	await frames(2)

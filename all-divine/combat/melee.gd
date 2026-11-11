@@ -11,7 +11,7 @@ extends Node
 ##     against those snapshots (Combat.resolve, with the target's CombatTuning), then applies them, target by
 ##     target (see below), and tells each attacker what its blow came to (hit_landed). A hit that came to
 ##     nothing (a WHIFF) is handed back to the attacker's scanner (HitScanner.forget), so the same swing may
-##     still strike that body on a later tick: a roll's iframes ending inside a long swing do not spare it
+##     still strike that body on a later tick: a body's iframes ending inside a long swing do not spare it
 ## So every hit of a frame is judged against the defenders as they stood when the frame began, and in a trade
 ## each side gets the result of the other's blow: both land. (The hurtboxes the hits were found on stood there
 ## too: see HitScanner.)

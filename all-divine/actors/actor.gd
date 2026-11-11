@@ -119,6 +119,9 @@ const GUARD_DROPPED_BY: Array[StringName] = [&"palm", &"heavy"]
 const GUARD_STANCE := &"guard_hold"
 ## The reaction a guarded blow plays: the guard stance stays up through it (HitIntake, hold_guard).
 const GUARD_HIT := &"guard_hit"
+## The reactions of a parry and of a catch: they end in the guard stance too when guard is still held.
+const PARRY_REACTION := &"parry"
+const CATCH_REACTION := &"catch"
 ## The action whose press, with a broken foe in reach, starts the def's finisher instead of its own move.
 const FINISHER_ACTION := &"palm"
 ## Actors whose posture is broken, while they reel (HitIntake): the foes a finisher can be started on.
@@ -402,7 +405,7 @@ func move_for(action: StringName, intent: Intent, named: StringName = &"") -> Mo
 	if move == null or move.directional.is_empty():
 		return move
 	var asked := evade_dir if action == SWAY_ACTION or action == DUCK_ACTION else intent.move
-	var variant: Variant = move.directional.get(MoveData.side_of(asked, facing()))
+	var variant: Variant = move.directional.get(MoveData.side_of(asked, facing(), move.side_ahead_deg, move.side_back_deg))
 	if variant == null:
 		return move
 	return Registry.fetch(&"moves", StringName(str(variant))) as MoveData
@@ -576,13 +579,16 @@ func _on_move_started(move: MoveData) -> void:
 		_set_guarding(false)
 
 
-# The raise, guard_hit or a sway or duck played out: the guard stance comes up this frame if guard is still held
+# The raise, guard_hit, parry, catch, or a sway or duck played out: the guard stance comes up this frame if guard is still held
 # (_keep_guard). A sway out of the stance ends with the stance back, so a player who holds guard through a flurry of sways
-# is standing his ground after the last of them, not walking off with his guard down.
+# is standing his ground after the last of them, and so does a parry or a catch (no fresh parry window comes with it): a
+# player who holds guard through an exchange is not left open by the answer that worked.
 func _on_move_ended(move: MoveData, cancelled: bool) -> void:
 	if cancelled:
 		return
-	if move.id == def.moveset.get(GUARD_ACTION, &"") or move.id == def.reactions.get(GUARD_HIT, &"") or move.evade != MoveData.Evade.NONE:
+	var ends_in_guard: Array = [def.moveset.get(GUARD_ACTION, &""), def.reactions.get(GUARD_HIT, &""),
+			def.reactions.get(PARRY_REACTION, &""), def.reactions.get(CATCH_REACTION, &"")]
+	if ends_in_guard.has(move.id) or move.evade != MoveData.Evade.NONE:
 		_guard_move_ended = true
 
 

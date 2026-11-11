@@ -76,6 +76,7 @@ const REACTIONS := {
 	&"guard_hit": [21, false, [
 		[0, &"sfx", {"name": &"roll_cloth"}],
 		[0, &"fx", {"name": &"roll_dust"}],
+		[6, &"cancel_open", {"into": {&"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 		[12, &"recovery", {}],
 		[14, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	]],
@@ -97,12 +98,14 @@ const REACTIONS := {
 }
 # The guard and its answers to a blow (F1 Task 8), OTHER moves without root motion, as REACTIONS has them. The
 # raise's parry window is f0 to f9 (10 frames, 167 ms); its guard is up from f4 to its end. The parry and the
-# catch open the riposte: palm or heavy at f8 and f14.
+# catch open the riposte: palm or heavy at f8 and f14; a sway or duck opens earlier on each defence (the raise f2, the parry f3,
+# the guard hit f6, the catch f8), so that none is late or lost.
 const GUARD_MOVES := {
 	&"guard_raise": [14, false, [
 		[0, &"parry_on", {}],
 		[0, &"sfx", {"name": &"whoosh_light"}],
 		[2, &"fx", {"name": &"glint"}],
+		[2, &"cancel_open", {"into": {&"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 		[4, &"guard_on", {}],
 		[10, &"parry_off", {}],
 		[10, &"recovery", {}],
@@ -112,11 +115,13 @@ const GUARD_MOVES := {
 	&"parry": [24, false, [
 		[0, &"sfx", {"name": &"roll_cloth"}],
 		[0, &"fx", {"name": &"glint"}],
+		[3, &"cancel_open", {"into": {&"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 		[8, &"cancel_open", {"into": {&"palm": &"palm_jab", &"heavy": &"palm_heavy", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	]],
 	&"catch": [30, false, [
 		[0, &"sfx", {"name": &"roll_cloth"}],
 		[4, &"fx", {"name": &"palm_trail", "bone": &"hand_r"}],
+		[8, &"cancel_open", {"into": {&"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 		[14, &"cancel_open", {"into": {&"palm": &"palm_jab", &"heavy": &"palm_heavy", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	]],
 }

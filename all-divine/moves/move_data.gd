@@ -10,10 +10,6 @@ enum Kind { ATTACK, DODGE, OTHER, REACTION }
 ## evade at all, SWAY a lean aside, DUCK a drop. A sway is the perfect dodge of a straight blow, a duck of a round one.
 enum Evade { NONE, SWAY, DUCK }
 
-## How far (degrees) from the facing a direction is still straight ahead, and how far it is already behind (side_of).
-const SIDE_AHEAD_DEG := 30.0
-const SIDE_BACK_DEG := 150.0
-
 @export var id: StringName
 @export var kind: Kind = Kind.ATTACK
 ## The clip in the actor's rig that plays the move.
@@ -47,6 +43,10 @@ const SIDE_BACK_DEG := 150.0
 ## against the way the body faces, as a sway leans and a dash-step goes; the move itself is the forward or left one. Empty:
 ## this move is started whichever way the stick lies.
 @export var directional: Dictionary = {}
+## How far (degrees) from the facing a direction is still straight ahead for `directional`, and how far it is already behind
+## (side_of). A sway's side is a lean (30 and 150); a dash-step's four sides are equal quarters (45 and 135).
+@export var side_ahead_deg := 30.0
+@export var side_back_deg := 150.0
 ## Seconds over which the move fades in over what the actor was doing, and out to locomotion.
 @export var blend_in := 0.05
 @export var blend_out := 0.15
@@ -55,17 +55,18 @@ const SIDE_BACK_DEG := 150.0
 @export var imitates: StringName
 
 
-## Which side of a body facing `facing` the ground direction `dir` (world x, z) lies on: &"" within 30 degrees of the
-## facing (straight ahead, or no direction at all), &"back" at 150 degrees or more from it, otherwise &"left" or
-## &"right" (his own: facing +Z, +X is his left). The key of `directional` the move for that direction is under.
-static func side_of(dir: Vector2, facing: Vector3) -> StringName:
+## Which side of a body facing `facing` the ground direction `dir` (world x, z) lies on: &"" within `ahead_deg` of the
+## facing (straight ahead, or no direction at all), &"back" at `back_deg` or more from it, otherwise &"left" or
+## &"right" (his own: facing +Z, +X is his left). The key of `directional` the move for that direction is under. `ahead_deg`
+## and `back_deg` are the two cuts (a move holds its own: side_ahead_deg, side_back_deg).
+static func side_of(dir: Vector2, facing: Vector3, ahead_deg := 30.0, back_deg := 150.0) -> StringName:
 	var ahead := Vector2(facing.x, facing.z)
 	if dir.is_zero_approx() or ahead.is_zero_approx():
 		return &""
 	var angle := rad_to_deg(absf(ahead.angle_to(dir)))
-	if angle <= SIDE_AHEAD_DEG:
+	if angle <= ahead_deg + 1e-4:
 		return &""
-	if angle >= SIDE_BACK_DEG:
+	if angle >= back_deg - 1e-4:
 		return &"back"
 	# His right hand is the facing turned a quarter toward -X when he faces +Z: (-z, x).
 	return &"right" if dir.dot(Vector2(-ahead.y, ahead.x)) > 0.0 else &"left"

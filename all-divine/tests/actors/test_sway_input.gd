@@ -504,7 +504,7 @@ func test_holding_dodge_after_a_dash_step_sprints() -> void:
 
 func test_a_parry_flows_into_a_sway() -> void:
 	# b taps guard on frame 6 and the jab (which lands on frame 11) is parried: b plays `parry`. It presses a sway on frame
-	# 15, in the hit-stop; the sway starts at the parry's f8 (frame 22, after the 3 frozen frames), as a riposte would.
+	# 15, in the hit-stop; the sway starts at the parry's f3 (frame 17, after the 3 frozen frames), well before a riposte could.
 	var run := Duel.make(self, [{"frames": 1, "press": [&"palm"]}, {"frames": 80}],
 			[{"frames": 5}, {"frames": 1, "press": [&"guard"], "hold": [&"guard"]}, {"frames": 8}, {"frames": 1, "press": [&"sway"], "evade_dir": Vector2(-1, 0)}, {"frames": 60}])
 	var b: Actor = run["b"]
@@ -515,7 +515,7 @@ func test_a_parry_flows_into_a_sway() -> void:
 	assert_eq(names.slice(0, 3), [&"guard_raise", &"parry", &"sway_left_slip"], "raise, parry, then the sway: %s" % [started])
 	if started.size() >= 3:
 		var parry_at: int = started[1][1]
-		assert_eq(started[2][1], parry_at + 8 + 3, "the sway on the parry's f8, where its window opens, after the parry's 3 frozen frames")
+		assert_eq(started[2][1], parry_at + 3 + 3, "the sway on the parry's f3, where its first window opens, after the parry's 3 frozen frames")
 
 
 # --- the window marks and the roll's end ---
@@ -610,3 +610,232 @@ func after_each() -> void:
 		_key_event(key, false)
 	_stick(0, 0.0, 0.0)
 	await frames(1)
+
+
+# --- fix round 1 ---
+
+# Abarax (a PLAYER copy) holding guard through `steps` more frames, who starts `move_id` himself at the end of frame `at`,
+# with `freeze` frames of hit-stop on it, and presses a sway toward his right on frame `press`. Returns the run.
+func _defence_run(move_id: StringName, at: int, freeze: int, press: int, total: int) -> Dictionary:
+	var arena := TestArena.make(self)
+	var steps := [{"frames": at + press - 1, "hold": [&"guard"]}, {"frames": 1, "press": [&"sway"], "evade_dir": Vector2(-1, 0), "hold": [&"guard"]},
+			{"frames": total, "hold": [&"guard"]}]
+	var actor := TestArena.spawn(arena, Duel.def(ActorDef.Team.PLAYER, 5.0), ScriptBrain.new(steps))
+	var run := {"arena": arena, "actor": actor, "started": [], "ended": []}
+	_watch(run, actor)
+	while actor.frame < at:
+		await frames(1)
+	actor.runner.start(Registry.fetch(&"moves", move_id) as MoveData)
+	if freeze > 0:
+		actor.freeze(freeze)
+	run["at"] = at
+	while actor.frame < at + press + total:
+		await frames(1)
+	return run
+
+
+func test_a_sway_pressed_on_any_frame_of_a_defence_comes_out() -> void:
+	# Each defence move is started by hand on frame 5; the sway is pressed on each frame k after it (k = 1 is the move's
+	# f1), with and without hit-stop on the move's first frames. None is swallowed.
+	var lengths := {&"guard_raise": 14, &"parry": 24, &"guard_hit": 21, &"catch": 30}
+	for id: StringName in lengths:
+		for freeze in [0, 4]:
+			for k in range(1, int(lengths[id]) + 3):
+				var run: Dictionary = await _defence_run(id, 5, freeze, k, 40)
+				var swayed: Array = run["started"].filter(func(s: Array) -> bool: return String(s[0]).begins_with("sway_"))
+				assert_eq(swayed.size(), 1, "%s, hit-stop %d, sway pressed on its frame %d: %s" % [id, freeze, k, run["started"]])
+				run["arena"].queue_free()
+				await frames(1)
+
+
+func test_a_sway_after_a_guard_tap_answers_within_two_frames() -> void:
+	for gap in range(1, 10):
+		var brain := KeysBrain.new([
+			{"frames": 4},
+			{"frames": 1, "press": [&"guard"], "hold": [&"guard"]},
+			{"frames": gap - 1, "hold": [&"guard"]},
+			{"frames": 1, "hold": [&"guard"], "dir": Vector2.RIGHT},
+			{"frames": 40, "hold": [&"guard"]},
+		])
+		var run: Dictionary = await _play(brain, 5 + gap + 40)
+		var sways: Array = run["started"].filter(func(s: Array) -> bool: return String(s[0]).begins_with("sway_"))
+		var pressed := 5 + gap
+		assert_eq(sways.size(), 1, "guard on 5, direction on %d: %s" % [pressed, run["started"]])
+		if sways.size() == 1:
+			assert_true(sways[0][1] - pressed <= 2, "the sway started on %d, %d frames after its press" % [sways[0][1], sways[0][1] - pressed])
+		run["arena"].queue_free()
+		await frames(1)
+
+
+func test_a_sway_after_a_parry_starts_by_its_third_free_frame() -> void:
+	await _assert_free_frame(&"parry", 3)
+
+
+func test_a_sway_after_a_guard_hit_starts_by_its_sixth_free_frame() -> void:
+	await _assert_free_frame(&"guard_hit", 6)
+
+
+func test_a_sway_after_a_catch_starts_by_its_eighth_free_frame() -> void:
+	await _assert_free_frame(&"catch", 8)
+
+
+# The reaction is on from the end of frame 5 with 3 frames of hit-stop, and the sway is pressed on frame 6, inside it: it
+# starts on the `free`th frame after the hit-stop (the reaction's f<free>), when its first window opens.
+func _assert_free_frame(id: StringName, free: int) -> void:
+	var run: Dictionary = await _defence_run(id, 5, 3, 1, 40)
+	var swayed: Array = run["started"].filter(func(s: Array) -> bool: return String(s[0]).begins_with("sway_"))
+	assert_eq(swayed.size(), 1, "%s: %s" % [id, run["started"]])
+	if swayed.size() == 1:
+		assert_eq(swayed[0][1], 5 + 3 + free, "%s: the sway on its free frame %d (the press was on frame 6)" % [id, free])
+
+
+func test_a_guarded_blow_twelve_frames_before_the_next_leaves_time_to_sway_it() -> void:
+	# b guards (raised on frame 1: its parry window is over by 11). a's jab lands on frame 13 and is GUARDED; c's, from behind,
+	# lands on frame 25, twelve frames later. b presses a sway on frame 14 (the first after the blow): the second is EVADED.
+	var arena := TestArena.make(self)
+	var b := TestArena.spawn(arena, Duel.def(ActorDef.Team.ENEMY, 5.0), ScriptBrain.new([
+			{"frames": 1, "press": [&"guard"], "hold": [&"guard"]}, {"frames": 12, "hold": [&"guard"]},
+			{"frames": 1, "press": [&"sway"], "evade_dir": Vector2(-1, 0), "hold": [&"guard"]}, {"frames": 60, "hold": [&"guard"]}]), Vector3(0, 0, 1), "B")
+	b.place(Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, 1)))
+	var a := TestArena.spawn(arena, Duel.def(ActorDef.Team.PLAYER, 5.0), ScriptBrain.new([{"frames": 2}, {"frames": 1, "press": [&"palm"]}, {"frames": 60}]), Vector3.ZERO, "A")
+	a.place(Transform3D(Basis(Vector3.UP, 0.0), Vector3.ZERO))
+	var c := TestArena.spawn(arena, Duel.def(ActorDef.Team.PLAYER, 5.0), ScriptBrain.new([{"frames": 14}, {"frames": 1, "press": [&"palm"]}, {"frames": 60}]), Vector3(0, 0, 2), "C")
+	c.place(Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, 2)))
+	var got := []
+	b.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void: got.append([HitResult.Outcome.keys()[r.outcome], b.frame]))
+	await Duel.play_to(self, b, 40)
+	assert_eq(got, [["GUARDED", 13], ["EVADED", 25]], "the first guarded, the second, twelve frames on, evaded")
+
+
+func test_guard_held_through_a_parry_is_a_guard_when_it_ends() -> void:
+	# b taps guard before a's jab lands (a parry) and keeps it held; a's next jab, long after the parry is over, is GUARDED.
+	var run := Duel.make(self, [{"frames": 1, "press": [&"palm"]}, {"frames": 60}, {"frames": 1, "press": [&"palm"]}, {"frames": 40}],
+			[{"frames": 5}, {"frames": 1, "press": [&"guard"], "hold": [&"guard"]}, {"frames": 150, "hold": [&"guard"]}])
+	var b: Actor = run["b"]
+	var got := []
+	b.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void: got.append(HitResult.Outcome.keys()[r.outcome]))
+	await Duel.play_to(self, b, 120)
+	assert_eq(got, ["PARRIED", "GUARDED"], "parried, then, with guard held, guarded")
+
+
+func test_guard_held_through_a_catch_is_a_guard_when_it_ends() -> void:
+	var solo: Dictionary = await _play(ScriptBrain.new([{"frames": 90, "hold": [&"guard"]}]), 2)
+	var a: Actor = solo["actor"]
+	a.runner.start(Registry.fetch(&"moves", &"catch") as MoveData)
+	while a.frame < 50:
+		await frames(1)
+	assert_true(a.guarding, "guard still held: the stance is up when the catch is over")
+	assert_false(a.runner.parry_window, "and no fresh parry window comes with it")
+
+
+func test_a_parry_played_out_with_guard_held_brings_the_stance_back() -> void:
+	var solo: Dictionary = await _play(ScriptBrain.new([{"frames": 80, "hold": [&"guard"]}]), 2)
+	var a: Actor = solo["actor"]
+	a.runner.start(Registry.fetch(&"moves", &"parry") as MoveData)
+	while a.frame < 40:
+		await frames(1)
+	assert_true(a.guarding, "the stance is up when the parry is over")
+	assert_false(a.runner.parry_window, "and no fresh parry window comes with it")
+
+
+func test_a_dash_step_on_a_diagonal_travels_the_diagonal() -> void:
+	for degrees in [45.0, 20.0, 70.0, -45.0, -20.0, 100.0, 135.0, 160.0]:
+		var dir := Vector2(sin(deg_to_rad(degrees)), cos(deg_to_rad(degrees)))  # degrees toward his left, from ahead (+Z)
+		var run: Dictionary = await _play(ScriptBrain.new([{"frames": 5}, {"frames": 1, "press": [&"dodge"], "move": dir}, {"frames": 40}]), 46)
+		var moved: Vector3 = _at(run, 46)["position"] - _at(run, 5)["position"]
+		assert_vec_near(moved, Vector3(dir.x, 0, dir.y) * DASH_TRAVEL, 0.05, "%s degrees off his facing: %s" % [degrees, moved])
+		assert_vec_near(_at(run, 24)["facing"], Vector3(0, 0, 1), 1e-6, "%s degrees: he faces as he did" % degrees)
+		run["arena"].queue_free()
+		await frames(1)
+
+
+func test_a_dash_steps_four_sides_are_equal_quarters_and_a_sways_are_not() -> void:
+	var dash := Registry.fetch(&"moves", &"dash_step") as MoveData
+	var sway := Registry.fetch(&"moves", &"sway_left_slip") as MoveData
+	assert_eq([dash.side_ahead_deg, dash.side_back_deg], [45.0, 135.0])
+	assert_eq([sway.side_ahead_deg, sway.side_back_deg], [30.0, 150.0])
+	var facing := Vector3(0, 0, 1)
+	assert_eq(MoveData.side_of(Vector2.from_angle(PI / 2 - deg_to_rad(40.0)), facing, 45.0, 135.0), &"", "40 degrees: ahead for a dash-step")
+	assert_eq(MoveData.side_of(Vector2.from_angle(PI / 2 - deg_to_rad(40.0)), facing), &"left", "and a side for a sway")
+
+
+func _use_device(device: int) -> void:
+	for pressed in [true, false]:
+		var event: InputEvent
+		if device == Inputs.Device.GAMEPAD:
+			var button := InputEventJoypadButton.new()
+			button.button_index = JOY_BUTTON_BACK
+			button.pressed = pressed
+			event = button
+		else:
+			var key := InputEventKey.new()
+			key.physical_keycode = KEY_F8
+			key.keycode = KEY_F8
+			key.pressed = pressed
+			event = key
+		Input.parse_input_event(event)
+		Input.flush_buffered_events()
+
+
+func _guard_facing_run(device: int, foe_at: Vector3) -> Dictionary:
+	_use_device(device)
+	var arena := TestArena.make(self)
+	var foe := TestArena.spawn(arena, load("res://data/actors/knuckle_1.tres"), Brain.new(), foe_at, "Foe")
+	foe.place(Transform3D(Basis.IDENTITY, foe_at))
+	var brain := KeysBrain.new([{"frames": 1, "press": [&"guard"], "hold": [&"guard"]}, {"frames": 60, "hold": [&"guard"]}])
+	var run: Dictionary = await _play(brain, 40, 0.0, Vector3.ZERO, arena)
+	_use_device(Inputs.Device.KEYBOARD_MOUSE)
+	return run
+
+
+func test_a_pad_guard_with_no_lock_turns_to_the_nearest_foe() -> void:
+	var behind: Dictionary = await _guard_facing_run(Inputs.Device.GAMEPAD, Vector3(0, 0, -2.5))
+	assert_true((_at(behind, 40)["facing"] as Vector3).dot(Vector3(0, 0, -1)) > 0.99, "a foe behind him within 3.5 m: he comes round: %s" % [_at(behind, 40)["facing"]])
+	assert_vec_near(_at(behind, 40)["position"], Vector3.ZERO, 1e-3, "and stays where he stands")
+	behind["arena"].queue_free()
+	await frames(1)
+	var far: Dictionary = await _guard_facing_run(Inputs.Device.GAMEPAD, Vector3(0, 0, -5.0))
+	assert_vec_near(_at(far, 40)["facing"], Vector3(0, 0, 1), 1e-6, "a foe at 5 m: he does not")
+	far["arena"].queue_free()
+	await frames(1)
+	var mouse: Dictionary = await _guard_facing_run(Inputs.Device.KEYBOARD_MOUSE, Vector3(0, 0, -2.5))
+	assert_vec_near(_at(mouse, 40)["facing"], Vector3(0, 0, 1), 1e-6, "on the keyboard and mouse the cursor decides, not the foe")
+
+
+func test_a_direction_that_went_down_while_he_was_held_is_not_a_press() -> void:
+	var arena := TestArena.make(self)
+	var actor := TestArena.spawn(arena, load(ABARAX), PlayerBrain.new())
+	var other := TestArena.spawn(arena, load(ABARAX), Brain.new(), Vector3(5, 0, 0), "Other")
+	var run := {"started": [], "ended": []}
+	_watch(run, actor)
+	_key_event(KEY_Q, true)
+	await frames(30)
+	actor.paired_with = other
+	_key_event(KEY_D, true)
+	await frames(5)
+	actor.paired_with = null
+	await frames(5)
+	_key_event(KEY_Q, false)
+	_key_event(KEY_D, false)
+	await frames(2)
+	var sways: Array = _ids(run).filter(func(id: StringName) -> bool: return String(id).begins_with("sway_"))
+	assert_eq(sways, [], "D went down while he was paired: no sway when he is free: %s" % [run["started"]])
+
+
+func test_a_direction_that_went_down_across_a_pause_is_not_a_press() -> void:
+	var arena := TestArena.make(self)
+	var actor := TestArena.spawn(arena, load(ABARAX), PlayerBrain.new())
+	var run := {"started": [], "ended": []}
+	_watch(run, actor)
+	_key_event(KEY_Q, true)
+	await frames(30)
+	get_tree().paused = true
+	_key_event(KEY_D, true)
+	await frames(5)
+	get_tree().paused = false
+	await frames(5)
+	_key_event(KEY_Q, false)
+	_key_event(KEY_D, false)
+	await frames(2)
+	var sways: Array = _ids(run).filter(func(id: StringName) -> bool: return String(id).begins_with("sway_"))
+	assert_eq(sways, [], "D went down while the game was paused: no sway: %s" % [run["started"]])

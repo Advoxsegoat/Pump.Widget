@@ -81,7 +81,7 @@ func test_cannot_pair_with_the_dead_or_the_already_paired() -> void:
 	assert_false(dead.start_paired(a, _pair()), "nor the dead with anyone")
 	assert_false(a.start_paired(a, _pair()), "nor with itself")
 	b.runner.iframes = true
-	assert_false(a.start_paired(b, _pair()), "nor with the invulnerable (mid-roll)")
+	assert_false(a.start_paired(b, _pair()), "nor with the invulnerable (mid-iframes)")
 	assert_false(b.start_paired(a, _pair()), "nor the invulnerable with anyone")
 	b.runner.iframes = false
 	assert_eq([a.paired_with, b.paired_with], [null, null], "nothing was paired")

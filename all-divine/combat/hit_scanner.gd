@@ -14,7 +14,7 @@ extends RefCounted
 ##
 ## Each body is struck at most once per activation: the same blow does not land again on the way back, and a new
 ## begin is a new blow. A blow that came to nothing does not count: Melee hands a WHIFF's target back (forget),
-## so a swing still live when a roll's iframes end can land on the body it passed through. The actor's own hurtbox is left out of the queries (its hands pass through its body),
+## so a swing still live when a body's iframes end can land on the body it passed through. The actor's own hurtbox is left out of the queries (its hands pass through its body),
 ## and so is every body of its own team (ActorDef.team): blows land only on the other side. A hurtbox is mapped
 ## to its actor by its meta `actor`, which Actor._ready sets.
 ##

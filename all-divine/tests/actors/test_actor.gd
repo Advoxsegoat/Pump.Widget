@@ -122,8 +122,7 @@ func test_place_stands_the_actor_there_at_rest_facing_its_way() -> void:
 	assert_near(actor.rotation.y, deg_to_rad(-120), 1e-4, "still facing that way")
 
 
-# snap_facing turns the body and locomotion's facing at once, with no turn rate in it: what a roll does to face the
-# stick, and what an aim assist does to face a foe.
+# snap_facing turns the body and locomotion's facing at once, with no turn rate in it: what an aim assist does to face a foe.
 func test_snap_facing_turns_the_body_and_locomotion_at_once() -> void:
 	var arena := TestArena.make(self)
 	var actor := TestArena.spawn(arena, _def(), Brain.new())
@@ -147,9 +146,9 @@ func test_head_point_is_look_height_above_the_feet() -> void:
 	assert_vec_near(giant.head_point(), Vector3(-3, 2.4, 0), 1e-6, "a taller def, a higher point")
 
 
-# The roll carries the speed he ran at (locomotion.speed), so that he runs on from it when the roll is done. The
-# rig's locomotion layer, which the move layer is laid over, rests once the roll is fully in (10 frames on: the
-# layer is in after 3 and the speed then eases to 0 in 3 more): it would show a run under the roll.
+# A dash-step carries the speed he ran at (locomotion.speed), so that he runs on from it when it is done. The
+# rig's locomotion layer, which the move layer is laid over, rests once the move is fully in (10 frames on: the
+# layer is in after 3 and the speed then eases to 0 in 3 more): it would show a run under the dash-step.
 func test_locomotion_layer_rests_while_a_move_plays() -> void:
 	var arena := TestArena.make(self)
 	var ahead := Vector2(0, 1)
@@ -160,13 +159,13 @@ func test_locomotion_layer_rests_while_a_move_plays() -> void:
 	while not actor.runner.busy():
 		await frames(1)
 	await frames(10)
-	assert_true(actor.runner.busy(), "mid-roll")
-	assert_true(actor.locomotion.speed > 1.0, "the roll carries speed (%s)" % actor.locomotion.speed)
+	assert_true(actor.runner.busy(), "mid-dash-step")
+	assert_true(actor.locomotion.speed > 1.0, "the dash-step carries speed (%s)" % actor.locomotion.speed)
 	assert_near(float(actor.rig.tree.get(Rig.LOCO_SPEED)), 0.0, 1e-9, "but the locomotion layer is at rest")
 	while actor.runner.busy():
 		await frames(1)
 	await frames(1)
-	assert_near(float(actor.rig.tree.get(Rig.LOCO_SPEED)), actor.locomotion.speed, 1e-6, "and takes the speed up again when the roll is over")
+	assert_near(float(actor.rig.tree.get(Rig.LOCO_SPEED)), actor.locomotion.speed, 1e-6, "and takes the speed up again when the dash-step is over")
 
 
 # A move started from a jog fades in over 0.05 s with the jog still under it, so the locomotion layer must keep

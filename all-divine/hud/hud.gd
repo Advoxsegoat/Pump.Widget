@@ -12,7 +12,7 @@ extends Control
 ##   - the lock reticle, a 5x5 rose diamond at the head of the foe locked on to
 ##   - the finisher prompt, a 7x7 rose glyph over the foe the player's palm would finish now (Actor.finishable_target)
 ##   - the unblockable icon over the head of an enemy giving a perilous attack its tell (ActorFx.icon_shape): a 9x9 rose
-##     glyph with a 1 px dark outline, one shape for each answer (a sweep: hop it; a thrust: catch it; a grab: roll away),
+##     glyph with a 1 px dark outline, one shape for each answer (a sweep: hop it; a thrust: catch it; a grab: sway or duck it),
 ##     drawn from the tell to the blow's last hitbox_off, its bottom at least 4 px above the head point, never over the
 ##     body (spec 3.5)
 ##   - the wave as pips, top centre
@@ -62,7 +62,7 @@ const HINT_MARGIN := 6
 ## The wave pips' states, as pip_states() gives them.
 enum Pip { COMING, ON, CLEARED }
 ## The unblockable icon of each answer, as 9 rows of 9 cells, an X where the glyph is drawn: a sweep is an upward chevron
-## over a low bar (hop it), a thrust a point between two brackets (catch it), a grab a sideways double chevron (roll away).
+## over a low bar (hop it), a thrust a point between two brackets (catch it), a grab a sideways double chevron (sway or duck it).
 const ICON_CELLS := {
 	HitProfile.Perilous.SWEEP: [
 		"....X....",

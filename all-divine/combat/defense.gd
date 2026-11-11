@@ -6,7 +6,7 @@ extends RefCounted
 ## stood when the frame began, whatever order the actors ran in: in a trade, neither side's blow has already
 ## flinched the other.
 
-## A move's marks make the body untouchable (a roll's iframes).
+## A move's marks make the body untouchable (iframes).
 var invulnerable := false
 ## Off the ground: a LOW blow passes under it.
 var airborne := false

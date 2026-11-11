@@ -220,8 +220,8 @@ func _clip_names() -> PackedStringArray:
 	return names
 
 
-func test_scarf_clears_the_body_in_a_roll() -> void:
-	# The roll tumbles the body over: the capsules keep the scarf out of it all the way.
+func test_scarf_clears_the_body_in_a_dash_step() -> void:
+	# The dash-step strides the body along fast: the capsules keep the scarf out of it all the way.
 	var arena := TestArena.make(self)
 	var brain := ScriptBrain.new([{"frames": 30}, {"frames": 1, "move": Vector2(0, 1), "press": [&"dodge"]},
 			{"frames": 60}])
@@ -229,12 +229,12 @@ func test_scarf_clears_the_body_in_a_roll() -> void:
 	await frames(30)
 	var chest := INF
 	var back := INF
-	var rolled := false
+	var stepped := false
 	for i in 61:
 		await frames(1)
-		rolled = rolled or actor.runner.busy()
+		stepped = stepped or actor.runner.busy()
 		chest = minf(chest, _clearance(actor.rig))
 		back = minf(back, _torso_clearance(actor.rig))
-	assert_true(rolled, "he rolled")
+	assert_true(stepped, "he dash-stepped")
 	assert_true(chest >= CLEARANCE, "the tip came within %.3f m of the spine_02-spine_03 segment" % chest)
 	assert_true(back >= CLEARANCE, "a joint of the scarf came within %.3f m of the torso's centre line" % back)

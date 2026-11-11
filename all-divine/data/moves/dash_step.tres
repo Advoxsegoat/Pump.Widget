@@ -14,3 +14,5 @@ directional = {
 &"right": &"dash_step_right"
 }
 neutral_variant = &"hop"
+side_ahead_deg = 45.0
+side_back_deg = 135.0

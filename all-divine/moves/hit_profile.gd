@@ -9,8 +9,8 @@ extends Resource
 ## it.
 enum Height { MID, LOW }
 ## What kind of danger the blow is. NONE is an ordinary hit. The other three are the "perilous" attacks,
-## each with its own answer: a SWEEP cannot be guarded or parried (hop it or roll it), a THRUST cannot be
-## guarded but can be parried (a parried thrust is a catch), and a GRAB can be neither (roll away).
+## each with its own answer: a SWEEP cannot be guarded or parried (hop it), a THRUST cannot be
+## guarded but can be parried (a parried thrust is a catch), and a GRAB can be neither (sway or duck it).
 enum Perilous { NONE, SWEEP, THRUST, GRAB }
 ## The line the blow travels, which says which dodge matches it (Combat.is_perfect): a STRAIGHT blow (a jab, a cross,
 ## a thrust) is matched by a sway, a ROUND one (a hook, a swing) by a duck. Any evade avoids an ordinary blow, but

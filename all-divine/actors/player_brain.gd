@@ -23,6 +23,9 @@ extends Brain
 ## faces the foe's head whatever the device, his attacks turn to it and track it through the swing, the camera leans
 ## to it, and a palm that can finish it finishes it. The lock lets go of a foe that dies or goes too far, and nothing
 ## else changes then: a swing under way carries on, and aim assist is back to the stick.
+##
+## A pad with no lock and guard held: the guard plants his legs, so he faces the nearest live foe within aim_assist_range
+## (face_target), whatever the angle; with none in range he stays as he faces.
 
 ## How far from straight down the screen a direction may point and still be a duck, in degrees.
 const DUCK_CONE_DEG := 45.0
@@ -155,11 +158,31 @@ func _aim(actor: Actor, intent: Intent) -> void:
 		if cursor is Vector3:
 			intent.face_target = cursor
 			toward = _flat_from(actor, cursor)
+	elif intent.held.has(Actor.GUARD_ACTION):
+		# On a pad with no lock, a held guard (which plants his legs) turns him to the nearest foe in range, whatever the angle.
+		var near: Variant = _nearest_foe(actor)
+		if near != null:
+			intent.face_target = near
 	if toward.is_zero_approx():
 		toward = Vector2(actor.facing().x, actor.facing().z)
 	# With no foe near the line, a stick swings along the way he faces, but a cursor is a place to swing at.
 	var foe: Variant = _assist_target(actor, toward)
 	intent.aim_target = foe if foe != null else cursor
+
+
+# The nearest live foe's position within the tuning's aim_assist_range of the actor, or null.
+func _nearest_foe(actor: Actor) -> Variant:
+	var best: Variant = null
+	var best_distance := actor.stats.tuning.aim_assist_range
+	for node in actor.get_tree().get_nodes_in_group(Actor.LOCKABLE_GROUP):
+		var foe := node as Actor
+		if foe == null or foe == actor or foe.dead:
+			continue
+		var distance := _flat_from(actor, foe.global_position).length()
+		if distance <= best_distance:
+			best = foe.global_position
+			best_distance = distance
+	return best
 
 
 # The point of the ground (at the height of the actor's feet) under the cursor, or null: no camera, or it cannot say.

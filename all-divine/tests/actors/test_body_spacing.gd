@@ -1,6 +1,6 @@
 extends TestCase
 ## Bodies do not pass through each other (BodySpacing): on the ground an actor's motion stops at another actor's capsule,
-## so the Knuckle's thrust stops at the body it hits and ends in front of it, and Abarax's own lunges (the hook, the roll)
+## so the Knuckle's thrust stops at the body it hits and ends in front of it, and Abarax's own lunges (the hook, the dash-step)
 ## stop at a Knuckle; while a body is airborne (the hop) a low slide passes beneath it, so the hop still counters the
 ## sweep. Measured on every attack below: no two grounded capsules are ever more than SLACK inside each other.
 ##
@@ -79,13 +79,15 @@ func test_abarax_palm_hook_stops_at_a_knuckle() -> void:
 	assert_true(knuckle.global_position.z > abarax.global_position.z, "and he is still in front of it")
 
 
-func test_a_roll_into_a_knuckle_stops_at_it() -> void:
-	var run := _pair(2.0, [{"frames": 60}], [{"frames": 1, "press": [&"dodge"], "move": Vector2(0, 1)}, {"frames": 60}], KNUCKLE_1)
+func test_a_dash_step_into_a_knuckle_stops_at_it() -> void:
+	# 1.4 m apart a free dash-step (1.3 m) would end 0.1 m from the Knuckle's centre, well inside its body: it must stop at it.
+	var run := _pair(1.4, [{"frames": 60}], [{"frames": 1, "press": [&"dodge"], "move": Vector2(0, 1)}, {"frames": 60}], KNUCKLE_1)
 	var abarax: Actor = run["abarax"]
 	var knuckle: Actor = run["knuckle"]
-	var deepest: float = await _deepest(abarax, knuckle, 50)
-	assert_true(deepest <= SLACK, "a roll at a Knuckle stops at its body (%.3f m inside)" % deepest)
-	assert_true(knuckle.global_position.z > abarax.global_position.z, "he did not roll through it")
+	var deepest: float = await _deepest(abarax, knuckle, 40)
+	assert_true(deepest <= SLACK, "a dash-step at a Knuckle stops at its body (%.3f m inside)" % deepest)
+	assert_true(knuckle.global_position.z > abarax.global_position.z, "he did not step through it")
+	assert_true(abarax.global_position.z > 0.3, "but he did step toward it (z %.2f)" % abarax.global_position.z)
 
 
 func test_a_hop_over_the_sweep_whiffs_and_the_knuckle_slides_beneath() -> void:

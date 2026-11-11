@@ -100,6 +100,7 @@ var _parry_started := -1  # the actor's buffer_frame when the last move with a p
 var _parry_fresh := true  # whether the current move's parry_on opens its window (see parry_window)
 var _warp := 0.0  # the extra travel along the facing the current move has made so far in its wind-up (metres; see the top)
 var _warping := false  # whether the current move is warped
+var _travel_turn := 0.0  # radians the current dodge's root travel is turned by, onto the stick's direction (see _start)
 var _strike_at_hit := 0.0  # where the target should stand from the body when the warped blow lands (metres)
 
 
@@ -208,6 +209,7 @@ func _start(move: MoveData, intent: Intent, force := false) -> void:
 		elif m["kind"] == &"hitbox_off":
 			_track_until = m["time"]
 	_begin_warp(move, intent)
+	_travel_turn = _turn_onto_stick(move, intent)
 	rig.play_move(move.clip, move.blend_in)
 	move_started.emit(move)
 	_pass_marks(BEFORE_START, 0.0)
@@ -239,6 +241,7 @@ func _end(cancelled: bool) -> void:
 	_track_until = -1.0
 	_warp = 0.0
 	_warping = false
+	_travel_turn = 0.0
 	charging = false
 	charge_profile = &""
 	_charge_args = {}
@@ -365,6 +368,17 @@ func _root_velocity(t0: float, t1: float, delta: float) -> Vector3:
 	return _root_travel(t0, t1) / delta
 
 
+# How far (radians) a dodge with no evade turns its clip's root travel: from the way its clip goes (the side it was chosen
+# for: the dash-step's forward, left, right or back) onto the way the stick points, so that a dash-step goes along the stick
+# and the side only picks the clip. Nothing for any other move, or with the stick at rest.
+func _turn_onto_stick(move: MoveData, intent: Intent) -> float:
+	if move.kind != MoveData.Kind.DODGE or move.evade != MoveData.Evade.NONE or intent == null or intent.move.is_zero_approx() or _root_track < 0:
+		return 0.0
+	var whole := _root_travel(0.0, _anim.length)
+	var own := Vector2(whole.x, whole.z)
+	return 0.0 if own.length() < 0.01 else own.angle_to(intent.move)
+
+
 # The current clip's root travel from t0 to t1, in the world on the ground plane (times the move's root_motion_scale).
 func _root_travel(t0: float, t1: float) -> Vector3:
 	var length := _anim.length
@@ -374,6 +388,9 @@ func _root_travel(t0: float, t1: float) -> Vector3:
 	# placement under it, which is none for Abarax).
 	var travel := actor.rig.skeleton.global_basis * ((to - from) * current.root_motion_scale)
 	travel.y = 0.0
+	if _travel_turn != 0.0:
+		var turned := Vector2(travel.x, travel.z).rotated(_travel_turn)
+		return Vector3(turned.x, 0.0, turned.y)
 	return travel
 
 
@@ -412,9 +429,9 @@ func _warp_velocity(intent: Intent, t0: float, t1: float, delta: float) -> Vecto
 
 ## The cancel window a cancel_open mark of `move` opens for an actor of `def`, from the mark's `into` (action -> move id).
 ## A move the actor plays as one of its reactions (one its def's `reactions` names: a flinch, a stagger, a guard_hit) is
-## shared by every actor, and its clip's windows name the moves of the actor it was made on (Abarax's roll and jab). So
+## shared by every actor, and its clip's windows name the moves of the actor it was made on (Abarax's dash-step and jab). So
 ## such a window opens only for the actions whose move in it is the actor's own for that action (its moveset's): a
-## Knuckle plays out a flinch whose window would roll it with Abarax's roll. Any other move's window is `into` as it is.
+## Knuckle plays out a flinch whose window would dash-step it with Abarax's dash-step. Any other move's window is `into` as it is.
 ## The clip checker follows cancels by the same rule.
 static func window_of(move: MoveData, into: Dictionary, def: ActorDef) -> Dictionary:
 	if not def.reactions.values().has(move.id):

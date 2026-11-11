@@ -60,6 +60,17 @@ func _ready() -> void:
 		_device = Device.GAMEPAD
 
 
+func _init() -> void:
+	# The direction latch is kept fresh every physics frame, paused or not, whether or not a brain asks: a key or stick that
+	# went down while the player could not think (a grab, a finisher, death, a pause) is latched by the time he can, so
+	# it is not a press then.
+	process_mode = Node.PROCESS_MODE_ALWAYS
+
+
+func _physics_process(_delta: float) -> void:
+	direction_pressed_this_frame()
+
+
 # The last device is that of the last event that is a press, or a move past the deadzone. An event that lets go
 # of something, or a stick that rests (or drifts inside the deadzone), is not the player's hand.
 func _input(event: InputEvent) -> void:

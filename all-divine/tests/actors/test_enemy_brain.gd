@@ -2,7 +2,7 @@ extends TestCase
 ## The enemy brain (actors/enemy_brain.gd, spec §4.5): it notices Abarax in its sight cone or by the sound of a sprint,
 ## keeps its preferred range and circles, re-angles when a wall spoils its spacing (Review Focus 5), and chooses an attack
 ## by weight, then closes or backs off into that attack's range and throws it, its combo pressed as the windows open.
-## Its tiers feint, delay the jab, extend the combo and track a roll; it backs off after a stagger and retreats when hurt.
+## Its tiers feint, delay the jab, extend the combo and track a dash-step; it backs off after a stagger and retreats when hurt.
 ## Every option of every Knuckle brain lands at both ends of its measured range (ruling A of Task 13).
 ##
 ## Abarax (his own def, HP to spare) stands at the origin facing +Z, driven by a ScriptBrain or a test brain; the Knuckle
@@ -324,7 +324,7 @@ func test_it_backs_up_to_an_attack_no_further_than_its_margin_and_at_a_walk() ->
 			var step := Vector2(knuckle.global_position.x - last.x, knuckle.global_position.z - last.z)
 			var from_him := Vector2(last.x - abarax.global_position.x, last.z - abarax.global_position.z).normalized()
 			last = knuckle.global_position
-			var away := step.dot(from_him)  # its own step away from him (his roll or walk is not its back-up)
+			var away := step.dot(from_him)  # its own step away from him (his dash-step or walk is not its back-up)
 			if brain.plan() != null and brain.mode == EnemyBrain.Mode.ENGAGED:
 				if plan != brain.plan():
 					plan = brain.plan()
@@ -429,7 +429,7 @@ class Strafer extends Brain:
 		return intent
 
 
-# Abarax's steps for a strafe along the world's axes (the review's): across and back, a roll each way now and then, a
+# Abarax's steps for a strafe along the world's axes (the review's): across and back, a dash-step each way now and then, a
 # step in and out, facing the Knuckle throughout.
 static func _world_strafe(knuckle: Node3D, push := 0.35) -> Array:
 	var steps := []
@@ -547,37 +547,37 @@ func test_a_target_that_steps_in_smothers_the_combo() -> void:
 	assert_eq(stutter, 0, "and it goes back to its spacing smoothly, with no back-and-forth stutter")
 
 
-func test_a_target_that_rolls_out_of_reach_ends_the_combo() -> void:
-	var dodger := Roller.new()
+func test_a_target_that_steps_out_of_reach_ends_the_combo() -> void:
+	var dodger := Stepper.new()
 	var run := _fight(_jab_only(1), Vector3(0, 0, 2.2), PI, dodger)
 	var knuckle: Actor = run["knuckle"]
 	dodger.watch = knuckle
 	var after := []
 	knuckle.runner.move_started.connect(func(m: MoveData) -> void:
-		if dodger.rolled and m.kind == MoveData.Kind.ATTACK:
+		if dodger.stepped and m.kind == MoveData.Kind.ATTACK:
 			after.append([knuckle.frame, m.id]))
-	var rolled_at := -1
+	var stepped_at := -1
 	for i in 60 * 5:
 		await frames(1)
-		if dodger.rolled and rolled_at < 0:
-			rolled_at = knuckle.frame
-	assert_true(dodger.rolled, "he rolled away as the jab came")
-	var swings := after.filter(func(e: Array) -> bool: return e[0] <= rolled_at + 60)
+		if dodger.stepped and stepped_at < 0:
+			stepped_at = knuckle.frame
+	assert_true(dodger.stepped, "he dash-stepped away as the jab came")
+	var swings := after.filter(func(e: Array) -> bool: return e[0] <= stepped_at + 60)
 	assert_eq(swings, [], "out of its reach, the combo ends: no cross, no hook swung at the air")
 
 
-## Abarax for the out-of-reach test: he stands until `watch`'s first jab starts, then rolls straight back, away from it.
-class Roller extends Brain:
+## Abarax for the out-of-reach test: he stands until `watch`'s first jab starts, then dash-steps straight back, away from it.
+class Stepper extends Brain:
 	var watch: Actor
-	var rolled := false
+	var stepped := false
 
 	func think(actor: Actor, _delta: float) -> Intent:
 		var intent := Intent.new()
-		if not rolled and watch != null and watch.runner.current != null and watch.runner.current.id == &"knuckle_jab" and watch.runner.time >= 5.0 / 60.0:
+		if not stepped and watch != null and watch.runner.current != null and watch.runner.current.id == &"knuckle_jab" and watch.runner.time >= 5.0 / 60.0:
 			var away := Vector2(actor.global_position.x - watch.global_position.x, actor.global_position.z - watch.global_position.z)
 			intent.pressed.append(&"dodge")
 			intent.move = away.normalized()
-			rolled = true
+			stepped = true
 		return intent
 
 

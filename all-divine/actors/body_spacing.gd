@@ -6,7 +6,7 @@ extends RefCounted
 ## cut its motion on the ground against every other actor's capsule (keep_apart):
 ##   - the part of the motion that would take the two capsules closer than their radii together is taken away, so the
 ##     body stops at the other's capsule and slides along it (a clamp at contact): a thrust stops at the body it hits,
-##     and a lunge or a roll at the body in its way
+##     and a lunge or a dash-step at the body in its way
 ##     When the other body is closing too, each takes only half the gap between them (they meet in the middle).
 ##   - two capsules already pressed into each other (a spawn, a teleport) are eased apart: each moves itself out at up
 ##     to SEPARATE_SPEED

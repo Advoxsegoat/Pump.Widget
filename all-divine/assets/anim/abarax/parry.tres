@@ -401,13 +401,21 @@ tracks/56/path = NodePath("Marks")
 tracks/56/interp = 1
 tracks/56/loop_wrap = true
 tracks/56/keys = {
-"times": PackedFloat32Array(0, 0.13333334),
-"transitions": PackedFloat32Array(1, 1),
+"times": PackedFloat32Array(0, 0.05, 0.13333334),
+"transitions": PackedFloat32Array(1, 1, 1),
 "values": [{
 "args": [{
 &"name": &"roll_cloth"
 }],
 "method": &"sfx"
+}, {
+"args": [{
+&"into": {
+&"duck": &"duck_slip",
+&"sway": &"sway_left_slip"
+}
+}],
+"method": &"cancel_open"
 }, {
 "args": [{
 &"into": {
