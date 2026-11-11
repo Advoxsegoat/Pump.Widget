@@ -423,3 +423,182 @@ func test_no_blade_clip_pops() -> void:
 		var limb: Array = ClipMotion.worst_join(rig, id)
 		assert_true(limb[0] <= limb[3], "%s: across a join the %s moves %.3f m to f%d (at most %.2f)" % [id, limb[1], limb[0], limb[2], limb[3]])
 
+
+
+# --- fights ---
+
+## Abarax for the fights: he stands his ground in a ring of `ring` metres round the blade Knuckle, facing him, circling (or
+## backing off at a walk when `retreat`), and when `dodges` he answers each of the Knuckle's blows by the defence that is the
+## perfect dodge of it (a duck of the cuts, a sway of the chop) pressed DODGE_LEAD frames before the blow lands, and counters
+## DODGE_TO_COUNTER frames after it: what the review's bot did.
+class Duelist extends Brain:
+	const DODGE_LEAD := 6
+	const DODGE_TO_COUNTER := 13
+	var foe: Actor:
+		set(value):
+			foe = value
+			foe.runner.move_started.connect(func(_m: MoveData) -> void: _serial += 1)
+	var ring := 2.0
+	var retreat := false
+	var retreat_push := 0.35
+	var still := false
+	var dodges := false
+	var _frame := 0
+	var _serial := 0  # how many moves the Knuckle has started
+	var _dodged_for := -1  # the Knuckle's move the last dodge answered
+	var _counter_at := -1
+
+	func think(actor: Actor, _delta: float) -> Intent:
+		var intent := Intent.new()
+		_frame += 1
+		if foe == null:
+			return intent
+		var to := Vector2(foe.global_position.x - actor.global_position.x, foe.global_position.z - actor.global_position.z)
+		var distance := to.length()
+		intent.face_target = foe.global_position
+		intent.aim_target = foe.global_position
+		if distance > 0.01:
+			var dir := to / distance
+			if still:
+				intent.move = Vector2.ZERO
+			elif retreat:
+				intent.move = -dir * retreat_push
+			else:
+				intent.move = (dir.rotated(PI * 0.5) * 0.4 + dir * clampf((distance - ring) * 0.8, -0.6, 0.6)).limit_length(0.5)
+		if dodges and actor.frozen == 0:
+			var move := foe.runner.current
+			if move != null and [&"blade_cut", &"blade_backcut", &"blade_chop"].has(move.id):
+				var on := BladeKnuckleMarks.on_frame(move.id)
+				if Marks.frame_of(foe.runner.time) >= on - DODGE_LEAD and _dodged_for != _serial and not actor.runner.busy():
+					_dodged_for = _serial
+					if move.id == &"blade_chop":
+						intent.pressed.append(&"sway")
+						intent.evade_dir = Vector2(1, 0)
+					else:
+						intent.pressed.append(&"duck")
+					_counter_at = _frame + DODGE_TO_COUNTER
+		if _frame == _counter_at:
+			intent.pressed.append(&"palm")
+		return intent
+
+
+## The frame each blade move's blow is on (for the Duelist's timing).
+class BladeKnuckleMarks:
+	static func on_frame(id: StringName) -> int:
+		for m in Marks.read(load("res://assets/anim/abarax/%s.tres" % id) as Animation):
+			if m["kind"] == &"hitbox_on":
+				return Marks.frame_of(m["time"])
+		return 0
+
+
+## `seeds` arenas that play at once, 60 m apart: in each an Abarax of `abarax` (made by `make`) in the middle and a blade
+## Knuckle thinking with its own brain seeded by the arena's number, 3 m off facing him. Returns, after `frames_to_play`
+## frames, each arena's {abarax, knuckle, log} where `log` is {cuts: [frames the cut started on], backcuts: [...], counters:
+## [frames a counter started on], counters_landed: [...], backcut_hits: [...]}.
+func _fights(seeds: int, frames_to_play: int, make: Callable, abarax_at := Vector3.ZERO) -> Array:
+	var runs := []
+	for seed_value in seeds:
+		var origin := Vector3(seed_value * 60.0, 0, 0)
+		var arena := TestArena.make(self)
+		arena.position = origin
+		var tough := Duel.def(ActorDef.Team.PLAYER, 1000.0)
+		tough.max_hp = 1000000.0
+		var duelist: Duelist = make.call()
+		var abarax := TestArena.spawn(arena, tough, duelist, abarax_at, "Abarax")
+		abarax.place(Transform3D(Basis(Vector3.UP, 0.0), origin + abarax_at))
+		var def := _def().duplicate() as ActorDef
+		def.max_hp = 1000000.0
+		var knuckle := TestArena.spawn(arena, def, EnemyBrain.new(def.brain, seed_value + 1), abarax_at + Vector3(0, 0, 3.0), "Knuckle")
+		knuckle.place(Transform3D(Basis(Vector3.UP, PI), origin + abarax_at + Vector3(0, 0, 3.0)))
+		duelist.foe = knuckle
+		var log := {"cuts": [], "backcuts": [], "counters": [], "counters_landed": [], "backcut_hits": []}
+		knuckle.runner.move_started.connect(func(m: MoveData) -> void:
+			if m.id == &"blade_cut":
+				log["cuts"].append(knuckle.frame)
+			elif m.id == &"blade_backcut":
+				log["backcuts"].append(knuckle.frame))
+		abarax.runner.move_started.connect(func(m: MoveData) -> void:
+			if [&"counter_rise", &"counter_hook"].has(m.id):
+				log["counters"].append(abarax.frame))
+		abarax.hit_landed.connect(func(r: HitResult, e: HitEvent) -> void:
+			if r.outcome == O.HIT and [&"counter_rise", &"counter_hook"].has(e.move.id):
+				log["counters_landed"].append(abarax.frame))
+		abarax.got_hit.connect(func(r: HitResult, e: HitEvent) -> void:
+			if r.outcome == O.HIT and e.move.id == &"blade_backcut":
+				log["backcut_hits"].append(abarax.frame))
+		runs.append({"arena": arena, "abarax": abarax, "knuckle": knuckle, "log": log})
+	await frames(frames_to_play)
+	for run: Dictionary in runs:
+		(run["arena"] as Node).queue_free()
+	await frames(2)
+	return runs
+
+
+func test_a_bot_that_ducks_and_counters_lands_its_counters() -> void:
+	# Eight fights of 1800 frames against an Abarax who circles at 2 m, ducks every cut, sways every chop and counters at once.
+	var runs: Array = await _fights(8, 1800, func() -> Duelist:
+		var d := Duelist.new()
+		d.dodges = true
+		return d)
+	var started := 0
+	var landed := 0
+	var sequences := 0
+	var punished := 0
+	for run: Dictionary in runs:
+		var log: Dictionary = run["log"]
+		started += (log["counters"] as Array).size()
+		landed += (log["counters_landed"] as Array).size()
+		sequences += (log["cuts"] as Array).size()
+		for landed_at: int in log["counters_landed"]:
+			if (log["backcut_hits"] as Array).any(func(f: int) -> bool: return f > landed_at and f <= landed_at + 90):
+				punished += 1
+	assert_true(started >= 20, "the bot countered %d times (at least 20)" % started)
+	assert_true(landed >= ceili(started * 0.9), "%d of its %d counters landed (at least 90%%)" % [landed, started])
+	assert_true(punished <= floori(sequences * 0.05), "%d of %d cut sequences ended with the backcut hitting him after a counter that landed (at most 5%%)" % [punished, sequences])
+
+
+func test_the_backcut_is_not_thrown_at_air() -> void:
+	# Abarax backs away from him at a walk, and at a quicker one. He steps through his cut, so at a walk the backcut still
+	# reaches (and lands); what must not happen is the backcut swung at air: of the cuts that find a man backing away, at most
+	# 10% are followed by a backcut that does not land (the combo ends instead, by the brain's rule on strike_distance).
+	for push: float in [0.25, 0.35]:
+		var runs: Array = await _fights(12, 900, func() -> Duelist:
+			var d := Duelist.new()
+			d.retreat = true
+			d.retreat_push = push
+			return d, Vector3(0, 0, -15.0))
+		var sequences := 0
+		var at_air := 0
+		var landed := 0
+		for run: Dictionary in runs:
+			var log: Dictionary = run["log"]
+			for i in (log["cuts"] as Array).size():
+				sequences += 1
+				var cut_at: int = log["cuts"][i]
+				var swung := (log["backcuts"] as Array).filter(func(f: int) -> bool: return f > cut_at and f <= cut_at + 80)
+				if not swung.is_empty():
+					if (log["backcut_hits"] as Array).any(func(f: int) -> bool: return f > cut_at and f <= cut_at + 160):
+						landed += 1
+					else:
+						at_air += 1
+		assert_true(sequences >= 10, "the bot backed away at %.2f from %d cuts (at least 10)" % [push, sequences])
+		assert_true(at_air <= floori(sequences * 0.1), "backing away at %.2f: of %d cuts, %d were followed by a backcut that landed and %d by one swung at air (at most 10%%)" % [push, sequences, landed, at_air])
+
+
+func test_the_backcut_is_thrown_at_a_man_who_stays() -> void:
+	# The other side of the rule: at an Abarax who stands his ground the cut is followed by the backcut and it lands (nine
+	# in ten of the sequences at least, the rest cut short by the fight).
+	var runs: Array = await _fights(8, 900, func() -> Duelist:
+		var d := Duelist.new()
+		d.still = true
+		return d)
+	var sequences := 0
+	var landed := 0
+	for run: Dictionary in runs:
+		var log: Dictionary = run["log"]
+		for cut_at: int in log["cuts"]:
+			sequences += 1
+			if (log["backcut_hits"] as Array).any(func(f: int) -> bool: return f > cut_at and f <= cut_at + 120):
+				landed += 1
+	assert_true(sequences >= 10, "he threw %d cuts at a man who stays (at least 10)" % sequences)
+	assert_true(landed >= ceili(sequences * 0.9), "%d of %d cuts were followed by a backcut that landed (at least 90%%)" % [landed, sequences])
