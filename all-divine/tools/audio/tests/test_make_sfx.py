@@ -7,6 +7,7 @@ import io
 import math
 import os
 import random
+import re
 import subprocess
 import sys
 import tempfile
@@ -160,10 +161,29 @@ class MakeSfx(unittest.TestCase):
         self.assertTrue(-6.0 <= peak_db(perfect) <= -2.0, "%.1f dBFS" % peak_db(perfect))
         rate, _, _, knocked = read(self.files["knocked_out"])
         self.assertTrue(0.2 <= len(knocked) / rate <= 0.6, "%.2f s" % (len(knocked) / rate))
-        self.assertGreaterEqual(peak_db(knocked), -3.0, "the loudest of the three: a hard, plain loss")
+        self.assertTrue(-20.0 <= peak_db(knocked) <= -14.0, "a layer under the blow's own impact, which is the loud part: %.1f dBFS" % peak_db(knocked))
         top = max(abs(s) for s in knocked)
         first = next(i for i, s in enumerate(knocked) if abs(s) >= 0.9 * top)
         self.assertLess(first / rate, 0.012, "it is at its loudest within 12 ms: no swell")
+
+    def test_the_knock_out_with_the_loudest_impact_does_not_clip(self):
+        # A blow that knocks him out of a chain plays its own impact and the knocked_out cue on the same sample, at their bank volumes
+        # (data/sounds/*.tres volume_db): the sum on the SFX bus, which has no limiter, must stay under 0 dBFS.
+        sounds = SHIPPED.parents[2] / "data" / "sounds"
+
+        def gain(cue):
+            text = (sounds / (cue + ".tres")).read_text()
+            found = re.search(r"^volume_db = (-?[0-9.]+)", text, re.M)
+            return 10 ** ((float(found.group(1)) if found else 0.0) / 20.0)
+
+        knock = [s * gain("knocked_out") for s in read(self.files["knocked_out"])[3]]
+        worst = 0.0
+        for cue, names in (("impact_palm", ["impact_palm_1", "impact_palm_2", "impact_palm_3"]), ("impact_heavy", ["impact_heavy_1", "impact_heavy_2"])):
+            for name in names:
+                hit = [s * gain(cue) for s in read(self.files[name])[3]]
+                mixed = [a + b for a, b in zip(hit, knock)]
+                worst = max(worst, max(abs(s) for s in mixed))
+        self.assertLess(20 * math.log10(worst), -0.3, "%.2f dBFS" % (20 * math.log10(worst)))
 
     def test_the_command_line_writes_every_file_and_rejects_the_unknown(self):
         with tempfile.TemporaryDirectory() as out:

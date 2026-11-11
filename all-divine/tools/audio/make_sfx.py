@@ -369,7 +369,8 @@ def perfect_dodge(rng):
 
 def knocked_out(rng):
     """Being knocked out of a chain: a hard low thump, a dull crack and a low rumble, driven a little, no swell: the loss
-    is plain and arrives at once."""
+    is plain and arrives at once. It plays on the same sample as the blow's own impact (up to -1.5 dBFS) on a bus with no limiter,
+    so it is a layer under that impact, at -18 dBFS: the two together stay under 0."""
     n = samples_in(0.4)
     return saturate(mix([
         (layer(thump(n, 150.0, 48.0, 0.03, 0.1), 1.0), 0.0),
@@ -455,7 +456,7 @@ SOUNDS = {
     "charge_hum": (charge_hum, -4.0),
     "evade_whoosh": (evade_whoosh, -8.0),
     "perfect_dodge": (perfect_dodge, -3.0),
-    "knocked_out": (knocked_out, PEAK_DB),
+    "knocked_out": (knocked_out, -18.0),
 }
 
 
