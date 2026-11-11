@@ -46,6 +46,12 @@ extends Node
 ## as a HIT that staggers. A pair's own blows (HitEvent.paired, the lead's pair_hit marks) are posted like any other
 ## but not judged: each lands on the follower as a HIT with no reaction (Combat.pair_hit). Any other blow on a body
 ## that is paired, even one that was not when the frame began (a grab took hold this frame), comes to nothing.
+##
+## The slow-down (slow) is kept here as well, since it is the fight's clock and Melee is the one thing that sees every actor:
+## for a number of frames it freezes every living actor on the frames a fixed pattern says (Actor.freeze, one frame at a time,
+## the hit-stop's own), so that each acts on a share of them. Nothing else is touched: the tree is not paused and no delta is
+## scaled, so a frozen frame ages no clock that a hit-stop's frame does not (the input buffer, the chain, the counter window),
+## a press made on one is buffered, and the same recorded input replays to the same state.
 
 ## Melee's place in each physics frame: after every actor (which run at the default, 0).
 const PRIORITY := 100
@@ -74,6 +80,12 @@ class Snapshot extends Node:
 
 
 var _snapshot: Snapshot
+var _slow_frames := 0  # the frames the slow in progress covers (0: none), and how many of them are still to be decided
+var _slow_share := 1.0
+var _slow_next := 0  # the index of the next frame to decide
+var _slow_decided_at := -1  # the tick the latest frame was decided on, so a call made during one does not decide twice
+var _ticks := 0  # the physics frames Melee has run
+var _held: Array[Actor] = []  # the actors the latest decision froze for the next frame, to let go again if the slow starts over
 var _posted: Array[HitEvent] = []
 var _pairs: Array[Pairing] = []  # the paired moves in play
 var _beginning: Array[Pairing] = []  # those begun this frame, whose moves have not started yet
@@ -115,6 +127,7 @@ func end_pairs_of(actor: Actor) -> Array[Actor]:
 
 
 func _physics_process(_delta: float) -> void:
+	_ticks += 1
 	if not _posted.is_empty():
 		_apply_posted()
 	for pairing in _beginning:
@@ -125,6 +138,49 @@ func _physics_process(_delta: float) -> void:
 		if pairing.tick():
 			pairing.finish()
 			_pairs.erase(pairing)
+	if slowed() and _slow_decided_at != _ticks:
+		_decide_slow_frame()
+
+
+## Slows the fight for `frames` physics frames: every living actor acts on `share` of them (ceil(frames x share) of the frames, spread
+## evenly, the first among them) and is frozen on the rest, with its own freeze, so hit-stop and slow-down are one mechanism and
+## recorded input replays to the same state. A call while a slow runs starts over: it does not add to it or lengthen it. The first
+## frame it decides is the next one the actors run, whether it is called from a blow's result (inside Melee's own frame) or between
+## frames.
+func slow(frames: int, share: float) -> void:
+	# What the slow that ran decided for the frame to come, and nothing has run since, goes with it: the new one decides it afresh.
+	if _slow_decided_at == _ticks:
+		for actor in _held:
+			if is_instance_valid(actor) and actor.frozen == 1:
+				actor.frozen = 0
+	_held.clear()
+	_slow_frames = maxi(frames, 0)
+	_slow_share = clampf(share, 0.0, 1.0)
+	_slow_next = 0
+	_slow_decided_at = -1
+	if slowed():
+		_decide_slow_frame()
+
+
+## Whether a slow has frames still to be decided.
+func slowed() -> bool:
+	return _slow_next < _slow_frames
+
+
+# Decides the next frame of the slow in progress: an actor acts on it when the running total of ceil(i x share) rises there,
+# and is held still on it (frozen for that one frame) when it does not.
+func _decide_slow_frame() -> void:
+	var i := _slow_next
+	_slow_next += 1
+	_slow_decided_at = _ticks
+	_held.clear()
+	if ceili(float(i + 1) * _slow_share - 1e-6) > ceili(float(i) * _slow_share - 1e-6):
+		return
+	for node in get_tree().get_nodes_in_group(Actor.GROUP):
+		var actor := node as Actor
+		if actor != null and not actor.dead:
+			actor.freeze(1)
+			_held.append(actor)
 
 
 # Judges and applies every blow posted this frame (see the top of this file).
