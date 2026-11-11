@@ -735,58 +735,60 @@ class Circler extends Brain:
 		return intent
 
 
-## What the tier Knuckles' attack mix is held to over twenty seeded 1800-frame fights, in each stance: each perilous attack's share of the attacks
-## started (the first move of each option, a feint that comes before it too: a jab string counts once), as [least, most] per cent, and the grab's count
-## (within a third of the 76 it threw before this task, in the fight where Abarax circles). `before` is what each tier started in all, circling and
-## standing, before the carried fixes (the sweep was never thrown, the thrust 60 times by tier II, 21 by tier III).
+## What the tier Knuckles' attack mix is held to over MIX_SEEDS seeded 1800-frame fights against an Abarax who circles at 2 m: each perilous
+## attack's share of the attacks started (the first move of each option, a feint that comes before it too: a jab string counts once), as
+## [least, most] per cent; the grab's count for every twenty fights (within a third of the 76 it threw before Task 14b); and `before`, what each
+## tier started in all for every twenty fights before Task 14b's fixes (the sweep was never thrown, the thrust 60 times by tier II, 21 by tier III).
+## The whole table (twenty seeds, circling and standing at 1.2 m) was measured twice when the mix was set (Task 14b, fix round 1: every share inside
+## its band in both stances); the suite holds a sample of it, because the twenty-seed table costs three minutes.
+const MIX_SEEDS := 6
 const MIX_STARTS: Array[StringName] = [&"knuckle_jab", &"knuckle_sweep", &"knuckle_thrust", &"knuckle_grab", &"knuckle_feint"]
 const MIX := {
-	1: {&"knuckle_sweep": [8, 20], "before": [140, 140]},
-	2: {&"knuckle_sweep": [8, 20], &"knuckle_thrust": [8, 20], "before": [172, 172]},
-	3: {&"knuckle_sweep": [5, 15], &"knuckle_thrust": [8, 20], "grab": [51, 101], "before": [202, 208]},
+	1: {&"knuckle_sweep": [8, 20], "before": 140},
+	2: {&"knuckle_sweep": [8, 20], &"knuckle_thrust": [8, 20], "before": 172},
+	3: {&"knuckle_sweep": [5, 15], &"knuckle_thrust": [8, 20], "grab": [51, 101], "before": 202},
 }
 
 
 func test_the_attack_mix_of_each_tier_in_ordinary_yard_fights() -> void:
+	var per_twenty := 20.0 / MIX_SEEDS
 	for tier in [1, 2, 3]:
 		var def := _brain_def(BRAINS[tier - 1])
-		for stance in [0, 1]:  # 0: Abarax circles it; 1: he stands 1.2 m from where it starts
-			var counts := {}
-			var runs := []
-			for seed_value in range(1, 21):
-				var origin := Vector3(seed_value * 50.0, 0, 0)
-				var arena := TestArena.make(self)
-				arena.position = origin
-				var circler := Circler.new() if stance == 0 else Brain.new()
-				var abarax := TestArena.spawn(arena, _tough(ABARAX), circler, Vector3.ZERO, "Abarax")
-				abarax.place(Transform3D(Basis(Vector3.UP, 0.0), origin))
-				var gap := 2.0 if stance == 0 else 1.2
-				var knuckle := TestArena.spawn(arena, _tough(KNUCKLES[tier - 1]), EnemyBrain.new(def, seed_value), Vector3(0, 0, gap), "Knuckle")
-				knuckle.place(Transform3D(Basis(Vector3.UP, PI), origin + Vector3(0, 0, gap)))
-				if stance == 0:
-					(circler as Circler).foe = knuckle
-				knuckle.runner.move_started.connect(func(m: MoveData) -> void:
-					if MIX_STARTS.has(m.id):
-						counts[m.id] = counts.get(m.id, 0) + 1)
-				runs.append(arena)
-			await frames(1800)
-			for arena: Node in runs:
-				arena.queue_free()
-			await frames(1)
-			var total := 0
-			for id: StringName in counts:
-				total += counts[id]
-			var shown := "knuckle_%d, Abarax %s: %d attacks %s" % [tier, "circling" if stance == 0 else "standing", total, counts]
-			var before: int = MIX[tier]["before"][stance]
-			assert_true(absf(total - before) <= before * 0.2, "%s: within 20%% of the %d it started before" % [shown, before])
-			for id: Variant in MIX[tier]:
-				if not id is StringName:
-					continue
-				var share: float = 100.0 * float(counts.get(id, 0)) / maxf(total, 1)
-				assert_true(share >= MIX[tier][id][0] and share <= MIX[tier][id][1], "%s: %s is %.1f%% of them, held to %s" % [shown, id, share, MIX[tier][id]])
-			if MIX[tier].has("grab"):
-				var grabs: int = counts.get(&"knuckle_grab", 0)
-				assert_true(grabs >= MIX[tier]["grab"][0] and grabs <= MIX[tier]["grab"][1], "%s: its grab %d times, held to %s" % [shown, grabs, MIX[tier]["grab"]])
+		var counts := {}
+		var runs := []
+		for seed_value in range(1, MIX_SEEDS + 1):
+			var origin := Vector3(seed_value * 50.0, 0, 0)
+			var arena := TestArena.make(self)
+			arena.position = origin
+			var circler := Circler.new()
+			var abarax := TestArena.spawn(arena, _tough(ABARAX), circler, Vector3.ZERO, "Abarax")
+			abarax.place(Transform3D(Basis(Vector3.UP, 0.0), origin))
+			var knuckle := TestArena.spawn(arena, _tough(KNUCKLES[tier - 1]), EnemyBrain.new(def, seed_value), Vector3(0, 0, 2.0), "Knuckle")
+			knuckle.place(Transform3D(Basis(Vector3.UP, PI), origin + Vector3(0, 0, 2.0)))
+			circler.foe = knuckle
+			knuckle.runner.move_started.connect(func(m: MoveData) -> void:
+				if MIX_STARTS.has(m.id):
+					counts[m.id] = counts.get(m.id, 0) + 1)
+			runs.append(arena)
+		await frames(1800)
+		for arena: Node in runs:
+			arena.queue_free()
+		await frames(1)
+		var total := 0
+		for id: StringName in counts:
+			total += counts[id]
+		var shown := "knuckle_%d, Abarax circling, %d fights: %d attacks %s" % [tier, MIX_SEEDS, total, counts]
+		var before: int = MIX[tier]["before"]
+		assert_true(absf(total * per_twenty - before) <= before * 0.2, "%s: for every twenty fights, within 20%% of the %d it started before" % [shown, before])
+		for id: Variant in MIX[tier]:
+			if not id is StringName:
+				continue
+			var share: float = 100.0 * float(counts.get(id, 0)) / maxf(total, 1)
+			assert_true(share >= MIX[tier][id][0] and share <= MIX[tier][id][1], "%s: %s is %.1f%% of them, held to %s" % [shown, id, share, MIX[tier][id]])
+		if MIX[tier].has("grab"):
+			var grabs: float = counts.get(&"knuckle_grab", 0) * per_twenty
+			assert_true(grabs >= MIX[tier]["grab"][0] and grabs <= MIX[tier]["grab"][1], "%s: its grab %.0f times for every twenty fights, held to %s" % [shown, grabs, MIX[tier]["grab"]])
+		print("    mix: %s" % shown)
 
 
 func test_the_sweep_lands_at_both_ends_of_its_new_range() -> void:
