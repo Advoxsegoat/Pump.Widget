@@ -151,14 +151,15 @@ func test_a_trade_freezes_both_for_the_longer_of_the_two() -> void:
 
 
 func test_a_blow_that_whiffs_freezes_nobody() -> void:
-	# b rolls in on frame 5 and is invulnerable while the jab's hand passes through it: every blow whiffs.
-	var run := Duel.make(self, [{"frames": 1, "press": [&"palm"]}, {"frames": 40}],
-			[{"frames": 4}, {"frames": 1, "press": [&"dodge"], "move": Vector2(0, -1)}, {"frames": 40}], 2.0)
+	# b steps in on frame 5 (the fixture dodge, invulnerable) while the jab's hand passes through it: every blow whiffs.
+	var run := Duel.make(self, [{"frames": 1, "press": [&"palm"]}, {"frames": 40}], [{"frames": 45}], 1.6)
 	var a: Actor = run["a"]
+	await Duel.play_to(self, run["b"], 5)
+	(run["b"] as Actor).runner.start(Duel.untouchable_dash(run["b"]))
 	var outcomes := []
 	a.hit_landed.connect(func(r: HitResult, _e: HitEvent) -> void: outcomes.append(r.outcome))
 	var seen := await _trace(run, 30)
-	assert_true(outcomes.has(HitResult.Outcome.WHIFF), "the hand reached the rolling body")
+	assert_true(outcomes.has(HitResult.Outcome.WHIFF), "the hand reached the dodging body")
 	assert_eq(outcomes.filter(func(o: int) -> bool: return o != HitResult.Outcome.WHIFF), [], "and nothing landed")
 	for f in seen:
 		assert_eq(seen[f]["a_frozen"], 0, "a is never frozen (frame %d)" % f)

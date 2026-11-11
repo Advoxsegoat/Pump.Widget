@@ -186,7 +186,6 @@ func test_every_sway_duck_and_dash_step_has_its_move_its_clip_and_its_length() -
 			assert_false(move.root_motion, "%s stands where it is" % id)
 		else:
 			assert_true(move.root_motion, "%s travels on its root" % id)
-			assert_false(move.invulnerable, "%s is never invulnerable" % id)
 
 
 func test_each_evade_window_and_redodge_frame_matches_its_tempo() -> void:

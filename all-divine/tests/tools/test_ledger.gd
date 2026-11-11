@@ -47,7 +47,7 @@ func test_the_clips_row_says_what_was_done_to_them() -> void:
 		return
 	var changes: String = clips[0].changes
 	for part in ["rotation tracks kept", "position tracks only for root and pelvis", "scale tracks", "hip height",
-			"retimed", "marks", "palm_jab", "palm_cross", "dodge_roll"]:
+			"retimed", "marks", "palm_jab", "palm_cross", "dash_step"]:
 		assert_true(changes.contains(part), "the Changes cell mentions \"%s\": %s" % [part, changes])
 
 

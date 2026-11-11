@@ -40,7 +40,8 @@ extends CharacterBody3D
 ##      if guard is let go, or palm or heavy is pressed with no move playing
 ##   5. on a frame with no move, locomotion turns the stick into a velocity, sprinting while dodge is held
 ##      (and the actor can act: an exhausted actor jogs instead; a guarding one only walks, slowly, and never
-##      sprints), and with the intent's face_target set the body turns toward the target (at the turn rate)
+##      sprints, unless its tuning plants the guard: then the stance gives the legs no stick at all, CombatTuning.
+##      guard_planted), and with the intent's face_target set the body turns toward the target (at the turn rate)
 ##      rather than toward the way it goes, unless it sprints (a sprint runs where it goes, as in Souls); on a
 ##      frame a move ran (one that ended this frame too), the velocity is the move's root motion, and locomotion
 ##      takes it over, so it carries on from the move's speed when the move is done
@@ -65,8 +66,8 @@ extends CharacterBody3D
 ##  12. the rig is ticked: the only place it animates
 ##  13. the scanner sweeps the hitboxes that are on over this tick's pose, and what they struck is posted to
 ##      Melee, which applies it after every actor has run
-## Holding dodge sprints only after the roll its press started is over, since locomotion does not run
-## while a move does (Bloodborne-style: tap to roll, hold to run).
+## Holding dodge sprints only after the dash-step its press started is over, since locomotion does not run
+## while a move does (tap to dash-step, hold to run).
 
 signal brain_changed(brain: Brain)
 ## A blow reached this actor and Melee judged it: `result` is what came of it. Emitted for every outcome, a
@@ -108,6 +109,10 @@ const LOCKABLE_GROUP := &"lockable"
 ## The action that raises the guard (the def's moveset names the raise) and, held as the raise plays out, keeps it
 ## up: the guard stance.
 const GUARD_ACTION := &"guard"
+## The actions of a sway and of a duck: pressed with guard held and a direction (PlayerBrain), they take the direction
+## (Intent.evade_dir) with them into the buffer, and it picks the side the move leans to (move_for).
+const SWAY_ACTION := &"sway"
+const DUCK_ACTION := &"duck"
 ## Pressing one of these drops the guard stance, to attack out of it.
 const GUARD_DROPPED_BY: Array[StringName] = [&"palm", &"heavy"]
 ## The clip the rig lays over the upper body while the guard stance is up.
@@ -151,9 +156,13 @@ var frozen := 0
 ## guard raise (moveset `guard`) or its guard_hit plays out with guard held, or a guarded blow lands while guard is
 ## held (hold_guard); it goes down when guard is let go, palm or heavy is pressed with no move playing, or any other
 ## move starts. While it is up the rig shows GUARD_STANCE on the upper body, the body walks at the tuning's
-## guard_speed_scale and never sprints, and stamina comes back slower. See is_guarding for whether a guard is up at
-## all.
+## guard_speed_scale and never sprints (or, with a planted guard, does not walk at all), and stamina comes back
+## slower. A sway or duck that plays out with guard held brings the stance back too. See is_guarding for whether a guard
+## is up at all.
 var guarding := false
+## The world (x, z) direction of the latest sway or duck press, kept with the press it came with in the buffer: the
+## buffered press comes out up to 9 frames later, and the side it leans to is the one it was pressed toward.
+var evade_dir := Vector2.ZERO
 ## The other fighter of the paired move the actor is in (start_paired), or null. While it is set, no one else's blow
 ## lands on the actor (Defense.paired) and its brain is ignored.
 var paired_with: Actor
@@ -165,7 +174,7 @@ var spacing: BodySpacing
 # The speed the rig's locomotion layer is given. With no move it is locomotion's. A move that starts is laid over
 # that layer in its blend_in, so the layer keeps the speed it had until the move is fully in (dropping it to
 # idle at once would pop the legs under a third of the move); then it eases down to 0 over the blend_in, so the
-# speed a roll carries on from (locomotion.speed, root motion) never shows as a run under the move.
+# speed a dash-step carries on from (locomotion.speed, root motion) never shows as a run under the move.
 var _rig_speed := 0.0
 var _push := Vector3.ZERO  # the knockback still to travel, in m/s on the ground plane (see push)
 var _locked: Actor = null  # the foe the brain had locked on to on the latest frame (Intent.locked)
@@ -236,7 +245,7 @@ func facing() -> Vector3:
 
 
 ## Turns the body to face `yaw` (radians about up; 0 faces +Z) at once, with no turn rate, and locomotion
-## with it so that it carries on from there. What a roll does to face the stick, and an aim assist to face a foe.
+## with it so that it carries on from there. What an aim assist does to face a foe.
 func snap_facing(yaw: float) -> void:
 	locomotion.facing_yaw = yaw
 	rotation.y = yaw
@@ -270,7 +279,8 @@ func push(velocity: Vector3) -> void:
 	_push += Vector3(velocity.x, 0.0, velocity.z)
 
 
-## True while a move's marks make the actor invulnerable (a roll's iframes).
+## True while a move's marks make the actor invulnerable (iframes). No move of Abarax's has them: a sway or duck has its
+## evade window instead, and a dash-step is never invulnerable.
 func is_invulnerable() -> bool:
 	return runner.iframes
 
@@ -380,6 +390,24 @@ func start_finisher_on(action: StringName) -> bool:
 	return target != null and start_paired(target, def.finisher)
 
 
+## The move the press of `action` starts now: `named` (what the open cancel window says for it) or else the actor's moveset
+## move for it, then that move's `directional` variant for the side asked for: of `evade_dir` for a sway or duck, of the
+## intent's stick for anything else (a dash-step). The side is measured against the way he faces (MoveData.side_of); a
+## move with no variant for it, or none at all, is the move itself. The runner calls this at both places it starts a
+## consumed press, so a window and a rest start the same move. Null for a press the actor has no move for.
+func move_for(action: StringName, intent: Intent, named: StringName = &"") -> MoveData:
+	var id: StringName = named if named != &"" else StringName(str(def.moveset.get(action, &"")))
+	var move := Registry.fetch(&"moves", id) as MoveData
+	# The chain (the tempo of the dodge before) picks a Quick or Flurry move in place of `move` here.
+	if move == null or move.directional.is_empty():
+		return move
+	var asked := evade_dir if action == SWAY_ACTION or action == DUCK_ACTION else intent.move
+	var variant: Variant = move.directional.get(MoveData.side_of(asked, facing()))
+	if variant == null:
+		return move
+	return Registry.fetch(&"moves", StringName(str(variant))) as MoveData
+
+
 ## Moves the actor by `offset` along the ground (its height is left out), stopping at the world as move_and_slide
 ## would, and sliding once along what it meets: a paired move's lead closing on its follower, and the follower turning
 ## about its feet (Pairing).
@@ -448,6 +476,8 @@ func _physics_process(delta: float) -> void:
 		intent = Intent.new()
 	for action in intent.pressed:
 		buffer.push(action, buffer_frame)
+		if action == SWAY_ACTION or action == DUCK_ACTION:
+			evade_dir = intent.evade_dir
 	_guard_held = intent.held.has(GUARD_ACTION)
 	_locked = intent.locked
 	if frozen > 0:
@@ -461,7 +491,9 @@ func _physics_process(delta: float) -> void:
 		locomotion.carry(planar)
 	else:
 		var sprint := intent.held.has(SPRINT_ACTION) and stats.can_act()
-		planar = locomotion.tick(intent.move, sprint, delta, stats.tuning.guard_speed_scale if guarding else 0.0)
+		# A planted guard gives the legs no stick (he stands his ground); the turn to a face_target below still happens.
+		var planted := guarding and stats.tuning.guard_planted
+		planar = locomotion.tick(Vector2.ZERO if planted else intent.move, sprint, delta, stats.tuning.guard_speed_scale if guarding else 0.0)
 		if _keeps_facing(intent):
 			var to_target := _flat_to(intent.face_target)
 			if not to_target.is_zero_approx():
@@ -538,15 +570,19 @@ func _set_guarding(on: bool) -> void:
 	rig.set_stance(GUARD_STANCE, on)
 
 
-# Any move but guard_hit takes the guard stance down: an attack or a roll out of it, a reaction, the death.
+# Any move but guard_hit takes the guard stance down: an attack, a sway or a dash-step out of it, a reaction, the death.
 func _on_move_started(move: MoveData) -> void:
 	if guarding and move.id != def.reactions.get(GUARD_HIT, &""):
 		_set_guarding(false)
 
 
-# The raise or guard_hit played out: the guard stance comes up this frame if guard is still held (_keep_guard).
+# The raise, guard_hit or a sway or duck played out: the guard stance comes up this frame if guard is still held
+# (_keep_guard). A sway out of the stance ends with the stance back, so a player who holds guard through a flurry of sways
+# is standing his ground after the last of them, not walking off with his guard down.
 func _on_move_ended(move: MoveData, cancelled: bool) -> void:
-	if not cancelled and (move.id == def.moveset.get(GUARD_ACTION, &"") or move.id == def.reactions.get(GUARD_HIT, &"")):
+	if cancelled:
+		return
+	if move.id == def.moveset.get(GUARD_ACTION, &"") or move.id == def.reactions.get(GUARD_HIT, &"") or move.evade != MoveData.Evade.NONE:
 		_guard_move_ended = true
 
 

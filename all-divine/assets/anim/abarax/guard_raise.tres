@@ -453,9 +453,11 @@ tracks/58/keys = {
 "values": [{
 "args": [{
 &"into": {
-&"dodge": &"dodge_roll",
+&"dodge": &"dash_step",
+&"duck": &"duck_slip",
 &"heavy": &"palm_heavy",
-&"palm": &"palm_jab"
+&"palm": &"palm_jab",
+&"sway": &"sway_left_slip"
 }
 }],
 "method": &"cancel_open"

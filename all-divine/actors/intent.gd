@@ -8,6 +8,9 @@ var move := Vector2.ZERO
 var pressed: Array[StringName] = []
 ## Actions that are down this frame (holding dodge sprints).
 var held: Array[StringName] = []
+## The world (x, z) direction of a sway or duck pressed this frame (the stick's or key's, turned by the camera), which
+## picks the side the sway leans to; zero when none was pressed.
+var evade_dir := Vector2.ZERO
 ## A world point (Vector3) to keep facing while moving, or null to face the way the actor goes.
 var face_target: Variant = null
 ## A world point (Vector3) for the head and eyes to look at, or null.

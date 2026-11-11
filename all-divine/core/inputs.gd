@@ -43,6 +43,10 @@ var _device := Device.KEYBOARD_MOUSE
 var _latched: Dictionary = {}  # flick action -> true while it is down
 var _flicks_frame := -1
 var _flicks: Array[StringName] = []
+var _keys_latched: Dictionary = {}  # move action -> true while its key is down
+var _stick_latched := false  # true while the left stick is past its flick
+var _direction_frame := -1
+var _direction := Vector2.ZERO
 var _sweep_px := 0.0
 var _sweep_began := 0.0
 
@@ -148,6 +152,53 @@ func pressed_this_frame() -> Array[StringName]:
 		elif Input.is_action_just_pressed(action):
 			pressed.append(action)
 	return pressed
+
+
+## The screen direction (x right, y down, length 1) of a move key that went down this physics frame, or of the left stick
+## flicked past Bindings.FLICK_DEADZONE (it is down again only after it falls below Bindings.DIRECTION_RELEASE), or
+## Vector2.ZERO if none did. A direction that was already down gives nothing: that is what makes a sway a press and
+## not a hold. Two keys that go down on one frame make their diagonal; opposite ones cancel. The stick wins over the keys
+## when both press. `devices` are the gamepads read, as for move_vector(). Worked out once a physics frame, however often
+## it is asked, so call it every frame (a brain does).
+func direction_pressed_this_frame(devices: Array[int] = Input.get_connected_joypads()) -> Vector2:
+	var frame := Engine.get_physics_frames()
+	if frame == _direction_frame:
+		return _direction
+	_direction_frame = frame
+	var keys := Vector2.ZERO
+	for action: StringName in Bindings.MOVE_DIRECTIONS:
+		var down := _down(action, devices) == 1
+		if down and not _keys_latched.get(action, false):
+			keys += Bindings.MOVE_DIRECTIONS[action]
+		_keys_latched[action] = down
+	var stick := _flicked_stick(devices)
+	if stick != Vector2.ZERO:
+		_direction = stick
+	else:
+		_direction = keys.normalized()
+	return _direction
+
+
+# The direction the left stick was flicked in this frame, or zero. The stick is read raw (no deadzone taken out), as a
+# whole and not axis by axis, so that a flick on the diagonal is one press, not one for each axis it passes the
+# threshold on.
+func _flicked_stick(devices: Array[int]) -> Vector2:
+	var raw := Vector2.ZERO
+	for device in devices:
+		var reading := Vector2(
+				_pushed(&"move_right", device) - _pushed(&"move_left", device),
+				_pushed(&"move_down", device) - _pushed(&"move_up", device))
+		if reading.length_squared() > raw.length_squared():
+			raw = reading
+	var strength := raw.length()
+	if _stick_latched:
+		if strength < Bindings.DIRECTION_RELEASE:
+			_stick_latched = false
+		return Vector2.ZERO
+	if strength >= Bindings.FLICK_DEADZONE:
+		_stick_latched = true
+		return raw / strength
+	return Vector2.ZERO
 
 
 # The flick actions that went down this physics frame (worked out once a frame, however often it is asked).

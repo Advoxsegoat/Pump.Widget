@@ -32,6 +32,9 @@ extends Resource
 @export var guard_arc_deg := 75.0
 ## What the actor's walking speed is multiplied by while it holds a guard.
 @export var guard_speed_scale := 0.45
+## Whether the legs get no stick while the guard stance is up: he stands his ground and only turns to his face_target. A
+## held guard that walks is a guard that cannot answer a press in two frames from where it stands.
+@export var guard_planted := false
 ## A parried blow adds its posture damage times this to the attacker.
 @export var parry_posture_scale := 2.0
 ## Posture damage a caught thrust deals to the attacker (a catch ignores the thrust's own numbers).

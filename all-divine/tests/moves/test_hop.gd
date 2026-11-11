@@ -1,8 +1,8 @@
 extends TestCase
-## The hop: the dodge button with the stick at rest. The roll's neutral variant is `hop`, a short jump on the spot
+## The hop: the dodge button with the stick at rest. The dash-step's neutral variant is `hop`, a short jump on the spot
 ## whose marks (airborne_on f2, airborne_off f28) take the body off the ground, so a LOW sweep passes under it
 ## (Combat.resolve, rule 2) while a MID blow still lands. The hop has no iframes, costs 12 stamina, and is
-## refused where a roll would be (an actor that cannot act).
+## refused where a dash-step would be (an actor that cannot act).
 ##
 ## The hop's airborne marks are on the frames its feet are really off the ground (f2 to f28: it leaps at once, hangs
 ## at the apex and comes down over four frames to f28, as F1 Task 12's fix round re-timed it so the landing does not
@@ -44,29 +44,28 @@ func _play_to(run: Dictionary, frame: int) -> void:
 			run["airborne"].append(actor.frame)
 
 
-func test_neutral_dodge_hops_and_pushed_dodge_rolls() -> void:
+func test_neutral_dodge_hops_and_pushed_dodge_dash_steps() -> void:
 	var neutral := _solo([{"frames": 1, "press": [&"dodge"]}, {"frames": 5}])
 	await _play_to(neutral, 6)
 	assert_eq(neutral["started"], [[&"hop", 1]], "the stick at rest: a hop")
 	assert_near((neutral["actor"] as Actor).stats.stamina, 88.0, 1e-6, "which costs its own 12")
 	var pushed := _solo([{"frames": 1, "press": [&"dodge"], "move": EAST}, {"frames": 5}])
 	await _play_to(pushed, 6)
-	assert_eq(pushed["started"], [[&"dodge_roll", 1]], "the stick pushed: a roll")
-	assert_near((pushed["actor"] as Actor).stats.stamina, 82.0, 1e-6, "which costs 18")
+	assert_eq(pushed["started"], [[&"dash_step_left", 1]], "the stick pushed: a dash-step")
+	assert_near((pushed["actor"] as Actor).stats.stamina, 92.0, 1e-6, "which costs 8")
 
 
 func test_hop_from_cancel_windows_too() -> void:
-	# A roll's window takes dodge at its f22 (frame 23), a jab's at its f20: at rest either starts the hop.
-	var roll := _solo([{"frames": 1, "press": [&"dodge"], "move": EAST}, {"frames": 21, "move": EAST},
-			{"frames": 1, "press": [&"dodge"]}, {"frames": 5}])
-	await _play_to(roll, 28)
-	assert_eq(roll["started"], [[&"dodge_roll", 1], [&"hop", 23]], "the roll's window")
+	# A jab's window takes dodge at its f20 (frame 21): at rest it starts the hop, with the stick pushed a dash-step.
 	var jab := _solo([{"frames": 1, "press": [&"palm"]}, {"frames": 19}, {"frames": 1, "press": [&"dodge"]}, {"frames": 5}])
 	await _play_to(jab, 26)
-	assert_eq(jab["started"], [[&"palm_jab", 1], [&"hop", 21]], "the jab's window")
+	assert_eq(jab["started"], [[&"palm_jab", 1], [&"hop", 21]], "the jab's window, at rest")
+	var pushed := _solo([{"frames": 1, "press": [&"palm"]}, {"frames": 19}, {"frames": 1, "press": [&"dodge"], "move": EAST}, {"frames": 5, "move": EAST}])
+	await _play_to(pushed, 26)
+	assert_eq(pushed["started"], [[&"palm_jab", 1], [&"dash_step_left", 21]], "and with the stick pushed")
 
 
-func test_hop_is_refused_where_a_roll_would_be() -> void:
+func test_hop_is_refused_where_a_dash_step_would_be() -> void:
 	var run := _solo([{"frames": 1, "press": [&"dodge"]}, {"frames": 5}])
 	var actor: Actor = run["actor"]
 	actor.stats.stamina = 0.0
@@ -186,17 +185,16 @@ func test_mid_hit_during_the_hop_lands() -> void:
 	assert_true((run["actor"] as Actor).runner.airborne, "he is still in the air")
 
 
-func test_mashing_dodge_does_not_extend_iframes() -> void:
-	# Pushed, the dodge rolls: iframes are 13 frames a roll however it is mashed. At rest it hops, with none.
+func test_mashing_dodge_never_makes_him_invulnerable() -> void:
+	# Pushed, the dodge dash-steps, which is never invulnerable. At rest it hops, with none either.
 	var mash := []
 	for i in 12:
 		mash.append({"frames": 1, "press": [&"dodge"], "move": EAST})
 		mash.append({"frames": 3, "move": EAST})
-	var rolls := _solo(mash)
-	await _play_to(rolls, 60)
-	var starts: Array = rolls["started"].filter(func(s: Array) -> bool: return s[0] == &"dodge_roll")
-	assert_true(starts.size() >= 1)
-	assert_eq(rolls["iframes"].size(), 13 * starts.size(), "13 iframes per roll that started, no more: %s" % [rolls["iframes"]])
+	var steps := _solo(mash)
+	await _play_to(steps, 60)
+	assert_true(steps["started"].any(func(s: Array) -> bool: return s[0] == &"dash_step_left"))
+	assert_eq(steps["iframes"], [], "no iframes at all, however it is mashed")
 	var hops := []
 	for i in 12:
 		hops.append({"frames": 1, "press": [&"dodge"]})
@@ -205,14 +203,10 @@ func test_mashing_dodge_does_not_extend_iframes() -> void:
 	await _play_to(rest, 60)
 	assert_true(rest["started"].any(func(s: Array) -> bool: return s[0] == &"hop"))
 	assert_eq(rest["iframes"], [], "mashing at rest never makes him invulnerable")
-	# A roll, then mashing at rest: only the roll's 13.
-	var mixed := _solo([{"frames": 1, "press": [&"dodge"], "move": EAST}] + hops)
-	await _play_to(mixed, 80)
-	assert_eq(mixed["iframes"].size(), 13, "one roll, then hops: %s" % [mixed["iframes"]])
 
 
 func test_the_hop_is_airborne_longer_than_a_sweep_is_active() -> void:
-	# The perilous sweep is live for 20 frames, more than a roll's 13 of iframes on purpose; the hop must be off the
+	# The perilous sweep is live for 20 frames, on purpose longer than a dodge could cover by itself; the hop must be off the
 	# ground longer than that. Counted twice: from the airborne marks, and from the feet themselves (both ankles well
 	# above the 0.08 to 0.12 m they stand at). Then a 20-frame LOW sweep whose first live frame is the first one judged
 	# against the hop in the air (frame 4: the lift-off mark of frame 3 shows in the next frame's snapshot) whiffs

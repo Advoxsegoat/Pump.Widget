@@ -448,8 +448,10 @@ tracks/57/keys = {
 }, {
 "args": [{
 &"into": {
-&"dodge": &"dodge_roll",
-&"palm": &"palm_cross"
+&"dodge": &"dash_step",
+&"duck": &"duck_slip",
+&"palm": &"palm_cross",
+&"sway": &"sway_left_slip"
 }
 }],
 "method": &"cancel_open"

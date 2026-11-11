@@ -10,7 +10,8 @@ const ROWS := [
 	["Palm (jab, cross, hook)", [&"palm"]],
 	["Heavy (hold to charge)", [&"heavy"]],
 	["Guard (tap to parry)", [&"guard"]],
-	["Dodge (roll; hop if still)", [&"dodge"]],
+	["Sway / duck: hold guard + a direction", [&"guard"]],
+	["Dash-step (hop if still)", [&"dodge"]],
 	["Lock on", [&"lock_on"]],
 	["Pause", [&"menu"]],
 ]

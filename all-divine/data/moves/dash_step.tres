@@ -8,7 +8,6 @@ id = &"dash_step"
 kind = 1
 clip = &"dash_step"
 stamina_cost = 8.0
-invulnerable = false
 directional = {
 &"back": &"dash_step_back",
 &"left": &"dash_step_left",

@@ -179,7 +179,12 @@ func test_guard_walks_slower_with_the_stance_on_the_upper_body() -> void:
 	var east := Vector2(1, 0)
 	var steps := [{"frames": 1, "press": [&"guard"], "hold": [&"guard"], "move": east},
 			{"frames": 120, "hold": [&"guard", &"dodge"], "move": east}]
-	var run := _duel([], steps)
+	# (A def whose tuning does not plant the guard: Abarax's does, and stands his ground. Its guard_speed_scale is for the
+	# foes' tunings and for a player who is not planted.)
+	var def := Duel.def(ActorDef.Team.ENEMY, 5.0)
+	def.combat = def.combat.duplicate() as CombatTuning
+	def.combat.guard_planted = false
+	var run := _duel([], steps, def)
 	var b: Actor = run["b"]
 	b.global_position = Vector3(5, 0, 5)  # well away from a
 	await Duel.play_to(self, b, 60)

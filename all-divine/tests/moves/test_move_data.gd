@@ -16,7 +16,7 @@ const TABLE := {
 		[15, &"hitbox_off", {"id": &"palm_l"}],
 		[15, &"cancel_open", {"into": {&"palm": &"palm_cross"}}],
 		[20, &"recovery", {}],
-		[20, &"cancel_open", {"into": {&"palm": &"palm_cross", &"dodge": &"dodge_roll"}}],
+		[20, &"cancel_open", {"into": {&"palm": &"palm_cross", &"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	],
 	&"palm_cross": [
 		[5, &"sfx", {"name": &"palm_whoosh"}],
@@ -25,7 +25,7 @@ const TABLE := {
 		[20, &"hitbox_off", {"id": &"palm_r"}],
 		[20, &"cancel_open", {"into": {&"palm": &"palm_hook"}}],
 		[25, &"recovery", {}],
-		[25, &"cancel_open", {"into": {&"palm": &"palm_hook", &"dodge": &"dodge_roll"}}],
+		[25, &"cancel_open", {"into": {&"palm": &"palm_hook", &"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	],
 	# The hook and the heavy palm's contact frames are where their clips show full extension (F1 Task 7's sheet). The hook
 	# was re-timed in F1 Task 12's fix round (Melee_Hook's lunge spread over four steps, so the head does not jump 0.8 m in
@@ -36,7 +36,7 @@ const TABLE := {
 		[40, &"fx", {"name": &"palm_trail", "bone": &"hand_r"}],
 		[45, &"hitbox_off", {"id": &"palm_r"}],
 		[55, &"recovery", {}],
-		[55, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dodge_roll"}}],
+		[55, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	],
 	&"palm_heavy": [
 		[10, &"hyperarmour_on", {}],
@@ -47,20 +47,11 @@ const TABLE := {
 		[20, &"hitbox_off", {"id": &"palm_r"}],
 		[20, &"hyperarmour_off", {}],
 		[40, &"recovery", {}],
-		[45, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dodge_roll"}}],
-	],
-	&"dodge_roll": [
-		[0, &"sfx", {"name": &"roll_cloth"}],
-		[3, &"iframes_on", {}],
-		[14, &"fx", {"name": &"roll_dust"}],
-		[14, &"sfx", {"name": &"roll_land"}],
-		[16, &"iframes_off", {}],
-		[20, &"recovery", {}],
-		[22, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dodge_roll"}}],
+		[45, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	],
 }
-const LENGTHS := {&"palm_jab": 35, &"palm_cross": 40, &"palm_hook": 82, &"palm_heavy": 57, &"dodge_roll": 30}
-const STEPS := {&"palm_jab": 12, &"palm_cross": 12, &"palm_hook": 12, &"palm_heavy": 12, &"dodge_roll": 0}
+const LENGTHS := {&"palm_jab": 35, &"palm_cross": 40, &"palm_hook": 82, &"palm_heavy": 57}
+const STEPS := {&"palm_jab": 12, &"palm_cross": 12, &"palm_hook": 12, &"palm_heavy": 12}
 # The reactions every actor shares (F1 Tasks 5 and 8): [length in frames, whether the move takes the clip's root
 # motion, then its marks as in TABLE]. Each is smooth. The death's thud and dust are on the frame its hips
 # meet the ground. A reaction's own sound is cloth moving (roll_cloth): the blow that caused it already plays
@@ -70,13 +61,13 @@ const REACTIONS := {
 		[0, &"sfx", {"name": &"roll_cloth"}],
 		[0, &"fx", {"name": &"roll_dust"}],
 		[20, &"recovery", {}],
-		[22, &"cancel_open", {"into": {&"dodge": &"dodge_roll"}}],
+		[22, &"cancel_open", {"into": {&"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	]],
 	&"stagger": [48, false, [
 		[0, &"sfx", {"name": &"roll_cloth"}],
 		[0, &"fx", {"name": &"roll_dust"}],
 		[40, &"recovery", {}],
-		[42, &"cancel_open", {"into": {&"dodge": &"dodge_roll"}}],
+		[42, &"cancel_open", {"into": {&"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	]],
 	&"death": [144, false, [
 		[56, &"sfx", {"name": &"body_fall"}],
@@ -86,7 +77,7 @@ const REACTIONS := {
 		[0, &"sfx", {"name": &"roll_cloth"}],
 		[0, &"fx", {"name": &"roll_dust"}],
 		[12, &"recovery", {}],
-		[14, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dodge_roll"}}],
+		[14, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	]],
 	&"guard_break": [60, false, [
 		[0, &"sfx", {"name": &"roll_cloth"}],
@@ -115,18 +106,18 @@ const GUARD_MOVES := {
 		[4, &"guard_on", {}],
 		[10, &"parry_off", {}],
 		[10, &"recovery", {}],
-		[10, &"cancel_open", {"into": {&"palm": &"palm_jab", &"heavy": &"palm_heavy", &"dodge": &"dodge_roll"}}],
+		[10, &"cancel_open", {"into": {&"palm": &"palm_jab", &"heavy": &"palm_heavy", &"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 		[14, &"guard_off", {}],
 	]],
 	&"parry": [24, false, [
 		[0, &"sfx", {"name": &"roll_cloth"}],
 		[0, &"fx", {"name": &"glint"}],
-		[8, &"cancel_open", {"into": {&"palm": &"palm_jab", &"heavy": &"palm_heavy"}}],
+		[8, &"cancel_open", {"into": {&"palm": &"palm_jab", &"heavy": &"palm_heavy", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	]],
 	&"catch": [30, false, [
 		[0, &"sfx", {"name": &"roll_cloth"}],
 		[4, &"fx", {"name": &"palm_trail", "bone": &"hand_r"}],
-		[14, &"cancel_open", {"into": {&"palm": &"palm_jab", &"heavy": &"palm_heavy"}}],
+		[14, &"cancel_open", {"into": {&"palm": &"palm_jab", &"heavy": &"palm_heavy", &"sway": &"sway_left_slip", &"duck": &"duck_slip"}}],
 	]],
 }
 
@@ -137,7 +128,7 @@ func _clip(n: StringName) -> Animation:
 
 func test_moves_are_registered_with_their_kinds_and_clips() -> void:
 	var want := {&"palm_jab": MoveData.Kind.ATTACK, &"palm_cross": MoveData.Kind.ATTACK, &"palm_hook": MoveData.Kind.ATTACK,
-			&"palm_heavy": MoveData.Kind.ATTACK, &"dodge_roll": MoveData.Kind.DODGE}
+			&"palm_heavy": MoveData.Kind.ATTACK, &"dash_step": MoveData.Kind.DODGE}
 	for id: StringName in want:
 		var move := Registry.fetch(&"moves", id) as MoveData
 		if move == null:
@@ -211,8 +202,8 @@ func test_the_heavy_palm_has_a_heavy_and_a_charged_profile() -> void:
 	assert_eq(move.stamina_cost, 24.0)
 
 
-func test_the_roll_hits_nothing() -> void:
-	assert_eq((Registry.fetch(&"moves", &"dodge_roll") as MoveData).hits, {})
+func test_the_dash_step_hits_nothing() -> void:
+	assert_eq((Registry.fetch(&"moves", &"dash_step") as MoveData).hits, {})
 
 
 func test_the_clips_have_the_lengths_and_steps_the_marks_were_placed_for() -> void:
@@ -289,25 +280,13 @@ func _assert_marks(id: StringName, want: Array) -> void:
 		assert_eq(read[i]["args"], want[i][2], label + " args")
 
 
-func test_the_dodge_is_invulnerable_for_13_frames_out_of_30() -> void:
-	var marks := Marks.read(_clip(&"dodge_roll"))
-	var on := -1
-	var off := -1
-	for m in marks:
-		if m["kind"] == &"iframes_on":
-			on = Marks.frame_of(m["time"])
-		elif m["kind"] == &"iframes_off":
-			off = Marks.frame_of(m["time"])
-	assert_eq(off - on, 13, "frames [%d, %d)" % [on, off])
-
-
-func test_roll_root_motion_scale_makes_the_roll_cover_three_metres() -> void:
-	var roll := Registry.fetch(&"moves", &"dodge_roll") as MoveData
-	var travelled := _root_travel(_clip(&"dodge_roll"))
-	assert_true(travelled > 4.0, "the clip itself travels %s m" % travelled)
-	assert_near(roll.root_motion_scale * travelled, 3.0, 0.05, "scale %s x %s m" % [roll.root_motion_scale, travelled])
-	assert_eq(snappedf(roll.root_motion_scale, 0.01), roll.root_motion_scale, "two decimals")
-	assert_true(roll.root_motion)
+func test_the_dash_step_has_no_iframes_and_covers_one_point_three_metres() -> void:
+	var dash := Registry.fetch(&"moves", &"dash_step") as MoveData
+	assert_eq(Marks.read(_clip(&"dash_step")).filter(func(m: Dictionary) -> bool: return String(m["kind"]).begins_with("iframes")), [] as Array,
+			"it is never invulnerable")
+	var travelled := _root_travel(_clip(&"dash_step"))
+	assert_near(dash.root_motion_scale * travelled, 1.3, 0.05, "scale %s x %s m" % [dash.root_motion_scale, travelled])
+	assert_true(dash.root_motion)
 
 
 func test_attacks_keep_the_clips_own_root_motion_scale() -> void:
@@ -333,6 +312,9 @@ func test_combat_tuning_defaults_are_the_numbers_of_the_abarax_file() -> void:
 	assert_ne(tuning, null)
 	var plain := CombatTuning.new()
 	for property: Dictionary in plain.get_property_list():
+		# The one difference there is meant to be: Abarax plants his guard, and a tuning that says nothing does not.
+		if property["name"] == "guard_planted":
+			continue
 		if property["usage"] & PROPERTY_USAGE_SCRIPT_VARIABLE:
 			assert_eq(tuning.get(property["name"]), plain.get(property["name"]), "the file and the class agree on %s" % property["name"])
 
@@ -354,7 +336,8 @@ func test_abarax_is_defined_by_data() -> void:
 		fail("abarax is a registered ActorDef")
 		return
 	assert_eq(def.id, &"abarax")
-	assert_eq(def.moveset, {&"palm": &"palm_jab", &"heavy": &"palm_heavy", &"dodge": &"dodge_roll", &"guard": &"guard_raise"})
+	assert_eq(def.moveset, {&"palm": &"palm_jab", &"heavy": &"palm_heavy", &"dodge": &"dash_step", &"guard": &"guard_raise",
+			&"sway": &"sway_left_slip", &"duck": &"duck_slip"})
 	assert_eq(def.max_hp, 100.0); assert_eq(def.max_stamina, 100.0); assert_eq(def.max_posture, 100.0); assert_eq(def.poise, 10.0)
 	assert_eq(def.required_clips, PackedStringArray(["idle", "walk", "jog", "sprint"]))
 	assert_eq(def.locomotion, load("res://data/tuning/abarax_locomotion.tres"))

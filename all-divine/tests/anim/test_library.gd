@@ -6,7 +6,7 @@ const LIB := "res://assets/anim/abarax/library.tres"
 const CONFIG := "res://assets/anim/clips.cfg"
 const MODEL := "res://assets/characters/abarax/abarax.glb"
 const RIG := "res://actors/abarax/abarax_rig.tscn"
-const CLIPS: PackedStringArray = ["idle", "walk", "jog", "sprint", "dodge_roll", "palm_jab", "palm_cross", "t_pose"]
+const CLIPS: PackedStringArray = ["idle", "walk", "jog", "sprint", "dash_step", "palm_jab", "palm_cross", "t_pose"]
 const LOCOMOTION: PackedStringArray = ["walk", "jog", "sprint"]
 const MAX_CLIP_BYTES := 2 * 1024 * 1024
 
@@ -42,14 +42,14 @@ func test_loops_and_lengths_and_steps() -> void:
 	var lib := load(LIB) as AnimationLibrary
 	for n in ["idle", "walk", "jog", "sprint"]:
 		assert_eq(lib.get_animation(n).loop_mode, Animation.LOOP_LINEAR, "%s loops" % n)
-	for n in ["dodge_roll", "palm_jab", "palm_cross", "t_pose"]:
+	for n in ["dash_step", "palm_jab", "palm_cross", "t_pose"]:
 		assert_eq(lib.get_animation(n).loop_mode, Animation.LOOP_NONE, "%s plays once" % n)
-	assert_near(lib.get_animation("dodge_roll").length, 0.5, 0.001)
+	assert_near(lib.get_animation("dash_step").length, 0.3, 0.001)
 	assert_near(lib.get_animation("palm_jab").length, 0.5833, 0.001)
 	assert_near(lib.get_animation("palm_cross").length, 0.6667, 0.001)
 	assert_eq(lib.get_animation("palm_jab").get_meta("step_fps"), 12)
 	assert_eq(lib.get_animation("palm_cross").get_meta("step_fps"), 12)
-	assert_eq(lib.get_animation("dodge_roll").get_meta("step_fps"), 0)
+	assert_eq(lib.get_animation("dash_step").get_meta("step_fps"), 0)
 	for n in _sections():
 		assert_true(lib.get_animation(n).has_meta("step_fps"), "%s carries step_fps" % n)
 		assert_eq(typeof(lib.get_animation(n).get_meta("step_fps")), TYPE_INT, "%s: step_fps is an int" % n)
@@ -134,12 +134,12 @@ func test_position_tracks_are_only_for_root_and_pelvis_and_no_scale_track_is_idl
 					assert_true(changes, "%s has a scale track on %s that never leaves 1" % [n, bone])
 
 
-func test_locomotion_clips_stay_in_place_and_the_roll_carries_root_motion() -> void:
+func test_locomotion_clips_stay_in_place_and_the_dash_step_carries_root_motion() -> void:
 	var lib := load(LIB) as AnimationLibrary
 	var root := NodePath("Model/%s:root" % ClipBuilder.skeleton_path(load(MODEL)))
 	for n in ["idle", "walk", "jog", "sprint", "t_pose", "palm_jab", "palm_cross"]:
 		assert_eq(lib.get_animation(n).find_track(root, Animation.TYPE_POSITION_3D), -1, "%s has no root travel" % n)
-	assert_true(lib.get_animation("dodge_roll").find_track(root, Animation.TYPE_POSITION_3D) >= 0)
+	assert_true(lib.get_animation("dash_step").find_track(root, Animation.TYPE_POSITION_3D) >= 0)
 
 
 # --- helpers ---

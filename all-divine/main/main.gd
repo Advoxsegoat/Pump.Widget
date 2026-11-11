@@ -17,7 +17,7 @@ extends Node
 ## is paused (to hear the menu button); the stage, and so the world in it, stops.
 ##
 ## With --selftest (a user argument: godot -- --selftest) Abarax fights one tier I Knuckle in the yard through a
-## scripted circuit instead (selftest_circuit: approach, jab, cross, hook, roll, guard, heavy) for SELFTEST_FRAMES
+## scripted circuit instead (selftest_circuit: approach, jab, cross, hook, sway, duck, dash-step, guard, heavy) for SELFTEST_FRAMES
 ## physics frames, and the arena does nothing by itself but send that one Knuckle; the SelfTest autoload
 ## (core/self_test.gd), listening for errors since before this scene loaded, then quits: 0 if none was logged, else 1.
 
@@ -31,12 +31,18 @@ const SELFTEST_WALK_PUSH := 0.6
 ## Frames to stand while the Knuckle closes on him, and between the circuit's blows.
 const SELFTEST_WAIT := 90
 const SELFTEST_PAUSE := 20
-## Frames a palm, a roll, a guard and a heavy take, recovery included.
+## Frames a palm, a sway, a duck, a dash-step, a guard and a heavy take, recovery included.
 const SELFTEST_PALM_FRAMES := 24
-## The hook is the longest of the three: it plays out (a press while it plays would be lost) before the roll.
+## The hook is the longest of the three: it plays out (a press while it plays would be lost) before the sway.
 const SELFTEST_HOOK_FRAMES := 95
-const SELFTEST_ROLL_FRAMES := 40
+const SELFTEST_SWAY_FRAMES := 26
+const SELFTEST_DUCK_FRAMES := 30
+const SELFTEST_DASH_FRAMES := 24
+## The guard is pressed every SELFTEST_GUARD_REPEAT frames for SELFTEST_GUARD_FRAMES: a blow of the Knuckle's can land as he
+## dash-steps back and flinch him (a flinch takes no guard until it is over), and a press made then would be lost; the
+## next, within the 9 frames a press is kept, is not.
 const SELFTEST_GUARD_FRAMES := 50
+const SELFTEST_GUARD_REPEAT := 10
 const SELFTEST_HEAVY_FRAMES := 70
 
 @onready var stage: PixelStage = $PixelStage
@@ -158,12 +164,16 @@ func start_selftest() -> void:
 
 
 ## The self-test's circuit, as ScriptBrain steps from the spawn against the Knuckle wave 0 sent (arena.enemies()[0]):
-## walk toward it, wait for it to come, jab, cross, hook, roll back, guard, heavy. He faces and aims at it throughout.
+## walk toward it, wait for it to come, jab, cross, hook, sway aside, duck, dash-step back, guard, heavy. He faces and aims at it throughout.
 func selftest_circuit() -> Array:
 	var foe := arena().enemies()[0]
 	var start := _flat(region.spawn().origin)
 	var toward := (_flat(foe.global_position) - start).normalized()
 	var face := {face_target = foe, aim_target = foe}
+	var guard := []
+	for i in SELFTEST_GUARD_FRAMES / SELFTEST_GUARD_REPEAT:
+		guard.append({frames = 1, press = [&"guard"], hold = [&"guard"]}.merged(face))
+		guard.append({frames = SELFTEST_GUARD_REPEAT - 1, hold = [&"guard"]}.merged(face))
 	return [
 		{frames = SELFTEST_PAUSE}.merged(face),
 		_leg(toward, SELFTEST_WALK_PUSH, SELFTEST_APPROACH, player.def.locomotion).merged(face),
@@ -174,9 +184,13 @@ func selftest_circuit() -> Array:
 		{frames = SELFTEST_PALM_FRAMES}.merged(face),
 		{frames = 1, press = [&"palm"]}.merged(face),
 		{frames = SELFTEST_HOOK_FRAMES}.merged(face),
-		{frames = 1, move = -toward, press = [&"dodge"]},
-		{frames = SELFTEST_ROLL_FRAMES}.merged(face),
-		{frames = SELFTEST_GUARD_FRAMES, press = [&"guard"], hold = [&"guard"]}.merged(face),
+		{frames = 1, press = [&"sway"], evade_dir = Vector2(-toward.y, toward.x)}.merged(face),
+		{frames = SELFTEST_SWAY_FRAMES}.merged(face),
+		{frames = 1, press = [&"duck"]}.merged(face),
+		{frames = SELFTEST_DUCK_FRAMES}.merged(face),
+		{frames = 1, move = -toward, press = [&"dodge"]}.merged(face),
+		{frames = SELFTEST_DASH_FRAMES}.merged(face),
+	] + guard + [
 		{frames = 1, press = [&"heavy"], hold = [&"heavy"]}.merged(face),
 		{frames = SELFTEST_HEAVY_FRAMES}.merged(face),
 	]

@@ -38,18 +38,18 @@ func _move(id: StringName) -> MoveData:
 func test_the_moves_carry_their_costs() -> void:
 	assert_eq(_move(&"palm_jab").stamina_cost, 12.0)
 	assert_eq(_move(&"palm_cross").stamina_cost, 14.0)
-	assert_eq(_move(&"dodge_roll").stamina_cost, 18.0)
+	assert_eq(_move(&"dash_step").stamina_cost, 8.0)
 
 
-func test_roll_costs_eighteen() -> void:
+func test_a_dash_step_costs_eight() -> void:
 	var run := _spawn([{"frames": 1, "press": [&"dodge"], "move": EAST}, {"frames": 10}])
 	var actor: Actor = run["actor"]
 	assert_eq(actor.stats.stamina, 100.0, "full before")
 	await _play_to(actor, 1)
-	assert_eq(run["started"], [[&"dodge_roll", 1]])
-	assert_near(actor.stats.stamina, 82.0, 1e-6, "spent on the frame the roll starts")
+	assert_eq(run["started"], [[&"dash_step_left", 1]])
+	assert_near(actor.stats.stamina, 92.0, 1e-6, "spent on the frame the dash-step starts")
 	await _play_to(actor, 11)
-	assert_near(actor.stats.stamina, 82.0, 1e-6, "and not again while it plays")
+	assert_near(actor.stats.stamina, 92.0, 1e-6, "and not again while it plays")
 
 
 func test_jab_costs_twelve_and_the_cross_it_cancels_into_fourteen() -> void:
@@ -66,9 +66,9 @@ func test_stamina_comes_back_after_the_wait() -> void:
 	var run := _spawn([{"frames": 1, "press": [&"dodge"], "move": EAST}, {"frames": 100}])
 	var actor: Actor = run["actor"]
 	await _play_to(actor, 36)
-	assert_near(actor.stats.stamina, 82.0, 1e-6, "still waiting 0.6 s after the roll")
+	assert_near(actor.stats.stamina, 92.0, 1e-6, "still waiting 0.6 s after the dash-step")
 	await _play_to(actor, 90)
-	assert_near(actor.stats.stamina, 100.0, 1e-6, "18 at 45 a second takes 0.4 s more")
+	assert_near(actor.stats.stamina, 100.0, 1e-6, "8 at 45 a second takes 0.18 s more")
 
 
 func test_no_attack_or_dodge_at_zero_but_walking_works() -> void:
@@ -158,7 +158,7 @@ func test_sprint_drains_twelve_a_second() -> void:
 	assert_true(actor.locomotion.sprinting)
 	await _play_to(actor, 60)
 	assert_near(actor.stats.stamina, 88.0, 1e-6, "12 for the second, with none coming back meanwhile")
-	assert_eq(run["started"], [], "holding dodge is a sprint, not a roll")
+	assert_eq(run["started"], [], "holding dodge is a sprint, not a dash-step")
 
 
 func test_sprint_drains_then_stops_when_exhausted() -> void:

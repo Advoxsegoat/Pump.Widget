@@ -10,6 +10,10 @@ enum Kind { ATTACK, DODGE, OTHER, REACTION }
 ## evade at all, SWAY a lean aside, DUCK a drop. A sway is the perfect dodge of a straight blow, a duck of a round one.
 enum Evade { NONE, SWAY, DUCK }
 
+## How far (degrees) from the facing a direction is still straight ahead, and how far it is already behind (side_of).
+const SIDE_AHEAD_DEG := 30.0
+const SIDE_BACK_DEG := 150.0
+
 @export var id: StringName
 @export var kind: Kind = Kind.ATTACK
 ## The clip in the actor's rig that plays the move.
@@ -23,9 +27,6 @@ enum Evade { NONE, SWAY, DUCK }
 ## The evade the move's evade window is, while it is open (see Evade). A move with an evade window says which here, and
 ## a move without one leaves it NONE: the clip checker holds the two together.
 @export var evade: Evade = Evade.NONE
-## Whether a dodge has iframes: the roll does, the dash-step never does (spec 3.7). The clip checker holds the clip to it:
-## the iframes marks of one that is, none on one that is not. (A sway or duck has its evade window instead.)
-@export var invulnerable := true
 ## After a dodge that avoided nothing, the frame of this move before which another sway or duck cannot start: twice the
 ## evade window's length, so a press at random is paid for in time as well as stamina. 0 for a move that does not bar one.
 @export var redodge_frame := 0
@@ -52,3 +53,19 @@ enum Evade { NONE, SWAY, DUCK }
 ## The move whose blow this one imitates until it stops (a feint): its tell shows the rim of that move's tell on the same
 ## frames, so that the two cannot be told apart until the blow does not come (ActorFx). Empty for a move that is itself.
 @export var imitates: StringName
+
+
+## Which side of a body facing `facing` the ground direction `dir` (world x, z) lies on: &"" within 30 degrees of the
+## facing (straight ahead, or no direction at all), &"back" at 150 degrees or more from it, otherwise &"left" or
+## &"right" (his own: facing +Z, +X is his left). The key of `directional` the move for that direction is under.
+static func side_of(dir: Vector2, facing: Vector3) -> StringName:
+	var ahead := Vector2(facing.x, facing.z)
+	if dir.is_zero_approx() or ahead.is_zero_approx():
+		return &""
+	var angle := rad_to_deg(absf(ahead.angle_to(dir)))
+	if angle <= SIDE_AHEAD_DEG:
+		return &""
+	if angle >= SIDE_BACK_DEG:
+		return &"back"
+	# His right hand is the facing turned a quarter toward -X when he faces +Z: (-z, x).
+	return &"right" if dir.dot(Vector2(-ahead.y, ahead.x)) > 0.0 else &"left"

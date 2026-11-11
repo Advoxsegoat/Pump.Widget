@@ -36,7 +36,7 @@ func _run_child(before: Array[String], after: Array[String]) -> Dictionary:
 
 
 # The circuit, here in this process: in 600 frames Abarax approaches the tier I Knuckle the yard sends, and fights it:
-# a jab, a cross and a hook, a roll, a guard and a heavy, trading blows with it.
+# a jab, a cross and a hook, a sway, a duck, a dash-step, a guard and a heavy, trading blows with it.
 func test_selftest_circuit_fights_a_knuckle_in_the_yard() -> void:
 	Game.reset()
 	Arena.reset_spawn_counts()  # the Knuckle's dice as in a fresh game, which --selftest is
@@ -54,7 +54,7 @@ func test_selftest_circuit_fights_a_knuckle_in_the_yard() -> void:
 			landed[0] += 1)
 	player.set_brain(ScriptBrain.new(main.selftest_circuit()))
 	await frames(Main.SELFTEST_FRAMES)
-	for move in [&"palm_jab", &"palm_cross", &"palm_hook", &"dodge_roll", &"guard_raise", &"palm_heavy"]:
+	for move in [&"palm_jab", &"palm_cross", &"palm_hook", &"sway_right_slip", &"duck_slip", &"dash_step_back", &"guard_raise", &"palm_heavy"]:
 		assert_true(started.has(move), "he played %s (%s)" % [move, started])
 	assert_true(landed[0] >= 1, "and landed a blow on it (%d)" % landed[0])
 	assert_true(foe.stats.hp < foe.stats.max_hp, "it is hurt")

@@ -7,4 +7,4 @@ script = ExtResource("1_move")
 id = &"blind_feint"
 kind = 2
 clip = &"idle"
-imitates = &"roll"
+imitates = &"step"

@@ -414,7 +414,9 @@ tracks/56/keys = {
 }, {
 "args": [{
 &"into": {
-&"dodge": &"dodge_roll"
+&"dodge": &"dash_step",
+&"duck": &"duck_slip",
+&"sway": &"sway_left_slip"
 }
 }],
 "method": &"cancel_open"

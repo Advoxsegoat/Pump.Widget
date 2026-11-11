@@ -1,9 +1,9 @@
 extends TestCase
 ## The preview reel (demo/demo_reel.tscn): Abarax's scripted choreography against a Knuckle that throws three scripted
 ## attacks. The recording is only worth making while every beat really happens, so this plays the reel in game time
-## and checks them in order: the jab, cross and hook land; the Knuckle's jab is parried; its sweep and its thrust
-## find Abarax hopping and rolling, so he is never hurt; a charged heavy, a jab and a cross break its posture; and the
-## Open Hand finisher kills it.
+## and checks them in order: the jab, cross and hook land; the Knuckle's jab is parried; its sweep finds Abarax hopping
+## and its thrust a guard that catches it, so he is never hurt; a charged heavy, a dash-step in, a jab and a cross break its
+## posture; and the Open Hand finisher kills it.
 
 const REEL := "res://demo/demo_reel.tscn"
 const O := HitResult.Outcome
@@ -29,13 +29,14 @@ func test_every_beat_of_the_reel_happens() -> void:
 	var charged := [0]
 	abarax.runner.charged.connect(func(_m: MoveData) -> void: charged[0] += 1)
 	await frames(60 * 20)
-	assert_eq(mine, [&"palm_jab", &"palm_cross", &"palm_hook", &"guard_raise", &"parry", &"palm_jab", &"hop", &"dodge_roll",
-			&"palm_heavy", &"palm_jab", &"palm_cross", &"finisher"], "Abarax's moves, in order")
-	assert_eq(theirs, [&"flinch", &"knuckle_jab", &"parried", &"knuckle_sweep", &"knuckle_thrust", &"stagger", &"posture_broken",
+	assert_eq(mine, [&"palm_jab", &"palm_cross", &"palm_hook", &"guard_raise", &"parry", &"palm_jab", &"hop", &"guard_raise", &"catch",
+			&"palm_heavy", &"dash_step", &"palm_jab", &"palm_cross", &"finisher"], "Abarax's moves, in order")
+	assert_eq(theirs, [&"flinch", &"knuckle_jab", &"parried", &"knuckle_sweep", &"knuckle_thrust", &"caught", &"stagger", &"posture_broken",
 			&"finisher_victim"], "the Knuckle's, in order")
 	assert_eq(abarax.stats.hp, abarax.stats.max_hp, "not one blow hurt him")
 	assert_true(taken.has(O.PARRIED), "he parried the jab")
-	assert_true(taken.has(O.WHIFF), "the sweep and the thrust came to nothing")
+	assert_true(taken.has(O.CAUGHT), "he caught the thrust")
+	assert_true(taken.has(O.WHIFF), "the sweep came to nothing")
 	assert_false(taken.has(O.HIT) or taken.has(O.GUARDED), "and nothing else came to anything")
 	assert_eq(charged[0], 1, "the heavy was charged")
 	assert_true(landed.count(O.HIT) >= 8, "his blows landed (%d)" % landed.count(O.HIT))

@@ -14,6 +14,7 @@ posture_regen_rate = 20.0
 broken_time = 2.0
 guard_arc_deg = 75.0
 guard_speed_scale = 0.45
+guard_planted = true
 parry_posture_scale = 2.0
 catch_posture = 50.0
 parry_refresh_frames = 20

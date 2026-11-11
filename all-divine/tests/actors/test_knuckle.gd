@@ -117,11 +117,11 @@ func test_a_larger_tier_travels_further_by_root_motion() -> void:
 		var actor := TestArena.spawn(arena, load(TIERS[i]) as ActorDef, ScriptBrain.new([]), Vector3(i * 3.0, 0, 0), "K%d" % (i + 1))
 		await frames(1)
 		var from := actor.global_position
-		actor.runner.start(Registry.fetch(&"moves", &"dodge_roll") as MoveData, true)
+		actor.runner.start(Registry.fetch(&"moves", &"dash_step") as MoveData, true)
 		while actor.runner.busy():
 			await frames(1)
 		travel.append(Vector2(actor.global_position.x - from.x, actor.global_position.z - from.z).length())
-	assert_true(travel[0] > 1.0, "the roll travels (%.3f m)" % travel[0])
+	assert_true(travel[0] > 1.0, "the dash-step travels (%.3f m)" % travel[0])
 	assert_near(travel[1] / travel[0], 1.04, 0.01, "%.3f m against %.3f m" % [travel[1], travel[0]])
 
 
@@ -189,14 +189,14 @@ func _dodge_out_of_a_flinch(def: ActorDef) -> Array:
 
 func test_a_shared_reaction_opens_its_window_only_into_the_actors_own_moves() -> void:
 	# The reactions are Abarax's clips, and their cancel windows name his moves: the flinch's takes a dodge into his
-	# roll. Abarax rolls out of it; a Knuckle, whose dodge is its feint, plays it out (it never rolls with his roll, nor
-	# jabs with his jab after), and its dodge press starts its own feint only once the flinch is over.
+	# dash-step. Abarax dash-steps out of it; a Knuckle, whose dodge is its feint, plays it out (it never dash-steps with
+	# his dash-step, nor jabs with his jab after), and its dodge press starts its own feint only once the flinch is over.
 	var abarax: Array = await _dodge_out_of_a_flinch(Duel.def(ActorDef.Team.PLAYER, 10.0))
-	assert_eq((abarax[0] as Array).slice(0, 2), [&"flinch", &"dodge_roll"], "Abarax rolls out of the flinch: %s" % [abarax[0]])
+	assert_eq((abarax[0] as Array).slice(0, 2), [&"flinch", &"dash_step_left"], "Abarax dash-steps out of the flinch: %s" % [abarax[0]])
 	assert_eq(abarax[1], true, "cutting it short")
 	var knuckle: Array = await _dodge_out_of_a_flinch(load(TIERS[0]) as ActorDef)
 	assert_eq(knuckle[1], false, "the Knuckle plays the flinch out: %s" % [knuckle[0]])
-	assert_false((knuckle[0] as Array).has(&"dodge_roll"), "and never rolls with Abarax's roll")
+	assert_false((knuckle[0] as Array).has(&"dash_step_left"), "and never dash-steps with Abarax's dash-step")
 
 
 func test_abaraxs_reaction_windows_are_all_his_own_moves() -> void:

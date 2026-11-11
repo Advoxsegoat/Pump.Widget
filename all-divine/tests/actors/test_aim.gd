@@ -273,7 +273,7 @@ func test_a_dodge_does_not_aim() -> void:
 	brain.target = _toward(90, 3)
 	brain.palm = false
 	var player := _player(brain)
-	player.runner.start(Registry.fetch(&"moves", &"dodge_roll") as MoveData)
+	player.runner.start(Registry.fetch(&"moves", &"dash_step") as MoveData)
 	await frames(12)
 	assert_near(player.locomotion.facing_yaw, 0.0, 1e-6, "only an attack turns toward an aim")
 

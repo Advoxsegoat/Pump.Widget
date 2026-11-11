@@ -111,7 +111,7 @@ func test_the_hook_goes_back_to_the_jab() -> void:
 
 func test_every_recovery_takes_a_dodge() -> void:
 	# Each move is started before frame 1 (so it is at f(k) on frame k) and a dodge is pressed a frame before the
-	# window that carries it opens: it rolls on the window's first frame, out of the move.
+	# window that carries it opens: it dash-steps on the window's first frame, out of the move.
 	var windows := {&"palm_jab": 20, &"palm_cross": 25, &"palm_hook": 55, &"palm_heavy": 45}
 	for id: StringName in windows:
 		var arena := TestArena.make(self)
@@ -121,16 +121,32 @@ func test_every_recovery_takes_a_dodge() -> void:
 		a.runner.move_started.connect(func(m: MoveData) -> void: started.append([m.id, a.frame]))
 		a.runner.start(Registry.fetch(&"moves", id) as MoveData)
 		await Duel.play_to(self, a, windows[id] + 3)
-		assert_eq(started, [[id, 0], [&"dodge_roll", windows[id]]], "%s: a roll on the frame its window opens" % id)
+		assert_eq(started, [[id, 0], [&"dash_step_left", windows[id]]], "%s: a dash-step on the frame its window opens" % id)
 		arena.free()
 
 
-func test_the_last_window_of_each_blow_is_the_next_blow_and_the_roll() -> void:
+func test_every_recovery_takes_a_sway_and_a_duck() -> void:
+	# The same, pressing a sway (toward his right) and then, in a fresh run, a duck.
+	var windows := {&"palm_jab": 20, &"palm_cross": 25, &"palm_hook": 55, &"palm_heavy": 45}
+	for press: Array in [[&"sway", &"sway_right_slip"], [&"duck", &"duck_slip"]]:
+		for id: StringName in windows:
+			var arena := TestArena.make(self)
+			var steps := [{"frames": windows[id] - 2}, {"frames": 1, "press": [press[0]], "evade_dir": Vector2(-1, 0)}, {"frames": 40}]
+			var a := TestArena.spawn(arena, load(Duel.ABARAX), ScriptBrain.new(steps))
+			var started := []
+			a.runner.move_started.connect(func(m: MoveData) -> void: started.append([m.id, a.frame]))
+			a.runner.start(Registry.fetch(&"moves", id) as MoveData)
+			await Duel.play_to(self, a, windows[id] + 3)
+			assert_eq(started, [[id, 0], [press[1], windows[id]]], "%s: a %s on the frame its window opens" % [id, press[0]])
+			arena.free()
+
+
+func test_the_last_window_of_each_blow_is_the_next_blow_and_the_dash_step_sway_and_duck() -> void:
 	var want := {
-		&"palm_jab": {&"palm": &"palm_cross", &"dodge": &"dodge_roll"},
-		&"palm_cross": {&"palm": &"palm_hook", &"dodge": &"dodge_roll"},
-		&"palm_hook": {&"palm": &"palm_jab", &"dodge": &"dodge_roll"},
-		&"palm_heavy": {&"palm": &"palm_jab", &"dodge": &"dodge_roll"},
+		&"palm_jab": {&"palm": &"palm_cross", &"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"},
+		&"palm_cross": {&"palm": &"palm_hook", &"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"},
+		&"palm_hook": {&"palm": &"palm_jab", &"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"},
+		&"palm_heavy": {&"palm": &"palm_jab", &"dodge": &"dash_step", &"sway": &"sway_left_slip", &"duck": &"duck_slip"},
 	}
 	for id: StringName in want:
 		var move := Registry.fetch(&"moves", id) as MoveData

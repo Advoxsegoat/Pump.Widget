@@ -135,7 +135,7 @@ static func _turn_between(a: Rig, b: Rig, bone: StringName) -> float:
 func test_nothing_to_look_at_leaves_the_clip_alone() -> void:
 	# Looking at nothing, the neck and head are exactly the clip's, in every clip.
 	var r := rig(); var plain := clip_rig()
-	for clip in [&"idle", &"jog", &"dodge_roll", &"palm_jab"]:
+	for clip in [&"idle", &"jog", &"dash_step", &"palm_jab"]:
 		for rr: Rig in [r, plain]:
 			rr.play_move(clip, 0.0)
 		for f in 20:

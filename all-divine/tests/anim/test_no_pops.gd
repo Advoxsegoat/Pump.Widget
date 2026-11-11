@@ -7,14 +7,10 @@ extends TestCase
 ## REPORTED holds the steps the rule flags that are confirmed artifacts of the source, each at the one frame it was
 ## measured on (frame -> the most any joint may move to it): a second pop anywhere else in the clip is still caught.
 ##   palm_heavy  UAL2 OverhandThrow's throw swings the head 0.79 m in the 12 fps step that lands the blow (f15)
-##   dodge_roll  UAL1 Roll at 2.9 times its speed tumbles the head and pelvis up to 0.38 m a frame, continuously, over
-##               its first 17 frames
 
 const RIG := "res://actors/abarax/abarax_rig.tscn"
 const REPORTED := {
 	&"palm_heavy": {15: 0.787},
-	&"dodge_roll": {1: 0.172, 2: 0.243, 7: 0.251, 8: 0.385, 9: 0.372, 10: 0.311, 11: 0.273, 13: 0.224, 14: 0.206,
-			15: 0.302, 16: 0.212, 17: 0.154},
 }
 
 

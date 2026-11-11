@@ -7,7 +7,6 @@
 [ext_resource type="Animation" path="res://assets/anim/abarax/dash_step_left.tres" id="5_3s0ya"]
 [ext_resource type="Animation" path="res://assets/anim/abarax/dash_step_right.tres" id="6_7c0ea"]
 [ext_resource type="Animation" path="res://assets/anim/abarax/death.tres" id="7_owwo5"]
-[ext_resource type="Animation" path="res://assets/anim/abarax/dodge_roll.tres" id="8_xjhat"]
 [ext_resource type="Animation" path="res://assets/anim/abarax/duck_flurry.tres" id="9_h6pwb"]
 [ext_resource type="Animation" path="res://assets/anim/abarax/duck_quick.tres" id="10_vqkqn"]
 [ext_resource type="Animation" path="res://assets/anim/abarax/duck_slip.tres" id="11_wtmwr"]
@@ -63,7 +62,6 @@ _data = {
 &"dash_step_left": ExtResource("5_3s0ya"),
 &"dash_step_right": ExtResource("6_7c0ea"),
 &"death": ExtResource("7_owwo5"),
-&"dodge_roll": ExtResource("8_xjhat"),
 &"duck_flurry": ExtResource("9_h6pwb"),
 &"duck_quick": ExtResource("10_vqkqn"),
 &"duck_slip": ExtResource("11_wtmwr"),

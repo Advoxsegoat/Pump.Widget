@@ -178,20 +178,20 @@ func test_move_pose_matches_clip_time_and_holds_between_steps() -> void:
 
 
 func test_smooth_clip_follows_move_time_exactly() -> void:
-	# dodge_roll has step_fps 0: the pose is at the gameplay time itself, whatever delta the tick had.
-	var r := rig(); r.play_move(&"dodge_roll", 0.0)
-	var a: Animation = r.tree.get_animation(&"dodge_roll")
+	# dash_step has step_fps 0: the pose is at the gameplay time itself, whatever delta the tick had.
+	var r := rig(); r.play_move(&"dash_step", 0.0)
+	var a: Animation = r.tree.get_animation(&"dash_step")
 	var tr := a.find_track(NodePath("Model/%s:spine_02" % ClipBuilder.skeleton_path(load(MODEL))), Animation.TYPE_ROTATION_3D)
 	var bone := r.skeleton.find_bone("spine_02")
-	for t in [0.1, 0.27, 0.3]:
+	for t in [0.1, 0.17, 0.27]:
 		r.set_move_time(t); r.tick(0.5)
 		var got := r.skeleton.get_bone_pose_rotation(bone)
 		assert_true(_angle(got, a.rotation_track_interpolate(tr, t)) < 1e-5, "t = %s" % t)
 
 
 func test_root_travel_stays_out_of_the_pose() -> void:
-	# The roll's root track carries ~5 m of travel; it is root motion, so the root bone stays home.
-	var r := rig(); r.play_move(&"dodge_roll", 0.0); r.set_move_time(0.45); r.tick(1.0 / 60)
+	# The dash-step's root track carries 1.3 m of travel; it is root motion, so the root bone stays home.
+	var r := rig(); r.play_move(&"dash_step", 0.0); r.set_move_time(0.28); r.tick(1.0 / 60)
 	assert_vec_near(r.skeleton.get_bone_pose_position(r.skeleton.find_bone("root")), Vector3.ZERO, 1e-4)
 
 
@@ -228,7 +228,7 @@ func test_cancel_inside_blend_in_does_not_jump_the_pose() -> void:
 
 
 func test_cancel_inside_a_move_to_move_crossfade_does_not_jump_the_pose() -> void:
-	# The jab, then the cross fading in over it, then a roll while the cross is still fading in: the roll
+	# The jab, then the cross fading in over it, then a dash-step while the cross is still fading in: the dash-step
 	# would take the jab's slot, which still shows a share of the pose. With no time passing, the cancel must
 	# change nothing that is shown: a rig that was cancelled and one with the same history that was not are
 	# alike, bone for bone, modifiers included (so none is applied twice to the held pose).
@@ -237,24 +237,24 @@ func test_cancel_inside_a_move_to_move_crossfade_does_not_jump_the_pose() -> voi
 		_jab_then_cross(r, blend_in); _jab_then_cross(control, blend_in)
 		var ab := float(r.tree.get(Rig.MOVE_AB))
 		assert_true(ab > 0.0 and ab < 1.0, "the first two moves are still crossfading (%s)" % ab)
-		_play(r, &"dodge_roll", blend_in)
+		_play(r, &"dash_step", blend_in)
 		r.tick(0.0); control.tick(0.0)
 		assert_eq(_worst_difference(r, control, true), "", "blend_in %s" % blend_in)
 
 
 func test_cancelled_into_move_fades_in_over_the_held_pose_and_takes_over() -> void:
-	# Then time passes: the roll fades in over the held pose in blend_in seconds, and after that the clips
-	# show the roll and nothing else, as on a rig that played it alone.
+	# Then time passes: the dash-step fades in over the held pose in blend_in seconds, and after that the clips
+	# show the dash-step and nothing else, as on a rig that played it alone.
 	var r := rig(); var alone := rig()
 	_jab_then_cross(r, 0.1)
-	_play(r, &"dodge_roll", 0.1)
+	_play(r, &"dash_step", 0.1)
 	for i in 7:
 		_tick(r)
 	assert_near(float(r.tree.get(Rig.MOVE_AB)), 0.0, 1e-6, "the fade is done, onto the slot the jab left")
-	_play(alone, &"dodge_roll", 0.0)
+	_play(alone, &"dash_step", 0.0)
 	for i in 7:
 		_tick(alone)
-	assert_eq(_worst_difference(r, alone, false), "", "only the roll shows")
+	assert_eq(_worst_difference(r, alone, false), "", "only the dash-step shows")
 
 
 func test_cancel_holds_the_pose_in_a_one_key_clip_of_the_rigs_own() -> void:
@@ -332,11 +332,11 @@ func test_locomotion_sets_speed_and_direction() -> void:
 func test_rigs_do_not_share_move_slots() -> void:
 	# Two rigs from one scene: a move in one must not change the clip the other's slot plays.
 	var a := rig(); var b := rig()
-	a.play_move(&"palm_jab", 0.0); b.play_move(&"dodge_roll", 0.0)
+	a.play_move(&"palm_jab", 0.0); b.play_move(&"dash_step", 0.0)
 	var a_slot := (a.tree.tree_root as AnimationNodeBlendTree).get_node(&"move_a") as AnimationNodeAnimation
 	var b_slot := (b.tree.tree_root as AnimationNodeBlendTree).get_node(&"move_a") as AnimationNodeAnimation
 	assert_eq(a_slot.animation, &"palm_jab")
-	assert_eq(b_slot.animation, &"dodge_roll")
+	assert_eq(b_slot.animation, &"dash_step")
 	var scene_root := (load(RIG) as PackedScene).instantiate()
 	var fresh := (scene_root.get_node("AnimationTree") as AnimationTree).tree_root as AnimationNodeBlendTree
 	assert_ne((fresh.get_node(&"move_a") as AnimationNodeAnimation).animation, &"palm_jab", "the scene's own tree is untouched")

@@ -33,3 +33,22 @@ static func make(t: TestCase, a_steps := [], b_steps := [], gap := 1.0, b_def: A
 static func play_to(t: TestCase, actor: Actor, frame: int) -> void:
 	while actor.frame < frame:
 		await t.frames(1)
+
+
+## A fixture dodge: the dash-step's clip and travel with iframes from its f3 to f15 (marks on a copy of the clip, added to
+## `actor`'s rig), for the tests of what an invulnerable body does to a blow. No move of the game is invulnerable (a
+## dash-step never is), so a test that needs a body no blow can touch starts this one itself, with `actor.runner.start`, on
+## the frame it would have pressed. It goes the way the actor faces (it is the dash-step's forward move).
+static func untouchable_dash(actor: Actor) -> MoveData:
+	var clip := actor.rig.tree.get_animation(&"dash_step").duplicate(true) as Animation
+	var marks := Marks.read(clip)
+	marks.append({"time": Marks.time_of(3), "kind": &"iframes_on", "args": {}})
+	marks.append({"time": Marks.time_of(16), "kind": &"iframes_off", "args": {}})
+	Marks.write(clip, marks)
+	actor.rig.tree.get_animation_library(&"").add_animation(&"untouchable_dash", clip)
+	var move := (Registry.fetch(&"moves", &"dash_step") as MoveData).duplicate() as MoveData
+	move.id = &"untouchable_dash"
+	move.clip = &"untouchable_dash"
+	move.directional = {}
+	move.neutral_variant = &""
+	return move

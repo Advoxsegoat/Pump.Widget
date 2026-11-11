@@ -79,18 +79,21 @@ func test_the_push_is_the_same_whatever_the_frame_rate() -> void:
 
 
 func test_a_whiff_pushes_nothing() -> void:
-	# b rolls in toward a on frame 5, invulnerable while the jab's hand passes through it. It ends where it would
-	# have with no jab at all.
-	var roll := [{"frames": 4}, {"frames": 1, "press": [&"dodge"], "move": Vector2(0, -1)}, {"frames": 60}]
-	var calm := Duel.make(self, [{"frames": 80}], roll, 2.0)
+	# b steps in toward a on frame 5 (the fixture dodge), invulnerable while the jab's hand passes through it. It ends
+	# where it would have with no jab at all.
+	var calm := Duel.make(self, [{"frames": 80}], [{"frames": 80}], 1.6)
+	await Duel.play_to(self, calm["b"], 5)
+	(calm["b"] as Actor).runner.start(Duel.untouchable_dash(calm["b"]))
 	await Duel.play_to(self, calm["a"], 60)
 	var expected: Vector3 = (calm["b"] as Actor).global_position
 	(calm["arena"] as Node).free()
-	var run := Duel.make(self, [{"frames": 1, "press": [&"palm"]}, {"frames": 80}], roll, 2.0)
+	var run := Duel.make(self, [{"frames": 1, "press": [&"palm"]}, {"frames": 80}], [{"frames": 80}], 1.6)
+	await Duel.play_to(self, run["b"], 5)
+	(run["b"] as Actor).runner.start(Duel.untouchable_dash(run["b"]))
 	var outcomes := []
 	(run["a"] as Actor).hit_landed.connect(func(r: HitResult, _e: HitEvent) -> void: outcomes.append(r.outcome))
 	await Duel.play_to(self, run["a"], 60)
-	assert_true(outcomes.has(HitResult.Outcome.WHIFF), "the hand reached the rolling body")
+	assert_true(outcomes.has(HitResult.Outcome.WHIFF), "the hand reached the dodging body")
 	assert_eq(outcomes.filter(func(o: int) -> bool: return o != HitResult.Outcome.WHIFF), [], "and nothing landed")
 	assert_vec_near((run["b"] as Actor).global_position, expected, 1e-4, "so the jab did not move it")
 

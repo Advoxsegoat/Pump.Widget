@@ -22,6 +22,13 @@ const TRIGGER_DEADZONE := 0.5
 ## threshold is one press, not a stutter of them (Inputs.pressed_this_frame does the latching).
 const FLICK_RELEASE := {&"target_left": 0.35, &"target_right": 0.35}
 const FLICK_DEADZONE := 0.6
+## The four movement actions with the screen direction each one is (x right, y down), for the presses that sway, duck and
+## dash-step by a direction (Inputs.direction_pressed_this_frame). The left stick flicks past FLICK_DEADZONE and lets go
+## below DIRECTION_RELEASE, the same two numbers as a target switch; a key is a press on the frame it goes down.
+const MOVE_DIRECTIONS := {
+	&"move_left": Vector2.LEFT, &"move_right": Vector2.RIGHT, &"move_up": Vector2.UP, &"move_down": Vector2.DOWN,
+}
+const DIRECTION_RELEASE := 0.35
 ## Every other action keeps the engine's default deadzone.
 const ACTION_DEADZONE := 0.2
 ## The device id of an event that matches input from any device.

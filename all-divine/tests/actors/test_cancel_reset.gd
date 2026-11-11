@@ -1,14 +1,14 @@
 extends TestCase
 ## What a cancel leaves behind. When a move is cancelled into another, nothing of the first may carry on in
-## the second: its hitboxes are off, its invulnerability and armour are off, and its cancel window is gone
-## (the new move has its own, from its own marks). Tested on the real clips' windows: palm_jab opens
-## {palm: palm_cross} at f15 and {palm, dodge} at f20; palm_cross opens {palm: palm_hook} at f20 and
-## {palm, dodge} at f25; dodge_roll has iframes on f3 to f15 and opens {palm, dodge} at f22. The jab's hitbox
-## is palm_l (on at f10, off at f15), the cross's is palm_r (f15 to f20).
+## the second: its hitboxes are off, its invulnerability, evade window and armour are off, and its cancel window is
+## gone (the new move has its own, from its own marks). Tested on the real clips' windows: palm_jab opens
+## {palm: palm_cross} at f15 and {palm, dodge, sway, duck} at f20; palm_cross opens {palm: palm_hook} at f20 and
+## {palm, dodge, sway, duck} at f25; dash_step opens {palm, heavy, guard, sway, duck} at f10; a sway's evade window
+## is open from its f2. The jab's hitbox is palm_l (on at f10, off at f15), the cross's is palm_r (f15 to f20).
 ##
 ## A move frame counts the actor's frames since the move started; 0 is the frame it started on. The windows
 ## only open once a hitbox's own mark has turned it off, so a second pair of tests cancels with
-## MoveRunner.start in the middle of a swing and a roll, where the state to clear is really on.
+## MoveRunner.start in the middle of a swing and a sway, where the state to clear is really on.
 
 const ABARAX := "res://data/actors/abarax.tres"
 const DT := 1.0 / 60
@@ -18,7 +18,7 @@ const DT := 1.0 / 60
 ##   actor     the Actor
 ##   started   [[move id, actor frame], ...] from move_started
 ##   ended     [[move id, actor frame, cancelled], ...] from move_ended
-##   states    actor frame -> {move (its id, or &""), hitboxes (active ids), iframes, window, recovery, facing}
+##   states    actor frame -> {move (its id, or &""), hitboxes (active ids), iframes, evading, window, recovery, facing}
 func _run(steps: Array, total: int) -> Dictionary:
 	var arena := TestArena.make(self)
 	var actor := TestArena.spawn(arena, load(ABARAX), ScriptBrain.new(steps))
@@ -38,6 +38,7 @@ func _state(actor: Actor) -> Dictionary:
 		"move": current.id if current != null else &"",
 		"hitboxes": actor.rig.active_hitboxes(),
 		"iframes": actor.runner.iframes,
+		"evading": actor.runner.evading,
 		"hyperarmour": actor.runner.hyperarmour,
 		"window": actor.runner.window.duplicate(),
 		"recovery": actor.runner.in_recovery,
@@ -72,51 +73,47 @@ func test_jab_cancelled_into_cross_turns_its_hitbox_off() -> void:
 	assert_eq(_at(run, 46)["window"], {&"palm": &"palm_hook"}, "the cross's window at its f20")
 
 
-func test_jab_cancelled_into_roll_at_its_recovery_window() -> void:
-	# Palm at frame 11, then dodge with the stick pushed east at jab f20 (frame 31), where {palm, dodge} opens.
+func test_jab_cancelled_into_dash_step_at_its_recovery_window() -> void:
+	# Palm at frame 11, then dodge with the stick pushed east at jab f20 (frame 31), where {palm, dodge, ...} opens.
 	var east := Vector2(1, 0)
 	var run: Dictionary = await _run([
 		{"frames": 10}, {"frames": 1, "press": [&"palm"]},
 		{"frames": 19}, {"frames": 1, "press": [&"dodge"], "move": east},
 		{"frames": 20, "move": east},
 	], 55)
-	assert_eq(run["started"], [[&"palm_jab", 11], [&"dodge_roll", 31]])
+	assert_eq(run["started"], [[&"palm_jab", 11], [&"dash_step_left", 31]])
 	assert_eq(run["ended"].front(), [&"palm_jab", 31, true], "the jab was cancelled")
 	var cancel := _at(run, 31)
-	assert_eq(cancel["move"], &"dodge_roll")
+	assert_eq(cancel["move"], &"dash_step_left")
 	assert_eq(cancel["hitboxes"], [] as Array[StringName], "no hitbox is on")
-	assert_false(cancel["iframes"], "the roll's iframes start at its f3")
-	assert_eq(cancel["window"], {}, "the jab's {palm, dodge} window did not carry over")
+	assert_false(cancel["iframes"], "a dash-step is never invulnerable")
+	assert_eq(cancel["window"], {}, "the jab's {palm, dodge, ...} window did not carry over")
 	assert_false(cancel["recovery"], "nor its recovery")
-	assert_vec_near(cancel["facing"], Vector3(1, 0, 0), 1e-6, "the roll turned to the stick at once")
-	assert_false(_at(run, 33)["iframes"], "f2")
-	assert_true(_at(run, 34)["iframes"], "iframes from the roll's f3")
-	assert_true(_at(run, 46)["iframes"], "through f15")
-	assert_false(_at(run, 47)["iframes"], "and off at f16")
+	assert_vec_near(cancel["facing"], Vector3(0, 0, 1), 1e-6, "the dash-step kept the facing, and went east sideways")
 	for f in range(31, 56):
 		assert_eq(_at(run, f)["hitboxes"], [] as Array[StringName], "no hitbox in frame %d" % f)
+		assert_false(_at(run, f)["iframes"], "no iframes in frame %d" % f)
 
 
-func test_roll_cancelled_into_jab_clears_iframes_and_the_window() -> void:
-	# Dodge at frame 11 (roll f0), palm at roll f22 (frame 33), where {palm, dodge} opens.
+func test_dash_step_cancelled_into_jab_clears_the_window() -> void:
+	# Dodge at frame 11 (dash f0), palm at dash f10 (frame 21), where {palm, heavy, guard, sway, duck} opens.
 	var run: Dictionary = await _run([
 		{"frames": 10}, {"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0)},
-		{"frames": 21}, {"frames": 1, "press": [&"palm"]},
+		{"frames": 9}, {"frames": 1, "press": [&"palm"]},
 		{"frames": 20},
-	], 60)
-	assert_eq(run["started"], [[&"dodge_roll", 11], [&"palm_jab", 33]])
-	assert_eq(run["ended"].front(), [&"dodge_roll", 33, true], "the roll was cancelled")
-	assert_eq(_at(run, 32)["window"], {}, "no window the frame before")
-	var cancel := _at(run, 33)
+	], 50)
+	assert_eq(run["started"], [[&"dash_step_left", 11], [&"palm_jab", 21]])
+	assert_eq(run["ended"].front(), [&"dash_step_left", 21, true], "the dash-step was cancelled")
+	assert_eq(_at(run, 20)["window"], {}, "no window the frame before")
+	var cancel := _at(run, 21)
 	assert_eq(cancel["move"], &"palm_jab")
-	assert_false(cancel["iframes"], "the roll's invulnerability is not the jab's")
-	assert_eq(cancel["window"], {}, "the roll's {palm, dodge} window is gone, and the jab's is empty until its f15")
-	assert_false(cancel["recovery"], "the roll's recovery is over with it")
-	assert_eq(_at(run, 47)["window"], {} , "still empty at jab f14")
-	assert_eq(_at(run, 48)["window"], {&"palm": &"palm_cross"}, "the jab's own window opens at its f15, with no dodge in it")
+	assert_eq(cancel["window"], {}, "the dash-step's window is gone, and the jab's is empty until its f15")
+	assert_false(cancel["recovery"], "the dash-step's recovery is over with it")
+	assert_eq(_at(run, 35)["window"], {}, "still empty at jab f14")
+	assert_eq(_at(run, 36)["window"], {&"palm": &"palm_cross"}, "the jab's own window opens at its f15, with no dodge in it")
 
 
-func test_jab_forced_into_roll_mid_swing_turns_the_hitbox_off() -> void:
+func test_jab_forced_into_dash_step_mid_swing_turns_the_hitbox_off() -> void:
 	# The windows only open after the hand is off, so force the cancel at jab f12, with palm_l on.
 	var arena := TestArena.make(self)
 	var actor := TestArena.spawn(arena, load(ABARAX), ScriptBrain.new([{"frames": 1, "press": [&"palm"]}]))
@@ -124,25 +121,26 @@ func test_jab_forced_into_roll_mid_swing_turns_the_hitbox_off() -> void:
 		await frames(1)
 	assert_eq(actor.runner.current.id, &"palm_jab")
 	assert_eq(actor.rig.active_hitboxes(), [&"palm_l"], "mid-swing")
-	actor.runner.start(Registry.fetch(&"moves", &"dodge_roll") as MoveData)
-	assert_eq(actor.runner.current.id, &"dodge_roll")
+	actor.runner.start(Registry.fetch(&"moves", &"dash_step") as MoveData)
+	assert_eq(actor.runner.current.id, &"dash_step")
 	assert_eq(actor.rig.active_hitboxes(), [] as Array[StringName], "the cancelled jab's hitbox is off at once")
 	assert_false(actor.runner.iframes)
 	assert_false(actor.runner.hyperarmour)
 	assert_eq(actor.runner.window, {})
 
 
-func test_roll_forced_into_jab_mid_roll_clears_iframes() -> void:
-	# Iframes are on from the roll's f3 to f15: cancel at f5, inside them.
+func test_sway_forced_into_jab_mid_evade_clears_the_evade_window() -> void:
+	# A sway's evade window is open from its f2: cancel at f5, inside it.
 	var arena := TestArena.make(self)
-	var actor := TestArena.spawn(arena, load(ABARAX), ScriptBrain.new([{"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0)}]))
-	while actor.frame < 6:  # the roll starts on frame 1, so frame 6 is its f5
+	var actor := TestArena.spawn(arena, load(ABARAX), ScriptBrain.new([{"frames": 1, "press": [&"sway"], "evade_dir": Vector2(1, 0)}]))
+	while actor.frame < 6:  # the sway starts on frame 1, so frame 6 is its f5
 		await frames(1)
-	assert_eq(actor.runner.current.id, &"dodge_roll")
-	assert_true(actor.is_invulnerable(), "mid-roll")
+	assert_eq(actor.runner.current.id, &"sway_left_slip")
+	assert_eq(actor.runner.evading, MoveData.Evade.SWAY, "mid-evade")
 	actor.runner.start(Registry.fetch(&"moves", &"palm_jab") as MoveData)
 	assert_eq(actor.runner.current.id, &"palm_jab")
-	assert_false(actor.is_invulnerable(), "the cancelled roll's iframes are off at once")
+	assert_eq(actor.runner.evading, MoveData.Evade.NONE, "the cancelled sway's window is closed at once")
+	assert_false(actor.is_invulnerable())
 	assert_false(actor.runner.hyperarmour)
 	assert_eq(actor.runner.window, {})
 	assert_eq(actor.rig.active_hitboxes(), [] as Array[StringName], "and the jab's hand is not on until its f10")

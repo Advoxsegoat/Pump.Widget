@@ -169,24 +169,24 @@ func test_yard_walls_hold_and_nobody_leaves() -> void:
 
 
 # The kerb is all that closes the south edge (nothing unseen stands on it), and it is lower than a body's capsule is
-# wide: it must hold what a fight throws at it. A roll, the Knuckle's longest lunges and a hard shove, each straight at
+# wide: it must hold what a fight throws at it. A dash-step, the Knuckle's longest lunges and a hard shove, each straight at
 # it, end with the body's centre a capsule's reach inside its face and its feet on the floor.
-func test_the_kerb_alone_holds_a_roll_a_lunge_and_a_shove() -> void:
+func test_the_kerb_alone_holds_a_dash_step_a_lunge_and_a_shove() -> void:
 	var region := _yard()
-	var abarax := _spawn(region, ABARAX, Vector3(3.0, 0.0, HALF - 1.5))
+	var abarax := _spawn(region, ABARAX, Vector3(3.0, 0.0, HALF - 0.9))
 	await frames(2)
 	abarax.set_brain(ScriptBrain.new([{frames = 2, move = Vector2(0, 1), press = [&"dodge"]}, {frames = 40, move = Vector2(0, 1)},
 			{frames = 2, move = Vector2(0, 1), press = [&"dodge"]}, {frames = 60, move = Vector2(0, 1)}]))
-	var rolled := false
+	var stepped := false
 	var south := 0.0
 	var up := 0.0
 	for i in 104:
 		await frames(1)
-		rolled = rolled or (abarax.runner.current != null and abarax.runner.current.id == &"dodge_roll")
+		stepped = stepped or (abarax.runner.current != null and abarax.runner.current.id == &"dash_step")
 		south = maxf(south, abarax.global_position.z)
 		up = maxf(up, abarax.global_position.y)
-	assert_true(rolled, "he rolled")
-	assert_true(south < HALF - BODY + 0.05 and south > HALF - BODY - 0.05, "rolling at the kerb, his centre stops a capsule's reach from its face (z %.3f)" % south)
+	assert_true(stepped, "he dash-stepped")
+	assert_true(south < HALF - BODY + 0.05 and south > HALF - BODY - 0.05, "dash-stepping at the kerb, his centre stops a capsule's reach from its face (z %.3f)" % south)
 	assert_true(up < 0.05, "and he stays on the floor (y %.3f)" % up)
 	var knuckle := _spawn(region, KNUCKLE_1, Vector3(-4.0, 0.0, HALF - 1.2))
 	await frames(2)

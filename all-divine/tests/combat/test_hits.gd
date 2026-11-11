@@ -8,10 +8,12 @@ extends TestCase
 ##
 ## A frame is the actor's: the first it lives is 1. A palm pressed on frame 1 starts the jab there (its f0);
 ## its hitbox palm_l is on from f10 to f14 (frames 11 to 15), and its profile `palm` does 8 HP and 6 poise.
-## The roll (dodge_roll) is invulnerable from its f3 to f15. The death clip is 2.4 s (144 frames).
+## The fixture dodge (Duel.untouchable_dash: the dash-step with iframes) is invulnerable from its f3 to f15. The death clip is 2.4 s (144 frames).
 
 const ABARAX := "res://data/actors/abarax.tres"
 const GAP := 1.0
+## How far off the target of the late-swing test stands, so that the fixture dodge brings it into reach on frame 19.
+const GAP_LATE := 2.3
 const O := HitResult.Outcome
 
 
@@ -152,47 +154,49 @@ func test_every_hit_kicks_the_additive_flinch() -> void:
 		assert_true((kick[0] as Vector2).length() > 0.0, "and the upper body is kicked all the same: %s" % kick[0])
 
 
-func test_roll_iframes_whiff() -> void:
-	# The target, 2 m off, rolls in toward the attacker on frame 5. It is invulnerable on frames 8 to 20 (the
-	# roll's f3 to f15; judged a frame later, as it stood when each frame began), which take in all of the jab's
-	# live frames, 11 to 15, and the roll (about 0.17 m a frame) carries it through the hand's reach over just
-	# those frames. A whiff leaves the body to be struck later in the swing, so each live frame in reach whiffs.
-	var run := _duel([{"frames": 1, "press": [&"palm"]}, {"frames": 40}],
-			[{"frames": 4}, {"frames": 1, "press": [&"dodge"], "move": Vector2(0, -1)}, {"frames": 40}], _foe(5.0), null, false, 2.0)
+func test_iframes_whiff() -> void:
+	# The target, 1.6 m off, starts the fixture dodge toward the attacker at the end of frame 5. It is invulnerable on frames 8
+	# to 20 (the dodge's f3 to f15; judged a frame later, as it stood when each frame began), which take in all of the jab's
+	# live frames, 11 to 15, and the step carries it through the hand's reach over just those frames. A whiff leaves the
+	# body to be struck later in the swing, so each live frame in reach whiffs.
+	var run := _duel([{"frames": 1, "press": [&"palm"]}, {"frames": 40}], [{"frames": 45}], _foe(5.0), null, false, 1.6)
 	var b: Actor = run["b"]
+	await _play_to(b, 5)
+	b.runner.start(Duel.untouchable_dash(b))
 	await _play_to(run["a"], 30)
-	assert_eq(run["b_started"], [[&"dodge_roll", 5]], "the roll, and no reaction")
+	assert_eq(run["b_started"], [[&"untouchable_dash", 5]], "the dodge, and no reaction")
 	assert_eq(b.stats.hp, 100.0)
 	var outcomes: Array = run["a_landed"].map(func(l: Array) -> String: return l[0])
-	assert_true(not outcomes.is_empty() and run["a_landed"][0] == ["WHIFF", 11], "the hand reached the rolling body on its first live frame: %s" % [run["a_landed"]])
+	assert_true(not outcomes.is_empty() and run["a_landed"][0] == ["WHIFF", 11], "the hand reached the dodging body on its first live frame: %s" % [run["a_landed"]])
 	assert_eq(outcomes.filter(func(o: String) -> bool: return o != "WHIFF"), [], "and every blow whiffed: %s" % [run["a_landed"]])
 	assert_eq(run["b_got"], run["a_landed"], "the target heard of each")
 
 
 func test_a_swing_still_active_after_the_iframes_end_lands() -> void:
 	# A fixture attack whose hitbox is live for 20 frames (the jab's clip, its palm_l on from f10 to f29, the hand
-	# drawing back from 0.70 m to 0.30 m in front). The target, 3.35 m off, rolls in on frame 5; the roll carries
-	# it into the hand's reach (where it stood as frame 19 began) on frame 19, the hitbox's first live frame, and
-	# it comes to rest about 0.35 m in front, still in reach. Judged as it stood when each frame began, it is
+	# drawing back from 0.70 m to 0.30 m in front). The target, `GAP_LATE` m off, starts the fixture dodge toward the attacker
+	# at the end of frame 5; it comes into the hand's reach on frame 19, the hitbox's first live frame, and
+	# comes to rest in front, still in reach. Judged as it stood when each frame began, it is
 	# invulnerable to frame 21: the blows of frames 19 to 21 whiff and leave it to be struck, and the one of
 	# frame 22 lands, once.
-	var run := _duel([], [{"frames": 4}, {"frames": 1, "press": [&"dodge"], "move": Vector2(0, -1)}, {"frames": 60}],
-			_foe(5.0), null, false, 3.35)
+	var run := _duel([], [{"frames": 70}], _foe(5.0), null, false, GAP_LATE)
 	var a: Actor = run["a"]
 	var b: Actor = run["b"]
 	var on := []
 	a.runner.mark.connect(func(kind: StringName, _args: Dictionary) -> void:
 		if kind == &"hitbox_on":
 			on.append(a.frame))
+	await _play_to(a, 5)
+	b.runner.start(Duel.untouchable_dash(b))
 	await _play_to(a, 9)
 	a.runner.start(_long_jab(a))
 	await _play_to(a, 45)
 	assert_eq(on, [19], "the hitbox came on on frame 19")
 	assert_eq(run["b_got"], [["WHIFF", 19], ["WHIFF", 20], ["WHIFF", 21], ["HIT", 22]],
-			"rolled into it on its first frame, whiffed while invulnerable, struck once the iframes were over")
+			"stepped into it on its first frame, whiffed while invulnerable, struck once the iframes were over")
 	assert_eq(run["a_landed"], run["b_got"])
 	assert_eq(b.stats.hp, 92.0, "struck once")
-	assert_eq(run["b_started"], [[&"dodge_roll", 5], [&"flinch", 22]])
+	assert_eq(run["b_started"], [[&"untouchable_dash", 5], [&"flinch", 22]])
 
 
 # A copy of the jab whose palm_l is live from f10 to f29, on a copy of its clip added to `a`'s rig.

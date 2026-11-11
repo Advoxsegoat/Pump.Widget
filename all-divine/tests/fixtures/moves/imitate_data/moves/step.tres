@@ -4,9 +4,6 @@
 
 [resource]
 script = ExtResource("1_move")
-id = &"dodge_roll"
-kind = 1
-clip = &"dodge_roll"
-root_motion_scale = 0.58
-stamina_cost = 18.0
-neutral_variant = &"hop"
+id = &"step"
+kind = 2
+clip = &"dash_step"

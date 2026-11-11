@@ -8,4 +8,3 @@ id = &"dash_step_right"
 kind = 1
 clip = &"dash_step_right"
 stamina_cost = 8.0
-invulnerable = false

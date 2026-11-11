@@ -9,7 +9,7 @@ const PAIR_DATA := "res://tests/fixtures/moves/pair_data"
 const IMITATE_DATA := "res://tests/fixtures/moves/imitate_data"
 const FINISHER := "res://data/pairs/finisher_open_hand.tres"
 const HITBOXES: PackedStringArray = ["palm_l", "palm_r"]
-const MOVES: PackedStringArray = ["palm_jab", "palm_cross", "dodge_roll"]
+const MOVES: PackedStringArray = ["palm_jab", "palm_cross", "dash_step"]
 ## The bones of Abarax's rig that an `fx` mark may name (a few of them).
 const BONES: PackedStringArray = ["hand_l", "hand_r", "Head"]
 ## The args of an sfx and an fx mark that name a cue and an effect the data has.
@@ -65,20 +65,18 @@ func _jab_marks(without: Array = [], extra: Array = []) -> Array:
 		_m(15, &"hitbox_off", {"id": &"palm_l"}),
 		_m(15, &"cancel_open", {"into": {&"palm": &"palm_cross"}}),
 		_m(20, &"recovery"),
-		_m(20, &"cancel_open", {"into": {&"palm": &"palm_cross", &"dodge": &"dodge_roll"}}),
+		_m(20, &"cancel_open", {"into": {&"palm": &"palm_cross", &"dodge": &"dash_step"}}),
 	]
 	return marks.filter(func(m: Dictionary) -> bool: return not without.has(m["kind"])) + extra
 
 
-func _roll_marks(without: Array = [], extra: Array = []) -> Array:
+# A dash-step's marks (a DODGE with no evade, so no iframes): its cues, a recovery and the window that follows it.
+func _dash_marks(without: Array = [], extra: Array = []) -> Array:
 	var marks := [
-		_m(0, &"sfx", {"name": &"roll_cloth"}),
-		_m(3, &"iframes_on"),
-		_m(14, &"fx", {"name": &"roll_dust"}),
-		_m(14, &"sfx", {"name": &"roll_land"}),
-		_m(16, &"iframes_off"),
-		_m(20, &"recovery"),
-		_m(22, &"cancel_open", {"into": {&"palm": &"palm_jab", &"dodge": &"dodge_roll"}}),
+		_m(1, &"sfx", {"name": &"roll_cloth"}),
+		_m(1, &"fx", {"name": &"roll_dust"}),
+		_m(10, &"recovery"),
+		_m(10, &"cancel_open", {"into": {&"palm": &"palm_jab"}}),
 	]
 	return marks.filter(func(m: Dictionary) -> bool: return not without.has(m["kind"])) + extra
 
@@ -108,8 +106,8 @@ func _attack_marks(on: int, tell_at := -1, tell_kind := &"glint") -> Array:
 	return marks
 
 
-func _roll(marks: Array = _roll_marks()) -> PackedStringArray:
-	return ClipChecker.new().check_move(_move(&"dodge_roll", MoveData.Kind.DODGE), _anim(30, 0, marks), HITBOXES, MOVES)
+func _dash(marks: Array = _dash_marks()) -> PackedStringArray:
+	return ClipChecker.new().check_move(_move(&"dash_fixture", MoveData.Kind.DODGE), _anim(18, 0, marks), HITBOXES, MOVES)
 
 
 # True if some problem contains every one of `fragments`.
@@ -179,7 +177,7 @@ func test_valid_attack_has_no_problems() -> void:
 
 
 func test_valid_dodge_has_no_problems() -> void:
-	assert_eq(_roll(), PackedStringArray())
+	assert_eq(_dash(), PackedStringArray())
 
 
 func test_hitbox_never_turned_off_is_reported() -> void:
@@ -249,37 +247,43 @@ func test_recovery_before_the_last_hitbox_off_is_reported() -> void:
 	assert_true(_has_problem(problems, ["recovery", "hitbox_off"]), "\n".join(problems))
 
 
-func test_dodge_without_iframes_is_reported() -> void:
-	var problems := _roll(_roll_marks([&"iframes_on", &"iframes_off"]))
-	assert_true(_has_problem(problems, ["iframes"]), "\n".join(problems))
+func test_a_dodge_with_no_evade_may_carry_no_iframes() -> void:
+	# A dash-step is never invulnerable: its clip has no iframes marks, and one that has them is reported.
+	var problems := _dash(_dash_marks([], [_m(3, &"iframes_on"), _m(9, &"iframes_off")]))
+	assert_true(_has_problem(problems, ["dash_fixture", "iframes"]), "\n".join(problems))
 
 
 func test_iframes_never_turned_off_are_reported() -> void:
-	var problems := _roll(_roll_marks([&"iframes_off"]))
+	var problems := _dash(_dash_marks([], [_m(3, &"iframes_on")]))
 	assert_true(_has_problem(problems, ["iframes", "never off"]), "\n".join(problems))
 
 
-func test_iframes_off_before_on_is_reported() -> void:
-	var problems := _roll(_roll_marks([&"iframes_on", &"iframes_off"], [_m(16, &"iframes_on"), _m(3, &"iframes_off")]))
+func test_iframes_off_before_on_are_reported() -> void:
+	var problems := _dash(_dash_marks([], [_m(9, &"iframes_on"), _m(3, &"iframes_off")]))
 	assert_true(_has_problem(problems, ["iframes", "before"]), "\n".join(problems))
+
+
+func test_a_dodge_with_no_evade_carries_no_evade_marks_either() -> void:
+	var problems := _dash(_dash_marks([], [_m(2, &"evade_on"), _m(12, &"evade_off")]))
+	assert_true(_has_problem(problems, ["dash_fixture", "evade marks", "evade is NONE"]), "\n".join(problems))
 
 
 func test_an_attack_needs_no_iframes_and_a_dodge_needs_no_hitbox() -> void:
 	assert_eq(_jab(), PackedStringArray())
-	assert_eq(_roll(), PackedStringArray())
+	assert_eq(_dash(), PackedStringArray())
 
 
 func test_move_without_sfx_is_reported() -> void:
 	var problems := _jab(_jab_marks([&"sfx"]))
 	assert_true(_has_problem(problems, ["sfx"]), "\n".join(problems))
-	problems = _roll(_roll_marks([&"sfx"]))
+	problems = _dash(_dash_marks([&"sfx"]))
 	assert_true(_has_problem(problems, ["sfx"]), "\n".join(problems))
 
 
 func test_move_without_fx_is_reported() -> void:
 	var problems := _jab(_jab_marks([&"fx"]))
 	assert_true(_has_problem(problems, ["fx"]), "\n".join(problems))
-	problems = _roll(_roll_marks([&"fx"]))
+	problems = _dash(_dash_marks([&"fx"]))
 	assert_true(_has_problem(problems, ["fx"]), "\n".join(problems))
 
 
@@ -327,7 +331,7 @@ func test_mark_off_the_step_grid_is_reported() -> void:
 
 
 func test_a_smooth_clip_has_no_grid() -> void:
-	assert_eq(_roll(_roll_marks([], [_m(7, &"fx", FX)])), PackedStringArray())
+	assert_eq(_dash(_dash_marks([], [_m(7, &"fx", FX)])), PackedStringArray())
 
 
 func test_the_grid_is_the_clips_own_step_rate() -> void:
@@ -418,7 +422,7 @@ func test_attack_without_hits_is_reported() -> void:
 
 
 func test_hits_of_other_moves_are_not_required() -> void:
-	assert_eq(_roll(), PackedStringArray(), "the roll has no hits and needs none")
+	assert_eq(_dash(), PackedStringArray(), "the dash-step has no hits and needs none")
 
 
 func test_a_hit_profiles_hitstop_must_be_three_to_six_frames() -> void:
@@ -582,13 +586,13 @@ func test_an_imitated_move_must_be_a_move() -> void:
 
 
 # tests/fixtures/moves/imitate_data: an actor on Abarax's rig whose moves imitate `blow` (the jab's clip, which has a
-# hitbox_on: fine), `roll` (the roll's clip, which has none), `nobody` (no such move) and `ghost` (a move whose clip the rig
+# hitbox_on: fine), `step` (the dash-step's clip, which has none), `nobody` (no such move) and `ghost` (a move whose clip the rig
 # does not have).
 func test_an_imitated_move_must_have_a_blow_in_the_actors_rig() -> void:
 	assert_eq(Registry.scan(IMITATE_DATA), PackedStringArray())
 	var problems := ClipChecker.new().check_all()
 	assert_false(_has_problem(problems, ["good_feint", "imitates"]), "a move with a hitbox_on is one to imitate: \n" + "\n".join(problems))
-	assert_true(_has_problem(problems, ["blind_feint", "imitates", "roll", "no hitbox_on"]), "\n".join(problems))
+	assert_true(_has_problem(problems, ["blind_feint", "imitates", "step", "no hitbox_on"]), "\n".join(problems))
 	assert_true(_has_problem(problems, ["lost_feint", "imitates", "unknown move", "nobody"]), "\n".join(problems))
 	assert_true(_has_problem(problems, ["clipless_feint", "imitates", "ghost", "no_such_clip", "not in the rig"]), "\n".join(problems))
 
@@ -663,7 +667,7 @@ func test_an_actors_moveset_must_name_moves_that_exist() -> void:
 
 
 func test_an_actors_move_and_the_moves_it_cancels_into_are_checked() -> void:
-	# The real jab, reached through the moveset, cancels into the cross and the roll: all three are checked,
+	# The real jab, reached through the moveset, cancels into the cross and the dash-step: all three are checked,
 	# and with the real data nothing is wrong.
 	assert_eq(ClipChecker.new().check_actor(_actor(load(RIG), {&"palm": &"palm_jab"})), PackedStringArray())
 
@@ -807,7 +811,7 @@ func test_real_data_passes() -> void:
 func test_real_data_has_the_f0_moves_and_abarax() -> void:
 	# Later work adds moves and actors, so this names what must be there and not how many there are.
 	var moves := Array(Registry.ids(&"moves"))
-	for id in ["dodge_roll", "palm_cross", "palm_hook", "palm_heavy", "palm_jab"]:
+	for id in ["dash_step", "palm_cross", "palm_hook", "palm_heavy", "palm_jab"]:
 		assert_true(moves.has(id), "the move %s" % id)
 	assert_true(Array(Registry.ids(&"actors")).has("abarax"), "the actor abarax")
 
@@ -913,26 +917,26 @@ func test_a_move_that_is_no_evade_may_not_carry_evade_marks() -> void:
 
 # --- sways, ducks, dash-steps and the sides a move starts ---
 
-func test_a_sway_or_duck_needs_neither_iframes_nor_cues_but_a_dodge_that_is_not_one_still_does() -> void:
+func test_a_sway_or_duck_needs_neither_iframes_nor_cues_but_a_dodge_that_is_not_one_still_needs_its_cues() -> void:
 	for evade in [MoveData.Evade.SWAY, MoveData.Evade.DUCK]:
 		var move := _move(&"sway_fixture", MoveData.Kind.DODGE)
 		move.evade = evade
 		var bare := [_m(2, &"evade_on"), _m(12, &"evade_off")]
 		assert_eq(_check(move, bare), PackedStringArray(), "an evade is its window: no iframes, no fx, no sfx")
 	var plain := _check(_move(&"sway_fixture", MoveData.Kind.DODGE), [])
-	assert_true(_has_problem(plain, ["dodge has no iframes_on"]), "a dodge that is no evade is held to its iframes: %s" % ["\n".join(plain)])
+	assert_true(_has_problem(plain, ["no sfx"]) and _has_problem(plain, ["no fx"]), "a dodge that is no evade is held to its cues: %s" % ["\n".join(plain)])
+	assert_false(_has_problem(plain, ["iframes"]), "and to no iframes at all: %s" % ["\n".join(plain)])
 
 
-func test_a_dodge_that_is_not_invulnerable_has_no_iframes_but_has_its_cues() -> void:
+func test_a_dodge_with_no_evade_has_no_iframes_but_has_its_cues() -> void:
 	var move := _move(&"dash_fixture", MoveData.Kind.DODGE)
-	move.invulnerable = false
 	var cues := [_m(1, &"fx", {"name": &"palm_trail"}), _m(1, &"sfx", {"name": &"palm_whoosh"})]
 	assert_eq(_check(move, cues), PackedStringArray(), "a dash-step is held to no iframes")
 	var problems := _check(move, [])
 	assert_false(_has_problem(problems, ["iframes"]), "\n".join(problems))
 	assert_true(_has_problem(problems, ["no sfx"]), "but it still needs its cues: %s" % ["\n".join(problems)])
 	problems = _check(move, cues + [_m(3, &"iframes_on"), _m(9, &"iframes_off")])
-	assert_true(_has_problem(problems, ["dash_fixture", "not invulnerable", "iframes"]), "and it may not carry iframes: %s" % ["\n".join(problems)])
+	assert_true(_has_problem(problems, ["dash_fixture", "no invulnerability", "iframes"]), "and it may not carry iframes: %s" % ["\n".join(problems)])
 
 
 func test_a_directional_target_must_be_a_move() -> void:
@@ -944,8 +948,9 @@ func test_a_directional_target_must_be_a_move() -> void:
 	assert_false(_has_problem(problems, ["right"]), "a move that exists is fine: %s" % ["\n".join(problems)])
 
 
-# ClipChecker.NOT_YET_STARTED seeds moves that nothing starts yet into the player's walk, so that their clips are checked. Once
-# the moveset or a cancel window of a move the player can reach names one of them, it is started for real and needs no seed.
+# ClipChecker.NOT_YET_STARTED seeds moves that nothing starts yet (the Quick and Flurry tempos) into the player's walk, so that
+# their clips are checked. Once the moveset or a cancel window of a move the player can reach names one of them, it is
+# started for real and needs no seed.
 func test_a_move_the_checker_seeds_is_one_nothing_starts_yet() -> void:
 	var def := Registry.fetch(&"actors", &"abarax") as ActorDef
 	var lib := load(LIB) as AnimationLibrary

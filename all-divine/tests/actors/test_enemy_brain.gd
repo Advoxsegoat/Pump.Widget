@@ -653,7 +653,7 @@ func test_tier_two_sometimes_feints_and_delays() -> void:
 	assert_eq(plain[0], 0, "tier I never feints")
 
 
-func test_tier_three_tracks_a_roll() -> void:
+func test_tier_three_tracks_a_dash_step() -> void:
 	var turned := []  # for [tracking, not]: how far the Knuckle's facing turned over the hook's active frames, degrees
 	for tracks in [true, false]:
 		var def := _brain_def(BRAINS[2], [_option(&"palm", 0.92, 1.0, PackedStringArray(["palm", "palm"]))])
@@ -671,7 +671,7 @@ func test_tier_three_tracks_a_roll() -> void:
 			if knuckle.runner.current != null and knuckle.runner.current.id == &"knuckle_hook" and (kind == &"hitbox_on" or kind == &"hitbox_off"):
 				facing_at[kind] = knuckle.rotation.y)
 		await frames(60 * 6)
-		assert_true(dodger.rolled, "he rolled past its side as the hook came")
+		assert_true(dodger.dodged, "he dash-stepped past its side as the hook came")
 		assert_true(facing_at.has(&"hitbox_off"), "the hook was thrown")
 		turned.append(rad_to_deg(absf(angle_difference(facing_at.get(&"hitbox_on", 0.0), facing_at.get(&"hitbox_off", 0.0)))))
 		(run["arena"] as Node).queue_free()
@@ -681,7 +681,7 @@ func test_tier_three_tracks_a_roll() -> void:
 
 
 func test_it_turns_back_to_its_target_no_faster_than_six_degrees_a_frame() -> void:
-	# He rolls past its side during its hook, so when the hook is over he stands well round to its side.
+	# He dash-steps past its side during its hook, so when the hook is over he stands well round to its side.
 	var def := _brain_def(BRAINS[0], [_option(&"palm", 0.0, 1.35, PackedStringArray(["palm", "palm"]))])
 	def.preferred_range = 1.0
 	var dodger := Dodger.new()
@@ -696,15 +696,17 @@ func test_it_turns_back_to_its_target_no_faster_than_six_degrees_a_frame() -> vo
 		last = knuckle.rotation.y
 		if not knuckle.runner.busy() and knuckle.frozen == 0:
 			worst = maxf(worst, turn)
-	assert_true(dodger.rolled, "he rolled round its side")
+	assert_true(dodger.dodged, "he dash-stepped round its side")
 	assert_true(worst <= 6.1, "it turns back to him at 6 degrees a frame at most (%.1f)" % worst)
 
 
-## Abarax for the tracking test: he stands until `watch`'s hook starts, then rolls to his right, past its side, timed so
-## he is rolling through its active frames (from the hook's f35: invulnerable from its f38, so the hook whiffs).
+## Abarax for the tracking test: he stands until `watch`'s hook starts, then dash-steps past its side, timed so he is
+## moving through its active frames (from the hook's f35). A dash-step does not spare him, and a hook that lands would
+## stop with its hit-stop: this test is of how the Knuckle's swing follows its target, so he is made untouchable by
+## hand from the dash-step on (the iframes flag, which only a mark of a move turns off again).
 class Dodger extends Brain:
 	var watch: Actor
-	var rolled := false
+	var dodged := false
 	var _hook_at := -1
 
 	func think(actor: Actor, _delta: float) -> Intent:
@@ -716,7 +718,9 @@ class Dodger extends Brain:
 		if _hook_at > 0 and actor.frame == _hook_at + 34:
 			intent.pressed.append(&"dodge")
 			intent.move = Vector2(-1, 0)
-			rolled = true
+			dodged = true
+		if dodged:
+			actor.runner.iframes = true
 		return intent
 
 

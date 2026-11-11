@@ -5,6 +5,8 @@ extends Brain
 ##   frames                      how many frames the step lasts (a step of 0 frames is skipped)
 ##   move                        Vector2, world (x, z), length 0 to 1 (default: none)
 ##   press                       actions pressed on the step's first frame only (default: none)
+##   evade_dir                   Vector2, world (x, z): the direction of a sway or duck pressed by the step, set with
+##                               its presses on the step's first frame (default: none)
 ##   hold                        actions held on every frame of the step (default: none); a pressed
 ##                               action is held only if it is listed here too
 ##   face_target, look_target,   a Vector3, or a Node3D followed as it moves (where it stands; an Actor looked at is
@@ -30,6 +32,7 @@ func think(_actor: Actor, _delta: float) -> Intent:
 	if _frame == 0:
 		for action in step.get("press", []):
 			intent.pressed.append(StringName(action))
+		intent.evade_dir = step.get("evade_dir", Vector2.ZERO)
 	for action in step.get("hold", []):
 		intent.held.append(StringName(action))
 	intent.face_target = _point(step.get("face_target"), false)

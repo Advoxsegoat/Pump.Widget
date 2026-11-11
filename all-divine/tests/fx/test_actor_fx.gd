@@ -126,7 +126,7 @@ func test_a_charge_let_go_early_shows_nothing() -> void:
 	assert_eq(_live(&"charge_glow").size(), 0)
 
 
-func test_a_roll_sounds_its_cloth_and_landing_and_kicks_up_dust_at_the_feet() -> void:
+func test_a_dash_step_sounds_its_cloth_and_kicks_up_dust_at_the_feet() -> void:
 	var run := Duel.make(self, [{"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0)}, {"frames": 60}], [], 6.0)
 	var a: Actor = run["a"]
 	var sounds := await _sounds(a, 30)
@@ -134,7 +134,7 @@ func test_a_roll_sounds_its_cloth_and_landing_and_kicks_up_dust_at_the_feet() ->
 	for f in sounds:
 		for id in sounds[f]:
 			heard.append([f, id])
-	assert_eq(heard, [[1, &"roll_cloth"], [15, &"roll_land"]], "the cloth as it starts, the landing at f14")
+	assert_eq(heard, [[2, &"roll_cloth"]], "the cloth at its f1, and no landing: it never leaves the ground")
 	var dust := _live(&"roll_dust")
 	assert_eq(dust.size(), 1, "one puff")
 	assert_false(dust[0].get_parent() is BoneAttachment3D, "left on the ground, not riding a bone")
@@ -204,16 +204,17 @@ func test_a_blow_that_whiffs_shows_and_sounds_nothing_of_a_hit() -> void:
 	var camera := CameraRig.new()
 	camera.stage = stage
 	stage.world.add_child(camera)
-	var roll := [{"frames": 4}, {"frames": 1, "press": [&"dodge"], "move": Vector2(0, -1)}, {"frames": 40}]
-	var run := Duel.make(self, [{"frames": 1, "press": [&"palm"]}, {"frames": 40}], roll, 2.0)
+	var run := Duel.make(self, [{"frames": 1, "press": [&"palm"]}, {"frames": 40}], [{"frames": 45}], 1.6)
 	var a: Actor = run["a"]
+	await Duel.play_to(self, run["b"], 5)
+	(run["b"] as Actor).runner.start(Duel.untouchable_dash(run["b"]))
 	var outcomes := []
 	a.hit_landed.connect(func(r: HitResult, _e: HitEvent) -> void: outcomes.append(r.outcome))
 	var impacts := 0
 	var sounds := await _sounds(a, 30)
 	for f in sounds:
 		impacts += (sounds[f] as Array).count(&"impact_palm")
-	assert_true(outcomes.has(HitResult.Outcome.WHIFF), "the hand did pass through the rolling body")
+	assert_true(outcomes.has(HitResult.Outcome.WHIFF), "the hand did pass through the dodging body")
 	assert_eq(impacts, 0, "but no impact sounded")
 	assert_eq(_live(&"hit_spark").size(), 0, "no spark")
 	assert_eq(camera.trauma, 0.0, "no shake")

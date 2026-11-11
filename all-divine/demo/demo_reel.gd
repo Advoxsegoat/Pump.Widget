@@ -6,11 +6,13 @@ extends Main
 ##
 ## The Knuckle (FOE_BEATS) throws three attacks (a jab, the perilous sweep, the perilous thrust) at fixed times, facing
 ## Abarax the rest of the time; Abarax's presses are timed against them (BEATS), and in order he walks in and locks
-## on, lands the jab, cross and hook, parries the Knuckle's jab and ripostes, hops over the sweep, rolls through the
-## thrust, lands a charged heavy, breaks the Knuckle's posture and finishes it with the Open Hand.
+## on, lands the jab, cross and hook, parries the Knuckle's jab and ripostes, hops over the sweep, catches the thrust with
+## a parry (the answer to a thrust), lands a charged heavy, dash-steps in, breaks the Knuckle's posture with a jab and a
+## cross and finishes it with the Open Hand.
 ##
-## For a reel that fits in half a minute the Knuckle is a copy of tier II with more HP and less posture, so that the
-## break comes in the last seconds and the earlier blows do not kill it first.
+## For a reel that fits in half a minute the Knuckle is a copy of tier II with more HP and a posture of its own, so that
+## the break comes in the last seconds and the earlier blows do not kill it first. (A catch takes 50 posture off the
+## attacker, so its posture is 50 more than the blows after it can break.)
 ##
 ## With --reel-log (a user argument) every move that starts and every blow that lands is printed with its time, for
 ## checking the choreography without a picture.
@@ -21,7 +23,7 @@ const KNUCKLE_DEF := preload("res://data/actors/knuckle_2.tres")
 const ABARAX_AT := Vector3(4.9, 0.0, 3.0)
 const KNUCKLE_AT := Vector3(-2.0, 0.0, 3.0)
 const REEL_HP := 140.0
-const REEL_POSTURE := 40.0
+const REEL_POSTURE := 90.0
 const WEST := Vector2(-1, 0)
 const EAST := Vector2(1, 0)
 ## The Knuckle's choreography, played by a ScriptBrain as Abarax's is (see BEATS for the keys): it walks in as he comes,
@@ -53,7 +55,7 @@ const FOE_BEATS := [
 ## Abarax's choreography: from `t` seconds on (until the next beat) the stick is at `move`, `press` is pressed on the
 ## beat's first frame and `hold` is held throughout. Each press is timed against the Knuckle's (FOE_BEATS): the guard a
 ## quarter of a second after its jab starts (so the parry is open when the blow lands), the hop 0.6 s after its sweep
-## starts (airborne through the kick), the roll half a second after its thrust starts (invulnerable as it lands).
+## starts (airborne through the kick), the guard 0.6 s after its thrust starts (so the catch is open as it lands).
 const BEATS := [
 	{t = 0.0},
 	{t = 1.0, move = WEST * 1.0},
@@ -70,10 +72,11 @@ const BEATS := [
 	{t = 7.9},
 	{t = 10.9, press = [&"dodge"]},
 	{t = 11.8},
-	{t = 13.8, move = EAST * 1.0, press = [&"dodge"]},
-	{t = 13.9},
+	{t = 13.9, press = [&"guard"], hold = [&"guard"]},
+	{t = 14.2},
 	{t = 14.65, press = [&"heavy"], hold = [&"heavy"]},
-	{t = 15.7, move = WEST * 0.45},
+	{t = 16.1, move = EAST * 1.0, press = [&"dodge"]},
+	{t = 16.2},
 	{t = 16.55, press = [&"palm"]},
 	{t = 16.9, press = [&"palm"]},
 	{t = 17.45, press = [&"palm"]},
@@ -141,7 +144,8 @@ static func steps_of(beats: Array) -> Array:
 		var end := start + 1
 		if i + 1 < beats.size():
 			end = roundi(float(beats[i + 1]["t"]) * Engine.physics_ticks_per_second)
-		var step := {frames = end - start, move = beat.get("move", Vector2.ZERO), press = beat.get("press", []), hold = beat.get("hold", [])}
+		var step := {frames = end - start, move = beat.get("move", Vector2.ZERO), press = beat.get("press", []), hold = beat.get("hold", []),
+				evade_dir = beat.get("evade_dir", Vector2.ZERO)}
 		steps.append(step)
 	return steps
 
@@ -187,6 +191,7 @@ class Hands extends PlayerBrain:
 		_now = _script.think(actor, delta)
 		var intent := super.think(actor, delta)
 		intent.held = _now.held
+		intent.evade_dir = _now.evade_dir
 		if lock.target != _was_locked:
 			_was_locked = lock.target
 			lock_changed.emit(lock.target)
@@ -200,3 +205,10 @@ class Hands extends PlayerBrain:
 
 	func pressed_actions() -> Array[StringName]:
 		return _now.pressed
+
+	# The reel is played by its script alone: no key or stick of the person at the window reaches it.
+	func held_actions() -> Array[StringName]:
+		return _now.held
+
+	func direction_pressed() -> Vector2:
+		return Vector2.ZERO

@@ -13,6 +13,6 @@ moveset = {
 &"c": &"lost_feint",
 &"d": &"clipless_feint",
 &"e": &"blow",
-&"f": &"roll",
+&"f": &"step",
 &"g": &"ghost"
 }

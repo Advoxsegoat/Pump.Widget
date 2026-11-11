@@ -11,12 +11,21 @@ extends Brain
 ## and mouse, the cursor's ground point itself, so a swing turns him to where the player points rather than along a
 ## facing that trails the cursor; otherwise (a stick) nothing.
 ##
+## Sway and duck (spec 2): guard held (or pressed on this very frame) and a direction pressed on this frame is a sway,
+## or a duck when the screen direction is within DUCK_CONE_DEG of straight down; the intent presses `sway` or `duck`
+## with the evade_dir (the camera's yaw turns the screen into the world), and a `guard` press of the same frame is
+## dropped, so a direction and guard together are a sway and not a parry. A direction that was down before guard was
+## presses nothing (Inputs.direction_pressed_this_frame is a press, not a hold).
+##
 ## Lock-on (see LockOn): lock_on locks the foe in the picture that the cursor, the stick or his facing (in that order) points
 ## at, or lets go. While locked, target_left and target_right (a flick of the right stick), and the wheel, move to the
 ## foe to the right or left of it on the screen, he
 ## faces the foe's head whatever the device, his attacks turn to it and track it through the swing, the camera leans
 ## to it, and a palm that can finish it finishes it. The lock lets go of a foe that dies or goes too far, and nothing
 ## else changes then: a swing under way carries on, and aim assist is back to the stick.
+
+## How far from straight down the screen a direction may point and still be a duck, in degrees.
+const DUCK_CONE_DEG := 45.0
 
 ## The camera's yaw (CameraRig.yaw()). At 0 the camera looks along -Z, so pushing up goes to -Z and
 ## pushing right to +X; a turned camera turns the stick with it.
@@ -33,9 +42,8 @@ func think(actor: Actor, _delta: float) -> Intent:
 	var world := Vector3(screen.x, 0.0, screen.y).rotated(Vector3.UP, view_yaw)
 	intent.move = Vector2(world.x, world.z)
 	intent.pressed = pressed_actions()
-	for action in Inputs.GAMEPLAY:
-		if Inputs.held(action):
-			intent.held.append(action)
+	intent.held = held_actions()
+	_evade(intent)
 	if actor != null:
 		_lock(actor, intent)
 		_aim(actor, intent)
@@ -45,6 +53,20 @@ func think(actor: Actor, _delta: float) -> Intent:
 ## The gameplay actions that went down this frame.
 func pressed_actions() -> Array[StringName]:
 	return Inputs.pressed_this_frame()
+
+
+## The gameplay actions that are down this frame.
+func held_actions() -> Array[StringName]:
+	var held: Array[StringName] = []
+	for action in Inputs.GAMEPLAY:
+		if Inputs.held(action):
+			held.append(action)
+	return held
+
+
+## The screen direction of a move key or stick flick that went down this frame, or zero (Inputs).
+func direction_pressed() -> Vector2:
+	return Inputs.direction_pressed_this_frame()
 
 
 ## The movement the player asks for on screen: right is +x, up is -y, length 0 to 1, deadzone out.
@@ -57,6 +79,19 @@ func screen_move() -> Vector2:
 ## the actor's own, the World viewport inside it, where the mouse never is).
 func mouse_position(actor: Actor) -> Vector2:
 	return actor.get_tree().root.get_mouse_position()
+
+
+# A direction pressed with guard held, or going down with it this frame, is a sway or a duck (see the top).
+func _evade(intent: Intent) -> void:
+	var direction := direction_pressed()
+	if direction == Vector2.ZERO or not (intent.held.has(Actor.GUARD_ACTION) or intent.pressed.has(Actor.GUARD_ACTION)):
+		return
+	while intent.pressed.has(Actor.GUARD_ACTION):
+		intent.pressed.erase(Actor.GUARD_ACTION)
+	var ducks := absf(direction.angle_to(Vector2.DOWN)) <= deg_to_rad(DUCK_CONE_DEG) + 1e-4
+	intent.pressed.append(Actor.DUCK_ACTION if ducks else Actor.SWAY_ACTION)
+	var world := Vector3(direction.x, 0.0, direction.y).rotated(Vector3.UP, view_yaw)
+	intent.evade_dir = Vector2(world.x, world.z)
 
 
 # Lock-on: lets go of a lost foe, then follows this frame's presses (toggle, switch), and tells the camera and the

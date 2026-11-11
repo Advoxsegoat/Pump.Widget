@@ -1,9 +1,9 @@
 extends TestCase
 ## The move runner inside an actor: a press starts a move on its own frame; the clip's marks turn the
 ## hitboxes and invulnerability on and off on the frames they sit on; a press made up to 9 frames before a
-## cancel window opens comes out on the window's first frame, and an older one is dropped; the roll goes
+## cancel window opens comes out on the window's first frame, and an older one is dropped; the dash-step goes
 ## as far as its clip's root motion (times the move's root_motion_scale), along the stick if it is pushed;
-## and holding dodge through a roll sprints after it.
+## and holding dodge through a dash-step sprints after it.
 ##
 ## Each test stands Abarax in an arena with a ScriptBrain. A move frame counts the actor's frames since
 ## the move started: 0 is the frame it started on. The jab's lead hand is palm_l (the clips' marks say so;
@@ -83,8 +83,8 @@ func _jab() -> MoveData:
 	return Registry.fetch(&"moves", &"palm_jab") as MoveData
 
 
-func _roll() -> MoveData:
-	return Registry.fetch(&"moves", &"dodge_roll") as MoveData
+func _dash() -> MoveData:
+	return Registry.fetch(&"moves", &"dash_step") as MoveData
 
 
 func test_palm_when_idle_starts_jab_the_same_frame() -> void:
@@ -102,12 +102,11 @@ func test_jab_hitbox_active_frames_10_to_14() -> void:
 	assert_eq(run["ended"], [[&"palm_jab", 46, false]], "the jab's 35 frames, then it ends by itself")
 
 
-func test_roll_iframes_are_13_frames() -> void:
+func test_a_dash_step_is_18_frames_and_never_invulnerable() -> void:
 	var run: Dictionary = await _run([{"frames": 10}, {"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0)}], 40)
 	var invulnerable := func(s: Dictionary) -> bool: return s["invulnerable"]
-	assert_eq(_move_frames(run, &"dodge_roll", invulnerable), range(3, 16))
-	assert_eq(_count(run, invulnerable), 13, "and at no other time")
-	assert_eq(run["ended"], [[&"dodge_roll", 41, false]], "30 frames")
+	assert_eq(_count(run, invulnerable), 0, "no frame of it, nor any other, is invulnerable")
+	assert_eq(run["ended"], [[&"dash_step_left", 29, false]], "18 frames")
 
 
 func test_buffered_palm_comes_out_on_window_open() -> void:
@@ -127,7 +126,7 @@ func test_buffered_dodge_comes_out_on_recovery() -> void:
 		{"frames": 13}, {"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0)},
 		{"frames": 20, "move": Vector2(1, 0)},  # the stick stays pushed until the window opens
 	], 30)
-	assert_eq(run["started"], [[&"palm_jab", 11], [&"dodge_roll", 31]], "the roll at jab f20")
+	assert_eq(run["started"], [[&"palm_jab", 11], [&"dash_step_left", 31]], "the dash-step at jab f20, toward his left")
 	assert_eq(run["ended"].front(), [&"palm_jab", 31, true])
 
 
@@ -137,7 +136,7 @@ func test_too_early_dodge_expires() -> void:
 		{"frames": 10}, {"frames": 1, "press": [&"palm"]},
 		{"frames": 9}, {"frames": 1, "press": [&"dodge"]},
 	], 40)
-	assert_eq(run["started"], [[&"palm_jab", 11]], "no roll")
+	assert_eq(run["started"], [[&"palm_jab", 11]], "no dash-step")
 	assert_eq(run["ended"], [[&"palm_jab", 46, false]], "the jab runs to its f35")
 
 
@@ -167,51 +166,37 @@ func test_start_fires_the_marks_at_time_zero() -> void:
 	var actor := TestArena.spawn(arena, load(ABARAX), ScriptBrain.new([]))
 	var got: Array = []
 	actor.runner.mark.connect(func(kind: StringName, args: Dictionary) -> void: got.append([kind, args]))
-	actor.runner.start(_roll())
-	assert_eq(got, [[&"sfx", {"name": &"roll_cloth"}]], "the roll's f0 sound, on the start itself")
+	actor.runner.start(Registry.fetch(&"moves", &"hop") as MoveData)
+	assert_eq(got, [[&"sfx", {"name": &"roll_cloth"}]], "the hop's f0 sound, on the start itself")
 	actor.runner.tick(Intent.new(), DT)
 	assert_eq(got.size(), 1, "and not again on the next tick")
 
 
-func test_roll_root_motion_matches_clip() -> void:
-	# The stick pushed the way the actor already faces (here a yaw of 0.7): the roll goes along that facing.
+func test_dash_step_root_motion_matches_clip() -> void:
+	# The stick pushed the way the actor already faces (here a yaw of 0.7): the dash-step goes along that facing.
 	var yaw := 0.7
 	var run: Dictionary = await _run([{"frames": 5}, {"frames": 1, "press": [&"dodge"], "move": Vector2(sin(yaw), cos(yaw))}], 40, yaw)
-	assert_eq(run["started"], [[&"dodge_roll", 6]])
-	assert_eq(run["ended"], [[&"dodge_roll", 36, false]])
+	assert_eq(run["started"], [[&"dash_step", 6]])
+	assert_eq(run["ended"], [[&"dash_step", 24, false]])
 	var actor: Actor = run["actor"]
-	var roll := _roll()
-	var clip := actor.rig.tree.get_animation(roll.clip)
+	var dash := _dash()
+	var clip := actor.rig.tree.get_animation(dash.clip)
 	var root := clip.find_track(actor.rig.tree.root_motion_track, Animation.TYPE_POSITION_3D)
-	assert_true(root >= 0, "the roll's clip has a root track")
+	assert_true(root >= 0, "the dash-step's clip has a root track")
 	var travel := clip.position_track_interpolate(root, clip.length) - clip.position_track_interpolate(root, 0.0)
 	travel.y = 0.0
-	var want := Basis(Vector3.UP, yaw) * travel * roll.root_motion_scale
-	var moved: Vector3 = _at(run, 36)["position"] - _at(run, 5)["position"]
+	var want := Basis(Vector3.UP, yaw) * travel * dash.root_motion_scale
+	var moved: Vector3 = _at(run, 24)["position"] - _at(run, 5)["position"]
 	moved.y = 0.0
 	var along := Vector3(sin(yaw), 0, cos(yaw))
 	assert_near(moved.dot(along), want.length(), 0.02, "along the facing")
 	assert_vec_near(moved, want, 0.02, "and nowhere else")
-	assert_true(want.length() > 2.5 and want.length() < 3.5, "about 3 m: %s" % want.length())
-	assert_vec_near(_at(run, 46)["position"], _at(run, 36)["position"], 1e-3, "and it stops there")
+	assert_near(want.length(), 1.3, 0.05, "1.3 m: %s" % want.length())
+	assert_vec_near(_at(run, 46)["position"], _at(run, 24)["position"], 1e-3, "and it stops there")
 
 
-func test_roll_snaps_to_stick_direction() -> void:
-	# Facing +Z, roll with the stick pushed east: the roll faces east on its first frame (a turn would
-	# take 7 or 8 frames) and goes east.
-	var run: Dictionary = await _run([{"frames": 5}, {"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0)}], 40)
-	assert_eq(run["started"], [[&"dodge_roll", 6]])
-	assert_vec_near(_at(run, 5)["facing"], Vector3(0, 0, 1), 1e-6)
-	assert_vec_near(_at(run, 6)["facing"], Vector3(1, 0, 0), 1e-6, "snapped on the roll's first frame")
-	var actor: Actor = run["actor"]
-	assert_near(actor.locomotion.facing_yaw, PI / 2, 1e-6, "locomotion faces that way too")
-	var moved: Vector3 = _at(run, 36)["position"] - _at(run, 5)["position"]
-	assert_true(moved.x > 2.5, "rolled %s east" % moved.x)
-	assert_near(moved.z, 0.0, 0.02, "and not along the old facing")
-
-
-func test_sprint_after_held_roll() -> void:
-	# Press and hold dodge with the stick pushed: the roll (frames 6 to 36), then a sprint while dodge
+func test_sprint_after_held_dash_step() -> void:
+	# Press and hold dodge with the stick pushed: the dash-step (frames 6 to 24), then a sprint while dodge
 	# stays held; let go, and back down to a jog.
 	var east := Vector2(1, 0)
 	var run: Dictionary = await _run([
@@ -221,10 +206,10 @@ func test_sprint_after_held_roll() -> void:
 		{"frames": 40, "move": east},
 	], 0)
 	var tuning: LocomotionTuning = (load(ABARAX) as ActorDef).locomotion
-	assert_eq(run["started"], [[&"dodge_roll", 6]], "holding does not roll again")
-	assert_eq(_count(run, func(s: Dictionary) -> bool: return s["sprinting"] and s["frame"] <= 36), 0, "no sprint during the roll")
+	assert_eq(run["started"], [[&"dash_step_left", 6]], "holding does not dash-step again")
+	assert_eq(_count(run, func(s: Dictionary) -> bool: return s["sprinting"] and s["frame"] <= 24), 0, "no sprint during the dash-step")
 	var held := _at(run, 96)
-	assert_true(held["sprinting"], "sprinting after the roll")
+	assert_true(held["sprinting"], "sprinting after the dash-step")
 	assert_near(held["speed"], tuning.sprint_speed, 1e-6, "at sprint_speed")
 	var released := _at(run, 136)
 	assert_false(released["sprinting"])

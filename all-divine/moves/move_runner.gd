@@ -19,9 +19,12 @@ extends Node
 ## the rest of it spread over the wind-up left, so a target that walks in or out meanwhile is met too; in all it is
 ## MAX_WARP at most either way, and never so far that the body would pass the target's (BodySpacing still stops it).
 ##
-## A dodge is the stick's too: a move with a `neutral_variant` (the roll's hop) starts that variant instead when the
+## Which move a consumed press starts is the actor's to say (Actor.move_for: the window's or the moveset's, then the
+## `directional` variant for the side the press was made toward), at both places the runner starts one.
+##
+## A dodge is the stick's too: a move with a `neutral_variant` (the dash-step's hop) starts that variant instead when the
 ## intent's stick is at rest, from rest and from a cancel window alike. The variant is checked as the move that was
-## asked for (a hop is refused where a roll would be) and spends its own stamina_cost.
+## asked for (a hop is refused where a dash-step would be) and spends its own stamina_cost.
 ##
 ## A move can be charged. At a charge_hold mark, if the player is holding the mark's action, the clip stops at the
 ## mark (its time stands still, so the pose holds) until the action is let go, or the mark's `frames` have passed:
@@ -152,20 +155,21 @@ func tick(intent: Intent, delta: float) -> Vector3:
 	if current != null and not window.is_empty():
 		var action := actor.buffer.consume(window.keys(), actor.buffer_frame)
 		if action != &"" and not actor.start_finisher_on(action):
-			_start(_fetch(window[action]), intent)
+			_start(actor.move_for(action, intent, StringName(str(window[action]))), intent)
 	if current != null and time >= _anim.length - Marks.EPSILON:
 		_end(false)
 	if current == null:
 		var action := actor.buffer.consume(actor.def.moveset.keys(), actor.buffer_frame)
 		if action != &"" and not actor.start_finisher_on(action):
-			_start(_fetch(actor.def.moveset[action]), intent)
+			_start(actor.move_for(action, intent), intent)
 	return velocity
 
 
 # Starts `move`, unless it is an attack or a dodge, the actor cannot act (no stamina, or exhausted) and it is not
 # `force`d: then nothing changes (but the actor's move_refused says so), a move that plays goes on, and the press that
-# asked is gone, since the callers have consumed it. A dodge with the stick pushed (`intent` from this frame, or null) faces the stick at once. With the
-# stick at rest, a move's neutral variant starts in its place, once the move asked for has passed the stamina gate.
+# asked is gone, since the callers have consumed it. With the stick at rest, a move's neutral variant starts in its place,
+# once the move asked for has passed the stamina gate. A dodge keeps the facing it has: a dash-step goes along the stick
+# and never turns him to it.
 func _start(move: MoveData, intent: Intent, force := false) -> void:
 	if move == null:
 		push_error("MoveRunner: no move to start on '%s'" % actor.name)
@@ -205,8 +209,6 @@ func _start(move: MoveData, intent: Intent, force := false) -> void:
 			_track_until = m["time"]
 	_begin_warp(move, intent)
 	rig.play_move(move.clip, move.blend_in)
-	if move.kind == MoveData.Kind.DODGE and intent != null and intent.move.length() > 0.0:
-		actor.snap_facing(Locomotion.yaw_of(intent.move))
 	move_started.emit(move)
 	_pass_marks(BEFORE_START, 0.0)
 

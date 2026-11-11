@@ -117,22 +117,22 @@ func _hits(rows: Array) -> Array:
 
 
 func test_control_returns_within_ninety_frames_of_the_press() -> void:
-	# a mashes dodge (with the stick pushed, a roll) every frame after the palm: the first roll is when he has control
-	# again.
+	# a mashes dodge (with the stick pushed, a dash-step) every frame after the palm: the first dash-step is when he has
+	# control again.
 	var steps := [{"frames": PALM_ON - 1}, {"frames": 1, "press": [&"palm"]}]
 	for i in 200:
 		steps.append({"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0)})
 	var run: Dictionary = await _duel(60.0, null, steps)
 	var a: Actor = run["a"]
-	var rolled := [-1]
+	var stepped := [-1]
 	a.runner.move_started.connect(func(m: MoveData) -> void:
-		if m.id == &"dodge_roll" and rolled[0] < 0:
-			rolled[0] = a.frame)
+		if m.id == &"dash_step_left" and stepped[0] < 0:
+			stepped[0] = a.frame)
 	await Duel.play_to(self, a, PALM_ON)
 	assert_eq(a.paired_with, run["b"], "the finisher started")
 	await Duel.play_to(self, a, PALM_ON + 150)
-	assert_true(rolled[0] > 0, "he rolls at last")
-	assert_true(rolled[0] - PALM_ON <= CAP, "control is back %d frames after the press, hit-stop included" % (rolled[0] - PALM_ON))
+	assert_true(stepped[0] > 0, "he dash-steps at last")
+	assert_true(stepped[0] - PALM_ON <= CAP, "control is back %d frames after the press, hit-stop included" % (stepped[0] - PALM_ON))
 
 
 func test_every_pair_hit_lands_on_the_head_or_chest() -> void:
