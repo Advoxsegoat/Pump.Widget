@@ -261,6 +261,25 @@ func test_a_flurry_counter_staggers_a_foe_whose_poise_would_shrug_it_off() -> vo
 
 # --- the clear-outs ---
 
+func test_the_rig_has_the_clear_outs_two_hitboxes_at_its_root() -> void:
+	var run := _world([])
+	var a: Actor = run["a"]
+	for case: Array in [[&"clear_arc", 1.8], [&"clear_ring", 2.0]]:
+		var shape := a.rig.hitbox_shape(case[0])
+		assert_true(shape != null and shape.shape is CylinderShape3D, "%s is a cylinder" % case[0])
+		if shape == null or not shape.shape is CylinderShape3D:
+			continue
+		var cylinder := shape.shape as CylinderShape3D
+		assert_near(cylinder.radius, case[1], 1e-6, "%s's radius" % case[0])
+		assert_near(cylinder.height, 1.4, 1e-6, "%s is 1.4 m high" % case[0])
+		var holder := a.rig.get_node("Hitboxes/%s" % case[0]) as Node3D
+		assert_false(holder is BoneAttachment3D, "%s rides no bone: it stands at his root" % case[0])
+		assert_vec_near(holder.global_position, a.global_position, 1e-4, "%s is centred on his feet (its shape stands 0.7 m up)" % case[0])
+		assert_near(shape.position.y, 0.7, 1e-6, "so it spans the knee to the head")
+	assert_eq(a.rig.active_hitboxes(), [], "and neither is on until a move turns it on")
+	await _free(run)
+
+
 func test_a_clear_out_throws_two_two_and_a_half_and_three_metres() -> void:
 	# in the open, within 0.1 m: the wave throws straight away from him (+Z), the back palm to his right (-X for a body facing +Z)
 	for id: StringName in [&"clear_wave", &"clear_backpalm"]:
