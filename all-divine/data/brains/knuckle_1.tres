@@ -14,8 +14,8 @@ script = ExtResource("1_koogs")
 action = &"gift"
 min_range = 2.6
 max_range = 2.85
-cooldown = 3.0
-weight = 0.4
+cooldown = 25.0
+weight = 0.15
 combo = PackedStringArray()
 
 [resource]

@@ -735,41 +735,58 @@ class Circler extends Brain:
 		return intent
 
 
-func test_every_perilous_attack_is_thrown_in_ordinary_yard_fights() -> void:
-	# Twenty seeded fights of 1800 frames (thirty seconds) each against an Abarax who circles it, 2 m off to begin with: every brain that has a
-	# sweep, a thrust or a grab throws each at least once.
-	var seen := {}  # tier -> {move id: how many times started}
+## What the tier Knuckles' attack mix is held to over twenty seeded 1800-frame fights, in each stance: each perilous attack's share of the attacks
+## started (the first move of each option, a feint that comes before it too: a jab string counts once), as [least, most] per cent, and the grab's count
+## (within a third of the 76 it threw before this task, in the fight where Abarax circles). `before` is what each tier started in all, circling and
+## standing, before the carried fixes (the sweep was never thrown, the thrust 60 times by tier II, 21 by tier III).
+const MIX_STARTS: Array[StringName] = [&"knuckle_jab", &"knuckle_sweep", &"knuckle_thrust", &"knuckle_grab", &"knuckle_feint"]
+const MIX := {
+	1: {&"knuckle_sweep": [8, 20], "before": [140, 140]},
+	2: {&"knuckle_sweep": [8, 20], &"knuckle_thrust": [8, 20], "before": [172, 172]},
+	3: {&"knuckle_sweep": [5, 15], &"knuckle_thrust": [8, 20], "grab": [51, 101], "before": [202, 208]},
+}
+
+
+func test_the_attack_mix_of_each_tier_in_ordinary_yard_fights() -> void:
 	for tier in [1, 2, 3]:
 		var def := _brain_def(BRAINS[tier - 1])
-		var wanted := []
-		for option: AttackOption in def.attacks:
-			var move := Registry.fetch(&"moves", (load(KNUCKLES[tier - 1]) as ActorDef).moveset[option.action]) as MoveData
-			for profile: HitProfile in move.hits.values():
-				if profile.perilous != HitProfile.Perilous.NONE:
-					wanted.append(move.id)
-		seen[tier] = {}
-		for id in wanted:
-			seen[tier][id] = 0
-		var runs := []
-		for seed_value in range(1, 21):
-			var circler := Circler.new()
-			var run := _fight(def, Vector3(0, 0, 3.0), PI, circler, tier, seed_value, Vector3(seed_value * 50.0, 0, 0))
-			circler.foe = run["knuckle"]
-			(run["knuckle"] as Actor).runner.move_started.connect(func(m: MoveData) -> void:
-				if seen[tier].has(m.id):
-					seen[tier][m.id] += 1)
-			runs.append(run)
-		for step in 60:  # the 1800 frames, in halves of a second; no more once every one has been thrown
-			await frames(30)
-			if (seen[tier] as Dictionary).values().all(func(n: int) -> bool: return n >= 1):
-				break
-		for run: Dictionary in runs:
-			(run["arena"] as Node).queue_free()
-		await frames(1)
-	for tier in [1, 2, 3]:
-		assert_false((seen[tier] as Dictionary).is_empty() and tier > 1, "knuckle_%d has perilous attacks" % tier)
-		for id: StringName in seen[tier]:
-			assert_true(seen[tier][id] >= 1, "knuckle_%d threw %s %d times in twenty fights of 30 s against an Abarax circling it (%s)" % [tier, id, seen[tier][id], seen[tier]])
+		for stance in [0, 1]:  # 0: Abarax circles it; 1: he stands 1.2 m from where it starts
+			var counts := {}
+			var runs := []
+			for seed_value in range(1, 21):
+				var origin := Vector3(seed_value * 50.0, 0, 0)
+				var arena := TestArena.make(self)
+				arena.position = origin
+				var circler := Circler.new() if stance == 0 else Brain.new()
+				var abarax := TestArena.spawn(arena, _tough(ABARAX), circler, Vector3.ZERO, "Abarax")
+				abarax.place(Transform3D(Basis(Vector3.UP, 0.0), origin))
+				var gap := 2.0 if stance == 0 else 1.2
+				var knuckle := TestArena.spawn(arena, _tough(KNUCKLES[tier - 1]), EnemyBrain.new(def, seed_value), Vector3(0, 0, gap), "Knuckle")
+				knuckle.place(Transform3D(Basis(Vector3.UP, PI), origin + Vector3(0, 0, gap)))
+				if stance == 0:
+					(circler as Circler).foe = knuckle
+				knuckle.runner.move_started.connect(func(m: MoveData) -> void:
+					if MIX_STARTS.has(m.id):
+						counts[m.id] = counts.get(m.id, 0) + 1)
+				runs.append(arena)
+			await frames(1800)
+			for arena: Node in runs:
+				arena.queue_free()
+			await frames(1)
+			var total := 0
+			for id: StringName in counts:
+				total += counts[id]
+			var shown := "knuckle_%d, Abarax %s: %d attacks %s" % [tier, "circling" if stance == 0 else "standing", total, counts]
+			var before: int = MIX[tier]["before"][stance]
+			assert_true(absf(total - before) <= before * 0.2, "%s: within 20%% of the %d it started before" % [shown, before])
+			for id: Variant in MIX[tier]:
+				if not id is StringName:
+					continue
+				var share: float = 100.0 * float(counts.get(id, 0)) / maxf(total, 1)
+				assert_true(share >= MIX[tier][id][0] and share <= MIX[tier][id][1], "%s: %s is %.1f%% of them, held to %s" % [shown, id, share, MIX[tier][id]])
+			if MIX[tier].has("grab"):
+				var grabs: int = counts.get(&"knuckle_grab", 0)
+				assert_true(grabs >= MIX[tier]["grab"][0] and grabs <= MIX[tier]["grab"][1], "%s: its grab %d times, held to %s" % [shown, grabs, MIX[tier]["grab"]])
 
 
 func test_the_sweep_lands_at_both_ends_of_its_new_range() -> void:

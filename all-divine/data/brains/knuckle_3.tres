@@ -15,17 +15,18 @@ action = &"gift"
 min_range = 2.75
 max_range = 2.95
 cooldown = 3.0
-weight = 0.4
+weight = 0.2
+back_up_margin = 1.3
 combo = PackedStringArray()
 
 [sub_resource type="Resource" id="Resource_cjsf0"]
 script = ExtResource("1_02iyf")
 action = &"heavy"
-min_range = 3.7
-max_range = 4.1
+min_range = 2.55
+max_range = 2.75
 back_up_margin = 1.5
 cooldown = 3.0
-weight = 0.5
+weight = 0.25
 combo = PackedStringArray()
 
 [sub_resource type="Resource" id="Resource_70tor"]
@@ -33,7 +34,7 @@ script = ExtResource("1_02iyf")
 action = &"interact"
 max_range = 1.1
 cooldown = 4.0
-weight = 0.4
+weight = 0.5
 combo = PackedStringArray()
 
 [resource]
