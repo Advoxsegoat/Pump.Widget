@@ -210,7 +210,7 @@ func test_the_blade_moves_and_the_blade_knuckle_have_their_numbers() -> void:
 	assert_eq(brain.delay_chance, 0.5, "he delays the chop half the time")
 	var lunge_option := brain.attacks[2]
 	assert_eq([lunge_option.action, lunge_option.min_range, lunge_option.max_range, lunge_option.weight, lunge_option.cooldown],
-			[&"heavy", 3.6, 4.1, 0.5, 3.0], "the lunge from 3.6 to 4.1 m")
+			[&"heavy", 3.6, 4.1, 0.25, 3.0], "the lunge from 3.6 to 4.1 m")
 	assert_eq(ClipChecker.new().check_actor(def), PackedStringArray(), "the clip checker passes him")
 
 
@@ -427,7 +427,7 @@ func test_no_blade_clip_pops() -> void:
 
 # --- fights ---
 
-## Abarax for the fights: he stands his ground in a ring of `ring` metres round the blade Knuckle, facing him, circling (or
+## Abarax for the fights: he walks round the blade Knuckle, about `ring` metres off, facing him, circling (or
 ## backing off at a walk when `retreat`), and when `dodges` he answers each of the Knuckle's blows by the defence that is the
 ## perfect dodge of it (a duck of the cuts, a sway of the chop) pressed DODGE_LEAD frames before the blow lands, and counters
 ## DODGE_TO_COUNTER frames after it: what the review's bot did.
@@ -464,7 +464,8 @@ class Duelist extends Brain:
 			elif retreat:
 				intent.move = -dir * retreat_push
 			else:
-				intent.move = (dir.rotated(PI * 0.5) * 0.4 + dir * clampf((distance - ring) * 0.8, -0.6, 0.6)).limit_length(0.5)
+				# round him at a walk, never backing off; closing in only when he has drifted past `ring` + 1.2 m
+				intent.move = (dir.rotated(PI * 0.5) * 0.4 + dir * clampf((distance - ring - 1.2) * 0.8, 0.0, 0.6)).limit_length(0.5)
 		if dodges and actor.frozen == 0:
 			var move := foe.runner.current
 			if move != null and [&"blade_cut", &"blade_backcut", &"blade_chop"].has(move.id):
@@ -511,8 +512,10 @@ func _fights(seeds: int, frames_to_play: int, make: Callable, abarax_at := Vecto
 		var knuckle := TestArena.spawn(arena, def, EnemyBrain.new(def.brain, seed_value + 1), abarax_at + Vector3(0, 0, 3.0), "Knuckle")
 		knuckle.place(Transform3D(Basis(Vector3.UP, PI), origin + abarax_at + Vector3(0, 0, 3.0)))
 		duelist.foe = knuckle
-		var log := {"cuts": [], "backcuts": [], "counters": [], "counters_landed": [], "backcut_hits": []}
+		var log := {"cuts": [], "backcuts": [], "counters": [], "counters_landed": [], "backcut_hits": [], "sequences": []}
 		knuckle.runner.move_started.connect(func(m: MoveData) -> void:
+			if [&"blade_cut", &"blade_chop", &"blade_lunge"].has(m.id):
+				log["sequences"].append(m.id)
 			if m.id == &"blade_cut":
 				log["cuts"].append(knuckle.frame)
 			elif m.id == &"blade_backcut":
@@ -602,3 +605,27 @@ func test_the_backcut_is_thrown_at_a_man_who_stays() -> void:
 				landed += 1
 	assert_true(sequences >= 10, "he threw %d cuts at a man who stays (at least 10)" % sequences)
 	assert_true(landed >= ceili(sequences * 0.9), "%d of %d cuts were followed by a backcut that landed (at least 90%%)" % [landed, sequences])
+
+
+func test_the_blade_knuckles_attack_mix() -> void:
+	# Twenty seeded fights of 1800 frames against an Abarax who circles at 2 m: the cut opens 55 to 75% of his attack
+	# sequences, the chop 15 to 35%, the lunge 8 to 15% (his perilous attack: a player should meet it in every fight), the same
+	# attack follows itself in at least 20% of the sequences, and there are about 10.6 sequences a fight (within 20%).
+	var runs: Array = await _fights(20, 1800, func() -> Duelist: return Duelist.new())
+	var counts := {&"blade_cut": 0, &"blade_chop": 0, &"blade_lunge": 0}
+	var total := 0
+	var repeats := 0
+	for run: Dictionary in runs:
+		var seq: Array = (run["log"] as Dictionary)["sequences"]
+		for i in seq.size():
+			counts[seq[i]] += 1
+			total += 1
+			if i > 0 and seq[i] == seq[i - 1]:
+				repeats += 1
+	var share := func(id: StringName) -> float: return float(counts[id]) / maxf(total, 1)
+	var mix := "%d sequences in 20 fights (%.1f a fight): cut %.0f%%, chop %.0f%%, lunge %.0f%%, the same again %.0f%%" % [total, total / 20.0, share.call(&"blade_cut") * 100.0, share.call(&"blade_chop") * 100.0, share.call(&"blade_lunge") * 100.0, repeats * 100.0 / maxf(total - 20, 1)]
+	assert_true(share.call(&"blade_cut") >= 0.55 and share.call(&"blade_cut") <= 0.75, "the cut opens 55 to 75%%: %s" % mix)
+	assert_true(share.call(&"blade_chop") >= 0.15 and share.call(&"blade_chop") <= 0.35, "the chop opens 15 to 35%%: %s" % mix)
+	assert_true(share.call(&"blade_lunge") >= 0.08 and share.call(&"blade_lunge") <= 0.15, "the lunge is 8 to 15%%: %s" % mix)
+	assert_true(repeats >= ceili((total - 20) * 0.2), "the same attack follows itself in at least 20%%: %s" % mix)
+	assert_true(total >= 170 and total <= 254, "about 10.6 sequences a fight, within 20%% (170 to 254 in 20): %s" % mix)
