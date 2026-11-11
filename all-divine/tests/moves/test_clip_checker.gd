@@ -948,30 +948,17 @@ func test_a_directional_target_must_be_a_move() -> void:
 	assert_false(_has_problem(problems, ["right"]), "a move that exists is fine: %s" % ["\n".join(problems)])
 
 
-# ClipChecker.NOT_YET_STARTED seeds moves that nothing starts yet (the Quick and Flurry tempos) into the player's walk, so that
-# their clips are checked. Once the moveset or a cancel window of a move the player can reach names one of them, it is
-# started for real and needs no seed.
-func test_a_move_the_checker_seeds_is_one_nothing_starts_yet() -> void:
-	var def := Registry.fetch(&"actors", &"abarax") as ActorDef
-	var lib := load(LIB) as AnimationLibrary
-	var queue: Array[String] = []
-	for id in def.moveset.values() + def.reactions.values():
-		queue.append(String(id))
-	var seen := {}
-	while not queue.is_empty():
-		var id: String = queue.pop_back()
-		if id == "" or seen.has(id) or not Registry.ids(&"moves").has(id):
-			continue
-		seen[id] = true
-		var move := Registry.fetch(&"moves", StringName(id)) as MoveData
-		if move == null or not lib.has_animation(move.clip):
-			continue
-		for mark in Marks.read(lib.get_animation(move.clip)):
-			if mark["kind"] == &"cancel_open" and mark["args"].get("into") is Dictionary:
-				for target in MoveRunner.window_of(move, mark["args"]["into"], def).values():
-					queue.append(String(target))
-		queue.append(String(move.neutral_variant))
-		for target in move.directional.values():
-			queue.append(String(target))
-	for id in ClipChecker.NOT_YET_STARTED:
-		assert_false(seen.has(String(id)), "'%s' is now started by the moveset or a cancel window: delete it from ClipChecker.NOT_YET_STARTED" % id)
+# The Quick and Flurry tempos are started by the chain (Actor.move_for), not by the moveset or a window: the checker walks
+# an actor's chain tuning as a source of started moves, so their clips are checked and no move is "reached by no actor".
+func test_the_moves_only_the_chain_starts_are_reached_and_checked() -> void:
+	var problems := ClipChecker.new().check_all()
+	for id in ["sway_left_quick", "sway_left_flurry", "duck_quick", "duck_flurry", "sway_right_flurry", "sway_back_quick"]:
+		assert_false(_has_problem(problems, [id, "reaches"]), "'%s' is started by the chain (and its sides by `directional`): \n%s" % [id, "\n".join(problems)])
+	var def := _actor(load(RIG), {&"palm": &"palm_jab"})
+	def.chain = ChainTuning.new()
+	def.chain.sway_moves = [&"sway_left_slip", &"sway_left_quick", &"sway_left_flurry"]
+	def.chain.duck_moves = [&"duck_slip", &"duck_quick", &"duck_flurry"]
+	assert_eq(ClipChecker.new().check_actor(def), PackedStringArray(), "a chain that names real moves is fine")
+	def.chain.duck_moves = [&"duck_slip", &"duck_quik", &"duck_flurry"]
+	var wrong := ClipChecker.new().check_actor(def)
+	assert_true(_has_problem(wrong, ["fixture", "chain", "duck_moves", "unknown move", "duck_quik"]), "\n".join(wrong))

@@ -33,8 +33,8 @@ extends RefCounted
 ##       finisher keeps the player 1.5 s at most, press to control; the lead is free when its clip ends)
 ##   every pair_hit, in either clip, names (`profile`) one of the pair's `hits`, whatever the kind of its move
 ##   every hit profile of the pair is a HitProfile with hitstop_frames 3 to 6
-## and per actor (check_actor): each required clip exists and is not a T-pose, the moveset, the reactions and the
-## pairs (its finisher and its grab_pair) name existing moves, each move the actor can start, react with, cancel
+## and per actor (check_actor): each required clip exists and is not a T-pose, the moveset, the reactions, the
+## pairs (its finisher and its grab_pair) and the dodge chain (the sways and ducks it starts by tempo) name existing moves, each move the actor can start, react with, cancel
 ## into (as the windows open for it: MoveRunner.window_of) or play in one of its pairs is checked against the actor's
 ## rig and team, and each of its pairs is checked with the clips of its rig. A move that `imitates` another imitates one
 ## whose clip is in the actor's rig and has a hitbox_on: the blow whose rim it wears. An enemy's brain (ActorDef.brain) presses
@@ -66,10 +66,6 @@ const WINDOW_PAIRS := {
 }
 ## The frame every evade window opens on, so that a sway or duck pressed at the last moment is safe from its second frame.
 const EVADE_OPENS := 2
-## The moves of the sway-and-duck defence that no moveset or cancel window names yet (the Quick and Flurry tempos, which the
-## chain picks and the next task adds), seeded into every player actor's walk so that their clips are checked. Their
-## `directional` targets follow from these. Once a window or the chain names them, they go from this list.
-const NOT_YET_STARTED: Array[StringName] = [&"sway_left_quick", &"sway_left_flurry", &"duck_quick", &"duck_flurry"]
 ## The reaction that needs no recovery: the clip ends with the actor on the ground.
 const DEATH := &"death"
 ## A bone within this many degrees of its rest rotation counts as not moved.
@@ -418,10 +414,15 @@ func _start_moves(def: ActorDef, move_ids: PackedStringArray, out: PackedStringA
 				out.append("%s: brain attack presses '%s', which its moveset lacks" % [def.id, option.action if option != null else &""])
 		if def.brain.feint_chance > 0.0 and not def.moveset.has(EnemyBrain.FEINT_ACTION):
 			out.append("%s: brain feints, but its moveset has no feint ('%s')" % [def.id, EnemyBrain.FEINT_ACTION])
-	if def.team == ActorDef.Team.PLAYER:
-		for move_id in NOT_YET_STARTED:
-			if move_ids.has(String(move_id)):
-				found.append(String(move_id))
+	if def.chain != null:
+		# the chain starts a sway or duck by its tempo (Actor.move_for), whatever the moveset and the windows name; the sides of
+		# each follow from its `directional`
+		for role: String in ["sway_moves", "duck_moves"]:
+			for move_id: StringName in def.chain.get(role):
+				if move_ids.has(String(move_id)):
+					found.append(String(move_id))
+				else:
+					out.append("%s: its chain's %s names unknown move '%s'" % [def.id, role, move_id])
 	for action in def.moveset:
 		var move_id := String(def.moveset[action])
 		if move_ids.has(move_id):
