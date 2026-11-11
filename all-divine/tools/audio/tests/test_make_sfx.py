@@ -29,6 +29,7 @@ NAMES = [
     "guard_block_1", "guard_block_2", "parry_ring", "catch_snap",
     "perilous_sting", "tell_glint", "cloth_move", "foot_land",
     "surface_cloth_1", "surface_cloth_2", "body_fall", "charge_hum", "stamina_refused",
+    "evade_whoosh", "perfect_dodge", "knocked_out",
 ]
 
 
@@ -42,6 +43,27 @@ def read(data):
 
 def rms(samples):
     return math.sqrt(sum(s * s for s in samples) / len(samples))
+
+
+def peak_db(samples):
+    return 20 * math.log10(max(abs(s) for s in samples))
+
+
+def crossings_per_second(samples):
+    """How often the sound crosses zero a second: twice its centre frequency for a noise, a plain measure of brightness."""
+    crossings = sum(1 for a, b in zip(samples, samples[1:]) if (a < 0.0) != (b < 0.0))
+    return crossings * make_sfx.RATE / len(samples)
+
+
+def played_at(samples, pitch):
+    """The sound as the player's pitch_scale `pitch` plays it: read faster, so higher and shorter (linear interpolation)."""
+    out = []
+    at = 0.0
+    while at < len(samples) - 1:
+        i = int(at)
+        out.append(samples[i] + (samples[i + 1] - samples[i]) * (at - i))
+        at += pitch
+    return out
 
 
 class MakeSfx(unittest.TestCase):
@@ -111,6 +133,37 @@ class MakeSfx(unittest.TestCase):
                 self.assertEqual(path.read_bytes(), data, "%s is out of date: run tools/audio/make_sfx.py" % path)
         extra = sorted(p.name for p in SHIPPED.glob("*.wav") if p.stem not in self.files) if SHIPPED.exists() else []
         self.assertEqual(extra, [], "WAVs the tool does not make")
+
+    def test_the_evade_whoosh_is_soft_and_short(self):
+        rate, _, _, samples = read(self.files["evade_whoosh"])
+        self.assertTrue(0.18 <= len(samples) / rate <= 0.4, "%.2f s" % (len(samples) / rate))
+        self.assertLessEqual(peak_db(samples), -6.0, "it is heard a dozen times in a chain, so it is soft")
+        self.assertGreaterEqual(peak_db(samples), -14.0, "but it is heard")
+
+    def test_the_whoosh_twelve_semitones_up_is_not_shrill(self):
+        # The chain's twelfth link plays it at pitch 2: its brightness then must stay low (the share of its energy above 6 kHz).
+        samples = read(self.files["evade_whoosh"])[3]
+        up = played_at(samples, 2.0)
+        shrill = rms(make_sfx.highpass(up, 6000.0)) / rms(up)
+        self.assertLess(shrill, 0.3, "%.2f of its level is above 6 kHz at twice the pitch" % shrill)
+        self.assertLess(crossings_per_second(up) / 2.0, 5000.0, "its centre is below 5 kHz at twice the pitch")
+        self.assertGreater(crossings_per_second(samples) / 2.0, 400.0, "and it is not a rumble at its own pitch")
+
+    def test_the_perfect_dodge_is_brighter_than_the_whoosh_and_the_knock_out_duller_than_both(self):
+        whoosh, perfect, knocked = (crossings_per_second(read(self.files[n])[3]) for n in ("evade_whoosh", "perfect_dodge", "knocked_out"))
+        self.assertGreater(perfect, whoosh * 1.3, "a brighter cue")
+        self.assertLess(knocked, whoosh * 0.6, "a low, hard cue")
+
+    def test_the_perfect_dodge_rings_a_moment_and_the_knock_out_hits_at_once_and_hard(self):
+        rate, _, _, perfect = read(self.files["perfect_dodge"])
+        self.assertTrue(0.3 <= len(perfect) / rate <= 0.8, "%.2f s" % (len(perfect) / rate))
+        self.assertTrue(-6.0 <= peak_db(perfect) <= -2.0, "%.1f dBFS" % peak_db(perfect))
+        rate, _, _, knocked = read(self.files["knocked_out"])
+        self.assertTrue(0.2 <= len(knocked) / rate <= 0.6, "%.2f s" % (len(knocked) / rate))
+        self.assertGreaterEqual(peak_db(knocked), -3.0, "the loudest of the three: a hard, plain loss")
+        top = max(abs(s) for s in knocked)
+        first = next(i for i, s in enumerate(knocked) if abs(s) >= 0.9 * top)
+        self.assertLess(first / rate, 0.012, "it is at its loudest within 12 ms: no swell")
 
     def test_the_command_line_writes_every_file_and_rejects_the_unknown(self):
         with tempfile.TemporaryDirectory() as out:

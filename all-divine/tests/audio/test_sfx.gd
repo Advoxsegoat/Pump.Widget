@@ -10,6 +10,7 @@ const CUES := {
 	&"impact_palm": 3, &"impact_heavy": 2, &"palm_whoosh": 3, &"whoosh_light": 3, &"whoosh_heavy": 1,
 	&"guard_block": 2, &"parry_ring": 1, &"catch_snap": 1, &"perilous_sting": 1, &"tell_glint": 1,
 	&"cloth_move": 1, &"foot_land": 1, &"surface_cloth": 2, &"body_fall": 1, &"charge_hum": 1,
+	&"evade_whoosh": 1, &"perfect_dodge": 1, &"knocked_out": 1,
 }
 
 
@@ -127,6 +128,12 @@ func test_pitch_and_volume_follow_the_cue() -> void:
 		_silence()
 	if cue.pitch_jitter > 0.0:
 		assert_true(seen.size() > 1, "the pitch varies from play to play")
+
+
+func test_the_evade_whoosh_has_no_jitter_so_that_its_steps_are_clean() -> void:
+	assert_eq(_cue(&"evade_whoosh").pitch_jitter, 0.0, "a semitone a link is 6%; a jitter would blur it")
+	Sfx.play(&"evade_whoosh", null, pow(2.0, 5.0 / 12.0))
+	assert_near((Sfx.playing_nodes()[0] as AudioStreamPlayer).pitch_scale, pow(2.0, 5.0 / 12.0), 1e-6, "played exactly as asked")
 
 
 func test_a_pitch_asked_for_multiplies_the_cues_own_and_is_reported() -> void:

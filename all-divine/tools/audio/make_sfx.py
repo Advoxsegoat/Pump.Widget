@@ -23,6 +23,10 @@ commit the new files, which tools/audio/tests checks are what this makes):
   cloth/fall  soft noise bursts and low thuds
   charge      a low hum with a slow vibrato that swells and fades
   refused     a short soft low double tick: a press the body could not pay for
+  evade       a soft airy swish whose centre rises, with no jitter and nothing above 3 kHz, so that it can be played
+              up to twelve semitones higher, a step a link of the dodge chain, and not turn shrill
+  perfect     a bright bell of three partials with a breath of air over it: the perfect dodge, a rung note
+  knocked     a short hard low thump with a dull crack and no swell: being knocked out of a chain, plainly lost
 """
 import argparse
 import io
@@ -338,6 +342,42 @@ def foot_land(rng):
     ], n), 1.3)
 
 
+def evade_whoosh(rng):
+    """The dodge's whoosh: a soft swish of noise whose centre rises, under a quick swell, and a little low air under it.
+    Nothing in it is above about 3 kHz, since the dodge chain plays it up to an octave higher (twelve semitones, a step a
+    link) and the cue has no pitch jitter to smear the steps."""
+    n = samples_in(0.26)
+    env = swell(n, 0.35)
+    swish = times(lowpass(swept(noise(rng, n), sweep_path(n, 650.0, 1700.0, 1.2), 1.5), 2800.0), env)
+    air = times(lowpass(noise(rng, n), 500.0), env)
+    return mix([(layer(swish, 1.0), 0.0), (layer(air, 0.35), 0.0)], n)
+
+
+def perfect_dodge(rng):
+    """The perfect dodge: a bell of three bright partials that glides up a little as it is struck, a breath of air over its
+    start, and a short low tick under it so that it is felt as well as heard."""
+    n = samples_in(0.55)
+    bell = partials(n, 2093.0, [1.0, 2.0, 3.01], [1.0, 0.5, 0.25], [0.2, 0.12, 0.07], glide=0.06, glide_tau=0.02)
+    air = times(bandpass(noise(rng, n), 2600.0, 1.2), swell(n, 0.1))
+    tick = times(lowpass(noise(rng, n), 700.0), decay(n, 0.02, 0.001))
+    return fade_out(mix([
+        (layer(bell, 1.0), 0.0),
+        (layer(air, 0.2), 0.0),
+        (layer(tick, 0.35), 0.0),
+    ], n), 0.03)
+
+
+def knocked_out(rng):
+    """Being knocked out of a chain: a hard low thump, a dull crack and a low rumble, driven a little, no swell: the loss
+    is plain and arrives at once."""
+    n = samples_in(0.4)
+    return saturate(mix([
+        (layer(thump(n, 150.0, 48.0, 0.03, 0.1), 1.0), 0.0),
+        (layer(burst(rng, n, 1700.0, 1.0, 0.018, 0.0003), 0.55), 0.0),
+        (layer(times(lowpass(noise(rng, n), 350.0), decay(n, 0.08, 0.001)), 0.5), 0.0),
+    ], n), 2.0)
+
+
 def stamina_refused(rng):
     """A press the body could not answer: a short, soft, low double tick, like a breath held back. Quiet on purpose: it
     says "no" without scolding."""
@@ -413,6 +453,9 @@ SOUNDS = {
     "body_fall": (body_fall, PEAK_DB),
     "stamina_refused": (stamina_refused, -12.0),
     "charge_hum": (charge_hum, -4.0),
+    "evade_whoosh": (evade_whoosh, -8.0),
+    "perfect_dodge": (perfect_dodge, -3.0),
+    "knocked_out": (knocked_out, PEAK_DB),
 }
 
 
