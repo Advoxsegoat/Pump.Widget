@@ -8,7 +8,7 @@ script = ExtResource("2_hit")
 damage = 5.0
 poise_damage = 6.0
 posture_damage = 4.0
-guard_stamina = 5.0
+guard_stamina = 10.0
 knockback = 0.3
 hitstop_frames = 3
 
@@ -16,6 +16,7 @@ hitstop_frames = 3
 script = ExtResource("1_move")
 id = &"drum_4"
 clip = &"drum_4"
+parry_ends = false
 strike_distance = 1.0
 hits = {
 &"jab": SubResource("Resource_jab")

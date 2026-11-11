@@ -23,4 +23,3 @@ script = ExtResource("2_bdef")
 preferred_range = 1.6
 attacks = Array[ExtResource("1_aopt")]([SubResource("Resource_string"), SubResource("Resource_short")])
 attack_rest = 1.2
-feint_chance = 0.2

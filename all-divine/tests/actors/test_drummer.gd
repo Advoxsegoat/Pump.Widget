@@ -3,7 +3,7 @@ extends TestCase
 ## sway-and-duck defence was built for. The string is seven moves, drum_1 to drum_7, each opening a cancel window for `palm`
 ## into the next; thrown at a standing Abarax the blows land 30, 26, 22, 18, 14 and 12 frames apart on the Drummer's own
 ## clock (frames in which both fighters act: hit-stop and the dodge chain's slow-down hold both alike), their lines
-## straight, straight, round, straight, round, straight, round. The first gives eighteen frames of warning, with both fists
+## straight, straight, round, straight, round, straight, round. The first gives 24 frames of warning (18 asked), with both fists
 ## raised. Dodged to the beat, the string takes Abarax to Flurry and breaks the Drummer's posture on the seventh (seven
 ## perfect dodges chip 0, 0, 8, 8, 16, 16, 16 = 64 of its 60); a blow that lands costs the stagger and the chain, never
 ## more than the string's 40 damage; a guard, a parry, a step away and mashing the sway are each answered as they should be.
@@ -25,7 +25,9 @@ const GAPS: Array[int] = [30, 26, 22, 18, 14, 12]
 const LINES: Array[int] = [LINE.STRAIGHT, LINE.STRAIGHT, LINE.ROUND, LINE.STRAIGHT, LINE.ROUND, LINE.STRAIGHT, LINE.ROUND]
 ## The table of the seven blows: damage, posture damage, poise damage, knockback.
 const NUMBERS: Array = [[5.0, 4.0, 6.0, 0.3], [5.0, 4.0, 6.0, 0.3], [6.0, 5.0, 8.0, 0.3], [5.0, 4.0, 6.0, 0.3],
-		[6.0, 5.0, 8.0, 0.3], [5.0, 4.0, 6.0, 0.3], [8.0, 10.0, 14.0, 3.0]]
+		[6.0, 5.0, 8.0, 0.3], [5.0, 4.0, 6.0, 0.3], [8.0, 10.0, 14.0, 0.3]]
+## What a guard of each blow costs in stamina: 80 for the string, the last blow the dearest.
+const GUARD_COSTS: Array[float] = [10.0, 10.0, 12.0, 10.0, 12.0, 10.0, 16.0]
 ## How many frames before each blow its dodge is pressed.
 const LEAD := 4
 ## Where the Drummer stands when the string is thrown at a standing Abarax: its string's range.
@@ -35,7 +37,9 @@ const SEED := 1
 ## The fists are raised when the lower of the two hands is at least this far above the head's own bone (metres), and the first
 ## move holds them there for at least RAISED_FOR frames of its wind-up.
 const RAISED := 0.1
-const RAISED_FOR := 10
+const RAISED_FOR := 14
+## The first blow lands this many frames after the string begins.
+const WARNING := 24
 
 
 # --- the string, thrown without the choosing ---
@@ -44,11 +48,17 @@ const RAISED_FOR := 10
 ## the brain does, without choosing or ending the string when the target is out of reach).
 class Strike extends Brain:
 	var target: Actor
+	## Frames after a string is over that the next begins (-1: never).
+	var again_after := -1
+	var presses := 7  # palms in a round: the string's seven blows
 	var _frame := 0
-	var _presses := 7
+	var _left := 7
+	var _idle := 0
 
-	func _init(foe: Actor) -> void:
+	func _init(foe: Actor, blows := 7) -> void:
 		target = foe
+		presses = blows
+		_left = blows
 
 	func think(actor: Actor, _delta: float) -> Intent:
 		var intent := Intent.new()
@@ -58,9 +68,15 @@ class Strike extends Brain:
 		intent.warp = true
 		if _frame == 1:
 			intent.pressed.append(&"palm")
-		elif actor.frozen == 0 and actor.runner.window.has(&"palm") and _presses > 1:
+		elif actor.frozen == 0 and actor.runner.window.has(&"palm") and _left > 1:
 			intent.pressed.append(&"palm")
-			_presses -= 1
+			_left -= 1
+		elif again_after >= 0 and not actor.runner.busy():
+			_idle += 1
+			if _idle > again_after:
+				_idle = 0
+				_left = presses
+				intent.pressed.append(&"palm")
 		return intent
 
 
@@ -138,6 +154,8 @@ func _play(run: Dictionary, chooser: Callable, limit := 900) -> Dictionary:
 				if action != &"":
 					presser.queue.append([action, run.get("stick", Vector2.ZERO)])
 		await frames(1)
+		if run.has("each"):
+			(run["each"] as Callable).call()
 		var done := started.any(func(s: Array) -> bool: return s[1] == &"drum_1") and not in_string
 		calm = calm + 1 if done else 0
 	return run
@@ -173,7 +191,8 @@ func test_the_drummers_blows_have_their_numbers() -> void:
 		for profile: HitProfile in move.hits.values():
 			assert_eq([profile.damage, profile.posture_damage, profile.poise_damage, profile.knockback], NUMBERS[i], "%s's numbers" % STRING[i])
 			assert_eq(profile.line, LINES[i], "%s's line" % STRING[i])
-			assert_eq(profile.guard_stamina, profile.damage, "%s costs a guard what it would cost him" % STRING[i])
+			assert_eq(profile.guard_stamina, GUARD_COSTS[i], "%s costs a guard %s stamina" % [STRING[i], GUARD_COSTS[i]])
+			assert_eq(move.parry_ends, i == STRING.size() - 1, "%s: a parry of it ends the move only for the last blow" % STRING[i])
 	var total := 0.0
 	for id in STRING:
 		for profile: HitProfile in (Registry.fetch(&"moves", id) as MoveData).hits.values():
@@ -204,8 +223,8 @@ func test_the_drummer_is_a_knuckle_with_its_own_look_and_moves() -> void:
 	assert_eq(Array(def.hidden_parts), ["Knuckle_Hood", "Knuckle_Pauldron"], "hood and pauldron hidden")
 	assert_ne(def.palette, knuckle.palette, "its own palette")
 	assert_eq(def.palette.id, &"knuckle_drummer")
-	assert_eq([def.max_hp, def.max_posture, def.poise, def.model_scale], [70.0, 60.0, 5.0, 0.97])
-	assert_eq(def.moveset, {&"palm": &"drum_1", &"heavy": &"knuckle_jab", &"dodge": &"knuckle_feint"}, "palm is the string, heavy the short jab")
+	assert_eq([def.max_hp, def.max_posture, def.poise, def.model_scale], [60.0, 60.0, 9.0, 0.97])
+	assert_eq(def.moveset, {&"palm": &"drum_1", &"heavy": &"knuckle_jab"}, "palm is the string, heavy the short jab: it has no feint")
 	assert_eq(def.brain, load(BRAIN))
 	assert_eq(ClipChecker.new().check_actor(def), PackedStringArray(), "the clip checker passes it")
 
@@ -214,7 +233,7 @@ func test_the_drummers_brain_chooses_the_string_and_the_short_blows() -> void:
 	var brain := load(BRAIN) as BrainDef
 	assert_eq(brain.preferred_range, 1.6)
 	assert_eq(brain.attack_rest, 1.2)
-	assert_eq(brain.feint_chance, 0.2)
+	assert_eq(brain.feint_chance, 0.0, "it never feints")
 	assert_eq(brain.attacks.size(), 2, "the string, and the jab and cross")
 	var string: AttackOption = brain.attacks[0]
 	assert_eq([string.action, string.weight, string.cooldown], [&"palm", 0.6, 4.0])
@@ -262,7 +281,7 @@ func test_its_first_blow_gives_eighteen_frames_of_warning() -> void:
 			on = Marks.frame_of(m["time"])
 		if m["kind"] == &"tell" and tell < 0:
 			tell = Marks.frame_of(m["time"])
-	assert_true(on >= 18, "the first hitbox comes on at f%d, at least 18 frames in" % on)
+	assert_eq(on, WARNING, "the first hitbox comes on at f%d: %d frames of warning (at least 18 asked)" % [on, WARNING])
 	assert_true(tell >= 0 and tell <= on - 18, "and the tell is there from f%d" % tell)
 	# Both fists raised: the lower of the two hands above the head's bone, for RAISED_FOR frames of the wind-up, in a pose that no
 	# other Knuckle move has at any frame.
@@ -395,36 +414,160 @@ func test_the_last_blow_sends_him_three_metres_and_he_acts_before_the_drummer_do
 
 
 func test_guarding_the_whole_string_costs_stamina_not_health() -> void:
+	# 80 stamina for the seven blows from 100: between 10 and 25 are left (it comes back a little between them), the guard unbroken.
 	var run := _stage(null, ScriptBrain.new([{"frames": 1, "press": [&"guard"], "hold": [&"guard"]}, {"frames": 400, "hold": [&"guard"]}]))
 	var a: Actor = run["a"]
 	var b: Actor = run["b"]
 	b.set_brain(Strike.new(a))
+	var left := [-1.0]
+	a.got_hit.connect(func(_r: HitResult, e: HitEvent) -> void:
+		if e.move.id == &"drum_7":
+			left[0] = a.stats.stamina)
 	await frames(300)
 	var outcomes := _outcomes(run)
 	assert_eq(outcomes, [O.GUARDED, O.GUARDED, O.GUARDED, O.GUARDED, O.GUARDED, O.GUARDED, O.GUARDED], "every blow guarded: %s" % [run["log"]["blows"]])
 	assert_eq(a.stats.hp, 100.0, "no damage")
-	assert_true(a.stats.stamina < 100.0 and a.stats.stamina > 0.0, "it cost stamina, not all of it: %s" % a.stats.stamina)
+	assert_true(left[0] >= 10.0 and left[0] <= 25.0, "it cost most of the stamina: %s left when the last blow was guarded" % left[0])
 
 
-func test_a_parry_of_any_blow_ends_the_string() -> void:
-	for blow in range(1, 8):
-		var run := _stage(_real_brain(), Presser.new(), 1.6)
+func test_a_second_string_guarded_breaks_the_guard() -> void:
+	# A second string that begins within 3 s (two here) of the first one's end finds him at 20 stamina: the guard breaks on one of its blows.
+	var run := _stage(null, ScriptBrain.new([{"frames": 1, "press": [&"guard"], "hold": [&"guard"]}, {"frames": 700, "hold": [&"guard"]}]))
+	var a: Actor = run["a"]
+	var b: Actor = run["b"]
+	var strike := Strike.new(a)
+	strike.again_after = 120
+	b.set_brain(strike)
+	await frames(600)
+	var outcomes := _outcomes(run)
+	assert_true(outcomes.size() >= 9, "a second string was thrown: %s" % [run["log"]["blows"]])
+	assert_eq(outcomes.slice(0, 7), [O.GUARDED, O.GUARDED, O.GUARDED, O.GUARDED, O.GUARDED, O.GUARDED, O.GUARDED], "the first string guarded")
+	assert_true(outcomes.slice(7).has(O.GUARD_BREAK), "the second breaks the guard on one of its blows: %s" % [run["log"]["blows"]])
+
+
+func test_a_parry_turns_one_blow_and_the_string_goes_on() -> void:
+	# Blow 1 is parried: PARRIED, it takes the posture a parried blow takes (the blow's, times the tuning's scale), it plays no reaction,
+	# and blow 2 lands 30 of its frames after.
+	var run := _stage(_real_brain(), Presser.new(), 1.6)
+	var a: Actor = run["a"]
+	var b: Actor = run["b"]
+	var reacted := []
+	b.runner.move_started.connect(func(m: MoveData) -> void:
+		if m.kind == MoveData.Kind.REACTION:
+			reacted.append(m.id))
+	var seen := {"flag": false, "posture": -1.0, "before": 60.0}
+	a.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void:
+		if r.outcome == O.PARRIED and not seen["flag"]:
+			seen["flag"] = true
+			seen["before"] = b.stats.posture)
+	run["each"] = func() -> void:
+		if seen["flag"] and seen["posture"] < 0.0:
+			seen["posture"] = b.stats.posture
+	await _play(run, func(n: int, _line: int) -> StringName: return &"guard" if n == 1 else &"")
+	var blows: Array = run["log"]["blows"]
+	assert_eq(blows[0][2], O.PARRIED, "blow 1 is parried: %s" % [blows])
+	assert_eq(blows[1][1], &"drum_2", "and blow 2 comes")
+	assert_eq(blows[1][0] - blows[0][0], 30, "30 frames after it: %s" % [blows])
+	var taken := 4.0 * a.stats.tuning.parry_posture_scale
+	assert_near(seen["before"] - seen["posture"], taken, 0.01, "it cost the Drummer a parried blow's posture (%s)" % taken)
+	assert_false(reacted.has(&"parried") or reacted.has(&"flinch") or reacted.has(&"stagger"), "and no reaction (%s)" % [reacted])
+	assert_true(blows.size() >= 7, "the string went on to its end: %s" % [blows])
+
+
+func test_parries_and_sways_mixed_climb_to_flurry() -> void:
+	# The owner's exchange: parry, sway, duck, parry, duck, sway, parry, by the blows' lines. The slow-down is on.
+	var run := _stage(_real_brain(), Presser.new(), 1.6, true)
+	var a: Actor = run["a"]
+	var seen := {"tempo": T.SLIP, "count": 0}
+	a.chain.changed.connect(func(count: int, tempo: DodgeChain.Tempo) -> void:
+		seen["tempo"] = maxi(seen["tempo"], tempo)
+		seen["count"] = maxi(seen["count"], count))
+	await _play(run, func(n: int, line: int) -> StringName:
+		return &"guard" if [1, 4, 7].has(n) else _perfect(line))
+	var outcomes := _outcomes(run)
+	assert_eq(outcomes, [O.PARRIED, O.EVADED, O.EVADED, O.PARRIED, O.EVADED, O.EVADED, O.PARRIED], "parried and evaded as pressed: %s" % [run["log"]["blows"]])
+	assert_eq(a.stats.hp, 100.0)
+	assert_eq(seen["tempo"], T.FLURRY, "Flurry (the chain reached %d)" % seen["count"])
+
+
+func test_a_parry_of_the_last_blow_staggers_the_drummer() -> void:
+	# The first six land on a body of poise 10 that none of them flinches; he parries the seventh, and the Drummer reels as any Knuckle
+	# does from a parry.
+	var run := _stage(_real_brain(), Presser.new(), 1.6)
+	var b: Actor = run["b"]
+	var reacted := []
+	b.runner.move_started.connect(func(m: MoveData) -> void:
+		if m.kind == MoveData.Kind.REACTION:
+			reacted.append(m.id))
+	await _play(run, func(n: int, _line: int) -> StringName: return &"guard" if n == 7 else &"")
+	var outcomes := _outcomes(run)
+	assert_eq(outcomes.back(), O.PARRIED, "blow 7 is parried: %s" % [run["log"]["blows"]])
+	assert_true(reacted.has(&"parried"), "and the Drummer plays its parried reaction (%s)" % [reacted])
+
+
+func test_a_parried_jab_still_ends_a_knuckles_combo() -> void:
+	# Every other move keeps its default: a tier I Knuckle's jab, parried, is turned back and the cross never comes.
+	var def := (load("res://data/actors/knuckle_1.tres") as ActorDef).duplicate() as ActorDef
+	def.max_hp = 100000.0
+	var run := Duel.without_slow(Duel.make(self, [], [], 1.0, def, load(ABARAX) as ActorDef))
+	var a: Actor = run["a"]
+	var b: Actor = run["b"]
+	var presser := Presser.new()
+	a.set_brain(presser)
+	b.set_brain(Strike.new(a, 3))
+	var started := []
+	b.runner.move_started.connect(func(m: MoveData) -> void: started.append(m.id))
+	var outcomes := []
+	a.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void: outcomes.append(r.outcome))
+	var pressed := false
+	for i in 200:
+		var move := b.runner.current
+		if not pressed and move != null and move.id == &"knuckle_jab" and a.frozen == 0 and b.frozen == 0:
+			if _hit_frame(b, move) - roundi(b.runner.time * 60.0) <= 5:
+				presser.queue.append([&"guard", Vector2.ZERO])
+				pressed = true
+		await frames(1)
+	assert_eq(outcomes, [O.PARRIED], "the jab is parried and nothing lands after it")
+	assert_false(started.has(&"knuckle_cross"), "the cross is never thrown (%s)" % [started])
+	assert_true(started.has(&"parried"), "the Knuckle reels from it")
+
+
+func test_a_jab_or_a_cross_does_not_stop_the_string_and_a_hook_a_heavy_and_a_counter_do() -> void:
+	# Abarax starts a move of his own so that its first blow lands just before the string's first (6 frames, or on the frame
+	# the move allows). The Drummer's poise is 9: a jab (poise damage 6) and a cross (8) leave it throwing all seven; a hook, a heavy,
+	# a counter and a clear-out reach it.
+	var cases := [[&"palm_jab", true], [&"palm_cross", true], [&"palm_hook", false], [&"palm_heavy", false],
+			[&"counter_hook", false, true], [&"clear_backpalm", false, true]]  # a counter and a clear-out are posted: their blows by data
+	for case: Array in cases:
+		var run := _stage(_real_brain(), Presser.new(), 1.1)
 		var a: Actor = run["a"]
 		var b: Actor = run["b"]
-		var reacted := []
-		b.runner.move_started.connect(func(m: MoveData) -> void:
-			if m.kind == MoveData.Kind.REACTION:
-				reacted.append(m.id))
-		await _play(run, func(n: int, line: int) -> StringName:
-			if n < blow:
-				return _perfect(line)
-			return &"guard" if n == blow else &"")
-		var outcomes := _outcomes(run)
-		assert_eq(outcomes.back(), O.PARRIED, "blow %d is parried: %s" % [blow, run["log"]["blows"]])
-		assert_eq(outcomes.size(), blow, "and no blow lands after it: %s" % [run["log"]["blows"]])
-		# the parry's own recoil, or the broken posture it adds the last of (six perfect dodges have taken 48 of its 60)
-		assert_true(reacted.has(&"parried") or reacted.has(&"posture_broken"), "the Drummer reels from it (%s)" % [reacted])
-		assert_eq(a.stats.hp, 100.0)
+		var mine := Registry.fetch(&"moves", case[0]) as MoveData
+		var on := 0
+		for m in Marks.read(a.rig.tree.get_animation(mine.clip)):
+			if m["kind"] == &"hitbox_on":
+				on = Marks.frame_of(m["time"])
+				break
+		var begin := maxi(1, WARNING - 6 - on) if case.size() == 2 else 4
+		var did := false
+		var guard := 0
+		var started: Array = run["log"]["started"]
+		while guard < 700:
+			guard += 1
+			var move := b.runner.current
+			if not did and move != null and move.id == &"drum_1" and roundi(b.runner.time * 60.0) >= begin and a.frozen == 0 and b.frozen == 0:
+				if case.size() > 2:
+					for profile: HitProfile in mine.hits.values():
+						Melee.post(Blows.event(a, b, profile))
+				else:
+					a.runner.start(mine, true)
+				did = true
+			await frames(1)
+		var ids := started.map(func(s: Array) -> StringName: return s[1])
+		var first := ids.find(&"drum_1")
+		var seven := first >= 0 and ids.slice(first, first + 7) == STRING  # the first string, thrown through: none of the later is
+		assert_true(did, "%s was started" % case[0])
+		assert_eq(seven, case[1], "%s: the Drummer %s the string through (%s)" % [case[0], "throws" if case[1] else "does not throw", ids])
 		(run["arena"] as Node).queue_free()
 		await frames(1)
 
