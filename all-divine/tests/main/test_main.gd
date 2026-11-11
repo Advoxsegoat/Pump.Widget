@@ -11,8 +11,20 @@ const YARD := "res://world/training_yard/training_yard.tscn"
 const COURTYARD := "res://world/courtyard/courtyard.tscn"
 
 
+const SETTINGS_PATH := "user://settings_test.cfg"
+
+
+func before_each() -> void:
+	Settings.path = SETTINGS_PATH
+
+
+# The settings a test changed go back, and the file it wrote goes.
 func after_each() -> void:
 	Game.reset()
+	Settings.reset_all()
+	Settings.path = "user://settings.cfg"
+	if FileAccess.file_exists(SETTINGS_PATH):
+		DirAccess.remove_absolute(SETTINGS_PATH)
 
 
 func _main() -> Main:
@@ -73,7 +85,10 @@ func test_main_boots_into_play_with_player_and_camera() -> void:
 	var stage := _stage(main)
 	assert_true(stage.settings != null, "the look is on")
 	if stage.settings != null:
-		assert_eq(stage.settings.resource_path, DEFAULT_SETTINGS, "the default look")
+		# The look is a copy of the default with each strength at its Settings percent (100 here).
+		var default := load(DEFAULT_SETTINGS) as RenderSettings
+		for strength in [&"outline", &"dof_strength", &"bloom_strength", &"fog_strength", &"grade_strength", &"vignette_strength"]:
+			assert_eq(stage.settings.get(strength), default.get(strength), "the default look's %s" % strength)
 	assert_eq(stage.grade, region.grade, "in the region's grade")
 	var overlay := main.get_node("DebugOverlay") as CanvasLayer
 	assert_false(overlay.visible, "the debug overlay starts hidden")
@@ -108,6 +123,43 @@ func test_f4_toggles_the_look_off_and_on() -> void:
 	_press_key(KEY_F4)
 	for strength in [&"outline", &"dof_strength", &"bloom_strength", &"fog_strength", &"grade_strength", &"vignette_strength"]:
 		assert_eq(stage.settings.get(strength), on.get(strength), "F4 again turns %s back on" % strength)
+
+
+func test_main_applies_the_look_from_the_settings_and_follows_changes() -> void:
+	var main := _main()
+	var stage := _stage(main)
+	var on := load(DEFAULT_SETTINGS) as RenderSettings
+	assert_eq(stage.settings.vignette_strength, on.vignette_strength, "at 100 the look is the default")
+	Settings.set_value("look/vignette", 0)
+	assert_eq(stage.settings.vignette_strength, 0.0, "a look setting is on the stage at once")
+	assert_eq(stage.settings.bloom_strength, on.bloom_strength, "the others are as they were")
+	_press_key(KEY_F4)
+	assert_eq(stage.settings.bloom_strength, 0.0, "F4 turns the look off")
+	_press_key(KEY_F4)
+	assert_eq(stage.settings.vignette_strength, 0.0, "and on again keeps the vignette at 0")
+	assert_eq(stage.settings.bloom_strength, on.bloom_strength)
+	Settings.set_value("sound/music", 50)
+	assert_eq(stage.settings.vignette_strength, 0.0, "a sound key does not touch it")
+	Settings.set_value("look/vignette", 100)
+	assert_eq(stage.settings.vignette_strength, on.vignette_strength, "back to 100")
+
+
+func test_main_applies_the_window_once_when_it_starts() -> void:
+	Settings.set_value("window/mode", "windowed")
+	Settings.set_value("window/scale", 2)
+	Game.reset()
+	var main := (load(MAIN) as PackedScene).instantiate() as Main
+	var window := Window.new()
+	window.mode = Window.MODE_FULLSCREEN
+	main.window = window
+	track(main)
+	var to: Dictionary = Settings.window_target(DisplayServer.screen_get_usable_rect().size)
+	assert_eq(to, {"mode": Window.MODE_WINDOWED, "size": Vector2i(1280, 720)}, "the target the settings give")
+	assert_eq([window.mode, window.size], [to.mode, to.size], "Main put its window there")
+	window.mode = Window.MODE_FULLSCREEN
+	Settings.set_value("window/scale", 3)
+	assert_eq(window.mode, Window.MODE_FULLSCREEN, "and only once: a later setting does not move it")
+	window.free()
 
 
 func test_menu_pauses_and_resumes() -> void:

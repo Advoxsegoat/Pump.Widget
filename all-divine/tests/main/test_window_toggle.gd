@@ -5,6 +5,16 @@ extends TestCase
 ## Window node outside the tree, which keeps the mode and size it is given.
 
 const PROJECT := "res://project.godot"
+const SETTINGS_PATH := "user://settings_test.cfg"
+
+
+# F11 in Main writes the chosen mode down, so every test here keeps the settings in a file of its own.
+func before_each() -> void:
+	Settings.path = SETTINGS_PATH
+
+
+func after_each() -> void:
+	_restore_settings()
 
 
 func test_the_game_starts_in_borderless_fullscreen() -> void:
@@ -81,6 +91,38 @@ func test_main_switches_its_window_on_f11_and_alt_enter() -> void:
 	assert_eq(window.mode, Window.MODE_FULLSCREEN, "Alt+Enter: fullscreen again")
 	window.free()
 	Game.reset()
+
+
+func test_f11_returns_to_the_chosen_window_size() -> void:
+	Settings.set_value("window/scale", 3)
+	var screen := Vector2i(1920, 1080)
+	assert_eq(WindowToggle.target(Window.MODE_FULLSCREEN, screen).size, Vector2i(1920, 1080), "scale 3")
+	Settings.set_value("window/scale", 6)
+	assert_eq(WindowToggle.target(Window.MODE_FULLSCREEN, screen).size, Vector2i(1920, 1080), "6 does not fit 1080p: 3")
+	Settings.reset_all()
+	assert_eq(WindowToggle.target(Window.MODE_FULLSCREEN, screen).size, Vector2i(1280, 720), "the default stays 1280x720")
+	assert_eq(WindowToggle.target(Window.MODE_FULLSCREEN).size, Vector2i(1280, 720), "and so on a screen it does not know")
+
+
+func test_f11_records_the_mode_it_leaves() -> void:
+	Game.reset()
+	var main := track((load("res://main/main.tscn") as PackedScene).instantiate()) as Main
+	var window := Window.new()
+	window.mode = Window.MODE_FULLSCREEN
+	main.window = window
+	_push(_key(KEY_F11))
+	assert_eq(Settings.get_value("window/mode"), "windowed", "F11 left it windowed")
+	_push(_key(KEY_F11))
+	assert_eq(Settings.get_value("window/mode"), "fullscreen", "and again, fullscreen")
+	window.free()
+	Game.reset()
+
+
+func _restore_settings() -> void:
+	Settings.reset_all()
+	Settings.path = "user://settings.cfg"
+	if FileAccess.file_exists(SETTINGS_PATH):
+		DirAccess.remove_absolute(SETTINGS_PATH)
 
 
 func _key(keycode: Key, alt := false) -> InputEventKey:

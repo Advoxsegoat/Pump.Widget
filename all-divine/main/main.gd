@@ -54,11 +54,13 @@ const SELFTEST_HEAVY_FRAMES := 70
 
 ## Whether the screen look is on (F4).
 var look_on := true
-## The window F11 and Alt+Enter switch: the game's own, unless a test gives it another.
-@onready var window: Window = get_window()
+## The window F11 and Alt+Enter switch: the game's own, unless a test gives it another before Main is ready.
+var window: Window = null
 
 
 func _ready() -> void:
+	if window == null:
+		window = get_window()
 	if Game.state != Game.State.PLAY:
 		Game.change(Game.State.PLAY)
 	player.place(region.spawn())
@@ -69,6 +71,8 @@ func _ready() -> void:
 	camera_rig.stage = stage
 	camera_rig.snap_now()
 	overlay.actor = player
+	Settings.apply_window(window)
+	Settings.changed.connect(_on_setting_changed)
 	_apply_look()
 	_enter_region()
 	if SelfTest.active:
@@ -78,6 +82,7 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if WindowToggle.is_toggle(event):
 		WindowToggle.apply(window)
+		Settings.note_window_mode(window.mode)
 		get_viewport().set_input_as_handled()
 		return
 	var key := event as InputEventKey
@@ -211,9 +216,16 @@ func _enter_region() -> void:
 			fight.begin(player)
 
 
-# The look on (default_settings) or off (RenderSettings.off()), in the region's grade.
+# The look on (default_settings, each strength times its Settings percent) or off (RenderSettings.off()), in the
+# region's grade.
 func _apply_look() -> void:
-	stage.apply_settings(DEFAULT_SETTINGS if look_on else DEFAULT_SETTINGS.off(), region.grade)
+	stage.apply_settings(Settings.look_of(DEFAULT_SETTINGS) if look_on else DEFAULT_SETTINGS.off(), region.grade)
+
+
+# A look setting changed: the stage takes it now.
+func _on_setting_changed(key: String) -> void:
+	if key.begins_with("look/"):
+		_apply_look()
 
 
 # A ScriptBrain step pushing the stick `push` along `dir` for as long as it takes, from rest, to cover
