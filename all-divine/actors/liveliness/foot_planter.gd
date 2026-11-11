@@ -33,6 +33,15 @@ const CALVES: Array[StringName] = [&"calf_l", &"calf_r"]
 const HIPS := &"pelvis"
 ## How far ahead of each knee its pole is placed, along the knee's forward (its calf's -Z).
 const POLE_DISTANCE := 0.5
+## Starts the hold of the feet in `holds` for `frames` ticks.
+func hold_frames(frames: int) -> void:
+	_hold_left = frames if not holds.is_empty() else 0
+
+
+## A held foot is let go once the pose lifts its ankle this far above ankle_height, in metres.
+const HOLD_RELEASE := 0.06
+## A hold is let go over its last this many frames.
+const HOLD_FADE := 3.0
 ## The most a foot is tilted to the ground under it, in degrees.
 const MAX_TILT_DEG := 30.0
 ## Over how much lift above ankle_height a foot's tilt to the ground fades out, in metres.
@@ -56,6 +65,14 @@ var ground := {&"foot_l": null, &"foot_r": null}
 ## blend_speed says). The rig sets it while the body is lifeless, so a body that dies with its feet where the ground probes
 ## put them eases back to the clip's pose instead of popping to it in a frame.
 var max_rate := INF
+
+## Feet held where they stand, by foot: a point in the skeleton's space, of which only the ground plane counts (hold_feet). While one is held
+## the foot's IK target keeps that place along the ground, whatever the blended pose (a crossfade of two poses with planted feet puts a
+## foot elsewhere in between, since the hips and the legs do not blend alike), and its height is the pose's. A foot is let go when its
+## frames are out, or as soon as the clip lifts it (a step lifts before it travels).
+var holds := {}
+## Frames left of each hold, counted in this modifier's own ticks.
+var _hold_left := 0
 
 ## False while the body is in the air: the offsets fade to 0, as for a foot with no ground.
 var planting := true
@@ -89,6 +106,10 @@ func _process_modification_with_delta(delta: float) -> void:
 		return
 	var to_skeleton := skeleton.global_transform.affine_inverse()
 	var keep := exp(-blend_speed * maxf(delta, 0.0))
+	if _hold_left > 0:
+		_hold_left -= 1
+		if _hold_left == 0:
+			holds.clear()
 	var poses: Array[Transform3D] = []
 	for i in 2:
 		var foot := FEET[i]
@@ -122,7 +143,16 @@ func _process_modification_with_delta(delta: float) -> void:
 		var lifted := (poses[i].origin.y - ankle_height) / TILT_FADE
 		_turn_foot(skeleton, i, poses[i], clampf(1.0 - lifted, 0.0, 1.0))
 		if targets[i] != null:
-			targets[i].global_position = skeleton.global_transform * (poses[i].origin + Vector3.UP * float(offsets[FEET[i]]))
+			var spot := poses[i].origin
+			if holds.has(FEET[i]):
+				if spot.y > ankle_height + HOLD_RELEASE:
+					holds.erase(FEET[i])  # the clip steps
+				else:
+					# held fully until the last HOLD_FADE frames, then let go over them, so the foot does not jump to the pose
+					var held := clampf(float(_hold_left) / HOLD_FADE, 0.0, 1.0)
+					spot.x = lerpf(spot.x, (holds[FEET[i]] as Vector3).x, held)
+					spot.z = lerpf(spot.z, (holds[FEET[i]] as Vector3).z, held)
+			targets[i].global_position = skeleton.global_transform * (spot + Vector3.UP * float(offsets[FEET[i]]))
 		if poles[i] != null:
 			var knee := skeleton.get_bone_global_pose(_calves[i])
 			poles[i].global_position = skeleton.global_transform * (knee.origin - knee.basis.z.normalized() * POLE_DISTANCE)

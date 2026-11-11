@@ -18,9 +18,10 @@ staggers = true
 script = ExtResource("1_move")
 id = &"counter_rise"
 clip = &"counter_rise"
-root_motion_scale = 0.5
+root_motion_scale = 0.25
 stamina_cost = 8.0
 cashes = true
+plant_feet = true
 hits = {
 &"counter": SubResource("Resource_counter")
 }

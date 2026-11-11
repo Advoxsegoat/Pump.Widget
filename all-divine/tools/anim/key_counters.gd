@@ -11,15 +11,22 @@ extends SceneTree
 ## now on it off again (the committed JSON), and works from that bare clip, so running it twice writes the same files.
 ##
 ## What a layer does, per clip (SPECS):
-##   legs     for the first `hold` frames each foot that is on the ground in the clip is held where the guard stance has it, and
-##            eases to where the clip has it by frame `hold` (a smoothstep), the legs solved two-bone from the hip. A counter
+##   start    the clip begins as the guard stance and becomes its own pose over its first `ease` frames (a smoothstep: every bone but the
+##            legs and the hips turn toward the guard stance's by the share that is left, and the hips go to where it has them). The rig
+##            blends a move in over 0.05 s, and a blend of two poses is not planted where each end is: legs bent for a crouch at a third of
+##            the way do not put the foot where a third of the hip's drop does. A start that is already the guard stance blends into
+##            nothing (the jab is one), and a counter out of a sway, a duck or rest has nothing to drag.
+##   legs     for the first `hold` frames each foot is held where the guard stance has it along the ground, and eases to where the
+##            clip has it by frame `hold` (a smoothstep), its height always the clip's own, the legs solved two-bone from the hip. A counter
 ##            starts out of a sway, a duck, the guard stance or rest, where the feet are planted in the guard stance's places;
 ##            the pack clips begin in their own wide stances, and the blend into them dragged the planted feet 0.14 to 0.34 m
-##            in a frame. A foot the clip lifts is left alone: it steps.
+##            in a frame. A foot that steps lifts before it travels.
 ##   arms     `guard`: the arm's bones ease toward the guard stance's (by the weights given: frame, 0 to 1), so a hand is not
 ##            left up in the air after the blow and the off hand stays where a boxer keeps it. `path`: the hand goes through
-##            the points given (frame, x toward his left, y up, z ahead, metres, from his feet) by two-bone IK from the
-##            shoulder, at the weights given, so the back palm's arm sweeps across and the wave's palm goes to the floor.
+##            the points given (frame, then x toward his left, y and z ahead, metres) by two-bone IK from the shoulder,
+##            at the weights given, so the back palm's arm sweeps across and the wave's palm goes to the floor. The points are
+##            offsets from the shoulder as the clip has it that frame (the clip twists the body through them), except `floor`:
+##            the y is then a height above the floor.
 ## The layers are Euler degrees (YXZ) per frame, laid after the clip's own rotation (ClipBuilder.apply_layer).
 
 # By path rather than by class name, so the tool also runs before the project has been imported.
@@ -28,42 +35,49 @@ const RIG := "res://actors/abarax/abarax_rig.tscn"
 const LIBRARY := "res://assets/anim/abarax/library.tres"
 const LAYERS := "res://assets/anim/layers/"
 const GUARD_CLIP := &"guard_hold"
-## A foot is on the ground while its bone is no higher than this above where the guard stance has it, in metres.
-const GROUNDED := 0.05
 
+## The bones eased from the guard stance into the clip's pose over the clip's first `ease` frames (SPECS): the whole body but the legs,
+## which `hold` solves.
+const EASED: Array[String] = ["pelvis", "spine_01", "spine_02", "spine_03", "neck_01", "Head", "clavicle_l", "clavicle_r", "upperarm_l",
+		"lowerarm_l", "hand_l", "upperarm_r", "lowerarm_r", "hand_r"]
 const LEGS: Array[String] = ["thigh_l", "calf_l", "foot_l", "thigh_r", "calf_r", "foot_r"]
 const ARMS_L: Array[String] = ["upperarm_l", "lowerarm_l", "hand_l"]
 const ARMS_R: Array[String] = ["upperarm_r", "lowerarm_r", "hand_r"]
 
-## Per clip: its length in frames, `hold` (see legs), and its arms: {side: {guard: [[frame, weight]...], path: [[frame, x, y, z]...],
+## Per clip: `ease` (the frames over which it starts as the guard stance and becomes its own pose), `hold` (see legs), `pelvis` ([[frame, x left, y up, z ahead]...] metres added to where the clip has the
+## hips, as ClipBuilder.PELVIS_MOVE does: the wave sinks to reach the floor), and its arms: {side: {guard: [[frame, weight]...], path: [[frame, x, y, z]...],
 ## path_weight: [[frame, weight]...]}}. Weights are linear between the points, then eased.
 const SPECS := {
 	&"counter_hook": {
-		"hold": 24,
+		"ease": 4,
+		"hold": 32,
 		"l": {"guard": [[0, 1.0], [33, 1.0]]},
 		"r": {"guard": [[0, 0.0], [10, 0.0], [16, 1.0], [33, 1.0]]},
 	},
 	&"counter_rise": {
-		"hold": 24,
+		"ease": 7,
+		"hold": 32,
 		"l": {"guard": [[0, 1.0], [36, 1.0]]},
 		"r": {"guard": [[0, 0.0], [10, 0.0], [17, 1.0], [36, 1.0]]},
 	},
 	&"clear_backpalm": {
-		"hold": 24,
+		"ease": 7,
+		"hold": 32,
 		"l": {"guard": [[0, 1.0], [44, 1.0]]},
 		"r": {
-			"path": [[4, -0.55, 1.12, -0.05], [8, -0.55, 1.14, 0.25], [12, -0.4, 1.14, 0.55], [14, 0.0, 1.14, 0.62], [16, 0.42, 1.14, 0.5],
-					[20, 0.62, 1.1, 0.12], [24, 0.55, 1.05, -0.05]],
+			"path": [[4, -0.37, -0.15, -0.13], [8, -0.39, -0.15, 0.03], [12, -0.37, -0.15, 0.13], [14, -0.07, -0.15, 0.38], [16, 0.30, -0.15, 0.25], [20, 0.38, -0.15, 0.07], [24, 0.39, -0.15, 0.00]],
 			"path_weight": [[0, 0.0], [4, 1.0], [24, 1.0], [28, 0.0]],
 			"guard": [[0, 0.0], [22, 0.0], [30, 1.0], [44, 1.0]],
 		},
 	},
 	&"clear_wave": {
-		"hold": 24,
+		"ease": 12,
+		"hold": 32,
+		"pelvis": [[0, 0.0, 0.0, 0.0], [4, 0.0, -0.03, 0.01], [12, 0.0, -0.34, 0.18], [20, 0.0, -0.34, 0.18], [30, 0.0, -0.12, 0.05], [38, 0.0, 0.0, 0.0]],
 		"l": {"guard": [[0, 1.0], [48, 1.0]]},
 		"r": {
-			"path": [[8, 0.35, 0.8, 0.1], [12, 0.2, 0.3, 0.45], [14, -0.1, 0.12, 0.5], [16, -0.35, 0.12, 0.4], [18, -0.5, 0.12, 0.15],
-					[20, -0.58, 0.14, -0.1], [24, -0.5, 0.2, -0.3]],
+			"path": [[8, 0.1, 0.8, 0.1], [12, 0.15, 0.3, 0.3], [14, 0.0, 0.18, 0.25], [16, -0.2, 0.18, 0.2], [18, -0.28, 0.18, 0.0], [20, -0.25, 0.2, -0.15], [24, -0.1, 0.25, -0.25]],
+			"floor": true,
 			"path_weight": [[0, 0.0], [8, 0.0], [12, 1.0], [24, 1.0], [32, 0.0]],
 			"guard": [[0, 0.0], [24, 0.0], [36, 1.0], [48, 1.0]],
 		},
@@ -77,6 +91,8 @@ func _initialize() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--report":
 			report = true
+		elif arg == "--debug":
+			pass  # lists the frames a hand misses its path on
 		elif arg.begins_with("--only="):
 			only = arg.trim_prefix("--only=").split(",")
 		else:
@@ -141,7 +157,10 @@ class _Solver:
 					_skeleton.set_bone_pose_rotation(bone, rotation)
 				Animation.TYPE_POSITION_3D:
 					if name == "pelvis":
-						_skeleton.set_bone_pose_position(bone, anim.position_track_interpolate(i, time))
+						var at := anim.position_track_interpolate(i, time)
+						if taken_off.has("@pelvis_move"):
+							at -= Builder.ROOT_STANDS.inverse() * Builder._layer_move(taken_off["@pelvis_move"], time * Builder.KEY_RATE)
+						_skeleton.set_bone_pose_position(bone, at)
 
 	func make(clip: StringName, anim: Animation, spec: Dictionary) -> Dictionary:
 		var frames := roundi(anim.length * 60.0)
@@ -152,13 +171,13 @@ class _Solver:
 			if parsed is Dictionary:
 				old = parsed
 		var emit: Array[String] = LEGS.duplicate()
-		emit.append_array(ARMS_L)
-		emit.append_array(ARMS_R)
+		emit.append_array(EASED)
 		var keys := {}
 		for bone in emit:
 			keys[bone] = []
 		var worst_foot := 0.0
 		var worst_hand := 0.0
+		var moves := []
 		var hold: int = spec["hold"]
 		for frame in frames + 1:
 			_skeleton.reset_bone_poses()
@@ -169,15 +188,33 @@ class _Solver:
 				var name := _skeleton.get_bone_name(bone)
 				_ref[name] = _skeleton.get_bone_global_pose(bone)
 				base[name] = _skeleton.get_bone_pose_rotation(bone)
+			var shift := _along(spec["pelvis"], frame) if spec.has("pelvis") else Vector3.ZERO
+			var eased: int = spec.get("ease", 0)
+			var left_over := 0.0  # how much of the guard stance is left in the pose on this frame
+			if frame < eased:
+				var left := 1.0 - smoothstep(0.0, 1.0, float(frame) / eased)
+				left_over = left
+				for name in EASED:
+					var bone := _skeleton.find_bone(name)
+					_skeleton.set_bone_pose_rotation(bone, (base[name] as Quaternion).slerp(_guard[name], left))
+				shift += ((_guard_g["pelvis"] as Transform3D).origin - (_ref["pelvis"] as Transform3D).origin) * left
+			if shift != Vector3.ZERO:
+				var pelvis := _skeleton.find_bone("pelvis")
+				_skeleton.set_bone_pose_position(pelvis, _skeleton.get_bone_pose_position(pelvis) + Builder.ROOT_STANDS.inverse() * shift)
+				moves.append([frame, snappedf(shift.x, 0.0001), snappedf(shift.y, 0.0001), snappedf(shift.z, 0.0001)])
+			else:
+				moves.append([frame, 0.0, 0.0, 0.0])
 			if frame < hold:
 				var s := smoothstep(0.0, 1.0, float(frame) / hold)
 				for side in ["l", "r"]:
-					var foot := "foot_" + side
+					var foot: String = "foot_" + side
 					var clip_foot: Vector3 = (_ref[foot] as Transform3D).origin
 					var guard_foot: Vector3 = (_guard_g[foot] as Transform3D).origin
-					if clip_foot.y > guard_foot.y + GROUNDED:
-						continue  # it steps
-					worst_foot = maxf(worst_foot, _solve("thigh_" + side, "calf_" + side, foot, guard_foot.lerp(clip_foot, s), true))
+					# the foot stays where the guard stance has it along the ground and rises or falls as the clip has it: a foot that
+					# steps lifts first, and a planted one does not slide; it is the guard stance's height too while the pose is eased in
+					var target := guard_foot.lerp(clip_foot, s)
+					target.y = lerpf(guard_foot.y, clip_foot.y, 1.0 - left_over)
+					worst_foot = maxf(worst_foot, _solve("thigh_" + side, "calf_" + side, foot, target, true))
 			for side in ["l", "r"]:
 				if not spec.has(side):
 					continue
@@ -186,9 +223,15 @@ class _Solver:
 				if arm.has("path"):
 					var w := _eased(arm["path_weight"], frame)
 					if w > 0.0:
-						var hand_now: Vector3 = (_ref["hand_" + side] as Transform3D).origin
-						var target := _along(arm["path"], frame)
-						worst_hand = maxf(worst_hand, _solve(names[0], names[1], names[2], hand_now.lerp(target, w), false))
+						var hand_now: Vector3 = _g("hand_" + side).origin
+						var shoulder: Vector3 = _g(names[0]).origin
+						var target := shoulder + _along(arm["path"], frame)
+						if arm.get("floor", false):
+							target.y = _along(arm["path"], frame).y
+						var missed := _solve(names[0], names[1], names[2], hand_now.lerp(target, w), false)
+						if missed > 0.04 and OS.get_cmdline_user_args().has("--debug"):
+							print("  %s f%d misses by %.2f: wants %s, shoulder at %s" % [clip, frame, missed, hand_now.lerp(target, w), (_ref[names[0]] as Transform3D).origin])
+						worst_hand = maxf(worst_hand, missed)
 				if arm.has("guard"):
 					var g := _eased(arm["guard"], frame)
 					if g > 0.0:
@@ -201,12 +244,14 @@ class _Solver:
 				var v := turn.get_euler(EULER_ORDER_YXZ) * (180.0 / PI)
 				(keys[bone] as Array).append([frame, snappedf(v.x, 0.001), snappedf(v.y, 0.001), snappedf(v.z, 0.001)])
 		var out := {}
+		out["@pelvis_move"] = moves
 		for bone in emit:
 			for key: Array in keys[bone]:
 				if absf(key[1]) > 0.002 or absf(key[2]) > 0.002 or absf(key[3]) > 0.002:
 					out[bone] = keys[bone]
 					break
-		return {"text": _text(out), "report": "%-15s feet at most %.4f m off their hold, hands at most %.4f m off their path" % [clip, worst_foot, worst_hand]}
+		var shoulder := (_g("upperarm_r").origin)
+		return {"text": _text(out), "report": "%-15s feet at most %.4f m off their hold, hands at most %.4f m off their path (his right shoulder ends at %s, an arm reaches %.2f m)" % [clip, worst_foot, worst_hand, shoulder, ((_ref["lowerarm_r"] as Transform3D).origin - (_ref["upperarm_r"] as Transform3D).origin).length() + ((_ref["hand_r"] as Transform3D).origin - (_ref["lowerarm_r"] as Transform3D).origin).length()]}
 
 	# The weight at `frame` of points [[frame, weight]...]: linear between them, eased, and the end values outside.
 	func _eased(points: Array, frame: float) -> float:

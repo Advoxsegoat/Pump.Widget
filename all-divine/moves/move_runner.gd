@@ -280,6 +280,8 @@ func _start(move: MoveData, intent: Intent, force := false) -> void:
 			_track_until = m["time"]
 	_begin_warp(move, intent)
 	_travel_turn = _turn_onto_stick(move, intent)
+	if move.plant_feet:
+		rig.hold_feet(Rig.FEET_HOLD_FRAMES)
 	rig.play_move(move.clip, move.blend_in)
 	move_started.emit(move)
 	_pass_marks(BEFORE_START, 0.0)

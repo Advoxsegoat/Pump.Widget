@@ -51,6 +51,9 @@ enum Evade { NONE, SWAY, DUCK }
 ## cancel into it: action -> move id (a sway's palm is the hook, its heavy the back-palm clear-out; a duck's the rising palm and
 ## the wave). Empty for a move that has no counters.
 @export var counters: Dictionary = {}
+## Whether the move keeps his planted feet where they are through its blend in (Rig.hold_feet): a move whose clip begins in the guard
+## stance's own feet, started from a stance where they are planted, so that the blend does not slide them. The counters set it.
+@export var plant_feet := false
 ## Whether the move is a counter or a clear-out: its blows carry what the chain was worth when it was cashed in (HitEvent.power,
 ## always_staggers, throw), which the scanner fills in from the actor's cashed_tempo.
 @export var cashes := false

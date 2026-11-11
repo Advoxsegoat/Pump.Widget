@@ -58,6 +58,10 @@ const RIM_MARK_PRIORITY := -1
 ## The warming passes (warm_rim) stay over the body for this many frames: drawn twice at least, wherever in a frame they
 ## were put on.
 const WARM_FRAMES := 3
+## How many ticks a move that plants its feet (MoveData.plant_feet) holds them for: its blend in, and the frames the hold takes to let go.
+const FEET_HOLD_FRAMES := 6
+## A foot is on the ground for the hold while its ankle is within this of the height it stands at.
+const FEET_HOLD_GROUNDED := 0.05
 ## An aura rises over this many seconds (or a third of its time, if that is shorter) and fades over the last of this many
 ## (or two fifths of its time).
 const AURA_RISE := 0.05
@@ -476,6 +480,21 @@ func set_foot_ground(foot: StringName, hit: Variant) -> void:
 		push_error("Rig: the ground under '%s' must be {position, normal} or null, not %s" % [foot, hit])
 		return
 	foot_planter.ground[foot] = hit
+
+
+## Holds each foot that stands on the ground where it is for the next `frames` ticks (FootPlanter.holds): a move that begins from a
+## planted stance (a counter, out of a sway) is blended in over a few frames, and a blend of two poses slides a planted foot unless the
+## foot is told to stay. A foot the clip lifts is let go at once.
+func hold_feet(frames: int) -> void:
+	if foot_planter == null or skeleton == null:
+		return
+	var to_skeleton := skeleton.global_transform.affine_inverse()
+	foot_planter.holds.clear()
+	for foot in FootPlanter.FEET:
+		var at := to_skeleton * shown_pose(foot).origin
+		if at.y <= foot_planter.ankle_height + FEET_HOLD_GROUNDED:
+			foot_planter.holds[foot] = at
+	foot_planter.hold_frames(frames)
 
 
 ## Where `foot` was in the world in the last tick's pose before it was planted (the clips' pose with the

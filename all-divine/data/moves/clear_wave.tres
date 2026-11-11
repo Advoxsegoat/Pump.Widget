@@ -24,6 +24,7 @@ clip = &"clear_wave"
 root_motion = false
 stamina_cost = 20.0
 cashes = true
+plant_feet = true
 hits = {
 &"clear": SubResource("Resource_clear")
 }

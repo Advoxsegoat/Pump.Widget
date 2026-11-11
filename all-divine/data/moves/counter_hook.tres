@@ -20,6 +20,7 @@ id = &"counter_hook"
 clip = &"counter_hook"
 stamina_cost = 8.0
 cashes = true
+plant_feet = true
 hits = {
 &"counter": SubResource("Resource_counter")
 }
