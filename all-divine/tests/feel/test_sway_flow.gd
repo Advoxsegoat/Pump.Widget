@@ -64,6 +64,42 @@ func test_seven_blows_gathering_speed_are_climbed_to_flurry_without_a_scratch() 
 	assert_eq(a.chain.tempo(), T.FLURRY)
 
 
+func test_parry_sway_sway_duck_takes_no_damage_from_jab_cross_hook() -> void:
+	# A real tier I Knuckle on a ScriptBrain. Its first jab (on frame 1) is parried; it reels, and once it is free again (frame 60)
+	# it throws its string: jab, cross, hook, pressed so each cancels into the next as soon as it can. Abarax sways the jab,
+	# sways the cross and ducks the hook, each pressed four frames before its blow lands (the jab lands on frame 80, the cross
+	# on 110, the hook on 155: the Knuckle's own timing, which the evades do not slow since they freeze no one). The chain
+	# climbs 1, 3, 5, 7, and the whole of it fits inside sixty frames without a defence that succeeds.
+	var knuckle := load(KNUCKLE) as ActorDef
+	var a_steps := []
+	var at := 0
+	for press: Array in [[14, &"guard"], [76, &"sway"], [106, &"sway"], [151, &"duck"]]:
+		a_steps.append({"frames": press[0] - at - 1})
+		a_steps.append({"frames": 1, "press": [press[1]]})
+		at = press[0]
+	var b_steps := []
+	at = 0
+	for frame: int in [1, 60, 80, 110]:
+		b_steps.append({"frames": frame - at - 1})
+		b_steps.append({"frames": 1, "press": [&"palm"]})
+		at = frame
+	var run := Duel.make(self, a_steps, b_steps, 1.0, knuckle)
+	var a: Actor = run["a"]
+	var b: Actor = run["b"]
+	var outcomes := []
+	a.got_hit.connect(func(r: HitResult, e: HitEvent) -> void: outcomes.append([a.frame, HitResult.Outcome.keys()[r.outcome], e.move.id]))
+	var started := []
+	a.runner.move_started.connect(func(move: MoveData) -> void: started.append(move.id))
+	while a.frame < 170:
+		await frames(1)
+	assert_eq(outcomes, [[21, "PARRIED", &"knuckle_jab"], [80, "EVADED", &"knuckle_jab"], [110, "EVADED", &"knuckle_cross"],
+			[155, "EVADED", &"knuckle_hook"]], "the jab parried, then each blow of the string evaded")
+	assert_eq(a.stats.hp, 100.0, "no damage")
+	assert_eq(started, [&"guard_raise", &"parry", &"sway_left_slip", &"sway_left_quick", &"duck_quick"], "the tempo of each dodge is the chain's at the time")
+	assert_eq([a.chain.count, a.chain.tempo()], [7, T.FLURRY], "the parry, two perfect sways and a perfect duck: 1 + 2 + 2 + 2")
+	assert_eq(b.stats.posture, 32.0, "60, less the parry's 12, less 8 for each of the cross and the hook (Quick), none for the jab (Slip)")
+
+
 func test_mashed_sways_evade_at_most_half_the_frames_at_every_tempo() -> void:   # Review Focus 2
 	# [action, the chain it starts with, how many frames are two of its redodge waits]; the chain is never fed, so no tempo changes
 	var rows := [[&"sway", 0, 40], [&"sway", 3, 32], [&"sway", 7, 24], [&"duck", 0, 48], [&"duck", 3, 36], [&"duck", 7, 28]]
