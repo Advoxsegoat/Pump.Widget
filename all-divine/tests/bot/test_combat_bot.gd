@@ -282,3 +282,29 @@ func test_the_same_seed_plays_the_same_fight_and_another_plays_another() -> void
 	assert_eq(runs[0][0].slice(0, n), runs[1][0].slice(0, n), "a seed plays the same controls")
 	assert_eq(runs[0][1], runs[1][1], "and ends in the same state")
 	assert_ne(runs[0][1], runs[2][1], "another seed does not")
+
+
+func test_the_numbers_are_kept_by_tier_of_the_wave() -> void:
+	var game := BotWorld.make(self, 3)
+	var bot := track(CombatBot.new()) as CombatBot
+	bot.begin(game.player, game.arena(), 3, CombatBot.Policy.COUNTER)
+	await frames(1500)
+	bot.finish()
+	var tiers := bot.tiers()
+	assert_true(tiers.has(1), "the yard's first waves are tier I: %s" % [tiers.keys()])
+	var dealt := 0.0
+	var taken := 0.0
+	var cleared := 0
+	for tier: int in tiers:
+		dealt += tiers[tier]["dealt"]
+		taken += tiers[tier]["taken"]
+		cleared += tiers[tier]["cleared"]
+	assert_near(dealt, bot.damage_dealt, 0.01, "the tiers add up to the run's")
+	assert_near(taken, bot.damage_taken, 0.01)
+	assert_eq(cleared, bot.waves_cleared)
+	assert_true(bot.damage_dealt > 0.0 and bot.tier_lines().size() == tiers.size(), "a line each: %s" % [bot.tier_lines()])
+	assert_true(bot.tier_lines()[0].contains("tier I:"), bot.tier_lines()[0])
+	bot.queue_free()
+	game.queue_free()
+	await frames(2)
+	InputFeed.release()

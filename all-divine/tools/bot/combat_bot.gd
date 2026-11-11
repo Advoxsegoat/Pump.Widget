@@ -81,6 +81,8 @@ var damage_taken := 0.0
 var highest_tempo := 0
 var waves_cleared := 0
 var deaths := 0
+## The same numbers wave by wave (the index of the wave that was on): {dealt, taken, tempo, cleared, deaths}.
+var by_wave := {}
 ## Where a failing run's recording is saved.
 var replay_dir := "res://out/replays"
 ## Whether engine errors and warnings count as problems (they are heard through TestLogger from begin to finish).
@@ -127,15 +129,22 @@ func begin(player: Actor, arena: Arena, seed_value: int, how: Policy = Policy.MI
 	recorder.begin(arena.scene_file_path if arena != null else "", rng_seed, 0)
 	if listen_for_errors:
 		TestLogger.shared().push_context(true)
-	player.hit_landed.connect(func(r: HitResult, _e: HitEvent) -> void: damage_dealt += r.hp_damage)
+	player.hit_landed.connect(func(r: HitResult, _e: HitEvent) -> void:
+		damage_dealt += r.hp_damage
+		_row()["dealt"] += r.hp_damage)
 	player.got_hit.connect(_on_got_hit)
-	player.died.connect(func() -> void: deaths += 1)
+	player.died.connect(func() -> void:
+		deaths += 1
+		_row()["deaths"] += 1)
 	if player.chain != null:
-		player.chain.changed.connect(func(_count: int, tempo: DodgeChain.Tempo) -> void: highest_tempo = maxi(highest_tempo, tempo))
+		player.chain.changed.connect(func(_count: int, tempo: DodgeChain.Tempo) -> void:
+			highest_tempo = maxi(highest_tempo, tempo)
+			_row()["tempo"] = maxi(_row()["tempo"], tempo))
 	if arena != null:
 		arena.wave_started.connect(func(_i: int) -> void: watch.note_progress(frame))
-		arena.wave_cleared.connect(func(_i: int) -> void:
+		arena.wave_cleared.connect(func(i: int) -> void:
 			waves_cleared += 1
+			_row(i)["cleared"] += 1
 			watch.note_progress(frame))
 		watch.note_progress(0)
 
@@ -168,6 +177,56 @@ func summary() -> String:
 	return "bot seed %d: waves %d, deaths %d, problems %d (%s: dealt %d, taken %d, highest tempo %s)" % [
 			rng_seed, waves_cleared, deaths, problems.size(), POLICIES.find_key(policy), roundi(damage_dealt), roundi(damage_taken),
 			DodgeChain.Tempo.keys()[highest_tempo].to_lower()]
+
+
+## The numbers of the run by the tier of the wave they came in, as {tier: {dealt, taken, tempo, cleared, deaths}}. A wave's tier is
+## the highest number a foe's def id ends in (knuckle_1, knuckle_2, knuckle_3: I, II, III), 0 for a wave of foes with none.
+func tiers() -> Dictionary:
+	var found := {}
+	for index: int in by_wave:
+		var tier := _tier_of(index)
+		if not found.has(tier):
+			found[tier] = {"dealt": 0.0, "taken": 0.0, "tempo": 0, "cleared": 0, "deaths": 0}
+		var row: Dictionary = found[tier]
+		var wave_row: Dictionary = by_wave[index]
+		for key in ["dealt", "taken", "cleared", "deaths"]:
+			row[key] += wave_row[key]
+		row["tempo"] = maxi(row["tempo"], wave_row["tempo"])
+	return found
+
+
+## One line for each tier of tiers(), lowest first.
+func tier_lines() -> PackedStringArray:
+	var lines := PackedStringArray()
+	var found := tiers()
+	var keys := found.keys()
+	keys.sort()
+	for tier: int in keys:
+		var row: Dictionary = found[tier]
+		lines.append("bot seed %d tier %s: dealt %d, taken %d, highest tempo %s, waves cleared %d, deaths %d" % [
+				rng_seed, ["other", "I", "II", "III", "IV", "V"][clampi(tier, 0, 5)], roundi(row["dealt"]), roundi(row["taken"]),
+				DodgeChain.Tempo.keys()[row["tempo"]].to_lower(), row["cleared"], row["deaths"]])
+	return lines
+
+
+# The numbers of wave `index` (the wave that is on by default), made when first asked for.
+func _row(index := -2) -> Dictionary:
+	if index == -2:
+		index = _arena.wave if _arena != null else -1
+	if not by_wave.has(index):
+		by_wave[index] = {"dealt": 0.0, "taken": 0.0, "tempo": 0, "cleared": 0, "deaths": 0}
+	return by_wave[index]
+
+
+func _tier_of(index: int) -> int:
+	if _arena == null or index < 0 or index >= _arena.waves.size():
+		return 0
+	var tier := 0
+	for def in _arena.waves[index].defs:
+		var digits := String(def.id).get_slice("_", String(def.id).get_slice_count("_") - 1)
+		if digits.is_valid_int():
+			tier = maxi(tier, int(digits))
+	return tier
 
 
 func _physics_process(_delta: float) -> void:
@@ -558,6 +617,7 @@ func _toward(foe: Actor) -> Vector2:
 # The player was struck at, or evaded: an evade may be followed by a counter or a clear-out.
 func _on_got_hit(result: HitResult, _event: HitEvent) -> void:
 	damage_taken += result.hp_damage
+	_row()["taken"] += result.hp_damage
 	if result.outcome != HitResult.Outcome.EVADED or policy == Policy.MASH:
 		return
 	_evaded_at = frame

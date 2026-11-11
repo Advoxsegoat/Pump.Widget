@@ -16,10 +16,9 @@ extends Node
 ## Start) pauses and resumes, and "Paused" shows while it is paused (PauseLabel). This node runs while the game
 ## is paused (to hear the menu button); the stage, and so the world in it, stops.
 ##
-## With --record=<path> the controls are written down (tools/replay/recorder.gd) and saved to the path when the game ends, and with
+## With --record=<path> the controls are written down (core/replay/recorder.gd) and saved to the path when the game ends, and with
 ## --replay=<path> that recording is played back into Abarax through the real input path (its seed's dice rolled first), the
-## arena's state hash printed when it is over, and, in a headless run, the game quits. Both load their scripts by path, since the
-## exports leave tools/ out.
+## arena's state hash printed when it is over, and, in a headless run, the game quits (core/replay/).
 ##
 ## With --selftest (a user argument: godot -- --selftest) Abarax fights one tier I Knuckle in the yard through a
 ## scripted circuit instead (selftest_circuit: approach, jab, cross, hook, sway, duck, dash-step, guard, heavy) for SELFTEST_FRAMES
@@ -50,9 +49,6 @@ const SELFTEST_GUARD_FRAMES := 50
 const SELFTEST_GUARD_REPEAT := 10
 const SELFTEST_HEAVY_FRAMES := 70
 
-const RECORDER := "res://tools/replay/recorder.gd"
-const REPLAYER := "res://tools/replay/replayer.gd"
-
 @onready var stage: PixelStage = $PixelStage
 @onready var region: Region = $PixelStage/World/Region
 @onready var hud: Hud = $PixelStage/Hud/Hud
@@ -65,9 +61,9 @@ var look_on := true
 ## The window F11 and Alt+Enter switch: the game's own, unless a test gives it another.
 @onready var window: Window = get_window()
 
-var _recorder: Node  # the InputRecorder of --record, or null
+var _recorder: InputRecorder  # the InputRecorder of --record, or null
 var _record_path := ""
-var _replayer: Node  # the InputReplayer playing a recording, or null
+var _replayer: InputReplayer  # the InputReplayer playing a recording, or null
 var _quit_after_replay := false  # --replay was given: a headless game ends with the recording
 
 
@@ -156,7 +152,7 @@ static func parse_arguments(args: PackedStringArray) -> Dictionary:
 ## from the arena's first wave: its seed is the round the dice began at (0, as the game starts) and its region this one's scene.
 func start_recording(path: String) -> void:
 	_record_path = path
-	_recorder = (load(RECORDER) as GDScript).new() as Node
+	_recorder = InputRecorder.new()
 	_recorder.name = &"Recorder"
 	add_child(_recorder)
 	_recorder.begin(region.scene_file_path, 0, 0)
@@ -172,11 +168,11 @@ func save_recording() -> Error:
 	return result
 
 
-## Plays `rec` into Abarax from the next frame, through the real input path (tools/replay/replayer.gd); when it is over the arena's
+## Plays `rec` into Abarax from the next frame, through the real input path (core/replay/replayer.gd); when it is over the arena's
 ## state hash is printed, and a headless game quits. The recording's dice are rolled before the first wave is sent (_ready), so a
 ## replay started here, after it, is the recording's fight only if the game began with its seed.
-func start_replay(rec: Resource) -> void:
-	_replayer = (load(REPLAYER) as GDScript).new() as Node
+func start_replay(rec: InputRecording) -> void:
+	_replayer = InputReplayer.new()
 	_replayer.name = &"Replayer"
 	add_child(_replayer)
 	_replayer.finished.connect(_on_replay_finished)
@@ -184,14 +180,14 @@ func start_replay(rec: Resource) -> void:
 
 
 # The recording at `path`, with its seed's dice set for the first wave; null with no path or none that loads.
-func _load_recording(path: String) -> Resource:
+func _load_recording(path: String) -> InputRecording:
 	if path.is_empty():
 		return null
-	var rec := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
-	if rec == null or not "frames" in rec:
+	var rec := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as InputRecording
+	if rec == null:
 		push_error("Main: cannot read the recording %s" % path)
 		return null
-	Arena.reset_spawn_counts(int(rec.get("seed")))
+	Arena.reset_spawn_counts(rec.seed)
 	return rec
 
 
