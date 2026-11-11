@@ -522,24 +522,41 @@ func test_the_slam_shows_its_ring_on_the_ground_before_it_hits_and_a_wave_at_the
 		assert_true(absf(wave.global_position.y - GroundWave.LIFT) < 1e-4, "on the ground")
 
 
-func test_its_recovery_takes_a_full_palm_string() -> void:
-	# Abarax's palm string: the jab, the cross and the hook, each pressed as the cancel window of the one before opens. The
-	# time from his first press to the hook's blow is what the heavy's recovery must give him: the frames of its clip after
-	# its last hitbox_off, and the shortest rest its brain takes before choosing again (a quarter off attack_rest).
-	var run := _fight(3.0, [{"frames": 1, "press": [&"palm"]}, {"frames": 15}, {"frames": 1, "press": [&"palm"]}, {"frames": 19},
-			{"frames": 1, "press": [&"palm"]}, {"frames": 200}], [])
+func _string_after(heavy_steps: Array, gap: float, evade: StringName, evade_at: int, string_at: int) -> Dictionary:
+	# Abarax evades the heavy's move (the evade started on its frame `evade_at`), and presses his palm string from frame
+	# `string_at`: jab, cross and hook, each pressed as the window of the one before opens. {landed: the frames of the heavy on which
+	# his blows landed on it, run}.
+	var steps := [{"frames": string_at - 1}, {"frames": 1, "press": [&"palm"]}, {"frames": 15}, {"frames": 1, "press": [&"palm"]},
+			{"frames": 19}, {"frames": 1, "press": [&"palm"]}, {"frames": 300}]
+	var run := _fight(gap, steps, heavy_steps)
+	var heavy: Actor = run["heavy"]
 	var abarax: Actor = run["abarax"]
-	var blows: Array[int] = []
-	abarax.runner.mark.connect(func(kind: StringName, _a: Dictionary) -> void:
-		if kind == &"hitbox_on":
-			blows.append(abarax.frame))
-	await Duel.play_to(self, abarax, 120)
-	assert_eq(blows.size(), 3, "jab, cross, hook")
-	var string_frames := blows[2] if blows.size() == 3 else 999
+	var landed: Array[int] = []
+	heavy.got_hit.connect(func(r: HitResult, e: HitEvent) -> void:
+		if e.attacker == abarax and r.outcome == O.HIT:
+			landed.append(heavy.frame))
+	await Duel.play_to(self, heavy, evade_at)
+	abarax.runner.start(_move(evade))
+	await Duel.play_to(self, heavy, 260)
+	return {"landed": landed, "run": run}
+
+
+func test_its_recovery_takes_a_full_palm_string() -> void:
+	# The string is counted by its blows that land, not by how long it takes. After a dodged slam (a hop on frame 27; the heavy is
+	# in the slam until frame 86 and rests at least a quarter off attack_rest after it) all three land before the heavy can act
+	# again; after a dodged haymaker (a duck, whose counter window is over before the jab) at least the jab and the cross do.
 	var rest := int(floor((load(HEAVY_BRAIN) as BrainDef).attack_rest * 0.75 * Marks.RATE))
-	for id: StringName in [&"heavy_haymaker", &"heavy_slam"]:
-		var recovery := _clip_frames(id) - _mark_frame(id, &"hitbox_off")
-		assert_true(recovery + rest >= string_frames, "%s: %d frames of recovery and %d of rest give the %d frames of the string" % [id, recovery, rest, string_frames])
+	var slam := await _string_after(_slam_steps(), 1.0, &"hop", 27, 62)
+	var free_at := _clip_frames(&"heavy_slam") + rest
+	assert_eq(slam["landed"].size(), 3, "after a hopped slam all three blows land (%s)" % [slam["landed"]])
+	assert_true(slam["landed"].is_empty() or slam["landed"][slam["landed"].size() - 1] <= free_at,
+			"and by frame %d, when he can act again (%s)" % [free_at, slam["landed"]])
+	_end(slam["run"])
+	var hay := await _string_after(_haymaker_steps(), 1.4, &"duck_slip", 30, 72)
+	var hay_free := _clip_frames(&"heavy_haymaker") + rest
+	assert_true(hay["landed"].size() >= 2, "after a ducked haymaker at least the jab and the cross land (%s)" % [hay["landed"]])
+	assert_true(hay["landed"].is_empty() or hay["landed"][1] <= hay_free, "by frame %d (%s)" % [hay_free, hay["landed"]])
+	_end(hay["run"])
 
 
 # --- a big body ---
@@ -574,7 +591,7 @@ func test_a_big_body_keeps_its_spacing_and_stays_in_the_yard() -> void:
 func test_a_big_body_is_held_in_the_yard() -> void:
 	const YARD := "res://world/training_yard/training_yard.tscn"
 	for corner: Vector2 in [Vector2(1, 1), Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1)]:
-		var region := track((load(YARD) as PackedScene).instantiate()) as Region
+		var region: Node = track((load(YARD) as PackedScene).instantiate())  # not `as Region`: that cast keeps the script alive at exit
 		var actor := (load("res://actors/actor.tscn") as PackedScene).instantiate() as Actor
 		actor.def = _heavy_def()
 		actor.position = Vector3(corner.x * 11.5, 0.0, corner.y * 11.5)
