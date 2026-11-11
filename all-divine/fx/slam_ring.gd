@@ -3,9 +3,10 @@ extends Node3D
 ## The heavy Knuckle's ground slam, drawn on the ground (data/fx/slam_warning.tres and slam_wave.tres). Both are in the red
 ## of a perilous attack's own wave (the readability tuning's wave_color), never the gold of a clear-out.
 ##
-## The warning (`wave` false) is the ring as it stands: the whole radius of the blow's hitbox, there from its first frame
-## and growing stronger up to the blow, so that a player standing outside it can see he is safe and one inside it can see
-## how far he has to go. The tell's own wave (ActorFx, 1.8 m) is smaller than this blow and grows from nothing, so it cannot
+## The warning (`wave` false) is the ring as it stands: the reach of the blow to a body's centre (2.0 m: the hitbox is the
+## body's own radius smaller), there from its first frame, growing stronger up to the blow and lit through its last live
+## frame, so that a player standing outside it can see he is safe and one inside it can see how far he has to go. It goes
+## when the move is cut (bind_to_move). The tell's own wave (ActorFx, 1.8 m) is smaller than this blow and grows from nothing, so it cannot
 ## say where this one lands. The wave (`wave` true) is a GroundWave of the same radius, going out at the blow.
 ##
 ## It lies on the ground, never over a body (the ring's shader is read against the depth buffer, as the waves' are).
@@ -17,10 +18,12 @@ const WAVE_GROUP := &"slam_wave"
 ## How strong the warning shows at its first frame; it climbs to full by `seconds`.
 const WARNING_START := 0.4
 
-## The radius of the ring: the slam's hitbox (slam_ring in the knuckle's rig).
-@export var radius := 2.2
-## How long the warning stands: from the tell to the blow.
-@export var seconds := 0.65
+## The radius of the ring: how far the slam reaches to a body's centre (its hitbox, slam_ring in the knuckle's rig, is 1.65 m).
+@export var radius := 2.0
+## How far past the ring the wave goes.
+@export var wave_travel := 0.6
+## How long the warning stands: from the tell to the last live frame of the blow (f42, frame 43).
+@export var seconds := 0.75
 ## Whether this is the wave at the blow instead of the warning before it.
 @export var wave := false
 
@@ -33,7 +36,7 @@ func _ready() -> void:
 	var tuning := ActorFx.TUNING
 	if wave:
 		add_to_group(WAVE_GROUP)
-		var out := GroundWave.make(radius, tuning.wave_seconds, tuning.wave_color, tuning.wave_ring_width, tuning.wave_fill_alpha)
+		var out := GroundWave.make(radius + wave_travel, tuning.wave_seconds, tuning.wave_color, tuning.wave_ring_width, tuning.wave_fill_alpha, false, radius)
 		add_child(out)
 		out.position = Vector3.UP * GroundWave.LIFT
 		return
@@ -77,3 +80,13 @@ func shown_radius() -> float:
 ## The colour the warning is drawn in.
 func shown_colour() -> Color:
 	return _material.get_shader_parameter(&"ring_color") as Color if _material != null else Color.TRANSPARENT
+
+
+## Ties the warning to the move that shows it: when the move ends, cut off or not, the ring goes (ActorFx hands it the runner).
+func bind_to_move(runner: MoveRunner) -> void:
+	if not wave and not runner.move_ended.is_connected(_on_move_ended):
+		runner.move_ended.connect(_on_move_ended)
+
+
+func _on_move_ended(_move: MoveData, _cancelled: bool) -> void:
+	queue_free()

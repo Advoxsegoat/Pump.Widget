@@ -101,7 +101,7 @@ height = 1.7
 
 [sub_resource type="CylinderShape3D" id="slam_ring_zone"]
 height = 0.5
-radius = 2.2
+radius = 1.65
 
 [node name="Rig" type="Node3D"]
 script = ExtResource("1_rig")

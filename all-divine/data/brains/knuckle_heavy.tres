@@ -13,7 +13,7 @@ combo = PackedStringArray()
 [sub_resource type="Resource" id="Resource_slam"]
 script = ExtResource("1_opt")
 action = &"gift"
-max_range = 2.2
+max_range = 1.8
 cooldown = 5.0
 weight = 0.7
 combo = PackedStringArray()

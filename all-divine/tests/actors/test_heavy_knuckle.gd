@@ -14,8 +14,11 @@ const ABARAX := "res://data/actors/abarax.tres"
 const KNUCKLE_1 := "res://data/actors/knuckle_1.tres"
 const O := HitResult.Outcome
 const R := HitResult.Reaction
-## The slam's ring, and where a body is clear of it: its centre this far out plus the body's own radius.
-const RING := 2.2
+## The slam reaches a body's centre this far out and no further, and the ring on the ground is drawn at it. Its hitbox is
+## smaller by the body's own radius (the hitbox lands on the hurtbox capsule). The brain chooses the slam within CHOSEN.
+const RING := 2.0
+const HITBOX := 1.65
+const CHOSEN := 1.8
 const BODY := 0.35
 ## The slam's blow comes on at its f38 and goes off at its f42 (frames 39 to 42).
 const SLAM_ON := 38
@@ -141,7 +144,7 @@ func test_the_brain_is_data_and_has_its_numbers() -> void:
 	var haymaker: AttackOption = brain.attacks[0]
 	var slam: AttackOption = brain.attacks[1]
 	assert_eq([haymaker.action, haymaker.weight, haymaker.combo], [&"palm", 1.0, PackedStringArray()], "the haymaker")
-	assert_eq([slam.action, slam.weight, slam.cooldown, slam.min_range, slam.max_range], [&"gift", 0.7, 5.0, 0.0, RING], "the slam: within 2.2 m")
+	assert_eq([slam.action, slam.weight, slam.cooldown, slam.min_range, slam.max_range], [&"gift", 0.7, 5.0, 0.0, CHOSEN], "the slam: within 1.8 m")
 
 
 func test_the_clip_checker_passes_it() -> void:
@@ -254,7 +257,7 @@ func test_a_broken_heavy_is_finished_and_the_blows_reach_its_larger_body() -> vo
 # --- the slam ---
 
 func test_the_slam_hits_everything_within_its_ring_that_stands_on_the_ground() -> void:
-	for case: Array in [[0.8, 0.0], [1.6, 0.0], [2.1, 0.0], [1.6, PI], [2.1, PI / 2.0], [0.8, -PI / 2.0]]:
+	for case: Array in [[0.8, 0.0], [1.6, 0.0], [1.95, 0.0], [1.6, PI], [1.95, PI / 2.0], [0.8, -PI / 2.0]]:
 		var run := _fight(case[0], [], _slam_steps(), case[1])
 		await Duel.play_to(self, run["heavy"], 70)
 		assert_eq(_outcomes(run), ["HIT"], "a body %.1f m off, %.0f degrees round, is hit once" % [case[0], rad_to_deg(case[1])])
@@ -266,6 +269,53 @@ func test_the_slam_hits_everything_within_its_ring_that_stands_on_the_ground() -
 	var far := _fight(2.7, [], _slam_steps())
 	await Duel.play_to(self, far["heavy"], 70)
 	assert_eq(_outcomes(far), [], "a body 2.7 m off is clear of it")
+
+
+func test_the_ring_drawn_is_the_ring_that_hits() -> void:
+	# A body whose centre is at 1.95 m is hit and one at 2.05 m is not, all round; and the ring drawn (the warning, and the wave
+	# as it starts) is the reach, to 3 cm.
+	for i in 8:
+		var around := TAU * i / 8.0
+		var near := _fight(1.95, [], _slam_steps(), around)
+		await Duel.play_to(self, near["heavy"], 70)
+		assert_eq(_outcomes(near), ["HIT"], "1.95 m off at %.0f degrees: hit" % rad_to_deg(around))
+		_end(near)
+		var out := _fight(2.05, [], _slam_steps(), around)
+		await Duel.play_to(self, out["heavy"], 70)
+		assert_eq(_outcomes(out), [], "2.05 m off at %.0f degrees: not hit" % rad_to_deg(around))
+		_end(out)
+	var run := _fight(4.0, [], _slam_steps())
+	var heavy: Actor = run["heavy"]
+	await Duel.play_to(self, heavy, 20)
+	var warning := _rings().filter(func(n: Node) -> bool: return n.is_in_group(&"slam_warning"))
+	assert_eq(warning.size(), 1)
+	assert_near((warning[0] as SlamRing).shown_radius(), RING, 0.03, "the warning is drawn at the reach")
+	await Duel.play_to(self, heavy, SLAM_ON + 1)
+	var waves := get_tree().get_nodes_in_group(GroundWave.GROUP).filter(func(n: Node) -> bool: return n.get_parent().is_in_group(&"slam_wave"))
+	assert_eq(waves.size(), 1, "the wave")
+	assert_near((waves[0] as GroundWave).radius(), RING, 0.1, "starts at the reach (%.2f m)" % (waves[0] as GroundWave).radius())
+
+
+func test_the_ring_goes_when_the_slam_is_cut() -> void:
+	var run := _fight(4.0, [], _slam_steps())
+	var heavy: Actor = run["heavy"]
+	await Duel.play_to(self, heavy, 9)
+	assert_eq(_rings().filter(func(n: Node) -> bool: return n.is_in_group(&"slam_warning")).size(), 1, "the ring is lit")
+	track(PostureBreaker.make(run["abarax"], heavy))
+	await Duel.play_to(self, heavy, 13)
+	assert_eq(heavy.runner.current.id, &"posture_broken", "the slam was cut")
+	assert_eq(_rings().filter(func(n: Node) -> bool: return n.is_in_group(&"slam_warning")).size(), 0, "and the ring went with it")
+
+
+func test_the_ring_is_full_through_the_live_frames() -> void:
+	var run := _fight(4.0, [], _slam_steps())
+	var heavy: Actor = run["heavy"]
+	for frame in range(SLAM_ON + 1, SLAM_OFF + 2):
+		await Duel.play_to(self, heavy, frame)
+		var warning := _rings().filter(func(n: Node) -> bool: return n.is_in_group(&"slam_warning"))
+		assert_eq(warning.size(), 1, "the full ring is lit on frame %d" % frame)
+		if warning.size() == 1:
+			assert_near((warning[0] as SlamRing).shown_radius(), RING, 0.03, "at the reach, frame %d" % frame)
 
 
 # The dash-step's forward is the way he faces: away from the heavy is the stick pushed along +Z for a body standing on +Z.
@@ -281,22 +331,19 @@ func _hop_at(frame: int) -> Array:
 
 
 func test_the_slam_is_left_by_a_dash_step_and_hopped_and_nothing_else_saves_him() -> void:
-	# A dash-step away begun on the heavy's frame 27, twelve frames before the blow's first (39), from 1.4 m: clear of the ring.
-	var dash := _fight(1.4, _dash_away_at(27), _slam_steps())
-	await Duel.play_to(self, dash["heavy"], 70)
-	assert_eq(_outcomes(dash), [], "a dash-step away begun 12 frames before the blow, from 1.4 m: missed")
-	_end(dash)
-	# A hop from 0.8 m, up from frame 27: its airborne marks cover the whole blow, which passes under.
-	var hop := _fight(0.8, _hop_at(27), _slam_steps())
-	await Duel.play_to(self, hop["heavy"], 70)
-	assert_eq(_outcomes(hop), [], "a hop over it: missed")
-	_end(hop)
-	# Two dash-steps begun at its first frame (the second as the first ends), from 0.8 m.
-	var twice := _fight(0.8, [{"frames": 1, "press": [&"dodge"], "move": AWAY}, {"frames": 17, "move": AWAY},
-			{"frames": 1, "press": [&"dodge"], "move": AWAY}, {"frames": 20, "move": AWAY}, {"frames": 200}], _slam_steps())
-	await Duel.play_to(self, twice["heavy"], 70)
-	assert_eq(_outcomes(twice), [], "two dash-steps inside its tell from 0.8 m: missed")
-	_end(twice)
+	# A dash-step straight away begun on the heavy's frame 27, twelve frames before the blow's first (39), is clear of the ring
+	# from contact outward: 1.3 m takes a body from 0.8 m to 2.1 m.
+	for gap: float in [0.8, 1.2, 1.6, 1.9]:
+		var dash := _fight(gap, _dash_away_at(27), _slam_steps())
+		await Duel.play_to(self, dash["heavy"], 70)
+		assert_eq(_outcomes(dash), [], "a dash-step away begun 12 frames before the blow, from %.1f m: missed" % gap)
+		_end(dash)
+	# A hop, up from frame 27: its airborne marks cover the whole blow, which passes under, from any distance.
+	for gap: float in [0.8, 1.4, 1.9]:
+		var hop := _fight(gap, _hop_at(27), _slam_steps())
+		await Duel.play_to(self, hop["heavy"], 70)
+		assert_eq(_outcomes(hop), [], "a hop over it from %.1f m: missed" % gap)
+		_end(hop)
 	# Nothing else: a guard is broken through, a sway and a duck do not evade a low blow, and standing still is hit.
 	var guard := _fight(1.0, [{"frames": 1, "press": [&"guard"], "hold": [&"guard"]}, {"frames": 200, "hold": [&"guard"]}], _slam_steps())
 	await Duel.play_to(self, guard["heavy"], SLAM_ON)
@@ -366,8 +413,8 @@ func test_the_slam_shows_its_ring_on_the_ground_before_it_hits_and_a_wave_at_the
 	await Duel.play_to(self, heavy, SLAM_ON + 2)
 	var wave_rings := _rings().filter(func(n: Node) -> bool: return n.is_in_group(&"slam_wave"))
 	assert_eq(wave_rings.size(), 1, "a wave goes out at the blow")
-	var made := get_tree().get_nodes_in_group(GroundWave.GROUP).filter(func(n: Node) -> bool: return absf((n as GroundWave).max_radius - RING) < 1e-6)
-	assert_eq(made.size(), 1, "a GroundWave of 2.2 m (%d waves before)" % waves)
+	var made := get_tree().get_nodes_in_group(GroundWave.GROUP).filter(func(n: Node) -> bool: return n.get_parent().is_in_group(&"slam_wave"))
+	assert_eq(made.size(), 1, "a GroundWave from the ring outward (%d waves before)" % waves)
 	for wave: GroundWave in made:
 		var material := (wave.get_node("Mesh") as MeshInstance3D).material_override as ShaderMaterial
 		assert_true((material.get_shader_parameter(&"ring_color") as Color).is_equal_approx(colour), "in the tell's colour, not the clear-out's gold")
@@ -408,7 +455,7 @@ func test_a_big_body_keeps_its_spacing_and_stays_in_the_yard() -> void:
 	var model := heavy.rig.get_node(^"Model") as Node3D
 	assert_near(model.scale.y, 1.18, 1e-6, "and the model")
 	var ring := heavy.rig.get_node(^"Hitboxes/slam_ring/zone/shape") as CollisionShape3D
-	assert_near((ring.shape as CylinderShape3D).radius, RING, 1e-6, "the slam's ring is 2.2 m whatever the size of the body")
+	assert_near((ring.shape as CylinderShape3D).radius, HITBOX, 1e-6, "the slam's hitbox is 1.65 m (2.0 m to a body's centre) whatever the size of the body")
 	assert_near((ring.shape as CylinderShape3D).height, 0.5, 1e-6, "and 0.5 m high")
 	assert_near(ring.global_basis.get_scale().x, 1.0, 1e-6, "it is not scaled with the model")
 	assert_true(ring.global_position.y < 0.3, "at the feet")
@@ -518,4 +565,4 @@ func test_the_brain_chooses_the_slam_only_with_abarax_inside_its_ring() -> void:
 	assert_true(started.any(func(s: Array) -> bool: return s[0] == &"heavy_slam"), "and the slam: %s" % [started])
 	for s: Array in started:
 		if s[0] == &"heavy_slam":
-			assert_true(s[1] <= RING + 0.05, "the slam was started with Abarax %.2f m off" % s[1])
+			assert_true(s[1] <= CHOSEN + 0.05, "the slam was started with Abarax %.2f m off" % s[1])

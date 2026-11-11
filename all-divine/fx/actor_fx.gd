@@ -103,7 +103,9 @@ func _listen() -> void:
 func _on_mark(kind: StringName, args: Dictionary) -> void:
 	match kind:
 		&"fx":
-			show_fx(StringName(args.get("name", &"")), null, StringName(args.get("bone", &"")))
+			var shown_node := show_fx(StringName(args.get("name", &"")), null, StringName(args.get("bone", &"")))
+			if shown_node != null and shown_node.has_method(&"bind_to_move"):
+				shown_node.call(&"bind_to_move", _actor.runner)  # an effect that belongs to the move goes when it is cut
 		&"sfx":
 			Sfx.play(StringName(args.get("name", &"")), _actor.global_position)
 		&"shake":
