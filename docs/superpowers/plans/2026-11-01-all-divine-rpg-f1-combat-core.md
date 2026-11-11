@@ -1159,6 +1159,176 @@ func test_selftest_fights_in_the_yard_and_exits_zero() -> void:
 
 - [ ] **Step 5: Commit.** Add to STATE.md Done: "F1 Task 14: the training yard, waves, HUD, the player's death and Get Up".
 
+> Tasks 14b, 14c and 14d were added after Task 14 by ruling (the owner asked for content to be diversified): three Knuckle
+> variants inside F1's architecture. They are built in parallel, each in its own working tree, and merged by the
+> controller; a task's waves, STATE.md lines and owner-checklist items are applied at the merge, not in the task.
+
+### Task 14b: The Drummer (a Knuckle with the long string) and the brain's carried fixes
+
+Why: the dodge chain reaches Flurry only against a string longer than three blows, and today's roster has none (a
+perfect player reaches Quick and the chain never bites). The Drummer is the enemy the sway-and-duck defence was built
+for. The three brain fixes are carried from Task 13's review.
+
+**Files:**
+- Create: `data/actors/knuckle_drummer.tres`, `data/brains/knuckle_drummer.tres`, `data/palettes/knuckle_drummer.tres`, moves `data/moves/drum_1.tres` … `drum_7.tres`, their clips in `assets/anim/clips.cfg` (built into `assets/anim/abarax/drum_*.tres`)
+- Modify: `actors/enemy_brain.gd`, `actors/brain_def.gd` (only if the string's tell needs a datum), `data/moves/knuckle_sweep.tres` and the three brains' sweep ranges, `data/arena/waves.tres`, `ASSETS.md`, `STATE.md`
+- Test: `tests/actors/test_drummer.gd`, additions to `tests/actors/test_enemy_brain.gd` and `tests/world/test_arena.gd`
+
+**Interfaces:**
+- Consumes: `AttackOption.combo` and the cancel windows (Task 13); `HitProfile.line` (sway Task 1); the dodge chain (sway Task 4); the clip builder's warps (Task 2).
+- Produces:
+  - **The string.** Seven moves `drum_1` … `drum_7`, each opening a cancel window for `palm` into the next, pressed by one `AttackOption` (`action = palm`, `combo` of six `palm`s). Measured on a standing Abarax, blow N+1 lands after blow N by **30, 26, 22, 18, 14, 12** frames. Lines: straight, straight, round, straight, round, straight, round.
+
+    | Move | Source clip | Line | Damage | Posture | Poise damage | Knockback |
+    |---|---|---|---|---|---|---|
+    | `drum_1` | Punch_Jab | STRAIGHT | 5 | 4 | 6 | 0.3 |
+    | `drum_2` | Punch_Cross | STRAIGHT | 5 | 4 | 6 | 0.3 |
+    | `drum_3` | Melee_Hook | ROUND | 6 | 5 | 8 | 0.3 |
+    | `drum_4` | Punch_Jab | STRAIGHT | 5 | 4 | 6 | 0.3 |
+    | `drum_5` | Melee_Hook | ROUND | 6 | 5 | 8 | 0.3 |
+    | `drum_6` | Punch_Cross | STRAIGHT | 5 | 4 | 6 | 0.3 |
+    | `drum_7` | Melee_Hook | ROUND | 8 | 10 | 14 | 3.0 |
+
+    The whole string is 40 damage. `drum_1`'s wind-up is at least 18 frames from its start to its `hitbox_on`, with both fists raised (a pose no other Knuckle move has): the player has time to choose to stand or leave. Each move's `strike_distance` and the brain's warp keep the blows in reach of a body that stands its ground or is flinched by them (knockback 0.3); the last sends him 3 m.
+  - **The Drummer.** `ActorDef` `knuckle_drummer`: the Knuckle rig, hood and pauldron hidden, its own palette (bare arms, red wraps), `max_hp 70`, `max_posture 60`, `poise 5`, `model_scale 0.97`; moveset `palm → drum_1`, `heavy → knuckle_jab` (the short jab, cross), `dodge → knuckle_feint`.
+  - **Its brain.** `preferred_range 1.6`; the string (weight 0.6, cooldown 4.0, `max_range` where `drum_1` lands) and jab, cross (weight 0.4); `attack_rest 1.2`; `feint_chance 0.2`; no sweep, thrust or grab.
+  - **What dodging it is worth** (the chain's own numbers, nothing new): seven perfect dodges break its posture on the seventh (chips 0, 0, 8, 8, 16, 16, 16 = 64 ≥ 60), which opens the finisher.
+  - **Brain fixes (all actors):**
+    - a Knuckle that chooses an attack it must back up for while still above `PRESS_SPEED` brakes to it first, then backs up (today it glides backward 0.31 m over 7 frames);
+    - a dropped plan starts that option's cooldown (today the same thrust can be chosen again 0.3–0.5 s later);
+    - `knuckle_sweep` gets a shorter slide (`root_motion_scale`) and the brains' sweep ranges move in to match, so the sweep is on the menu against an Abarax who stands or circles at ordinary range.
+  - **Waves.** The yard's waves gain the Drummer: alone as the third wave, and with a tier I Knuckle later; the old waves keep their order after it.
+
+- [ ] **Step 1: Write the failing tests.**
+
+```gdscript
+# tests/actors/test_drummer.gd
+func test_the_string_lands_seven_blows_at_the_gaps() -> void:              # 30, 26, 22, 18, 14, 12 on a standing Abarax; lines S S R S R S R
+func test_its_first_blow_gives_eighteen_frames_of_warning() -> void:
+func test_dodged_perfectly_the_string_takes_him_to_flurry_and_breaks_the_drummer() -> void:   # a real Drummer on its real brain (seeded), presses 4 frames before each landing; hp 100, tempo FLURRY, the Drummer finishable
+func test_dodged_with_the_wrong_dodge_it_is_still_survived() -> void:      # hp 100, chain 7, the Drummer not broken
+func test_a_blow_that_lands_costs_no_more_than_the_string() -> void:       # let blow N land for N = 1..7, press nothing after: hp >= 60 every time; he is sent 3 m away by the last blow and can act before the Drummer attacks again
+func test_guarding_the_whole_string_costs_stamina_not_health() -> void:
+func test_a_parry_of_any_blow_ends_the_string() -> void:
+func test_leaving_by_dash_step_makes_the_rest_miss() -> void:
+func test_mashing_sways_through_it_loses_to_timing() -> void:             # fewer than half evaded
+# tests/actors/test_enemy_brain.gd
+func test_a_back_up_brakes_to_a_walk_first() -> void:                     # no backward travel above PRESS_SPEED
+func test_a_dropped_plan_is_not_chosen_again_inside_its_cooldown() -> void:
+func test_every_perilous_attack_is_thrown_in_ordinary_yard_fights() -> void:   # over 20 seeded fights of 1800 frames against an Abarax who circles at 2 m, each brain that has a sweep, thrust or grab throws each at least once
+func test_the_sweep_lands_at_both_ends_of_its_new_range() -> void:
+# tests/world/test_arena.gd
+func test_the_third_wave_is_a_drummer() -> void:
+```
+
+- [ ] **Step 2: Run** `tools/test.sh --filter=test_drummer` and `--filter=test_enemy_brain`. Expected: FAIL.
+- [ ] **Step 3: Build the seven clips** (warps of the three sources, `step_fps` as the Knuckle's others), their marks and moves, then the def, the brain, the palette and the waves; then the three brain fixes.
+- [ ] **Step 4: Look at it.** A contact sheet of the seven moves, and a strip of the whole string in the game's picture against a guarding Abarax and against one who dodges it. Read the PNGs; the string must read as one accelerating rush, and the first blow's raised fists must be seen.
+- [ ] **Step 5: Run** `tools/test.sh`, the clip checker (56 moves), the self-test and `TEST_TIMEOUT=1800 tools/test.sh --render`. Expected: all pass.
+- [ ] **Step 6: Commit.** STATE.md Done: "F1 Task 14b: the Drummer, a Knuckle with a seven-blow accelerating string; the brain brakes before backing up, cools a dropped plan, and throws the sweep at ordinary range". Owner checklist: the Drummer's string (is one slip too dear, is the first blow's warning enough).
+
+---
+
+### Task 14c: The blade Knuckle
+
+Why: the book's Knuckles fight with fist and blade. A blade changes reach, rhythm and which defence is right (round cuts
+are ducked; the lunge is caught by the Open Hand), and it is the first weapon on screen.
+
+**Files:**
+- Create: `data/actors/knuckle_blade.tres`, `data/brains/knuckle_blade.tres`, `data/palettes/knuckle_blade.tres`, moves `blade_cut`, `blade_backcut`, `blade_chop`, `blade_lunge`, their clips; the blade mesh (made by `tools/anim/build_knuckle.py`, a part named `Knuckle_Blade` in the right hand)
+- Modify: `actors/knuckle/knuckle_rig.tscn` (a hitbox `blade_r` along the blade), the three existing Knuckle defs (`Knuckle_Blade` joins their `hidden_parts`), `assets/anim/clips.cfg`, `data/arena/waves.tres`, `ASSETS.md`, `STATE.md`
+- Test: `tests/actors/test_blade_knuckle.gd`, additions to `tests/anim/test_knuckle_model.gd` (or the model's existing test) and `tests/world/test_arena.gd`
+
+**Interfaces:**
+- Consumes: the Knuckle model's build (Task 12); `hidden_parts`; `HitProfile.line`, `perilous` (THRUST is caught: Task 8); the UAL2 sword clips (Task 2).
+- Produces:
+  - **The blade.** A straight single-edged blade, 0.75 m from guard to tip, made in the model's build script (no downloaded asset), in the Knuckle's right hand, toon-shaded with a steel entry in the palette. Hidden on every other Knuckle.
+  - **The hitbox** `blade_r`: a capsule along the blade, on the hitbox layer, off unless a move turns it on.
+  - **The moves:**
+
+    | Move | Source clip | Line | Blow by | Damage | Posture | Other |
+    |---|---|---|---|---|---|---|
+    | `blade_cut` | Sword_Regular_A | ROUND | f22 | 16 | 12 | cancels into `blade_backcut` |
+    | `blade_backcut` | Sword_Regular_B | ROUND | f18 | 16 | 12 | |
+    | `blade_chop` | Sword_Regular_C | STRAIGHT | f28 | 22 | 20 | `staggers`; a held wind-up (`charge_hold`) for delayed swings |
+    | `blade_lunge` | Sword_Dash | STRAIGHT | by its travel | 24 | 25 | `perilous` THRUST, as `knuckle_thrust` |
+
+    Reach: a cut lands on a standing Abarax from 1.9 m, the chop from 2.0 m. Each move leaves at least 24 frames of recovery after its blow in which a jab reaches him.
+  - **The blade Knuckle.** `ActorDef` `knuckle_blade`: hood on, pauldron hidden, its own palette, `max_hp 80`, `max_posture 70`, `poise 8`; moveset `palm → blade_cut`, `heavy → blade_lunge`, `gift → blade_chop`, `dodge → knuckle_feint`.
+  - **Its brain.** `preferred_range 2.6`; cut then backcut (weight 1.0), the chop (0.5, `delay_chance 0.5`), the lunge from 3.6–4.1 m (0.5, cooldown 3); `attack_rest 0.9`; `track_dodges` false.
+  - **Waves.** One blade Knuckle alone, then one with a Drummer.
+
+- [ ] **Step 1: Write the failing tests.**
+
+```gdscript
+# tests/actors/test_blade_knuckle.gd
+func test_only_the_blade_knuckle_shows_a_blade() -> void:
+func test_each_blade_move_lands_at_both_ends_of_its_range_and_misses_beyond_it() -> void:
+func test_the_cuts_are_ducked_and_the_chop_is_swayed_for_a_perfect_dodge() -> void:
+func test_the_lunge_is_caught_and_cannot_be_guarded() -> void:
+func test_a_cut_reaches_further_than_a_fist() -> void:                     # 1.9 m against the jab's range
+func test_each_blow_leaves_a_recovery_a_jab_can_punish() -> void:
+func test_the_blade_hitbox_is_off_outside_its_marks() -> void:
+func test_a_counter_after_a_dodged_cut_reaches_him() -> void:              # the hook and the rise from where a dodge of a 1.9 m cut leaves Abarax; if they cannot reach, the report says so with the distances
+```
+
+- [ ] **Step 2: Run** `tools/test.sh --filter=test_blade_knuckle`. Expected: FAIL.
+- [ ] **Step 3: Build** the blade in the model, the hitbox, the four clips and moves, the def, brain, palette and waves.
+- [ ] **Step 4: Look at it.** Contact sheets of the four moves; the blade Knuckle beside a fist Knuckle in the game's picture, standing and mid-cut. The blade must read as a blade at 640×360 (a bright edge against the dark yard), and must not pass through his own body in any frame of the four moves or of the reactions he shares.
+- [ ] **Step 5: Run** `tools/test.sh`, the clip checker (60 moves), `tools/bpy_test.sh`, the self-test and `--render`. Expected: all pass.
+- [ ] **Step 6: Commit.** STATE.md Done: "F1 Task 14c: the blade Knuckle: round cuts, a chop, a lunge the Open Hand catches". Owner checklist: the blade's look; whether the counters reach a blade Knuckle after a dodge.
+
+---
+
+### Task 14d: The heavy Knuckle and the ground slam
+
+Why: the owner kept the dash-step "for larger enemies and for AoE", and the yard has neither. One big body that shrugs
+off light blows and one attack that must be left or hopped give the dash-step and the hop their work.
+
+**Files:**
+- Create: `data/actors/knuckle_heavy.tres`, `data/brains/knuckle_heavy.tres`, `data/palettes/knuckle_heavy.tres`, moves `heavy_haymaker`, `heavy_slam`, their clips
+- Modify: `actors/knuckle/knuckle_rig.tscn` (a hitbox `slam_ring`, a cylinder of radius 2.2 m and height 0.5 m at the feet), `assets/anim/clips.cfg`, `data/arena/waves.tres`, `ASSETS.md`, `STATE.md`
+- Test: `tests/actors/test_heavy_knuckle.gd`, additions to `tests/world/test_arena.gd`
+
+**Interfaces:**
+- Consumes: `hyperarmour_on` / `hyperarmour_off` marks and `Combat.resolve`'s rule for them (Task 5); `HitProfile.height` LOW and `perilous` SWEEP (Task 9: a low blow is hopped or left, not guarded or swayed); `GroundWave` (Task 14); `model_scale`.
+- Produces:
+  - **The heavy Knuckle.** `ActorDef` `knuckle_heavy`: hood and pauldron on, `model_scale 1.18`, its own palette, `max_hp 140`, `max_posture 120`, `poise 14`; slower locomotion (its own tuning or the Knuckle's with a speed scale if one exists); moveset `palm → heavy_haymaker`, `gift → heavy_slam`.
+  - **The moves:**
+
+    | Move | Source clip | Blow | Profile | Other |
+    |---|---|---|---|---|
+    | `heavy_haymaker` | Melee_Hook (slowed) | by f30 | ROUND, damage 26, posture 24, `staggers`, knockback 3 | hyper-armour from f8 to its `hitbox_off`; 36 frames of recovery |
+    | `heavy_slam` | Sword_Heavy_Combo's overhead, or the best of the pack by a contact sheet | at f38–f42 | `slam_ring`, height LOW, `perilous` SWEEP, damage 22, posture 20, `staggers`, knockback 2.5 away from him | hyper-armour through the wind-up; a `GroundWave` of radius 2.2 m in the sweep's tell colour at its blow; 44 frames of recovery |
+
+  - **Its brain.** `preferred_range 2.0`; the haymaker (weight 1.0, `max_range` its reach), the slam (weight 0.7, cooldown 5, chosen when Abarax is within 2.2 m); `attack_rest 1.4`; no feint.
+  - **What the player must find true:** jabs do not interrupt its wind-ups (the hyper-armour), but posture damage still counts and a Flurry counter still staggers it; the slam is escaped by leaving its ring (a dash-step away begun no later than 12 frames before the blow from 1.4 m or more; from closer, two dash-steps inside its tell) or by a hop over it, and by nothing else (a guard is broken through, a sway or duck does not evade a LOW blow); its recoveries are long enough for a full palm string.
+  - **A throw and hyper-armour** (carried from the sway plan): a clear-out throws a hyper-armoured body its full distance and does not stagger it; the move it was in plays on where it lands. Held by a test here, now that an enemy has hyper-armour.
+  - **Waves.** The heavy Knuckle alone as the last wave but one, and with two tier I Knuckles as the last.
+
+- [ ] **Step 1: Write the failing tests.**
+
+```gdscript
+# tests/actors/test_heavy_knuckle.gd
+func test_a_jab_does_not_stop_its_wind_up_and_a_flurry_counter_does() -> void:
+func test_posture_still_breaks_it_through_hyper_armour() -> void:
+func test_the_slam_hits_everything_within_its_ring_that_stands_on_the_ground() -> void:   # at 0.8, 1.6 and 2.1 m, all round; not at 2.7 m
+func test_the_slam_is_left_by_a_dash_step_and_hopped_and_nothing_else_saves_him() -> void:  # from 1.4 m a dash-step away begun 12 frames before the blow: missed; from 0.8 m a hop: missed, and two dash-steps begun at its first frame: missed; guard: broken through; sway and duck: hit
+func test_the_slam_gives_at_least_thirty_frames_of_tell() -> void:
+func test_its_recovery_takes_a_full_palm_string() -> void:
+func test_a_big_body_keeps_its_spacing_and_stays_in_the_yard() -> void:
+func test_a_clear_out_throws_it_and_does_not_stagger_it() -> void:
+func test_the_slam_does_not_hit_other_knuckles() -> void:
+```
+
+- [ ] **Step 2: Run** `tools/test.sh --filter=test_heavy_knuckle`. Expected: FAIL.
+- [ ] **Step 3: Build** the two clips and moves, the ring hitbox, the def, brain, palette and waves.
+- [ ] **Step 4: Look at it.** The heavy Knuckle beside Abarax and a tier I Knuckle (the size must read); a strip of the slam with its ring; a dash-step out of it and a hop over it in the game's picture. The ring on the ground must show where it will hit before it hits.
+- [ ] **Step 5: Run** `tools/test.sh`, the clip checker (62 moves), the self-test and `--render`. Expected: all pass.
+- [ ] **Step 6: Commit.** STATE.md Done: "F1 Task 14d: the heavy Knuckle: hyper-armoured wind-ups and a ground slam to leave or hop". Owner checklist: the heavy's size and weight; whether the slam's warning is fair.
+
+---
+
 ### Task 15: Input recording, replay and the combat bot
 
 **Files:**
