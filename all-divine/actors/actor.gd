@@ -176,6 +176,9 @@ var paired_with: Actor
 var pair: PairedMove
 ## The chain of defences that succeeded in a row (DodgeChain), null for an actor whose def has no `chain`.
 var chain: DodgeChain
+## What slows the fight on the chain's first perfect dodge and on its link into Flurry (ChainSlow): null unless the actor has a chain
+## and is on the player's team.
+var chain_slow: ChainSlow
 ## The tempo the chain had when the attack now playing started (SLIP for any other move): what the counters read.
 var cashed_tempo: DodgeChain.Tempo = DodgeChain.Tempo.SLIP
 ## Keeps its body out of other actors' (step 7): its motion on the ground stops at their capsules.
@@ -216,6 +219,9 @@ func _ready() -> void:
 		var chain_fx := (load(CHAIN_FX) as GDScript).new() as Node
 		chain_fx.name = &"ChainFx"
 		add_child(chain_fx)
+		# The rule that slows the fight on the chain's first perfect dodge and its way into Flurry is the player's alone.
+		if def.team == ActorDef.Team.PLAYER:
+			chain_slow = ChainSlow.new(chain)
 	locomotion.facing_yaw = rotation.y
 	runner.actor = self
 	runner.move_started.connect(_on_move_started)
