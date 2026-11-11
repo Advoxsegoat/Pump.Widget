@@ -60,6 +60,7 @@ var _extras: Array[Actor] = []  # the debug foes
 var _cleared := false  # the wave that is on has been cleared
 var _next_in := -1.0  # seconds to the next wave, or -1
 var _reset_in := -1.0  # seconds to the reset after the player's death, or -1
+var _wave_frames := 0  # physics frames since the wave that is on was sent (state_hash)
 
 
 func _init() -> void:
@@ -95,6 +96,7 @@ func start_wave(index: int) -> void:
 	wave = posmod(index, waves.size())
 	_cleared = false
 	_next_in = -1.0
+	_wave_frames = 0
 	_forget_dead()
 	var spawns := enemy_spawns()
 	var n := 0
@@ -169,10 +171,11 @@ func wave_is_cleared() -> bool:
 
 
 ## A hash of the whole fight as it stands: every actor in tree order (its position to the millimetre, HP, posture and
-## stamina to a tenth, and the id of the move it is playing), the wave and the physics frame. Equal fights hash equal; a
-## replay that goes wrong shows where it first differed (Task 15).
+## stamina to a tenth, and the id of the move it is playing), the wave and the physics frames since the wave was sent (not the
+## engine's count, which says only when the fight was played: the same recording hashes the same wherever it begins). Equal
+## fights hash equal; a replay that goes wrong shows where it first differed.
 func state_hash() -> int:
-	var parts: Array = [wave, Engine.get_physics_frames()]
+	var parts: Array = [wave, _wave_frames]
 	for node in get_tree().get_nodes_in_group(Actor.GROUP):
 		var actor := node as Actor
 		if actor == null or not (is_ancestor_of(actor) or actor == player) or actor.stats == null:
@@ -184,12 +187,15 @@ func state_hash() -> int:
 	return parts.hash()
 
 
-## Forgets the counted rounds, so that the next foes roll the dice of the first round (for tests, and a replay).
-static func reset_spawn_counts() -> void:
-	_rounds = 0
+## Forgets the counted rounds, so that the next foes roll the dice of round `first` (the first, by default): for tests and a
+## replay, and for the combat bot, whose seed is the round its fight starts at, so that each seed is a different fight and
+## always the same one.
+static func reset_spawn_counts(first := 0) -> void:
+	_rounds = first
 
 
 func _physics_process(delta: float) -> void:
+	_wave_frames += 1
 	if not automatic:
 		return
 	if _next_in >= 0.0:

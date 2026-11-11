@@ -49,6 +49,8 @@ var _direction_frame := -1
 var _direction := Vector2.ZERO
 var _sweep_px := 0.0
 var _sweep_began := 0.0
+var _injected_move: Variant = null  # a Vector2 given by inject_move, or null
+var _injected_direction: Variant = null  # a Vector2 given by inject_direction, or null
 
 
 func _ready() -> void:
@@ -129,6 +131,20 @@ static func combine(stick: Vector2, keys: Vector2) -> Vector2:
 	return unit if unit.length_squared() > stick.length_squared() else stick
 
 
+## Gives `move` (a screen-space Vector2, as move_vector returns it) in place of what the devices read, until it is given null.
+## A headless run has no pad to push a stick on, so a replay and the combat bot move Abarax through this: it is the one seam
+## for movement, and the buttons go through the real actions (Input.action_press).
+func inject_move(move: Variant) -> void:
+	_injected_move = move
+
+
+## Gives `direction` (a screen direction of length 1, or Vector2.ZERO) as the direction pressed on every frame until it is given
+## null: the press a key or a flick of the stick makes, which a sway or duck is made of (direction_pressed_this_frame). A caller
+## gives it frame by frame, so a press lasts the one frame it is set for.
+func inject_direction(direction: Variant) -> void:
+	_injected_direction = direction
+
+
 ## The movement the player is asking for, in screen space (right is +x, up is -y), at most length 1.
 ## It reads what move_left, move_right, move_up and move_down are bound to, so any of them can be
 ## rebound to a key, a mouse button, a gamepad button or a gamepad axis. Bound axes make the analog
@@ -137,6 +153,8 @@ static func combine(stick: Vector2, keys: Vector2) -> Vector2:
 ## The longer of the two wins (see combine).
 ## `devices` are the gamepads that count (the strongest analog push wins); by default, every one connected.
 func move_vector(devices: Array[int] = Input.get_connected_joypads()) -> Vector2:
+	if _injected_move is Vector2:
+		return _injected_move
 	var analog := Vector2.ZERO
 	for device in devices:
 		var raw := Vector2(
@@ -172,6 +190,8 @@ func pressed_this_frame() -> Array[StringName]:
 ## when both press. `devices` are the gamepads read, as for move_vector(). Worked out once a physics frame, however often
 ## it is asked, so call it every frame (a brain does).
 func direction_pressed_this_frame(devices: Array[int] = Input.get_connected_joypads()) -> Vector2:
+	if _injected_direction is Vector2:
+		return _injected_direction
 	var frame := Engine.get_physics_frames()
 	if frame == _direction_frame:
 		return _direction

@@ -210,6 +210,32 @@ func test_state_hash_changes_with_play_and_repeats_with_the_same_state() -> void
 	assert_eq(arena.state_hash(), f, "but not a fifth of one")
 
 
+func test_reset_spawn_counts_can_start_at_a_round_and_so_a_seed_is_a_fight() -> void:
+	Arena.reset_spawn_counts(7)
+	var arena := _arena()
+	var foe := _foes(arena)[0]
+	assert_eq(foe.spawn_count, 7, "the first foes roll the dice of round 7")
+	Arena.reset_spawn_counts()
+	assert_eq(_foes(_arena())[0].spawn_count, 0, "and no argument is the first round")
+
+
+func test_state_hash_counts_frames_from_the_waves_start_not_the_engines() -> void:
+	# A replay needs the same hash whenever it is played: two fights alike in everything but the engine's frame count (the
+	# second begins a hundred frames later) hash alike frame for frame, and a frame later is another hash.
+	Arena.reset_spawn_counts()
+	var first := _arena()
+	await frames(20)
+	var early := first.state_hash()
+	first.queue_free()
+	await frames(100)
+	Arena.reset_spawn_counts()
+	var second := _arena()
+	await frames(20)
+	assert_eq(second.state_hash(), early, "the same fight 100 frames of the engine's count later")
+	await frames(1)
+	assert_ne(second.state_hash(), early, "and a frame on is another hash")
+
+
 func test_state_hash_includes_the_current_move_and_the_wave() -> void:
 	var arena := _arena()
 	await frames(3)
