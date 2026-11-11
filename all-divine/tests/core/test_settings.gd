@@ -11,10 +11,14 @@ const SOUND_KEYS: Array[String] = ["master", "music", "sfx", "voice", "ui"]
 var _made: Node = null
 var _was_active := false
 var _buses := []
+var _switches := {}
 
 
 func before_each() -> void:
 	_was_active = SelfTest.active
+	_switches = {}
+	for switch in ReadabilityTuning.SWITCHES:
+		_switches[switch] = _effects().get(switch)
 	_buses = []
 	for i in AudioServer.bus_count:
 		_buses.append([AudioServer.get_bus_volume_db(i), AudioServer.is_bus_mute(i)])
@@ -29,6 +33,9 @@ func after_each() -> void:
 		_made.reset_all()
 		SelfTest.active = _was_active
 		_made = null
+	# Whatever a Settings the test made (and freed) applied to the shared tuning goes back as it was.
+	for switch in _switches:
+		_effects().set(switch, _switches[switch])
 	for i in _buses.size():
 		AudioServer.set_bus_volume_db(i, _buses[i][0])
 		AudioServer.set_bus_mute(i, _buses[i][1])
