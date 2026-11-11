@@ -17,11 +17,11 @@ var _tempo := DodgeChain.Tempo.SLIP  # the tempo the chain was at when last it c
 
 
 func _init(chain: DodgeChain) -> void:
-	chain.linked.connect(_on_linked.bind(chain))
+	chain.linked.connect(_on_linked)
 	chain.changed.connect(_on_changed)
 
 
-func _on_linked(perfect: bool, _chain: DodgeChain) -> void:
+func _on_linked(perfect: bool) -> void:
 	if perfect and not _had_perfect:
 		_had_perfect = true
 		_slow()
