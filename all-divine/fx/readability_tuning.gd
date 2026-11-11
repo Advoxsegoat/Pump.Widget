@@ -73,8 +73,9 @@ extends Resource
 @export var chain_rim_color := Color("fff1c8")
 @export_range(0.0, 1.0) var chain_rim_quick := 0.5
 @export_range(0.0, 1.0) var chain_rim_flurry := 1.0
-## The afterimage: its colour (the alpha is how solid it starts) and how many frames it takes to fade away.
-@export var afterimage_color := Color(1.0, 0.94509804, 0.78431374, 0.6)
+## The afterimage: its colour, a pale lilac that stands out from the yard's dark blue ground and its warm lamplit pools alike (the
+## alpha is how solid it starts) and how many frames it takes to fade away.
+@export var afterimage_color := Color(0.9019608, 0.8627451, 1.0, 0.7)
 @export var afterimage_frames := 8
 ## The slow-down: how many physics frames it lasts and the share of them each actor acts on.
 @export var slow_frames := 12

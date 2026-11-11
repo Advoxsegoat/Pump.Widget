@@ -39,7 +39,7 @@ static func _script(presses: Array) -> Array:
 # {arena, a, b, started, hits}: `a` plays `steps`; `started` is [frame, id] of each move it started, `hits` the results of the blows
 # of a's that landed ([frame of a, outcome]).
 func _world(steps := [], b_def: ActorDef = null) -> Dictionary:
-	var run := Duel.make(self, steps, [], 1.0, b_def)
+	var run := Duel.without_slow(Duel.make(self, steps, [], 1.0, b_def))
 	var a: Actor = run["a"]
 	run["started"] = []
 	run["hits"] = []

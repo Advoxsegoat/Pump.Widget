@@ -54,6 +54,7 @@ func test_a_clear_out_among_three_knuckles() -> void:
 		foes.append(foe)
 	for i in 7:
 		player.chain.link(false, 0)
+	Melee.slow(0, 1.0)  # the way into Flurry slows the fight (ChainFx); this one is timed to the frame
 	main.camera_rig.snap_now()
 	await frames(30)
 	await _shoot("clearout_before")

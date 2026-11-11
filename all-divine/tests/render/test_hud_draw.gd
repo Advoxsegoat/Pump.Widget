@@ -111,6 +111,42 @@ func test_each_unblockable_icon_is_drawn_cell_for_cell() -> void:
 		await frames(1)
 
 
+## The grab's glyph: a body leaning off a line (it is slipped by leaning out of its way), nine by nine.
+const GRAB_GLYPH := [
+	"X....XX..",
+	"X....XX..",
+	"X...XXX..",
+	"X..XXXXX.",
+	"X..XXX...",
+	"X.XXX....",
+	"X.XX.X...",
+	"X.X...X..",
+	"X........",
+]
+
+
+func test_the_grabs_icon_draws_its_new_glyph() -> void:
+	assert_eq(Hud.ICON_CELLS[HitProfile.Perilous.GRAB], GRAB_GLYPH, "the grab's cells are the body leaning off a line")
+	var run := await _fight()
+	var main: Main = run["main"]
+	var fx := (run["foes"][1] as Actor).get_node("ActorFx") as ActorFx
+	fx.icon_shape = HitProfile.Perilous.GRAB
+	await frames(2)
+	var img := await _picture(main)
+	var rect: Rect2i = main.hud.icons()[0].rect
+	var wrong := 0
+	var filled := 0
+	for y in 9:
+		for x in 9:
+			var want := GRAB_GLYPH[y][x] == "X"
+			var cell := rect.position + Vector2i(x, y)
+			if want:
+				filled += 1
+			if want != _is(img, cell, ActorFx.TUNING.icon_color):
+				wrong += 1
+	assert_eq(wrong, 0, "all %d filled cells are rose and the rest are not (%d wrong)" % [filled, wrong])
+
+
 func test_the_wave_pips_are_drawn_cleared_on_and_coming() -> void:
 	var run := await _fight()
 	var main: Main = run["main"]

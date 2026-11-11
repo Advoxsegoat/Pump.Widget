@@ -53,6 +53,7 @@ func _move(id: StringName) -> MoveData:
 func _flurry(actor: Actor) -> void:
 	for i in FLURRY:
 		actor.chain.link(false, 0)
+	Melee.slow(0, 1.0)  # the way into Flurry slows the fight (ChainFx); these fights are timed to the frame
 
 
 # The eight ways at a wall or a corner of the yard: a unit vector in (x, z).
