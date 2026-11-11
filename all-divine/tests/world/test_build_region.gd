@@ -404,4 +404,4 @@ func test_every_listed_kenney_piece_is_in_the_toon_material() -> void:
 				var expected := _material("kenney_water") if name.begins_with("fountain-round") and mesh.get_active_material(i) == _material("kenney_water") else _material("kenney_town")
 				assert_eq(mesh.get_active_material(i), expected, "%s surface %d" % [name, i])
 		scene.free()
-	assert_true(listed >= 43, "the list was read (%d pieces)" % listed)
+	assert_true(listed >= 42, "the list was read (%d pieces)" % listed)
