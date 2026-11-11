@@ -370,5 +370,5 @@ func _write(path: String, text: String) -> void:
 
 func test_check_all_walks_the_scene_folders() -> void:
 	assert_eq(ShotChecker.new().check_all(), PackedStringArray())
-	var lines := ShotChecker.new().check_all("res://scenes/no_such_folder")
+	var lines := ShotChecker.new().check_all("user://no_such_scenes")
 	assert_eq(lines.size(), 0, "a root with no scenes has nothing to report")
