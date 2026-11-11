@@ -26,10 +26,13 @@ const STEPPED_CLEARANCE := 0.06
 ## body folds or lies down further than the scarf's capsules keep it off the line. Each is clear of the chest, and each
 ## is the clip's measured least less 0.005 m.
 ##   hop    the leap folds the torso over its knees: the scarf hangs 0.115 m off the line at the closest
+##   counter_hook  the body folds over the hook, as the stepped palm_hook's does (that one has STEPPED_CLEARANCE): the scarf hangs
+##          0.131 m off the line at the closest
 ##   getup  it starts lying on his back, and played from idle, as here, the scarf whips into that pose and is 0.127 m
 ##          off for a few frames (in play it comes from the finisher victim's lying pose, where it lies already)
 const CLIP_CLEARANCE := {
 	&"hop": 0.10,
+	&"counter_hook": 0.126,
 	&"getup": 0.122,
 }
 const TORSO: Array[StringName] = [&"pelvis", &"spine_01", &"spine_02", &"spine_03", &"neck_01"]
