@@ -27,7 +27,10 @@ const files = await page.evaluate(([looks, expressions]) => {
   const found = {};
   for (const id of looks) {
     for (const expression of expressions) {
-      const canvas = AD.spr.portrait(AD.PORTS[id], expression);
+      // The painter's own smile is a two-pixel change of the mouth for most looks; its closedSmile option (eyes shut, as
+      // Abarax's look already has) is the one a reader can see, so every look smiles that way.
+      const look = expression === 'smile' ? Object.assign({}, AD.PORTS[id], { closedSmile: 1 }) : AD.PORTS[id];
+      const canvas = AD.spr.portrait(look, expression);
       found[`${id}/${expression}.png`] = canvas.toDataURL('image/png');
     }
   }

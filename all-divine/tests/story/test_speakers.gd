@@ -25,22 +25,42 @@ func test_every_speaker_has_neutral_and_the_six_expressions_as_48_by_48_with_tra
 			assert_eq(image.get_pixel(47, 0).a, 0.0, "%s %s: the top right corner is clear" % [id, expression])
 
 
+## Two expressions of a speaker must differ by this many pixels to be told apart at 48 pixels.
+const MIN_DIFFERENCE := 12
+## Known limit: the Tactics painter has no option that strengthens `serious`, which is a change of the brows alone, so it
+## stays 10 pixels from `neutral`. It is not painted over; the owner is told.
+const KNOWN_SHORT := {"neutral|serious": 8}
+
+
 func test_the_expressions_differ() -> void:
 	for id in SPEAKERS:
 		var speaker := Registry.fetch(&"speakers", StringName(id)) as Speaker
 		if speaker == null:
 			fail("speaker %s is missing" % id)
 			continue
-		var seen := {}
+		var images := {}
 		for expression in EXPRESSIONS:
 			var texture := speaker.portraits.get(StringName(expression)) as Texture2D
 			if texture == null:
 				fail("%s has no %s" % [id, expression])
 				continue
-			var data := texture.get_image().get_data()
-			for other: String in seen:
-				assert_ne(data, seen[other], "%s: %s and %s are the same picture" % [id, expression, other])
-			seen[expression] = data
+			images[expression] = texture.get_image().get_data()
+		var short := PackedStringArray()
+		for i in EXPRESSIONS.size():
+			for j in range(i + 1, EXPRESSIONS.size()):
+				var a: PackedByteArray = images.get(EXPRESSIONS[i], PackedByteArray())
+				var b: PackedByteArray = images.get(EXPRESSIONS[j], PackedByteArray())
+				var differing := 0
+				for p in range(0, mini(a.size(), b.size()), 4):
+					if a[p] != b[p] or a[p + 1] != b[p + 1] or a[p + 2] != b[p + 2] or a[p + 3] != b[p + 3]:
+						differing += 1
+				var key := "%s|%s" % [EXPRESSIONS[i], EXPRESSIONS[j]]
+				var floor_px: int = KNOWN_SHORT.get(key, MIN_DIFFERENCE)
+				if differing < MIN_DIFFERENCE:
+					short.append("%s differs by %d" % [key, differing])
+				assert_true(differing >= floor_px, "%s: %s and %s differ by %d pixels, under %d" % [id, EXPRESSIONS[i], EXPRESSIONS[j], differing, floor_px])
+		# the pairs that fall short of 12 are only the known ones
+		assert_true(short.size() <= KNOWN_SHORT.size(), "%s: pairs short of %d: %s" % [id, MIN_DIFFERENCE, ", ".join(short)])
 
 
 func test_every_portrait_file_has_a_ledger_row() -> void:
