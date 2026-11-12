@@ -33,22 +33,19 @@ const BARS_FRAMES := 30
 ## A shot's progress reaches 1 this many seconds before its end, so that the next shot's first key (0) is a cut and not
 ## a ramp over a frame; half a millisecond is far under the physics step.
 const PROGRESS_EDGE := 0.0005
-## What the checker says that stops a timeline being built: the timing of the shots.
-const TIMING_PROBLEMS: PackedStringArray = ["gap of ", "overlap of ", "frames, under the", "starts at frame", "the scene has no shots", "is empty or used twice"]
-
 ## Why the last `build` gave null; empty after one that built.
 static var last_error := ""
 
 
-## The animation for `scene`, or null when the shots' timing is one the checker rejects (a gap, an overlap, a shot under 12
-## frames, ...), `last_error` then holding its first line.
+## The animation for `scene`, or null when the checker has any problem with it (a gap, an overlap, a shot under 12 frames, a
+## glide out of range, a call past its shot's end, ...), `last_error` then holding its first line. A listed placeholder is not one.
 static func build(scene: SceneShots) -> Animation:
 	last_error = ""
-	for line in ShotChecker.new().check(scene):
-		for problem in TIMING_PROBLEMS:
-			if line.contains(problem):
-				last_error = line
-				return null
+	var checker := ShotChecker.new()
+	for line in checker.check(scene):
+		if not checker.is_placeholder(line):  # a clip not made yet is listed, not refused, in a draft
+			last_error = line
+			return null
 	var anim := Animation.new()
 	anim.length = scene.total_frames() / 60.0
 	anim.loop_mode = Animation.LOOP_NONE

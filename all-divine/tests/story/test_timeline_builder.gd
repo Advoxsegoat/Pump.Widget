@@ -243,3 +243,27 @@ func test_forty_calls_on_one_frame_fire_in_data_order_in_a_scene_of_two_hundred_
 	assert_eq(first.size(), 40, "all forty are called")
 	for i in first.size():
 		assert_near(first[i], 0.001 * (i + 1), 1e-9, "call %d is the %dth of the data" % [i, i + 1])
+
+
+func test_the_builder_refuses_what_the_checker_refuses() -> void:
+	var cases := {}
+	var lead := _fixture()
+	lead.lead_in = 5
+	cases["lead_in 5"] = lead
+	var blend := _fixture()
+	blend.shots[1].blend_in = 70
+	cases["blend_in longer than the shot"] = blend
+	var late := _fixture()
+	late.shots[0].beats[0].at = 95
+	cases["a beat past its shot"] = late
+	var late_line := _fixture()
+	late_line.shots[2].lines[0].at = 70
+	cases["a line past its shot"] = late_line
+	var aimless := _fixture()
+	aimless.shots[3].aim = &""
+	cases["no aim"] = aimless
+	for name in cases:
+		var built: Variant = quietly(func() -> Variant: return TimelineBuilder.build(cases[name]))
+		assert_true(built == null, "%s: not built" % name)
+		var lines := ShotChecker.new().check(cases[name])
+		assert_true(lines.size() > 0 and TimelineBuilder.last_error == lines[0], "%s: the checker's first line is the error: '%s'" % [name, TimelineBuilder.last_error])
