@@ -123,14 +123,14 @@ func test_the_selected_row_has_a_rose_chevron_and_rose_text() -> void:
 	assert_true(_count_tone(img, text_area, &"rose") > 10, "Resume's text is rose")
 	assert_eq(_count_tone(img, text_area, &"white"), 0, "and not white")
 	var other_text := Rect2i(rows[1].text_at.x, rows[1].rect.position.y, 60, 10)
-	assert_true(_count_tone(img, other_text, &"white") > 5, "Quit's text is the Hud's white")
+	assert_true(_count_tone(img, other_text, &"white") > 5, "Settings' text is the Hud's white")
 	assert_eq(_count_tone(img, other_text, &"rose"), 0, "and not rose")
 	var heading := Rect2i(main.menu.layout().heading_at.x, main.menu.layout().heading_at.y - 8, 80, 10)
 	assert_true(_count_tone(img, heading, &"gold") > 10, "the heading is gold")
 	assert_eq(_count_tone(img, heading, &"rose"), 0, "and not rose")
 	main.menu.press(MenuNav.Cmd.DOWN)
 	var moved := await _picture(main)
-	assert_true(_count(moved, rows[1].chevron, Hud.ROSE) == 5, "after Down the chevron is on Quit")
+	assert_true(_count(moved, rows[1].chevron, Hud.ROSE) == 5, "after Down the chevron is on Settings")
 	assert_eq(_count(moved, rows[0].chevron, Hud.ROSE), 0, "and off Resume")
 
 

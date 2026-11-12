@@ -27,6 +27,14 @@ const CAPACITY := (BOTTOM - PANEL_Y - 2 * PADDING - PITCH - 2 * GAP - PITCH) / P
 ## Room kept at the right of a scrolling page for its arrows (5 px wide), and the space between a label and its value.
 const ARROW_ROOM := 8
 const VALUE_GAP := 8
+## A slider's bar: its outline is 1 px around the BAR_PIXELS wide, 3 px high inside; BAR_GAP is the space between the bar and the percent.
+const BAR_OUTER := Vector2i(MenuRow.BAR_PIXELS + 2, 5)
+const BAR_GAP := 4
+const BAR_TRACK := Color(0.81, 0.85, 0.94, 0.3)  # the empty part of the bar: Hud.POSTURE, faint
+## The widest percent, which every slider's bar is placed by so that the bars of a page line up.
+const WIDEST_PERCENT := "100%"
+## The least time, in seconds of the menu's own clock (it counts while the game is paused), between two sound samples.
+const SAMPLE_GAP := 0.15
 const ARROW_UP_CELLS := ["..X..", ".XXX.", "XXXXX"]
 const ARROW_DOWN_CELLS := ["XXXXX", ".XXX.", "..X.."]
 const FONT_SIZE := Hud.HINT_FONT_SIZE
@@ -40,6 +48,11 @@ const FOOTER_PAD := "A: choose   B: back"
 var window: Window
 ## Whether the game runs on a web page, which owns the window and the quitting.
 var web: bool = Settings.on_web
+## What the window rows ask the screen's size from (a test gives its own).
+var screen_size: Callable = func() -> Vector2i: return DisplayServer.screen_get_usable_rect().size
+## The menu's own player of the sound rows' samples, and how many it has started.
+var sample_player: AudioStreamPlayer = null
+var sample_count := 0
 ## The page shown (MenuPages), the selected row of it, and whether the menu is up.
 var page: StringName = MenuPages.ROOT
 var index := 0
@@ -55,6 +68,8 @@ var _back: Callable = Callable()
 var _footer_seen := ""
 var _top := 0  # the first row shown (a page with more rows than fit scrolls)
 var _width := PANEL_W  # the panel's width: what the page needs, fixed while it is open
+var _trail: Array[Dictionary] = []  # the pages opened from others: {from, index, to}
+var _since_sample := SAMPLE_GAP  # seconds since the last sample, on the menu's own clock
 
 
 func _init() -> void:
@@ -62,6 +77,9 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	visible = false
+	sample_player = AudioStreamPlayer.new()
+	sample_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(sample_player)
 
 
 func _ready() -> void:
@@ -71,8 +89,10 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	_since_sample += delta
 	if not is_open:
 		return
+	refresh()
 	var cmd := nav.tick(delta)
 	if cmd != MenuNav.Cmd.NONE:
 		press(cmd)
@@ -84,8 +104,57 @@ func _process(delta: float) -> void:
 func open() -> void:
 	is_open = true
 	visible = true
+	_trail.clear()
 	nav.begin()
 	show_page(MenuPages.ROOT)
+
+
+## Opens the page `id` from the page shown, to come back to: pop_page returns here with this row selected.
+func push_page(id: StringName) -> void:
+	_trail.append({from = page, index = index, to = id})
+	show_page(id)
+
+
+## Goes back from the page shown to the page it was opened from, on the row it was opened with (or, for a page shown directly, the
+## page it belongs under).
+func pop_page() -> void:
+	var target := MenuPages.parent_of(page)
+	var start := 0
+	if not _trail.is_empty() and _trail.back().to == page:
+		var entry: Dictionary = _trail.pop_back()
+		target = entry.from
+		start = entry.index
+	var built := MenuPages.build(target, self)
+	built.start = start
+	show_page(target, built)
+
+
+## Asks every row whether it is enabled now, and moves the selection off a row that has gone dim (so a chevron is always shown). Called
+## each frame, and by press and show_page.
+func refresh() -> void:
+	for row in _rows:
+		if row.enabled_when.is_valid():
+			row.enabled = row.enabled_when.call()
+	if not _rows.is_empty() and not _rows[index].selectable():
+		_move(-1)
+
+
+## Plays the cue `cue` on `bus` through the menu's own player, so that a sound row's step can be heard while the game is paused: at most
+## one in SAMPLE_GAP seconds, and none when the row's own level (`key`) or the master level is 0. The level is the bus's, already set.
+func play_sample(cue: StringName, bus: StringName, key: String) -> void:
+	if _since_sample < SAMPLE_GAP or Settings.get_value("sound/master") == 0 or Settings.get_value(key) == 0:
+		return
+	if not Registry.ids(&"sounds").has(String(cue)):
+		return
+	var sound := Registry.fetch(&"sounds", cue) as SoundCue
+	if sound == null or sound.streams.is_empty():
+		return
+	_since_sample = 0.0
+	sample_count += 1
+	sample_player.stream = sound.streams[0]
+	sample_player.bus = bus
+	sample_player.volume_db = sound.volume_db
+	sample_player.play()
 
 
 ## Hides the menu.
@@ -103,6 +172,9 @@ func show_page(id: StringName, built: MenuPage = null) -> void:
 	_rows = built.rows
 	_back = built.back
 	index = clampi(built.start, 0, maxi(_rows.size() - 1, 0))
+	for row in _rows:
+		if row.enabled_when.is_valid():
+			row.enabled = row.enabled_when.call()
 	if not _rows.is_empty() and not _rows[index].selectable():
 		_move(1)
 	_top = 0
@@ -140,6 +212,7 @@ func press(cmd: MenuNav.Cmd) -> void:
 		MenuNav.Cmd.BACK:
 			if _back.is_valid():
 				_back.call()
+	refresh()
 	queue_redraw()
 
 
@@ -177,11 +250,16 @@ func layout() -> Dictionary:
 		var line := rows_top + PITCH * (i - _top)
 		var value := row.value()
 		var wide := ceili(font.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x)
+		var bar := Rect2i()
+		if row.has_bar():
+			bar = Rect2i(Vector2i(left + width - _text_width(WIDEST_PERCENT) - BAR_GAP - BAR_OUTER.x, line + (PITCH - BAR_OUTER.y) / 2), BAR_OUTER)
 		shown.append({
 			index = i,
 			label = row.label,
 			value = value,
 			kind = row.kind,
+			bar = bar,
+			fill = row.fill(),
 			enabled = row.enabled,
 			selected = i == index and row.selectable(),
 			rect = Rect2i(left, line, width, PITCH),
@@ -200,7 +278,7 @@ func layout() -> Dictionary:
 	}
 
 
-## What is drawn for each row of the page shown, as {index (in the page), label, value, kind, enabled, selected, rect, text_at, value_at, chevron}: the
+## What is drawn for each row of the page shown, as {index (in the page), label, value, kind, enabled, selected, rect, text_at, value_at, chevron, bar, fill}: the
 ## rect is the row's line, text_at where its label starts, value_at its right-hand text, chevron the cells' box.
 func rows() -> Array[Dictionary]:
 	var shown: Array[Dictionary] = []
@@ -218,14 +296,28 @@ func _fit_width() -> int:
 	var widest := _text_width(_heading)
 	for row in _rows:
 		var wide := INDENT + _text_width(row.label)
-		var value := row.value()
-		if not value.is_empty():
-			wide += VALUE_GAP + _text_width(value)
+		var room := _value_room(row)
+		if room > 0:
+			wide += VALUE_GAP + room
 		widest = maxi(widest, wide)
 	widest = maxi(widest, maxi(_text_width(FOOTER_KEYBOARD), _text_width(FOOTER_PAD)))
 	if _rows.size() > CAPACITY:
 		widest += ARROW_ROOM
 	return mini(widest + 2 * PADDING, PANEL_W)
+
+
+# The room a row's right-hand side needs: the widest text the row can ever show (not just the one it shows now), and for a slider
+# its bar and the widest percent, since the width is fixed while the page is open.
+func _value_room(row: MenuRow) -> int:
+	var texts: Array = [row.value()]
+	if row.all_values.is_valid():
+		texts.append_array(row.all_values.call())
+	var room := 0
+	for text: String in texts:
+		room = maxi(room, _text_width(text))
+	if row.has_bar():
+		room = maxi(room, _text_width(WIDEST_PERCENT)) + BAR_GAP + BAR_OUTER.x
+	return room
 
 
 func _text_width(text: String) -> int:
@@ -283,12 +375,26 @@ func _draw() -> void:
 			colour = Hud.ROSE
 		draw_string(font, Vector2(shown.text_at), shown.label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, colour)
 		if not (shown.value as String).is_empty():
-			draw_string(font, Vector2(shown.value_at), shown.value, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, colour if shown.selected else Hud.GOLD)
+			var value_colour := colour if shown.selected or not shown.enabled else Hud.GOLD
+			draw_string(font, Vector2(shown.value_at), shown.value, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, value_colour)
+		if (shown.bar as Rect2i).size != Vector2i.ZERO:
+			_draw_bar(shown.bar, shown.fill, shown.enabled)
 		if shown.selected:
 			_draw_chevron((shown.chevron as Rect2i).position)
 	draw_string(font, Vector2(map.footer_at), footer(), HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, Hud.POSTURE)
 	_draw_arrow((map.arrow_up as Rect2i).position, ARROW_UP_CELLS, map.arrow_up.size != Vector2i.ZERO)
 	_draw_arrow((map.arrow_down as Rect2i).position, ARROW_DOWN_CELLS, map.arrow_down.size != Vector2i.ZERO)
+
+
+# A slider's bar: its empty track, the gold fill (a dim one if the row is off) from the left, and the 1 px outline of the Hud's ink.
+func _draw_bar(outer: Rect2i, fill: int, enabled: bool) -> void:
+	var inside := Rect2i(outer.position + Vector2i(1, 1), outer.size - Vector2i(2, 2))
+	draw_rect(Rect2(inside), BAR_TRACK)
+	if fill > 0:
+		draw_rect(Rect2(inside.position, Vector2i(fill, inside.size.y)), Hud.GOLD if enabled else Hud.POSTURE)
+	for edge in [Rect2i(outer.position, Vector2i(outer.size.x, 1)), Rect2i(outer.position + Vector2i(0, outer.size.y - 1), Vector2i(outer.size.x, 1)),
+			Rect2i(outer.position, Vector2i(1, outer.size.y)), Rect2i(outer.position + Vector2i(outer.size.x - 1, 0), Vector2i(1, outer.size.y))]:
+		draw_rect(Rect2(edge), Hud.INK)
 
 
 # A small gold arrow of 5 x 3 cells where rows are hidden.
