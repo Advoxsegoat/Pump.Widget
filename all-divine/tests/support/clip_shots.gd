@@ -42,6 +42,7 @@ func open(host: Node) -> void:
 	rig.apply_palette(def.palette)
 	rig.hide_parts(def.hidden_parts)
 	rig.set_model_scale(def.model_scale)
+	rig.set_body_inflate(def.body_inflate)
 	camera = CameraRig.new()
 	camera.target = middle
 	camera.stage = stage

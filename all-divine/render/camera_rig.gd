@@ -172,9 +172,9 @@ func shake(strength: float) -> void:
 
 
 ## How far the shake has the camera from where it would be, in metres along its right and up: shake_at for this
-## rig's trauma and moment.
+## rig's trauma and moment, times the player's Camera shake setting (Settings.shake_scale).
 func shake_offset() -> Vector2:
-	return shake_at(trauma, _shake_time)
+	return shake_at(trauma, _shake_time) * Settings.shake_scale()
 
 
 ## The shake of `trauma` at `seconds` into a shaking: up to trauma squared times MAX_SHAKE (in length) along smooth

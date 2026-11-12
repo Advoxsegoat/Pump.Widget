@@ -20,8 +20,10 @@ const GROUP := &"attack_tokens"
 const PER_TARGET := 2
 ## Seconds a token is kept without being taken again before it comes back by itself.
 const TIMEOUT := 3.0
+## Asked for as a count: all of a target's tokens, whatever their number.
+const ALL := 0
 
-var _held := {}  # attacker (Actor) -> [target (Actor), seconds since last taken]
+var _held := {}  # attacker (Actor) -> [target (Actor), seconds since last taken, how many tokens]
 var _watching := {}  # attacker (Actor) -> the Callables connected to its signals
 
 
@@ -34,22 +36,33 @@ func _enter_tree() -> void:
 	add_to_group(GROUP)
 
 
-## Takes one of `target`'s tokens for `attacker`: true if it now holds one (or held one already, which starts its
-## TIMEOUT again), false while PER_TARGET others hold them. An attacker holds one token at a time: taking one for
-## another target gives back the first.
-func take(attacker: Actor, target: Actor) -> bool:
+## Takes `n` of `target`'s tokens for `attacker` (ALL, or any number past PER_TARGET, is every one the target gives; below 1
+## is taken as ALL): true if it now holds them (or held them already, which starts its TIMEOUT again), false while others hold
+## so many that fewer than `n` are left, and then it keeps what it held. An attacker holds tokens for one target at a time:
+## taking some for another target gives back the first. What an attacker holds is `n` as last taken, not added up: taken as
+## one after all, it holds one.
+func take(attacker: Actor, target: Actor, n := 1) -> bool:
 	if attacker == null or target == null or not attacker.is_inside_tree():
 		return false
+	var want := _wanted(n)
 	if _held.has(attacker):
 		if _held[attacker][0] == target:
+			if _others(attacker, target) + want > PER_TARGET:
+				return false
 			_held[attacker][1] = 0.0
+			_held[attacker][2] = want
 			return true
 		give_back(attacker)
-	if count(target) >= PER_TARGET:
+	if _others(attacker, target) + want > PER_TARGET:
 		return false
-	_held[attacker] = [target, 0.0]
+	_held[attacker] = [target, 0.0, want]
 	_watch(attacker)
 	return true
+
+
+## Whether `attacker` could hold `n` of `target`'s tokens now, holding what it holds.
+func can_take(attacker: Actor, target: Actor, n := 1) -> bool:
+	return attacker != null and target != null and _others(attacker, target) + _wanted(n) <= PER_TARGET
 
 
 ## Gives `attacker`'s token back, if it holds one.
@@ -67,11 +80,7 @@ func holds(attacker: Actor) -> bool:
 
 ## How many of `target`'s tokens are held.
 func count(target: Actor) -> int:
-	var n := 0
-	for key: Variant in _held:  # untyped: a holder freed under us must not be assigned to a typed variable
-		if is_instance_valid(key) and _held[key][0] == target:
-			n += 1
-	return n
+	return _others(null, target)
 
 
 ## The AttackTokens in `node`'s tree, or null.
@@ -82,9 +91,9 @@ static func of(node: Node) -> AttackTokens:
 
 
 ## take on the AttackTokens in `attacker`'s tree; true when there is none (nothing limits who attacks).
-static func take_for(attacker: Actor, target: Actor) -> bool:
+static func take_for(attacker: Actor, target: Actor, n := 1) -> bool:
 	var tokens := of(attacker)
-	return tokens == null or tokens.take(attacker, target)
+	return tokens == null or tokens.take(attacker, target, n)
 
 
 ## give_back on the AttackTokens in `attacker`'s tree, if there is one.
@@ -143,3 +152,16 @@ func _unwatch(attacker: Actor) -> void:
 		attacker.died.disconnect(callables[2])
 	if attacker.tree_exiting.is_connected(callables[2]):
 		attacker.tree_exiting.disconnect(callables[2])
+
+
+# How many tokens of `target` are held by anyone but `attacker`.
+func _others(attacker: Actor, target: Actor) -> int:
+	var n := 0
+	for key: Variant in _held:  # untyped: a holder freed under us must not be assigned to a typed variable
+		if key != attacker and is_instance_valid(key) and _held[key][0] == target:
+			n += _held[key][2]
+	return n
+
+
+static func _wanted(n: int) -> int:
+	return PER_TARGET if n < 1 or n > PER_TARGET else n

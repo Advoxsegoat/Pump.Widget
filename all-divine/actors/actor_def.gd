@@ -24,6 +24,10 @@ enum Team { PLAYER, ENEMY }
 ## How much further off its root than the model's own its body hangs for the paired moves it follows (a finisher on it): the lead
 ## closes in by this, so his blows reach it (Pairing.offset_of). 1 for every body but the heavy Knuckle's.
 @export_range(0.5, 1.5) var pair_reach := 1.0
+## How much thicker than its model the body is drawn, in metres (Rig.set_body_inflate): the character shader pushes every vertex out
+## along its normal by this much. It is only the picture: the hitboxes, the hurtbox, the body capsule, the feet and the clips' travel
+## are as the model has them. 0 for every body but the heavy Knuckle's, which it makes read as a broad man standing still.
+@export_range(0.0, 0.1) var body_inflate := 0.0
 ## Whether the foot planter keeps its toes out of the floor as well as its ankles (FootPlanter.keep_toes_up): a body larger than the
 ## model's, whose stride pitches the foot toes-down further.
 @export var keep_toes_up := false

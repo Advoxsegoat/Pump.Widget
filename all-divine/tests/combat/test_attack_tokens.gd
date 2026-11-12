@@ -152,3 +152,73 @@ func test_a_holder_freed_or_taken_out_of_the_tree_gives_its_token_back() -> void
 	k[1].free()
 	await frames(2)
 	assert_eq(tokens.count(abarax), 2, "nothing is lost or doubled when it is freed after")
+
+
+# --- an attack that holds more than one token (AttackOption.tokens, the heavy Knuckle's) ---
+
+func test_an_attack_can_hold_all_of_a_targets_tokens() -> void:
+	var run := _ring(3, func(i: int) -> Brain:
+		return ScriptBrain.new([{"frames": 2}, {"frames": 1, "press": [&"palm"]}, {"frames": 200}] if i == 0 else []))
+	var tokens: AttackTokens = run["tokens"]
+	var abarax: Actor = run["abarax"]
+	var k: Array[Actor] = run["knuckles"]
+	await frames(1)
+	assert_eq(AttackTokens.ALL, 0, "0 asks for all of them")
+	assert_true(tokens.take(k[0], abarax, AttackTokens.ALL), "alone, one may take them all")
+	assert_eq(tokens.count(abarax), AttackTokens.PER_TARGET, "that is every token the target gives")
+	assert_false(tokens.take(k[1], abarax), "and no other enemy takes one")
+	assert_false(tokens.take(k[2], abarax, AttackTokens.ALL), "nor all")
+	assert_true(tokens.take(k[0], abarax, AttackTokens.ALL), "taken again by its holder, they stay its own")
+	assert_eq(tokens.count(abarax), AttackTokens.PER_TARGET, "not doubled")
+	await frames(10)
+	assert_true(k[0].runner.busy() and tokens.holds(k[0]), "held while its blow plays")
+	assert_eq(tokens.count(abarax), AttackTokens.PER_TARGET, "all of them")
+	assert_false(tokens.take(k[1], abarax), "so still no one else")
+	await frames(60)
+	assert_false(k[0].runner.busy(), "its blow is over")
+	assert_eq(tokens.count(abarax), 0, "and every token came back with it")
+	assert_true(tokens.take(k[1], abarax) and tokens.take(k[2], abarax), "two others may take one each now")
+
+
+func test_taking_more_is_refused_while_another_holds_one_and_keeps_what_was_held() -> void:
+	var run := _ring(2, func(_i: int) -> Brain: return Brain.new())
+	var tokens: AttackTokens = run["tokens"]
+	var abarax: Actor = run["abarax"]
+	var k: Array[Actor] = run["knuckles"]
+	await frames(1)
+	assert_true(tokens.take(k[0], abarax))
+	assert_true(tokens.take(k[1], abarax))
+	assert_false(tokens.can_take(k[0], abarax, AttackTokens.ALL), "it could not hold all: another holds one")
+	assert_false(tokens.take(k[0], abarax, AttackTokens.ALL), "so it does not")
+	assert_true(tokens.holds(k[0]) and tokens.count(abarax) == 2, "and keeps the one it had")
+	tokens.give_back(k[1])
+	assert_true(tokens.can_take(k[0], abarax, AttackTokens.ALL), "alone it could")
+	assert_true(tokens.take(k[0], abarax, AttackTokens.ALL), "and takes them: the one it had grows to all")
+	assert_eq(tokens.count(abarax), AttackTokens.PER_TARGET)
+	assert_true(tokens.take(k[0], abarax), "taken as one token, it holds one again")
+	assert_eq(tokens.count(abarax), 1, "the rest are free")
+	assert_true(tokens.take(k[1], abarax), "for another")
+
+
+func test_all_tokens_come_back_when_the_attack_is_cut_or_its_holder_goes() -> void:
+	var run := _ring(4, func(_i: int) -> Brain: return Brain.new())
+	var tokens: AttackTokens = run["tokens"]
+	var abarax: Actor = run["abarax"]
+	var k: Array[Actor] = run["knuckles"]
+	await frames(1)
+	assert_true(tokens.take(k[0], abarax, AttackTokens.ALL))
+	k[0].runner.start(Registry.fetch(&"moves", &"flinch") as MoveData)
+	assert_eq(tokens.count(abarax), 0, "a flinch gives them all back")
+	assert_true(tokens.take(k[0], abarax, AttackTokens.ALL))
+	k[0].runner.start(Registry.fetch(&"moves", &"posture_broken") as MoveData)
+	assert_eq(tokens.count(abarax), 0, "a broken posture does")
+	assert_true(tokens.take(k[1], abarax, AttackTokens.ALL))
+	k[1].die()
+	assert_eq(tokens.count(abarax), 0, "a death does")
+	assert_true(tokens.take(k[2], abarax, AttackTokens.ALL))
+	k[2].queue_free()  # an arena reset frees its actors
+	await frames(3)
+	assert_eq(tokens.count(abarax), 0, "a reset (the holder freed) does")
+	assert_true(tokens.take(k[3], abarax, AttackTokens.ALL), "and the next may take them")
+	await frames(roundi(AttackTokens.TIMEOUT * 60.0) + 5)
+	assert_eq(tokens.count(abarax), 0, "held unused, they come back after the timeout, all of them")

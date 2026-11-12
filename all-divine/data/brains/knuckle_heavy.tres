@@ -8,6 +8,7 @@ script = ExtResource("1_opt")
 action = &"palm"
 min_range = 1.4
 max_range = 2.4
+tokens = 0
 combo = PackedStringArray()
 
 [sub_resource type="Resource" id="Resource_slam"]
@@ -16,6 +17,7 @@ action = &"gift"
 max_range = 1.8
 cooldown = 5.0
 weight = 0.7
+tokens = 0
 combo = PackedStringArray()
 
 [resource]

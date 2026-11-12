@@ -43,7 +43,7 @@ const FOE_BAR := 24
 const FOE_HP_HEIGHT := 3
 const FOE_POSTURE_HEIGHT := 2
 const FOE_ABOVE := 12
-## A foe shows its bars this many physics frames after a blow reached it (3 s).
+## A foe shows its bars this many play frames (Game.play_frames: a pause does not count) after a blow reached it (3 s).
 const FOE_SHOWN_FRAMES := 180
 ## The stamina bar's blink at a refused press: lit and then dark, this many times, over ActorFx.REFUSAL_FRAMES physics
 ## frames in all (2 frames lit and 2 dark, twice). That one number is also how seldom a refused press starts the blink,
@@ -110,8 +110,8 @@ var suppressed := false
 
 var _hint_left := HINT_SECONDS
 var _hints_pinned := false  # F1 was pressed: the timer no longer hides them
-var _refused_at := -1000  # the physics frame the latest refused press was on
-var _hit_at := {}  # foe (Actor) -> the physics frame a blow last reached it
+var _refused_at := -1000  # the play frame (Game.play_frames) the latest refused press was on
+var _hit_at := {}  # foe (Actor) -> the play frame a blow last reached it
 var _watching := {}  # foes whose got_hit is connected (Actor -> true)
 
 
@@ -174,7 +174,7 @@ func posture_rect() -> Rect2i:
 ## Whether the stamina bar is lit by a refused press: lit for BLINK_FRAMES physics frames, dark for as many, BLINKS times,
 ## counted from the frame the press was refused on.
 func stamina_blink_on() -> bool:
-	var since := Engine.get_physics_frames() - _refused_at
+	var since := Game.play_frames - _refused_at
 	return since >= 0 and since < ActorFx.REFUSAL_FRAMES and (since / BLINK_FRAMES) % 2 == 0
 
 
@@ -190,7 +190,7 @@ func _bars(icons_now: Array[Dictionary], finishing: Actor) -> Array[Dictionary]:
 	if player == null or camera_rig == null:
 		return shown
 	var locked := _locked()
-	var now := Engine.get_physics_frames()
+	var now := Game.play_frames
 	# The bars sit above whatever stands over a head: an unblockable icon, or the finisher prompt.
 	var raised := {}
 	for icon in icons_now:
@@ -474,11 +474,11 @@ func _watch(foe: Actor) -> void:
 
 func _on_foe_hit(result: HitResult, _event: HitEvent, foe: Actor) -> void:
 	if result.outcome != HitResult.Outcome.WHIFF and result.outcome != HitResult.Outcome.EVADED:
-		_hit_at[foe] = Engine.get_physics_frames()
+		_hit_at[foe] = Game.play_frames
 
 
 func _on_refused(_move: MoveData, _reason: StringName) -> void:
 	# A press mashed while the bar blinks does not restart it: one blink (and one cue) every ActorFx.REFUSAL_FRAMES at most.
-	var now := Engine.get_physics_frames()
+	var now := Game.play_frames
 	if now - _refused_at >= ActorFx.REFUSAL_FRAMES:
 		_refused_at = now
