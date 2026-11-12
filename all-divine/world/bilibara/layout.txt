@@ -15,20 +15,31 @@
 # (0.3 m, slate), a low wall (1.25 m) or the gate (1.2 m); the tall masses stand north of the ground they close, or at
 # least 9 m south of any other.
 #
-#   x=-40            -20             0             20         40
-#   z=-80  . . . . . . . . . . . . . T8 T8 T8 T8 T8 T8 . .             T8 = the yard's north wall (12.5..42.5)
-#   z=-75                            T9 Y  Y  Y  Y  Y  Y T10            Y  = the Tanneries yard 25 x 20 (15..40)
-#   z=-55  . . . . . . . . . . . . . k  k  L1 :: L2 k  k  .            k kerb, :: the 5 m mouth, with a pillar post each side
-#   z=-45  T6 T6 T6 T6 T6 T6 T6 T6 T6 T6 T6 L  .  T7 T7                T6 the works over the Rack Walk (x -40..25)
-#   z=-37.5  (T6)                      (T6)    .  B  B  T7b            B  = alcove B (30..37.5, -37.5..-30)
-#   z=-30  T6 T6 T6 T6 T6 T6 T6 T6 T6 T6 T6 . L3 k                      L3 low wall, k the alcove's kerb
-#   z=-25  T1 R  R  R  R  R  R  R  R  R  R  R  .  T6 T6                 R  = the Rack Walk (-35..25, -25..-20)
-#   z=-20  T1 l  k  k  k  k  k  k  k  k  k  L4 .  T3                    k the Rack Walk's kerb (x -30..22.5), L4 low wall
-#   z=-10  T1 l  L5 T2 T2 T2 T2 T2 T2 T2 T2 T2 .  T3 T3                 l  = the loop lane (-35..-30, -20..-5), L5 low wall
-#   z=-5   T1 G  T2 T2 T2 T2 T2 T2 T2 T2 T2 T2 .  T3 T4                 G  = the gate (-35..-30, 1 m deep, 1.2 m high)
-#   z=0    T5 A  A  s  s  s  s  s  s  s  s  s  s  s  T4                 A court A, s Rue Caillou (-30..32.5), T4 its east cap
-#   z=5    ----------------------- kerb (x -40..32.5) -----------------
-# Where the plan's table and the builder part (the plan's Departures in the task report): T6 is two blocks (the builder's
+# One character is 5 m, the left column starts at x = -45 and a row is labelled with its north edge (the camera looks up the
+# page). A = court A (slate), s = Rue Caillou (cobble), l = the Tanneries lane, R = the Rack Walk, o = the loop lane (tan
+# earth), B = alcove B (slate), Y = the Tanneries yard (tan earth), # = a tall mass, w = a low wall (1.25 m), . = nothing to
+# walk on. The kerbs (south of the street, the Rack Walk, the alcove and the yard), the gate (south end of the loop lane,
+# between court A and the street's north row) and the pillar posts are too thin to show.
+#
+#   z=-80    . . . . . . . . . . . # # # # # # # 
+#   z=-75    . . . . . . . . . . . # Y Y Y Y Y # 
+#   z=-70    . . . . . . . . . . . # Y Y Y Y Y # 
+#   z=-65    . . . . . . . . . . . # Y Y Y Y Y # 
+#   z=-60    . . . . . . . . . . . # Y Y Y Y Y # 
+#   z=-55    . . . . . . . . . . . . . w l w . . 
+#   z=-50    . . . . . . . . . . . . . w l w . . 
+#   z=-45    . # # # # # # # # # # # # # l # # . 
+#   z=-40    . # # # # # # # # # # # # # l # # . 
+#   z=-35    . # # # # # # # # # # # # # l B # . 
+#   z=-30    . # # # # # # # # # # # # # l w . . 
+#   z=-25    . # R R R R R R R R R R R R l w . . 
+#   z=-20    . # o w . . . . . . . . . w l # . . 
+#   z=-15    . # o w . . . . . . . . . w l # . . 
+#   z=-10    . # o # # # # # # # # # # # l # . . 
+#   z=-5     # A A s s s s s s s s s s s s # . . 
+#   z=0      # A A s s s s s s s s s s s s # . . 
+#
+# Where the plan's table and the builder part (listed in the Task 2 report): T6 is two blocks (the builder's
 # longest block is 60 m, T6 is 65); T7b stops at the alcove (its north end is T7's, and two blocks may not overlap); the low
 # walls are 1.25 m boxes of slate (`curb`), which the builder gives a footprint as wide as the table's, where a row of
 # wall-half pieces would be 1 m deep.
