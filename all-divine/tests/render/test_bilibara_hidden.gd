@@ -87,7 +87,7 @@ func _measure(x: float, z: float) -> Dictionary:
 			# body 0.7 m from it; it is a rail and not a wall, and the share below says how much of him it hides.)
 			if not hit.is_empty() and (hit["collider"] as Node).name != &"GateRail":
 				blocked.append(h)
-	return {hidden = 1.0 - float(shown) / maxf(1.0, silhouette), rays = blocked, at = at, silhouette = silhouette}
+	return {shot = with_him, hidden = 1.0 - float(shown) / maxf(1.0, silhouette), rays = blocked, at = at, silhouette = silhouette}
 
 
 func test_nothing_low_hides_a_fighter_against_it() -> void:
@@ -106,6 +106,10 @@ func test_nothing_low_hides_a_fighter_against_it() -> void:
 		assert_true(wall != null, "%s exists" % spot[0])
 		for x: float in spot[2]:
 			var got := await _measure(x, (spot[1] as float) - 0.36)
+			if (spot[0] == "LowWall4" and x == 23.75) or (spot[0] == "Gate" and x == -32.5) or (spot[0] == "LowWall1" and x == 23.0):
+				var path := ProjectSettings.globalize_path("res://").path_join("out/shots/bilibara/against_%s.png" % String(spot[0]).to_snake_case())
+				DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+				(got.shot as Image).save_png(path)
 			print("hidden share at %s x %.2f: %.1f%% (rays blocked at %s)" % [spot[0], x, got.hidden * 100.0, got.rays])
 			assert_true(absf(got.at.z - ((spot[1] as float) - 0.35)) < 0.05, "%s x %.2f: he stands against it (z %.3f)" % [spot[0], x, got.at.z])
 			assert_eq(got.rays, [] as Array[float], "%s x %.2f: no ray from his body above 0.4 m is blocked" % [spot[0], x])
