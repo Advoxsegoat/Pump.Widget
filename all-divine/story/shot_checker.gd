@@ -59,6 +59,17 @@ const GLIDE_FRAMES := Vector2i(20, 90)
 const MOMENT_GLIDE_FRAMES := Vector2i(15, 90)
 ## Two bodies: the capsules are 0.35 m in radius.
 const BODIES_APART := 0.7
+## The actor's capsule (actors/actor.tscn), set a little above the ground so that the floor itself is not in the way.
+const BODY_RADIUS := 0.35
+const BODY_HEIGHT := 1.8
+const BODY_LIFT := 0.05
+const FLOOR_TOLERANCE := 0.1
+const WALK_SAMPLE := 0.1
+## A mark is inside the region if walls stop a body on all four sides, seen at this height above the floor (a low kerb
+## counts) within this distance.
+const OPEN_HEIGHT := 0.15
+const OPEN_DISTANCE := 80.0
+const OPEN_DIRECTIONS := {"north": Vector3(0, 0, -1), "east": Vector3(1, 0, 0), "south": Vector3(0, 0, 1), "west": Vector3(-1, 0, 0)}
 const REHEARSAL := "rehearsal."
 const AT_START := "@start"
 ## The middle of the two fighters in a paired move, which the Director fills in.
@@ -85,6 +96,8 @@ var _folder := ""
 var _placeholders := 0
 # Objects (by instance id) whose enums are bad: the rules that would read them skip them.
 var _bad := {}
+# The walks that were measured, for the place check: {actor, shot, from, to (Vector3, region space), from_mark, to_mark}.
+var _walks: Array[Dictionary] = []
 # The Rest intervals of the walks, for the bodies-apart rule: {actor, from, to, at (Vector3), mark}.
 var _rests: Array[Dictionary] = []
 
@@ -164,6 +177,7 @@ func check(scene: SceneShots, folder := "") -> PackedStringArray:
 	_placeholders = 0
 	_bad = {}
 	_rests = []
+	_walks = []
 	finished = false
 	stopped = ""
 	for stage in STAGES:
@@ -182,13 +196,13 @@ func check(scene: SceneShots, folder := "") -> PackedStringArray:
 # {scene: SceneShots or null, problems} for a shots.tres at `path`, `name` standing for it in a line.
 func _load(path: String, name: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
-		return {scene = null, problems = PackedStringArray(["%s/-: shots.tres is missing (%s)" % [name, path]])}
+		return {scene = null, problems = PackedStringArray(["%s/-: %s is missing (%s)" % [name, path.get_file(), path]])}
 	var resource := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
 	if resource == null:
-		return {scene = null, problems = PackedStringArray(["%s/-: shots.tres does not parse; see the engine's lines above (%s)" % [name, path]])}
+		return {scene = null, problems = PackedStringArray(["%s/-: %s does not parse; see the engine's lines above (%s)" % [name, path.get_file(), path]])}
 	var scene := resource as SceneShots
 	if scene == null:
-		return {scene = null, problems = PackedStringArray(["%s/-: shots.tres is not a SceneShots (%s)" % [name, path]])}
+		return {scene = null, problems = PackedStringArray(["%s/-: %s is not a SceneShots (%s)" % [name, path.get_file(), path]])}
 	return {scene = scene, problems = _unknown_keys(path, String(scene.id) if scene.id != &"" else name)}
 
 
@@ -670,6 +684,8 @@ func _check_walks() -> bool:
 				metres = Vector2(from_at.x - to_at.x, from_at.z - to_at.z).length()
 			elif known != null and known.space == to.space and known.actor == to.actor:
 				metres = Vector2(known.position.x - to.position.x, known.position.z - to.position.z).length()
+			if from_at != null and to_at != null and known != null:
+				_walks.append({actor = entry.actor, shot = shot.id, from = from_at, to = to_at, from_mark = known.name, to_mark = to.name})
 			var arrive: int = beats[i].frame
 			if metres >= 0.0 and def != null and def.locomotion != null:
 				var needed := StoryWalk.frames(def.locomotion, beat.pace, metres)
@@ -712,6 +728,97 @@ func _check_bodies_apart() -> void:
 				reported[key] = true
 				_add("-", "%s and %s stand %.1f m apart at rest from frame %d (marks '%s' and '%s'), under %.1f m: two bodies" % [
 						b.actor, a.actor, apart, from, b.mark, a.mark, BODIES_APART])
+
+
+# --- the place ---
+
+## The marks and walks of `scene` checked in the region's own physics `space` (the region instanced in a tree, a physics
+## frame run): every mark that has a place in the region, REGION or ACTOR_START as the rehearsal marks resolve it, has
+## walkable floor within 0.1 m under it, room for a body (an actor's capsule there touches no wall, prop or edge) and
+## walls on all four sides (a mark with an open side is outside the region); and the straight line of every walk
+## the checker measured is clear for a body. Each failure is a line naming the mark or walk, where, and what is in the
+## way. The tool loads the region; the other rules do not need it.
+func check_place(scene: SceneShots, space: PhysicsDirectSpaceState3D) -> PackedStringArray:
+	check(scene)   # its problems are the other check's business; it leaves the walks it measured
+	_problems = PackedStringArray()
+	var failed := {}
+	for mark in scene.marks:
+		var at: Variant = scene.region_position(mark)
+		if at != null and not _mark_in_place(space, mark, at):
+			failed[mark.name] = true
+	for walk in _walks:
+		if failed.has(walk.from_mark) or failed.has(walk.to_mark):
+			continue
+		var length: float = Vector2(walk.from.x - walk.to.x, walk.from.z - walk.to.z).length()
+		var steps := maxi(1, ceili(length / WALK_SAMPLE))
+		for step in steps + 1:
+			var at: Vector3 = walk.from.lerp(walk.to, float(step) / float(steps))
+			var hits := _body_hits(space, at)
+			if not hits.is_empty():
+				_add(String(walk.shot), "walk of %s from '%s' to '%s' is blocked by %s at %s, %.1f m along its %.1f m" % [
+						walk.actor, walk.from_mark, walk.to_mark, ", ".join(hits), _where(at), length * float(step) / float(steps), length])
+				break
+	return _problems
+
+
+# False, with a line, if a body cannot stand at `mark` (at `at` in the region).
+func _mark_in_place(space: PhysicsDirectSpaceState3D, mark: SceneMark, at: Vector3) -> bool:
+	var here := "mark '%s' at %s" % [mark.name, _where(at)]
+	var floor_hit := _ray(space, at + Vector3(0, 0.5, 0), at + Vector3(0, -0.6, 0))
+	if floor_hit.is_empty() or absf(floor_hit.position.y - at.y) > FLOOR_TOLERANCE:
+		var found := "there is none under it" if floor_hit.is_empty() else "the floor there is %.2f m %s it, at %s" % [
+				absf(floor_hit.position.y - at.y), "below" if floor_hit.position.y < at.y else "above", _what(floor_hit.collider)]
+		_add("-", "%s: no walkable floor within %.1f m under it (%s)" % [here, FLOOR_TOLERANCE, found])
+		return false
+	var hits := _body_hits(space, at)
+	if not hits.is_empty():
+		_add("-", "%s: a body does not fit there, %s is in the way" % [here, ", ".join(hits)])
+		return false
+	var open := PackedStringArray()
+	for direction: String in OPEN_DIRECTIONS:
+		var from := at + Vector3(0, OPEN_HEIGHT, 0)
+		if _ray(space, from, from + OPEN_DIRECTIONS[direction] * OPEN_DISTANCE).is_empty():
+			open.append(direction)
+	if not open.is_empty():
+		_add("-", "%s: nothing stops a body to the %s, so it is outside the region's walls (or the region has none there)" % [here, " and ".join(open)])
+		return false
+	return true
+
+
+# The names of what the world has where an actor's capsule would stand at `at` (empty: room for a body).
+func _body_hits(space: PhysicsDirectSpaceState3D, at: Vector3) -> PackedStringArray:
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = BODY_RADIUS
+	capsule.height = BODY_HEIGHT
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = capsule
+	query.transform = Transform3D(Basis(), at + Vector3(0, BODY_LIFT + BODY_HEIGHT / 2.0, 0))
+	query.collision_mask = Layers.WORLD
+	var names := PackedStringArray()
+	for hit in space.intersect_shape(query, 8):
+		var name := _what(hit.collider)
+		if not names.has(name):
+			names.append(name)
+	return names
+
+
+func _ray(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3) -> Dictionary:
+	var query := PhysicsRayQueryParameters3D.create(from, to, Layers.WORLD)
+	return space.intersect_ray(query)
+
+
+# What a collider is called to a writer: a body named Body is its parent's.
+func _what(collider: Object) -> String:
+	var node := collider as Node
+	if node == null:
+		return "something"
+	if (node.name == &"Body" or node.name == &"StaticBody3D") and node.get_parent() != null:
+		return String(node.get_parent().name)
+	return String(node.name)
+
+
+func _where(at: Vector3) -> String:
+	return "(%.2f, %.2f, %.2f)" % [at.x, at.y, at.z]
 
 
 # --- helpers ---
