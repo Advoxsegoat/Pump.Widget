@@ -35,34 +35,44 @@ static func parse_policies(text: String) -> Array[CombatBot.Policy]:
 	return found
 
 
+## The name `--policy=` gives `policy`.
+func policy_name(policy: int) -> String:
+	return String(CombatBot.POLICIES.find_key(policy))
+
+
+## What the arguments ask for: {seeds, frames, policies, detail}; empty (after saying why) when they cannot be read.
+static func parse(args: PackedStringArray) -> Dictionary:
+	var asked := {"seeds": [1] as Array[int], "frames": 7200, "policies": [CombatBot.Policy.MIXED] as Array[CombatBot.Policy], "detail": false}
+	for arg in args:
+		if arg.begins_with("--seeds="):
+			asked["seeds"] = parse_seeds(arg.trim_prefix("--seeds="))
+		elif arg.begins_with("--frames="):
+			asked["frames"] = int(arg.trim_prefix("--frames="))
+		elif arg.begins_with("--policy="):
+			asked["policies"] = parse_policies(arg.trim_prefix("--policy="))
+		elif arg == "--detail":
+			asked["detail"] = true
+		else:
+			printerr("run_bot: unknown argument '%s'\n%s" % [arg, USAGE])
+			return {}
+	if asked["seeds"].is_empty() or asked["policies"].is_empty() or asked["frames"] <= 0:
+		printerr("run_bot: cannot read the arguments\n%s" % USAGE)
+		return {}
+	return asked
+
+
 ## Plays every seed with every policy: `host` is the node the games are put under (the root of the tree running this). Prints a line
 ## per run; returns the exit code: 1 if any run had a problem, 2 for arguments it cannot read, else 0.
 func run(host: Node, args: PackedStringArray) -> int:
-	var seeds: Array[int] = [1]
-	var frames := 7200
-	var policies: Array[CombatBot.Policy] = [CombatBot.Policy.MIXED]
-	var wants_detail := false
-	for arg in args:
-		if arg.begins_with("--seeds="):
-			seeds = parse_seeds(arg.trim_prefix("--seeds="))
-		elif arg.begins_with("--frames="):
-			frames = int(arg.trim_prefix("--frames="))
-		elif arg.begins_with("--policy="):
-			policies = parse_policies(arg.trim_prefix("--policy="))
-		elif arg == "--detail":
-			wants_detail = true
-		else:
-			printerr("run_bot: unknown argument '%s'\n%s" % [arg, USAGE])
-			return 2
-	if seeds.is_empty() or policies.is_empty() or frames <= 0:
-		printerr("run_bot: cannot read the arguments\n%s" % USAGE)
+	var asked := parse(args)
+	if asked.is_empty():
 		return 2
 	var failed := false
-	for policy in policies:
-		for seed_number in seeds:
-			var result := await _play(host, seed_number, policy, frames)
+	for policy: CombatBot.Policy in asked["policies"]:
+		for seed_number: int in asked["seeds"]:
+			var result := await _play(host, seed_number, policy, asked["frames"])
 			print(result["summary"])
-			if wants_detail:
+			if asked["detail"]:
 				for line in result["foes"]:
 					print("  " + line)
 			for line in result["problems"]:

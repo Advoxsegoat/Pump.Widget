@@ -41,3 +41,13 @@ func test_a_clean_run_prints_a_line_for_its_seed_and_exits_zero() -> void:
 func test_arguments_it_cannot_read_exit_two() -> void:
 	var run := _run(["--seeds=nine"])
 	assert_eq(run["code"], 2, run["text"])
+
+
+func test_the_arguments_are_parsed_together() -> void:
+	var asked := BotRunner.parse(PackedStringArray(["--seeds=2-3", "--frames=500", "--policy=counter", "--detail"]))
+	assert_eq(asked["seeds"], [2, 3] as Array[int])
+	assert_eq(asked["frames"], 500)
+	assert_eq(asked["policies"], [CombatBot.Policy.COUNTER] as Array[CombatBot.Policy])
+	assert_true(asked["detail"])
+	assert_eq(BotRunner.parse(PackedStringArray()), {"seeds": [1] as Array[int], "frames": 7200, "policies": [CombatBot.Policy.MIXED] as Array[CombatBot.Policy], "detail": false}, "the defaults")
+	assert_true(quietly(func() -> Variant: return BotRunner.parse(PackedStringArray(["--seeds=x"]))).is_empty(), "unreadable gives nothing")
