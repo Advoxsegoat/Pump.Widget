@@ -92,6 +92,9 @@ var policy: Policy = Policy.MIXED
 ## and it acts on nothing newer. It knows how long each blow takes from its tell (a player learns that). 0 sees the fight as it is.
 var reaction_frames := DEFAULT_REACTION
 var reaction_jitter := 3
+## Whether a walk that gets nowhere is steered aside (see _steer). Off, the bot pushes at what is in its way, as it did before the fix: that is how
+## the sweep found a foe that stood and stared (see the report), and how to find it again.
+var steering := true
 ## The fewest frames from a tell to the defence pressed for it over the run (-1 for none yet).
 var fewest_reaction := -1
 ## Physics frames the bot has played.
@@ -105,6 +108,8 @@ var damage_dealt := 0.0
 var damage_taken := 0.0
 var highest_tempo := 0
 var waves_cleared := 0
+## The frame the last wave of the arena was first cleared on (every wave met on the way), or -1 while it has not been.
+var round_done_at := -1
 var deaths := 0
 ## The same numbers by the foe's def id: {dealt, taken, tempo, cleared, deaths}, HP taken off a foe of that def and off him by one,
 ## the highest tempo reached with one the nearest, the waves cleared that held one (each def in a wave has it), his deaths to one.
@@ -182,6 +187,8 @@ func begin(player: Actor, arena: Arena, seed_value: int, how: Policy = Policy.MI
 		watch.bounds = BotWatch.bounds_of(arena) if arena.is_inside_tree() else watch.bounds
 		arena.wave_cleared.connect(func(i: int) -> void:
 			waves_cleared += 1
+			if round_done_at < 0 and i == arena.wave_count() - 1:
+				round_done_at = frame
 			watch.note_cleared(i)
 			var seen := {}
 			for def in _arena.waves[i].defs:
@@ -217,9 +224,10 @@ func save_replay() -> Error:
 
 ## One line of what the run came to: waves cleared, deaths and problems, then the numbers the policies are compared by.
 func summary() -> String:
-	return "bot seed %d: waves %d, deaths %d, problems %d (%s, reaction %d: dealt %d, taken %d, highest tempo %s, fewest frames from a tell to a defence %d)" % [
+	var round_note := "" if round_done_at < 0 else ", the last wave cleared on frame %d" % round_done_at
+	return "bot seed %d: waves %d, deaths %d, problems %d (%s, reaction %d: dealt %d, taken %d, highest tempo %s, fewest frames from a tell to a defence %d%s)" % [
 			rng_seed, waves_cleared, deaths, problems.size(), POLICIES.find_key(policy), reaction_frames, roundi(damage_dealt), roundi(damage_taken),
-			DodgeChain.Tempo.keys()[highest_tempo].to_lower(), fewest_reaction]
+			DodgeChain.Tempo.keys()[highest_tempo].to_lower(), fewest_reaction, round_note]
 
 
 ## The numbers of the run by the foe's def id (by_foe).
@@ -720,7 +728,8 @@ func _move(foes: Array[Actor]) -> void:
 	var chained := _player.chain != null and _player.chain.count > 0
 	if _distance(foe) > ENGAGE_RANGE and not (chained and _distance(foe) < THREAT_RANGE + 1.0):
 		_walk = _toward(foe)
-	_steer()
+	if steering:
+		_steer()
 
 
 # Turns the walk aside when it has gone nowhere for STUCK_FRAMES, for STEER_FRAMES.

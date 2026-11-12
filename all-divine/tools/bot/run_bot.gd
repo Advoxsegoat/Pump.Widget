@@ -39,7 +39,7 @@ func _supervise(runner: Variant, asked: Dictionary) -> int:
 			var policy_name: String = runner.policy_name(policy)
 			var code := -1
 			for attempt in RETRIES + 1:
-				code = _child(["--seeds=%d" % seed_number, "--frames=%d" % asked["frames"], "--policy=%s" % policy_name, "--reaction=%d" % asked["reaction"]] + (["--detail"] if asked["detail"] else []))
+				code = _child(["--seeds=%d" % seed_number, "--frames=%d" % asked["frames"], "--policy=%s" % policy_name, "--reaction=%d" % asked["reaction"]] + (["--detail"] if asked["detail"] else []) + (["--no-steering"] if not asked["steering"] else []) + (["--until-round"] if asked["until_round"] else []))
 				if code == 0 or code == 1:
 					break
 				printerr("run_bot: Godot died (exit %d) on seed %d, policy %s%s" % [code, seed_number, policy_name, "; running it again" if attempt < RETRIES else ""])

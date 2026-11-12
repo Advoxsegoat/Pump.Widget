@@ -4,7 +4,7 @@ extends RefCounted
 ## with the policy asked for, `frames` physics frames, one line for the seed (and with --detail one for each foe def it met, the numbers a policy is judged by).
 ## A run that found a problem prints it and its recording is saved (out/replays).
 
-const USAGE := "usage: tools/godot.sh -s res://tools/bot/run_bot.gd -- [--seeds=1-10 | 1,3,5] [--frames=7200] [--policy=mixed|aggress|counter|mash|all] [--reaction=14] [--detail]"
+const USAGE := "usage: tools/godot.sh -s res://tools/bot/run_bot.gd -- [--seeds=1-10 | 1,3,5] [--frames=7200] [--policy=mixed|aggress|counter|mash|all] [--reaction=14] [--no-steering] [--until-round] [--detail]"
 
 
 ## The seeds an argument like "1-10" or "1,4,7" names, or [] if it is not one.
@@ -42,7 +42,7 @@ func policy_name(policy: int) -> String:
 
 ## What the arguments ask for: {seeds, frames, policies, detail}; empty (after saying why) when they cannot be read.
 static func parse(args: PackedStringArray) -> Dictionary:
-	var asked := {"seeds": [1] as Array[int], "frames": 7200, "policies": [CombatBot.Policy.MIXED] as Array[CombatBot.Policy], "detail": false, "reaction": CombatBot.DEFAULT_REACTION}
+	var asked := {"seeds": [1] as Array[int], "frames": 7200, "policies": [CombatBot.Policy.MIXED] as Array[CombatBot.Policy], "detail": false, "reaction": CombatBot.DEFAULT_REACTION, "steering": true, "until_round": false}
 	for arg in args:
 		if arg.begins_with("--seeds="):
 			asked["seeds"] = parse_seeds(arg.trim_prefix("--seeds="))
@@ -52,6 +52,10 @@ static func parse(args: PackedStringArray) -> Dictionary:
 			asked["policies"] = parse_policies(arg.trim_prefix("--policy="))
 		elif arg == "--detail":
 			asked["detail"] = true
+		elif arg == "--until-round":
+			asked["until_round"] = true
+		elif arg == "--no-steering":
+			asked["steering"] = false
 		elif arg.begins_with("--reaction="):
 			asked["reaction"] = int(arg.trim_prefix("--reaction="))
 		else:
@@ -72,7 +76,7 @@ func run(host: Node, args: PackedStringArray) -> int:
 	var failed := false
 	for policy: CombatBot.Policy in asked["policies"]:
 		for seed_number: int in asked["seeds"]:
-			var result := await _play(host, seed_number, policy, asked["frames"], asked["reaction"])
+			var result := await _play(host, seed_number, policy, asked["frames"], asked["reaction"], asked["steering"], asked["until_round"])
 			print(result["summary"])
 			if asked["detail"]:
 				for line in result["foes"]:
@@ -88,16 +92,17 @@ func run(host: Node, args: PackedStringArray) -> int:
 
 
 # One seed with one policy for `frames` physics frames: {summary, problems, replay}.
-func _play(host: Node, seed_number: int, policy: CombatBot.Policy, frames: int, reaction: int) -> Dictionary:
+func _play(host: Node, seed_number: int, policy: CombatBot.Policy, frames: int, reaction: int, steering := true, until_round := false) -> Dictionary:
 	Game.reset()
 	var game := BotWorld.make(host, seed_number)
 	var bot := CombatBot.new()
 	host.add_child(bot)
 	bot.listen_for_errors = true
 	bot.reaction_frames = reaction
+	bot.steering = steering
 	bot.begin(game.player, game.arena(), seed_number, policy)
 	var tree := host.get_tree()
-	while bot.frame < frames:
+	while bot.frame < frames and not (until_round and bot.round_done_at >= 0):
 		await tree.physics_frame
 	bot.finish()
 	var result := {"summary": bot.summary(), "problems": bot.problems, "replay": bot.replay_path(), "finding_replay": bot.replay_path("finding"), "foes": bot.foe_lines(), "findings": bot.findings}
