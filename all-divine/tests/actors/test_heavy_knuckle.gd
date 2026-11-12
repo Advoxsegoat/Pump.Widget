@@ -102,7 +102,7 @@ func test_the_heavy_knuckle_has_its_numbers() -> void:
 	var def := _heavy_def()
 	assert_eq(def.id, &"knuckle_heavy")
 	assert_eq(def.team, ActorDef.Team.ENEMY)
-	assert_eq(def.hidden_parts, PackedStringArray(), "hood and pauldron on")
+	assert_eq(def.hidden_parts, PackedStringArray(["Knuckle_Blade"]), "hood and pauldron on; the blade Knuckle's sword hidden")
 	assert_near(def.model_scale, 1.18, 1e-6, "model_scale")
 	assert_eq([def.max_hp, def.max_posture, def.poise], [140.0, 120.0, 14.0], "hp, posture, poise")
 	assert_eq(def.moveset, {&"palm": &"heavy_haymaker", &"gift": &"heavy_slam"}, "its moveset")

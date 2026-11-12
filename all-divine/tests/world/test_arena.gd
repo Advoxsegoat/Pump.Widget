@@ -61,7 +61,7 @@ func _press_key(key: Key) -> void:
 		get_viewport().push_input(event)
 
 
-func test_the_wave_data_is_the_ten_waves() -> void:
+func test_the_wave_data_is_the_twelve_waves() -> void:
 	var set := load(WAVES) as ArenaWaveSet
 	assert_true(set != null, "data/arena/waves.tres is an ArenaWaveSet")
 	if set == null:
@@ -75,11 +75,11 @@ func test_the_wave_data_is_the_ten_waves() -> void:
 		shown.append(who)
 	assert_eq(shown, [
 		[["knuckle_1", 1]], [["knuckle_1", 2]], [["knuckle_drummer", 1]], [["knuckle_2", 1]], [["knuckle_2", 1], ["knuckle_1", 1]],
-		[["knuckle_drummer", 1], ["knuckle_1", 1]], [["knuckle_heavy", 1]], [["knuckle_3", 1]], [["knuckle_3", 1], ["knuckle_2", 1]],
-		[["knuckle_heavy", 1], ["knuckle_1", 1]],
-	], "1x I; 2x I; the Drummer; 1x II; II + I; the Drummer + I; the heavy; 1x III; III + II; the heavy + I")
+		[["knuckle_blade", 1]], [["knuckle_drummer", 1], ["knuckle_1", 1]], [["knuckle_heavy", 1]], [["knuckle_3", 1]],
+		[["knuckle_3", 1], ["knuckle_2", 1]], [["knuckle_blade", 1], ["knuckle_drummer", 1]], [["knuckle_heavy", 1], ["knuckle_1", 1]],
+	], "1x I; 2x I; the Drummer; 1x II; II + I; the blade; the Drummer + I; the heavy; 1x III; III + II; the blade + the Drummer; the heavy + I")
 	var bare := Arena.new()
-	assert_eq(bare.waves.size(), 10, "and the arena has them by default")
+	assert_eq(bare.waves.size(), 12, "and the arena has them by default")
 	bare.free()
 
 

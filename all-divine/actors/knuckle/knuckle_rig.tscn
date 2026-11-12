@@ -95,6 +95,10 @@ radius = 0.18
 [sub_resource type="SphereShape3D" id="foot_zone"]
 radius = 0.16
 
+[sub_resource type="CapsuleShape3D" id="blade_zone"]
+radius = 0.04
+height = 0.78
+
 [sub_resource type="CapsuleShape3D" id="body"]
 radius = 0.35
 height = 1.7
@@ -237,6 +241,20 @@ monitoring = false
 
 [node name="shape" type="CollisionShape3D" parent="Hitboxes/foot_r/zone"]
 shape = SubResource("foot_zone")
+
+[node name="blade_r" type="BoneAttachment3D" parent="Hitboxes"]
+bone_name = "hand_r"
+use_external_skeleton = true
+external_skeleton = NodePath("../../Model/Armature/Skeleton3D")
+
+[node name="zone" type="Area3D" parent="Hitboxes/blade_r"]
+collision_layer = 16
+collision_mask = 8
+monitoring = false
+
+[node name="shape" type="CollisionShape3D" parent="Hitboxes/blade_r/zone"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -0.006, 0.065, 0.427)
+shape = SubResource("blade_zone")
 
 [node name="Hurtbox" type="Area3D" parent="."]
 collision_layer = 8

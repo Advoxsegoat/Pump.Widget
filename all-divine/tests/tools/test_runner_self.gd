@@ -42,3 +42,33 @@ func _run_in_child(script: String, args: Array[String]) -> Dictionary:
 
 func _has_line_starting(lines: PackedStringArray, prefix: String) -> bool:
 	return Array(lines).any(func(line: String) -> bool: return line.begins_with(prefix))
+
+
+func test_shards_split_the_files_between_them_and_miss_none() -> void:
+	var files := PackedStringArray()
+	for i in 10:
+		files.append("suite/x/test_%02d.gd" % i)
+	var seen := {}
+	for index in [1, 2, 3]:
+		var part := TestRunner.shard(files, index, 3)
+		assert_true(part.size() >= 3 and part.size() <= 4, "shard %d of 3 holds its share of ten files (%d)" % [index, part.size()])
+		for path in part:
+			assert_false(seen.has(path), "%s is in one shard only" % path)
+			seen[path] = true
+	assert_eq(seen.size(), 10, "the three shards hold every file between them")
+	assert_eq(TestRunner.shard(files, 1, 3), PackedStringArray([files[0], files[3], files[6], files[9]]), "a shard takes every third file, so neighbours (the slow files of one folder) are spread")
+	assert_eq(TestRunner.shard(files, 1, 1), files, "one shard of one is every file")
+
+
+func test_a_shard_that_does_not_exist_holds_nothing() -> void:
+	var files := PackedStringArray(["suite/x/test_a.gd", "suite/x/test_b.gd"])
+	for bad: Array in [[0, 3], [4, 3], [1, 0], [-1, 2]]:
+		assert_eq(TestRunner.shard(files, bad[0], bad[1]), PackedStringArray(), "shard %d of %d" % bad)
+
+
+func test_shard_argument_is_read_as_index_of_count() -> void:
+	assert_eq(TestRunner.shard_of("2/3"), Vector2i(2, 3))
+	assert_eq(TestRunner.shard_of("1/1"), Vector2i(1, 1))
+	for bad in ["", "2", "0/3", "4/3", "a/b", "2/3/4", "2/0", "-1/3"]:
+		assert_eq(TestRunner.shard_of(bad), Vector2i.ZERO, "'%s' is not a shard" % bad)
+

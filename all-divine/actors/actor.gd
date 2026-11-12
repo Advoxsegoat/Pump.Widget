@@ -214,6 +214,8 @@ func _ready() -> void:
 		rig.cadence = def.locomotion.cadence
 	if rig.foot_planter != null:
 		rig.foot_planter.keep_toes_up = def.keep_toes_up
+	if not def.locomotion_clips.is_empty():
+		rig.set_locomotion_clips(def.locomotion_clips)
 	stats = Stats.from_def(def)
 	locomotion = Locomotion.new(def.locomotion)
 	if def.chain != null:

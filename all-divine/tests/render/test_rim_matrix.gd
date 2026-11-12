@@ -25,6 +25,11 @@ extends TestCase
 ## look at.
 
 const MAIN := "res://main/main.tscn"
+## The blade Knuckle, whose sword is part of the body the rim goes round.
+const BLADE := preload("res://data/actors/knuckle_blade.tres")
+## The chop's wind-up holds the sword up end-on to the camera: the rim round its tip shows 3 pixels past the pixels the silhouette
+## reads there (one more than the fists' 2), a tip a few pixels wide being drawn a little further than the flat-colour pass reads it.
+const SWORD_TIP_FAR := 3
 ## The World picture is what is read, 642x362 whatever the window is: a small window is drawn faster.
 const SIZE := Vector2i(640, 360)
 const ROSE := Color("e8607e")
@@ -94,6 +99,18 @@ func test_the_thrust_rim_holds_everywhere() -> void:
 
 func test_the_grab_rim_holds_everywhere() -> void:
 	await _check_move(&"knuckle_grab", [10, 45])
+
+
+func test_the_blade_cut_rim_holds_everywhere() -> void:
+	await _check_move(&"blade_cut", [8, 20], BLADE)
+
+
+func test_the_blade_chop_rim_holds_everywhere() -> void:
+	await _check_move(&"blade_chop", [10, 24], BLADE, SWORD_TIP_FAR)
+
+
+func test_the_blade_lunge_rim_holds_everywhere() -> void:
+	await _check_move(&"blade_lunge", [10, 42], BLADE)
 
 
 # Two rims at once, one body 0.7 m behind the other (so they overlap in the picture), each way round. A rim at full strength
@@ -187,12 +204,12 @@ func test_the_warming_passes_show_nothing() -> void:
 
 
 # One move at an early frame and at its blow, in every place.
-func _check_move(move_id: StringName, at_frames: Array) -> void:
+func _check_move(move_id: StringName, at_frames: Array, def: ActorDef = null, far_allowed := 2) -> void:
 	for frame: int in at_frames:
-		var run := await _pose(move_id, frame)
+		var run := await _pose(move_id, frame, def)
 		var main: Main = run["main"]
 		var foe: Actor = run["foe"]
-		var label := "%s f%d" % [String(move_id).trim_prefix("knuckle_"), frame]
+		var label := "%s f%d" % [String(move_id).trim_prefix("knuckle_").trim_prefix("blade_"), frame]
 		var open := {}
 		var column := 0
 		for place: Dictionary in PLACES:
@@ -221,7 +238,7 @@ func _check_move(move_id: StringName, at_frames: Array) -> void:
 			assert_true(stats.outline_showing >= 15, "%s: some of the upper body's edge shows (%d of %d outline pixels)" % [where, stats.outline_showing, open.outline])
 			assert_true(kept >= MIN_RIM_KEPT, "%s: the upper body keeps %d%% of the open ground's rim (%d pixels on %d of outline; in the open %d on %d)" % [
 					where, roundi(100.0 * kept), stats.upper, stats.outline_showing, open.upper, open.outline])
-			assert_true(stats.far <= 2, "%s: nothing away from the body changed (%d pixels)" % [where, stats.far])
+			assert_true(stats.far <= far_allowed, "%s: nothing away from the body changed (%d pixels, at most %d)" % [where, stats.far, far_allowed])
 		_rows += 1
 		main.queue_free()
 		await frames(2)
@@ -231,13 +248,20 @@ func _check_move(move_id: StringName, at_frames: Array) -> void:
 # The yard with a Knuckle `frame` frames into `move_id`, started in the open facing the camera, and Abarax; both frozen, no
 # shadows, nothing else moving. Returns {main, foe, turn}: `turn` is how far the move has turned the body from the way it
 # started; each case then stands the frozen body where it wants, facing its way.
-func _pose(move_id: StringName, frame: int) -> Dictionary:
+func _pose(move_id: StringName, frame: int, def: ActorDef = null) -> Dictionary:
 	Game.reset()
 	Arena.reset_spawn_counts()
 	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
 	main.arena().automatic = false
 	for light in main.region.find_children("*", "Light3D", true, false):
 		(light as Light3D).shadow_enabled = false
+	if def != null:  # the one foe of this def, in place of the first wave's
+		var wave := ArenaWave.new()
+		wave.defs.assign([def])
+		wave.count = PackedInt32Array([1])
+		main.arena().clear_foes()
+		main.arena().waves.assign([wave])
+		main.arena().start_wave(0)
 	var foe := main.arena().enemies()[0]
 	foe.set_brain(Brain.new())
 	main.player.set_brain(Brain.new())
