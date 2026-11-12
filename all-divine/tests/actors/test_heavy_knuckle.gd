@@ -155,6 +155,7 @@ func test_the_brain_is_data_and_has_its_numbers() -> void:
 	var slam: AttackOption = brain.attacks[1]
 	assert_eq([haymaker.action, haymaker.weight, haymaker.combo], [&"palm", 1.0, PackedStringArray()], "the haymaker")
 	assert_eq([slam.action, slam.weight, slam.cooldown, slam.min_range, slam.max_range], [&"gift", 0.7, 5.0, 0.0, CHOSEN], "the slam: within 1.8 m")
+	assert_eq([haymaker.tokens, slam.tokens], [AttackTokens.ALL, AttackTokens.ALL], "both hold every token their target gives (Task 14e)")
 
 
 func test_the_clip_checker_passes_it() -> void:

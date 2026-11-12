@@ -27,6 +27,10 @@ extends Resource
 @export var back_up_margin := 1.0
 ## Whether it needs one of the target's attack tokens (AttackTokens) to be thrown.
 @export var needs_token := true
+## How many of the target's attack tokens (AttackTokens) it holds until it is over or cut: 1 as for any attack, 0 for all that
+## the target gives (the heavy Knuckle's: while he winds up, blows and recovers no other enemy begins an attack on his target,
+## and he begins none while another holds one). Ignored with needs_token false.
+@export var tokens := 1
 ## Actions pressed in turn after `action`, each as the cancel window that takes it opens: ["palm", "palm"] after the
 ## jab is the cross and then the hook.
 @export var combo := PackedStringArray()
