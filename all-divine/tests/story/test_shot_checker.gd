@@ -307,15 +307,17 @@ func test_a_walk_that_does_not_fit_before_the_next_beat_is_reported() -> void:
 	scene.mark(&"foe_in").position = Vector3(4.5, 0.0, 2.6)   # 3.3 m from foe_stop
 	scene.shots[0].beats[0].at = 60
 	var lines := _check(scene)
-	_only(lines, "S1", "knuckle needs 3.72 s (223 frames) to walk 3.3 m at WALK to 'foe_stop' and come to rest, but has 0.50 s (30 frames) before the end of S1")
+	_only(lines, "S1", "knuckle needs 3.72 s (223 frames) to walk 3.3 m at WALK to 'foe_stop' and come to rest, but has 3.50 s (210 frames) before the end of the scene")
 
 
-func test_a_walk_has_until_the_end_of_its_shot() -> void:
+func test_a_walk_carries_across_a_cut() -> void:
 	var scene := _fixture()
-	scene.mark(&"foe_in").position = Vector3(4.5, 0.0, 2.6)
-	scene.shots[1].beats.clear()   # nothing of the foe's follows, but the walk must still be over when S1 ends
+	scene.mark(&"foe_in").position = Vector3(4.5, 0.0, 2.6)   # 3.3 m: 223 frames, and S1 is 90
+	scene.shots[1].beats.clear()
 	scene.shots[1].cues.clear()
-	_only(_check(scene), "S1", "but has 1.50 s (90 frames) before the end of S1")
+	assert_eq(_check(scene), PackedStringArray(), "the walk goes on through S2 and S3 (270 frames in all)")
+	scene.shots[0].beats[0].at = 60   # 210 frames to the scene's last frame
+	_only(_check(scene), "S1", "but has 3.50 s (210 frames) before the end of the scene")
 
 
 # --- notes, status, placeholders ---

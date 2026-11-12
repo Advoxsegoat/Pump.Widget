@@ -179,7 +179,7 @@ func test_a_walk_that_just_fits_passes_and_one_frame_less_fails() -> void:
 	var scene := _fixture()
 	var n := StoryWalk.frames(def.locomotion, ActorBeat.Pace.WALK, 1.0)
 	scene.shots[0].beats[0].at = 90 - n
-	scene.shots[1].beats[0].at = 0
+	scene.shots[1].beats.append(_beat(&"knuckle", 0, {move_to = &"foe_in"}))   # the next walk begins as S2 does
 	assert_eq(_check(scene), PackedStringArray())
 	scene.shots[0].beats[0].at = 91 - n
 	_only(_check(scene), "S1", "needs %.2f s (%d frames)" % [float(n) / 60.0, n])
@@ -194,11 +194,19 @@ func test_a_clip_or_a_face_mid_walk_does_not_end_the_walk() -> void:
 
 func test_a_second_walk_starts_from_the_mark_the_first_reached() -> void:
 	var scene := _fixture()
-	scene.shots[1].beats.append(_beat(&"knuckle", 0, {move_to = &"foe_in"}))
+	scene.shots[3].beats.append(_beat(&"knuckle", 50, {move_to = &"foe_in"}))
 	var lines := _check(scene)
-	_only(lines, "S2", "knuckle needs")
+	_only(lines, "S4", "knuckle needs")
 	assert_true(lines[0].contains("to walk 1.0 m at WALK to 'foe_in' and come to rest"), lines[0])
-	assert_true(lines[0].contains("before the end of S2"), lines[0])
+	assert_true(lines[0].contains("before the end of the scene"), lines[0])
+
+
+func test_a_walk_given_before_the_last_could_arrive_is_a_line() -> void:
+	var scene := _fixture()
+	scene.shots[0].beats.append(_beat(&"knuckle", 30, {move_to = &"foe_in"}))   # the first walk needs 70 frames from 0
+	var lines := _check(scene)
+	assert_true(lines.size() >= 1, "\n".join(lines))
+	assert_true(lines[0].contains("knuckle needs") and lines[0].contains("before its next move_to"), lines[0])
 
 
 func test_a_named_live_actor_that_plays_a_clip_has_a_def() -> void:

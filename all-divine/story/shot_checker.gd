@@ -33,7 +33,7 @@ extends RefCounted
 ##   a MINI is 180 to 360 frames in all, a MOMENT one shot of 90 frames at most with no letterbox and no beats, a
 ##       CUTSCENE 120 frames or more; the glides are 20 to 90 frames (15 to 90 for a MOMENT)
 ##   every `move_to` a mark, from a place that is known (a spawn mark, a rehearsal mark, the mark of the actor's last
-##       walk), fits before the actor's next `move_to` or the end of its shot, by StoryWalk: the time to be at rest
+##       walk), fits before the actor's next `move_to` or the scene's last frame (a walk goes on across a cut), by StoryWalk: the time to be at rest
 ##       there. Two actors are never at rest nearer than two bodies (0.7 m) at once
 ##   an approved scene has no placeholder
 ## The marks and walks are checked in the place itself by PlaceChecker, which needs the region loaded.
@@ -637,7 +637,7 @@ func _check_kind() -> bool:
 # --- walking ---
 
 # Each actor's `move_to`s in time order, by StoryWalk: a walk to a mark, from a place that is known, is over (the body
-# at rest within the arrival distance) before the actor's next `move_to` or the end of its shot. Where a body stands is
+# at rest within the arrival distance) before the actor's next `move_to` or the scene's last frame. Where a body stands is
 # known from its spawn mark (a spawned actor) or its rehearsal mark (a live one) and from the mark of its last walk.
 # Then no two bodies are at rest nearer than two bodies.
 func _check_walks() -> bool:
@@ -692,13 +692,12 @@ func _check_walks() -> bool:
 				if needed < 0:
 					_add(String(shot.id), "%s: could not work out how long a walk of %.1f m takes (the locomotion numbers give no speed)" % [entry.actor, metres])
 					needed = 0
-				var limit: int = mini(next if i + 1 < beats.size() else end, shot.start + shot.length)
-				var left: int = limit - beats[i].frame
+				var left: int = next - beats[i].frame
 				arrive += needed
 				if needed > left:
 					_add(String(shot.id), "%s needs %.2f s (%d frames) to walk %.1f m at %s to '%s' and come to rest, but has %.2f s (%d frames) before %s" % [
 							entry.actor, float(needed) / FRAMES_PER_SECOND, needed, metres, ActorBeat.Pace.keys()[beat.pace], beat.move_to,
-							float(left) / FRAMES_PER_SECOND, left, "its next move_to" if limit == next and i + 1 < beats.size() else "the end of %s" % shot.id])
+							float(left) / FRAMES_PER_SECOND, left, "its next move_to" if i + 1 < beats.size() else "the end of the scene"])
 			_rest(entry, to, mini(arrive, next), next)
 			known = to
 	_check_bodies_apart()
