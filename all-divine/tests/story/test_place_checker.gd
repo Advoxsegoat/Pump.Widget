@@ -129,9 +129,9 @@ func test_a_region_with_no_spawn_is_a_line() -> void:
 	_only(lines, ["the region has no Spawn marker"])
 
 
-# A platform 0.5 m high with a 0.25 m step up to it, and one 1.0 m high with no way up, in the yard.
+# A platform 0.2 m high with a 0.1 m step up to it, and one 1.0 m high with no way up, in the yard.
 func _add_platforms() -> void:
-	for box in [[Vector3(-6, 0, 2), Vector3(4, 0.5, 2)], [Vector3(-2, 0, 2), Vector3(1, 0.25, 2)], [Vector3(-6, 0, -6), Vector3(4, 1.0, 2)]]:
+	for box in [[Vector3(-6, 0, 2), Vector3(4, 0.2, 2)], [Vector3(-2, 0, 2), Vector3(1, 0.1, 2)], [Vector3(-6, 0, -6), Vector3(4, 1.0, 2)]]:
 		var body := StaticBody3D.new()
 		body.collision_layer = Layers.WORLD | Layers.IK_SURFACE
 		body.collision_mask = 0
@@ -147,8 +147,8 @@ func _add_platforms() -> void:
 func test_marks_on_a_platform_reached_by_a_low_step_pass_and_one_with_no_way_up_does_not() -> void:
 	_add_platforms()
 	await frames(2)
-	assert_eq(_marks(_scene(Vector3(0, 0, 0), Vector3(-4, 0.5, 3))), PackedStringArray(), "on the platform")
-	assert_eq(_marks(_scene(Vector3(0, 0, 0), Vector3(-1.5, 0.25, 3))), PackedStringArray(), "on the step")
+	assert_eq(_marks(_scene(Vector3(0, 0, 0), Vector3(-4, 0.2, 3))), PackedStringArray(), "on the platform")
+	assert_eq(_marks(_scene(Vector3(0, 0, 0), Vector3(-1.5, 0.1, 3))), PackedStringArray(), "on the step")
 	_only(_marks(_scene(Vector3(0, 0, 0), Vector3(-4, 1.0, -5))), ["mark 'foe_stop'", "cannot be reached from Spawn"])
 
 

@@ -64,12 +64,21 @@ const BODY_RADIUS := 0.35
 const BODY_HEIGHT := 1.8
 const BODY_LIFT := 0.05
 const FLOOR_TOLERANCE := 0.1
+## The least upward lean of a surface's normal (y of a unit vector) that a body stands on.
+const FLOOR_NORMAL := 0.7
 const WALK_SAMPLE := 0.1
 ## The region's floor is flooded from its Spawn on a grid of this many metres; neighbouring floors join when they differ
-## in height by no more than STEP (a ramp's rise over a cell, a low step; a kerb of 0.3 m is not one).
-const CELL := 0.5
-const STEP := 0.26
-const MAX_CELLS := 250000
+## in height by no more than STEP, which is what a real body climbs (0.10 m, and not 0.15 m); a kerb of 0.3 m is not one.
+const CELL := 0.25
+const STEP := 0.12
+## A cell is passable when a capsule of this radius fits there: slimmer than a body's 0.35 m, so that a grid of CELL
+## metres always has a cell in a doorway a body can use (0.8 m and up). It also passes a slot between 0.5 and 0.7 m wide
+## that a body cannot use; the world's own tests seal a region against the real body.
+const PROBE_RADIUS := 0.25
+## A body crosses a gap in the floor of up to 0.5 m (it is held up by its own width), so floors up to this many cells apart
+## on a line, with nothing in the way, are joined.
+const BRIDGE_CELLS := 3
+const MAX_CELLS := 400000
 const REHEARSAL := "rehearsal."
 const AT_START := "@start"
 ## The middle of the two fighters in a paired move, which the Director fills in.
@@ -84,6 +93,9 @@ const STAGES: Array[StringName] = [&"_check_enums", &"_check_folder", &"_check_c
 		&"_check_shots", &"_check_kind", &"_check_walks"]
 ## Fields every resource has that a file may set.
 const COMMON_KEYS: PackedStringArray = ["script", "resource_name", "resource_local_to_scene", "resource_path"]
+
+## How many cells of floor the flood fill may visit before it stops and says so.
+var max_cells := MAX_CELLS
 
 ## Whether the last `check` ran every rule to its end.
 var finished := false
@@ -1096,7 +1108,10 @@ func _place_rules(scene: SceneShots, space: PhysicsDirectSpaceState3D, spawn: Va
 		_add("-", "the region has no Spawn marker, so no mark can be shown to be reachable")
 	else:
 		reach = _reach(space, spawn)
-		if reach.is_empty():
+		if reach.size() >= max_cells:
+			_add("-", "the flood of the region's floor stopped at %d cells, so no mark was judged for reachability" % max_cells)
+			reach = {}
+		elif reach.is_empty():
 			_add("-", "the region's Spawn at %s has no walkable floor under it or no room for a body, so no mark can be shown to be reachable" % _where(spawn))
 	var failed := {}
 	for mark in scene.marks:
@@ -1153,7 +1168,7 @@ func _reach(space: PhysicsDirectSpaceState3D, spawn: Vector3) -> Dictionary:
 		cells[start] = floor_y
 		var queue: Array[Vector2i] = [start]
 		var next := 0
-		while next < queue.size() and cells.size() < MAX_CELLS:
+		while next < queue.size() and cells.size() < max_cells:
 			var cell := queue[next]
 			next += 1
 			for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
@@ -1165,6 +1180,17 @@ func _reach(space: PhysicsDirectSpaceState3D, spawn: Vector3) -> Dictionary:
 				if there != null:
 					cells[neighbour] = there
 					queue.append(neighbour)
+					continue
+				# no floor to stand on, or no room, next door: a body spans a gap, so look for floor a few cells on
+				for jump in range(2, BRIDGE_CELLS + 1):
+					var far: Vector2i = cell + step * jump
+					if cells.has(far):
+						break
+					var across: Variant = _stand(space, Vector2(far) * CELL, here + STEP + 0.02, here - STEP - 0.02)
+					if across != null and _line_blockers(space, Vector3(cell.x * CELL, here, cell.y * CELL), Vector3(far.x * CELL, across, far.y * CELL), PROBE_RADIUS).is_empty():
+						cells[far] = across
+						queue.append(far)
+						break
 	_reach_cache[key] = cells
 	return _leave(&"_reach", cells)
 
@@ -1173,10 +1199,10 @@ func _reach(space: PhysicsDirectSpaceState3D, spawn: Vector3) -> Dictionary:
 func _stand(space: PhysicsDirectSpaceState3D, xz: Vector2, from_y: float, to_y: float) -> Variant:
 	_enter(&"_stand")
 	var hit := _ray(space, Vector3(xz.x, from_y, xz.y), Vector3(xz.x, to_y, xz.y))
-	if hit.is_empty():
+	if hit.is_empty() or hit.normal.y < FLOOR_NORMAL:   # a ray that starts on the side of something is not a floor
 		return _leave(&"_stand", null)
 	var at := Vector3(xz.x, hit.position.y, xz.y)
-	if not _body_hits(space, at).is_empty():
+	if not _body_hits(space, at, PROBE_RADIUS).is_empty():
 		return _leave(&"_stand", null)
 	return _leave(&"_stand", at.y)
 
@@ -1190,18 +1216,18 @@ func _reached(space: PhysicsDirectSpaceState3D, at: Vector3, reach: Dictionary) 
 			var cell := centre + Vector2i(dx, dz)
 			if reach.has(cell) and absf(float(reach[cell]) - at.y) <= STEP:
 				var from := Vector3(cell.x * CELL, reach[cell], cell.y * CELL)
-				if _line_blockers(space, from, at).is_empty():
+				if _line_blockers(space, from, at, PROBE_RADIUS).is_empty():
 					return _leave(&"_reached", true)
 	return _leave(&"_reached", false)
 
 
 # The names of what stands in a body's way along a straight line (empty: clear), sampled every WALK_SAMPLE metres.
-func _line_blockers(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3) -> PackedStringArray:
+func _line_blockers(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3, radius := BODY_RADIUS) -> PackedStringArray:
 	_enter(&"_line_blockers")
 	var length := Vector2(from.x - to.x, from.z - to.z).length()
 	var steps := maxi(1, ceili(length / WALK_SAMPLE))
 	for step in steps + 1:
-		var hits := _body_hits(space, from.lerp(to, float(step) / float(steps)))
+		var hits := _body_hits(space, from.lerp(to, float(step) / float(steps)), radius)
 		if not hits.is_empty():
 			return _leave(&"_line_blockers", hits)
 	return _leave(&"_line_blockers", PackedStringArray())
@@ -1217,16 +1243,16 @@ func _why_not_reached(space: PhysicsDirectSpaceState3D, at: Vector3, reach: Dict
 		if apart < best_apart:
 			best_apart = apart
 			best = Vector3(cell.x * CELL, reach[cell], cell.y * CELL)
-	var blockers := _line_blockers(space, best, at)
+	var blockers := _line_blockers(space, best, at, PROBE_RADIUS)
 	var between := "%s is in the way" % ", ".join(blockers) if not blockers.is_empty() else "no floor within a step of %.2f m joins them (a gap, or a rise or drop over that)" % STEP
 	return _leave(&"_why_not_reached", "the nearest floor a body reaches is %.1f m away, at %s, and %s" % [best_apart, _where(best), between])
 
 
 # The names of what the world has where an actor's capsule would stand at `at` (empty: room for a body).
-func _body_hits(space: PhysicsDirectSpaceState3D, at: Vector3) -> PackedStringArray:
+func _body_hits(space: PhysicsDirectSpaceState3D, at: Vector3, radius := BODY_RADIUS) -> PackedStringArray:
 	_enter(&"_body_hits")
 	var capsule := CapsuleShape3D.new()
-	capsule.radius = BODY_RADIUS
+	capsule.radius = radius
 	capsule.height = BODY_HEIGHT
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = capsule

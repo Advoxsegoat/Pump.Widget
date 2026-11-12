@@ -121,3 +121,16 @@ func test_a_real_body_walks_32_m_and_jogs_60_m_to_rest_on_the_promised_frame() -
 		assert_true(got.frames > 0, where)
 		assert_true(got.error <= StoryWalk.ARRIVAL, where)
 		assert_true(absf(float(got.frames - said)) <= 2.0, where)
+
+
+# A tuning whose body never gets up to speed: no walk of it has a time.
+func _stalled() -> LocomotionTuning:
+	var tuning := (Registry.fetch(&"actors", &"knuckle_1") as ActorDef).locomotion.duplicate() as LocomotionTuning
+	tuning.accel = 0.001
+	return tuning
+
+
+func test_a_walk_that_cannot_be_solved_has_no_number_and_is_not_zero() -> void:
+	var tuning := _stalled()
+	assert_eq(StoryWalk.frames(tuning, ActorBeat.Pace.WALK, 1.0), -1)
+	assert_eq(StoryWalk.frames(tuning, ActorBeat.Pace.JOG, 300.0), -1, "a long walk of it as well")

@@ -318,6 +318,15 @@ func test_a_named_live_actor_that_plays_a_clip_has_a_def() -> void:
 	assert_eq(_check(scene), PackedStringArray())
 
 
+func test_a_walk_that_has_no_number_is_a_line() -> void:
+	var scene := _fixture()
+	var def := (scene.cast_entry(&"knuckle").def as ActorDef).duplicate() as ActorDef
+	def.locomotion = def.locomotion.duplicate() as LocomotionTuning
+	def.locomotion.accel = 0.001   # a body that never gets up to speed
+	scene.cast_entry(&"knuckle").def = def
+	_only(_check(scene), "S1", "knuckle: could not work out how long a walk of 1.0 m takes")
+
+
 func test_a_named_live_actor_that_walks_has_a_def() -> void:
 	var scene := _fixture()
 	var guard := CastEntry.new()
