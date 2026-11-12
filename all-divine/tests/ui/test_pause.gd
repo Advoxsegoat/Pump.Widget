@@ -711,6 +711,10 @@ func _hold_run(action: StringName, pause_at: int, held: int, until: int, jab := 
 	var a := main.player
 	var seen := {"charged": [], "started": [], "outcomes": [], "guarding": []}
 	if jab:
+		# On the pad a held guard turns him to the nearest foe. On the keyboard and mouse he would face the cursor, which is
+		# wherever the window's pointer happens to be: under a real window (the render suite) that is behind him, and the blow
+		# comes from outside the guard's arc.
+		Inputs._device = Inputs.Device.GAMEPAD
 		var foe := main.arena().enemies()[0]
 		var at := a.global_position + a.facing() * 0.9
 		foe.place(Transform3D(Basis(Vector3.UP, a.locomotion.facing_yaw + PI), at))
