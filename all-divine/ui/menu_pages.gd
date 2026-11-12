@@ -10,6 +10,11 @@ const ROOT := &"root"
 const QUIT := &"quit"
 
 
+## Every page there is, by id: for the shots and the tests that go through them all.
+static func ids() -> Array[StringName]:
+	return [ROOT, QUIT]
+
+
 ## The page `id` of `menu` as a Dictionary (see the top). An id that is not a page gives the root page.
 static func build(id: StringName, menu: Menu) -> Dictionary:
 	match id:
