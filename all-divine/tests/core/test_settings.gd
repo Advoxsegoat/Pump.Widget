@@ -528,3 +528,115 @@ func test_note_window_mode_stores_both_fullscreens_as_fullscreen() -> void:
 	assert_eq(_made.get_value("window/mode"), "windowed", "any other mode")
 	_made.note_window_mode(Window.MODE_FULLSCREEN)
 	assert_eq(_made.get_value("window/mode"), "fullscreen")
+
+
+func test_a_value_is_a_literal_and_never_builds_an_object() -> void:
+	var forms := {
+		"an object": 'Object(Node,"name":"x")',
+		"an object with a script": 'Object(Node,"script":Resource("res://core/settings.gd"))',
+		"a resource": 'Resource("res://data/tuning/readability.tres")',
+		"an ExtResource": 'ExtResource("1")',
+		"a SubResource": 'SubResource("1")',
+		"an array": "[1, 2]",
+		"a dictionary": '{"a": 1}',
+		"a Vector2i": "Vector2i(1, 2)",
+		"a Color": "Color(1, 0, 0, 1)",
+		"a StringName": '&"name"',
+		"an expression": "1+1",
+		"nan": "nan",
+		"inf": "inf",
+	}
+	for what in forms:
+		_write("[camera]\nshake=%s\ndips=false\n[effects]\nafterimage_on=%s\n[sound]\nmusic=40\n" % [forms[what], forms[what]])
+		var objects := Performance.get_monitor(Performance.OBJECT_COUNT)
+		var settings := _make()
+		assert_eq(settings.get_value("camera/shake"), 100, what + ": the key is its default")
+		assert_eq(settings.get_value("effects/afterimage_on"), true, what + ": a switch too")
+		assert_eq(settings.get_value("camera/dips"), false, what + ": the line after is read")
+		assert_eq(settings.get_value("sound/music"), 40, what + ": and the section after")
+		settings.free()
+		assert_eq(Performance.get_monitor(Performance.OBJECT_COUNT), objects, what + ": nothing built is left")
+
+
+func test_the_literals_a_setting_can_be() -> void:
+	_made = _make()
+	for pair in [["true", true], ["false", false], ["50", 50], ["-5", -5], ["50.0", 50.0], ["1.5e1", 15.0], [".5", 0.5],
+			['"windowed"', "windowed"], ['"a\\"b"', 'a"b'], ['"back\\\\slash"', "back\\slash"], ['"a\\nb"', "a\nb"], ['"="', "="]]:
+		assert_eq(_made._literal(pair[0]), pair[1], "literal " + pair[0])
+	for text in ["", "tru", "True", "1 2", "--5", "5.", "1e", '"open', '"a"b"', '"bad\\q"', "0x10", "1_000"]:
+		assert_eq(_made._literal(text), null, "not a literal: " + text)
+
+
+func test_a_file_save_wrote_reads_back_at_minimum_maximum_and_default() -> void:
+	_made = _make()
+	for pick in ["low", "high", "default"]:
+		for key in _made.keys():
+			var value: Variant = _made.default_of(key)
+			if typeof(value) == TYPE_BOOL:
+				value = (pick == "low")
+			elif typeof(value) == TYPE_STRING:
+				value = "windowed" if pick == "low" else "fullscreen"
+			elif pick != "default":
+				value = (1 if key == "window/scale" else 0) if pick == "low" else (6 if key == "window/scale" else 100)
+			assert_true(_made.set_value(key, value), "set %s %s" % [pick, key])
+		var again := _make()
+		for key in _made.keys():
+			assert_eq(again.get_value(key), _made.get_value(key), "%s: %s reads back" % [pick, key])
+		again.free()
+
+
+func test_a_run_that_is_not_the_players_game_reads_no_player_file() -> void:
+	_write("[camera]\nshake=25\n")
+	var read := {}
+	for args in [PackedStringArray(), PackedStringArray(["--no-player-settings"])]:
+		var settings := (load(SETTINGS) as GDScript).new() as Node
+		settings.path = PATH
+		settings.player_path = PATH
+		settings.scripted_run = false  # as the game is, not as a tool run with -s is
+		settings.user_args = args
+		track(settings)
+		read[args.size()] = settings.get_value("camera/shake")
+		settings.free()
+	assert_eq(read[0], 25, "the game reads the player's file")
+	assert_eq(read[1], 100, "a run given --no-player-settings does not")
+	var again := (load(SETTINGS) as GDScript).new() as Node
+	again.path = PATH
+	again.player_path = PATH
+	again.scripted_run = false
+	again.user_args = PackedStringArray(["--no-player-settings"])
+	track(again)
+	again.set_value("camera/shake", 50)
+	assert_eq(FileAccess.get_file_as_string(PATH), "[camera]\nshake=25\n", "and does not write it")
+	again.free()
+
+
+func test_the_readers_small_corners() -> void:
+	_made = _make()
+	# A bad section header does not keep the section before it.
+	_write("[camera]\ndips=false\n[bad\nshake=25\n[look]\nbloom=50\n")
+	var data: Dictionary = _made._read(PATH)
+	assert_false(data.get("camera", {}).has("shake"), "a key under a bad header is dropped, not given to the section before")
+	assert_eq(data.get("look", {}).get("bloom"), 50, "the next good header starts again")
+	# A ; inside a quoted string is part of the string; one after it is a note.
+	assert_eq(_made._without_note('a="x;y" ; note'), 'a="x;y" ')
+	assert_eq(_made._without_note('a="x\\";y" # note'), 'a="x\\";y" ')
+	_write('[x]\na="b;c" ; note\n')
+	assert_eq(_made._read(PATH).get("x", {}).get("a"), "b;c", "the string keeps its ;")
+	# A byte-order mark at the start of the file is skipped.
+	_write("\ufeff[camera]\nshake=25\n")
+	assert_eq(_made._read(PATH).get("camera", {}).get("shake"), 25, "a BOM")
+	# A value is split at the first = of the line.
+	_write('[x]\na="b=c"\n')
+	assert_eq(_made._read(PATH).get("x", {}).get("a"), "b=c", "the first =")
+
+
+func test_a_nul_byte_costs_its_own_line() -> void:
+	var file := FileAccess.open(PATH, FileAccess.WRITE)
+	file.store_string("[sound]\nmusic=40\n")
+	file.store_8(0)
+	file.store_string("junk\nvoice=50\n[camera]\nshake=25\n")
+	file.close()
+	_made = _make()
+	assert_eq(_made.get_value("sound/music"), 40, "the line before")
+	assert_eq(_made.get_value("sound/voice"), 50, "the line after")
+	assert_eq(_made.get_value("camera/shake"), 25, "and the section after")

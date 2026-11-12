@@ -18,9 +18,9 @@ extends Node
 ## data/tuning/readability.tres says (all on), the camera shake, the look and the sound are 100, the window is the
 ## project's own (fullscreen; windowed on the web).
 ##
-## Only the game reads and writes the player's file. Under the self-test and under any script run with `-s` (the test
-## runner, the tools) the settings are the defaults and that file is neither read nor written; a test's own file,
-## under its own path, is. On the web the page owns the window: apply_window does nothing there (`on_web`).
+## Only the game reads and writes the player's file. Under the self-test, under any script run with `-s` (the test
+## runner, the tools) and in a run given the user argument `--no-player-settings` (the recording tools) the settings
+## are the defaults and that file is neither read nor written; a test's own file, under its own path, is. On the web the page owns the window: apply_window does nothing there (`on_web`).
 
 ## Emitted after a setting changed (by set_value, and by reset_all for each setting that moved).
 signal changed(key: String)
@@ -50,6 +50,8 @@ const SOUND := {
 	"voice": &"Voice",
 	"ui": &"UI",
 }
+## The user argument that makes a run leave the player's file alone.
+const NO_PLAYER_SETTINGS := "--no-player-settings"
 ## The player's file.
 const PLAYER_PATH := "user://settings.cfg"
 const _TUNING := preload("res://data/tuning/readability.tres")
@@ -71,8 +73,17 @@ class Spec:
 var path := PLAYER_PATH
 ## Which file is the player's, the one a test run or the self-test leaves alone. Only a test changes it.
 var player_path := PLAYER_PATH
+## True when this run is a script run with `-s` (the test runner, the tools), whose main loop has a script. Only a test
+## changes it.
+var scripted_run := Engine.get_main_loop() != null and Engine.get_main_loop().get_script() != null
+## The user arguments the run was started with (after `--`). Only a test changes it.
+var user_args := OS.get_cmdline_user_args()
 ## True on the web, where the page owns the window. Only a test changes it.
 var on_web := OS.has_feature("web")
+
+# The shapes of a number: a whole one, and one with a fraction or an exponent.
+var _whole := RegEx.create_from_string("^-?[0-9]+$")
+var _fraction := RegEx.create_from_string("^-?([0-9]+\\.[0-9]+|\\.[0-9]+|[0-9]+(?=[eE]))([eE][+-]?[0-9]+)?$")
 
 var _keys: Array[String] = []
 var _spec: Dictionary[String, Spec] = {}
@@ -297,11 +308,12 @@ func _add_percent(key: String, step: int) -> void:
 
 
 # Whether this run may read and write the file at `file_path`: the player's file belongs to the game alone, not to the
-# self-test and not to a script run with -s (the test runner and the tools have a script for a main loop).
+# self-test, not to a script run with -s (the test runner and the tools) and not to a run that says it is not the
+# player's game (--no-player-settings, which the recording tools pass).
 func _may_use(file_path: String) -> bool:
 	if file_path != player_path:
 		return true
-	return not SelfTest.active and Engine.get_main_loop().get_script() == null
+	return not SelfTest.active and not scripted_run and not user_args.has(NO_PLAYER_SETTINGS)
 
 
 # `value` as `key` holds it (a number clamped and snapped), or null if it is not a value of the key's kind. A whole
@@ -341,7 +353,17 @@ func _read(from: String) -> Variant:
 	file.close()
 	var previous := Engine.print_error_messages
 	Engine.print_error_messages = false
-	var text := bytes.get_string_from_utf8().trim_prefix("\ufeff")
+	# A NUL byte ends a string the engine decodes, so each stretch between them is decoded alone and they are joined
+	# by line ends: a NUL costs its own line.
+	var pieces := PackedStringArray()
+	var from_byte := 0
+	while true:
+		var nul := bytes.find(0, from_byte)
+		pieces.append(bytes.slice(from_byte, bytes.size() if nul < 0 else nul).get_string_from_utf8())
+		if nul < 0:
+			break
+		from_byte = nul + 1
+	var text := "\n".join(pieces).trim_prefix("\ufeff")
 	var data := {}
 	var section := ""
 	for raw in text.split("\n"):
@@ -357,7 +379,7 @@ func _read(from: String) -> Variant:
 		var at := line.find("=")
 		if section.is_empty() or at <= 0:
 			continue
-		var value: Variant = str_to_var(line.substr(at + 1).strip_edges())
+		var value: Variant = _literal(line.substr(at + 1).strip_edges())
 		if value == null:
 			continue
 		if not data.has(section):
@@ -365,6 +387,44 @@ func _read(from: String) -> Variant:
 		data[section][line.substr(0, at).strip_edges()] = value
 	Engine.print_error_messages = previous
 	return data
+
+
+# `text` as the value it spells, if it spells one a setting can be: true, false, a number (a whole one is an int, one
+# with a fraction or an exponent a float) or a double-quoted string with the escapes `\\`, `\"`, `\n`, `\t` and `\r`;
+# else null. Nothing else is evaluated: a settings file is values, and never builds an object, loads a resource or runs
+# a script (what the engine's own parser of variants would do with `Object(...)` or `Resource(...)`).
+func _literal(text: String) -> Variant:
+	if text == "true":
+		return true
+	if text == "false":
+		return false
+	if _whole.search(text) != null:
+		return text.to_int()
+	if _fraction.search(text) != null:
+		return text.to_float()
+	if text.length() < 2 or not text.begins_with("\"") or not text.ends_with("\""):
+		return null
+	var out := ""
+	var i := 1
+	while i < text.length() - 1:
+		var c := text[i]
+		if c == "\"":
+			return null
+		if c == "\\":
+			i += 1
+			if i >= text.length() - 1:
+				return null
+			match text[i]:
+				"\\": out += "\\"
+				"\"": out += "\""
+				"n": out += "\n"
+				"t": out += "\t"
+				"r": out += "\r"
+				_: return null
+		else:
+			out += c
+		i += 1
+	return out
 
 
 # `line` up to a `;` or `#` that is not inside a string.

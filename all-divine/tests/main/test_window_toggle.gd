@@ -118,7 +118,18 @@ func test_f11_records_the_mode_it_leaves() -> void:
 	Game.reset()
 
 
+func test_on_the_web_f11_goes_to_the_base_window_size() -> void:
+	Settings.on_web = true
+	Settings.set_value("window/scale", 3)
+	assert_eq(WindowToggle.target(Window.MODE_FULLSCREEN, Vector2i(1920, 1080)).size, Vector2i(1280, 720),
+		"the web's windowed size does not follow the setting")
+	assert_eq(WindowToggle.target(Window.MODE_FULLSCREEN).size, Vector2i(1280, 720))
+	Settings.on_web = false
+	assert_eq(WindowToggle.target(Window.MODE_FULLSCREEN, Vector2i(1920, 1080)).size, Vector2i(1920, 1080), "off the web it does")
+
+
 func _restore_settings() -> void:
+	Settings.on_web = OS.has_feature("web")
 	Settings.reset_all()
 	Settings.path = "user://settings.cfg"
 	if FileAccess.file_exists(SETTINGS_PATH):
