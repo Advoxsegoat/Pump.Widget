@@ -21,11 +21,17 @@ extends Resource
 ## The format this game reads.
 const VERSION := 1
 
+## The settings that change a fight (Settings keys): the header stores their values, and a replay runs with them. Found by playing a
+## seeded fight with each setting at its default and at its other end; only the slow-down on a perfect dodge changed it.
+const FIGHT_SETTINGS: Array[String] = ["effects/slowdown_on"]
+
 ## The header: the format's version, who made it, how many frames it has, and whether a debug key was pressed while it was made.
 @export var version := VERSION
 @export var policy := ""
 @export var frame_count := 0
 @export var debug_keys := false
+## The values the settings in FIGHT_SETTINGS had when the fight was recorded: key -> value.
+@export var settings: Dictionary = {}
 ## Entries lived (a count of frames from the first) -> the arena's state hash after them.
 @export var hashes: Dictionary = {}
 

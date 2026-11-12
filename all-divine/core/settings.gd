@@ -160,6 +160,28 @@ func set_value(key: String, value: Variant) -> bool:
 	return true
 
 
+## Lends the values in `values` (key -> value; keys that are not settings, and values that do not check, are left out) to the game
+## without writing the player's file or telling anyone: for a replay, which runs the settings its recording was made with. Returns what
+## they were, for take_back.
+func lend(values: Dictionary) -> Dictionary:
+	var before := {}
+	for key: String in values:
+		if not _spec.has(key):
+			continue
+		var checked: Variant = _checked(key, values[key], true)
+		if checked == null:
+			continue
+		before[key] = _values[key]
+		_values[key] = checked
+		_apply(key)
+	return before
+
+
+## Gives back what lend returned.
+func take_back(before: Dictionary) -> void:
+	lend(before)
+
+
 ## Every key back to its default, applied and saved, with `changed` for each that moved.
 func reset_all() -> void:
 	var moved: Array[String] = []

@@ -249,6 +249,7 @@ func test_a_fight_the_bot_played_replays_to_the_same_hash_with_the_slow_down_fro
 	await frames(100)
 	assert_eq(Engine.get_physics_frames(), at + 100)
 	assert_eq(await _replay_game(from_file), recorded[1], "played from the file, a hundred frames later")
+	assert_eq(rec.settings, {"effects/slowdown_on": true}, "the header says what the settings that change a fight were")
 
 
 func test_a_bot_run_paused_for_two_hundred_frames_is_the_run_never_paused() -> void:
@@ -257,3 +258,70 @@ func test_a_bot_run_paused_for_two_hundred_frames_is_the_run_never_paused() -> v
 	assert_eq(paused[1], plain[1], "the same end hash")
 	assert_eq((paused[0] as InputRecording).frames, (plain[0] as InputRecording).frames, "the same controls: the pause is not in the recording")
 	assert_eq(paused[3], PackedStringArray(), "and the bot found no problem in it")
+
+
+# The settings that change a fight (found by running a seeded bot fight at each setting's default and at its other end: only the slow-down
+# changed it, in a counter fight where a perfect dodge fires it and in an aggress fight of 500 frames where it does not), and those that do
+# not. Every setting there is must be in one list: a new one fails this test until someone has run the survey for it and put it in one.
+const CHANGES_A_FIGHT: Array[String] = ["effects/slowdown_on"]
+const DOES_NOT: Array[String] = [
+	"effects/parry_aura_on", "effects/perilous_rim_on", "effects/heavy_wave_on", "effects/perilous_wave_on", "effects/perilous_icon_on",
+	"effects/parry_burst_on", "effects/afterimage_on", "effects/chain_rim_on", "camera/shake", "camera/dips",
+	"look/outline", "look/dof", "look/bloom", "look/fog", "look/grade", "look/vignette",
+	"sound/master", "sound/music", "sound/sfx", "sound/voice", "sound/ui", "window/mode", "window/scale",
+]
+
+
+func test_every_setting_is_known_to_change_a_fight_or_not_and_the_header_stores_those_that_do() -> void:
+	var known := CHANGES_A_FIGHT + DOES_NOT
+	var unknown := []
+	for key in Settings.keys():
+		if not known.has(key):
+			unknown.append(key)
+	assert_eq(unknown, [], "a setting that has not been surveyed: run a seeded fight with it at both ends, and list it")
+	for key in known:
+		assert_true(Settings.keys().has(key), "%s is a setting" % key)
+	assert_eq(InputRecording.FIGHT_SETTINGS, CHANGES_A_FIGHT, "the header stores exactly the settings that change a fight")
+
+
+func test_a_fight_recorded_with_the_slow_down_off_replays_as_recorded_with_it_on() -> void:
+	var path := "user://settings_replay_test.cfg"
+	var player_path := Settings.path
+	Settings.path = path
+	Settings.set_value("effects/slowdown_on", false)
+	var off := await _record_bot(SLOW_SEED, CombatBot.Policy.COUNTER, FRAMES)
+	Settings.reset_all()
+	assert_true(Settings.get_value("effects/slowdown_on"), "the slow-down is on again, as by default")
+	var written := FileAccess.get_file_as_string(path)
+	var rec: InputRecording = off[0]
+	assert_eq(rec.settings, {"effects/slowdown_on": false}, "the header says it was off")
+	assert_false(off[2], "and the fight was never slowed")
+	var again := await _replay_game(rec)
+	assert_eq(again, off[1], "replayed with the slow-down on by default, it is the fight that was recorded")
+	assert_true(Settings.get_value("effects/slowdown_on"), "and the player's setting is back after it")
+	assert_eq(FileAccess.get_file_as_string(path), written, "the file was not written")
+	DirAccess.remove_absolute(path)
+	Settings.path = player_path
+
+
+func test_lent_settings_are_neither_written_nor_announced_and_come_back() -> void:
+	var path := "user://settings_lend_test.cfg"
+	var player_path := Settings.path
+	Settings.path = path
+	Settings.set_value("camera/shake", 50)
+	var written := FileAccess.get_file_as_string(path)
+	var heard := []
+	var listener := func(key: String) -> void: heard.append(key)
+	Settings.changed.connect(listener)
+	var before := Settings.lend({"camera/shake": 0, "effects/slowdown_on": false, "no/such_key": 1, "camera/dips": "not a switch"})
+	assert_eq(Settings.get_value("camera/shake"), 0, "lent")
+	assert_eq(Settings.get_value("effects/slowdown_on"), false, "lent")
+	assert_eq(before, {"camera/shake": 50, "effects/slowdown_on": true}, "what they were: a key that is not one and a value that does not check are left alone")
+	Settings.take_back(before)
+	assert_eq([Settings.get_value("camera/shake"), Settings.get_value("effects/slowdown_on")], [50, true], "given back")
+	assert_eq(heard, [], "no one was told")
+	assert_eq(FileAccess.get_file_as_string(path), written, "and the file was not written")
+	Settings.changed.disconnect(listener)
+	Settings.reset_all()
+	DirAccess.remove_absolute(path)
+	Settings.path = player_path

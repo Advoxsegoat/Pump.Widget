@@ -20,6 +20,7 @@ var arena: Arena
 
 var _rec: InputRecording
 var _at := 0
+var _lent := {}  # what the settings were before the recording's were lent, for the end
 
 
 func _init() -> void:
@@ -28,13 +29,26 @@ func _init() -> void:
 
 ## Starts playing `rec` from its first entry on the next physics frame.
 func play(rec: InputRecording) -> void:
+	_give_back()
 	_rec = rec
 	_at = 0
+	_lent = Settings.lend(rec.settings)  # the fight is played under the settings it was recorded with
 
 
 ## Whether a recording is being played.
 func playing() -> bool:
 	return _rec != null
+
+
+func _exit_tree() -> void:
+	_give_back()
+
+
+# Puts the player's settings back (nothing is written: they were only lent).
+func _give_back() -> void:
+	if not _lent.is_empty():
+		Settings.take_back(_lent)
+		_lent = {}
 
 
 func _physics_process(_delta: float) -> void:
@@ -46,11 +60,13 @@ func _physics_process(_delta: float) -> void:
 		if got != int(_rec.hashes[_at]):
 			var recorded := int(_rec.hashes[_at])
 			_rec = null
+			_give_back()
 			InputFeed.release()
 			diverged.emit(_at, recorded, got)
 			return
 	if _at >= _rec.frames.size():
 		_rec = null
+		_give_back()
 		InputFeed.release()
 		finished.emit()
 		return

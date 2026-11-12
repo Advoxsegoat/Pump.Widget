@@ -72,6 +72,7 @@ var quit_game: Callable = func() -> void: get_tree().quit()
 var _recorder: InputRecorder  # the InputRecorder of --record, or null
 var _record_path := ""
 var _replayer: InputReplayer  # the InputReplayer playing a recording, or null
+var _lent_settings := {}  # what the settings were before a --replay lent the defaults
 var _quit_after_replay := false  # --replay was given: a headless game ends with the recording
 
 
@@ -94,10 +95,16 @@ func _ready() -> void:
 	menu.quit_requested.connect(func() -> void: quit_game.call())
 	window.min_size = Vector2i(PixelSnap.INTERNAL)
 	Game.state_changed.connect(_on_game_state_changed)
-	_apply_look()
 	var arguments := parse_arguments(OS.get_cmdline_user_args())
 	var replaying: InputRecording = null
 	if not arguments["replay"].is_empty():
+		# A replay is the recording's settings (the replayer lends those) and the defaults for the rest, whatever the player chose: the
+		# player's file is neither read for it nor written, and the window is left as it is.
+		var defaults := {}
+		for key in Settings.keys():
+			if not key.begins_with("window/"):
+				defaults[key] = Settings.default_of(key)
+		_lent_settings = Settings.lend(defaults)
 		var why := replay_refusal(arguments["replay"])
 		if not why.is_empty():
 			# no fight is begun, and none is played in its place
@@ -105,6 +112,7 @@ func _ready() -> void:
 			get_tree().quit(EXIT_REFUSED)
 			return
 		replaying = _load_recording(arguments["replay"])
+	_apply_look()
 	_enter_region()
 	if SelfTest.active:
 		start_selftest()

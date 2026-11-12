@@ -31,6 +31,8 @@ func _init() -> void:
 func begin(region: String, seed: int, start_frame := 0, policy := "") -> void:
 	_rec = InputRecording.new()
 	_rec.policy = policy
+	for key in InputRecording.FIGHT_SETTINGS:
+		_rec.settings[key] = Settings.get_value(key)  # the fight as it is played: under the player's own settings, or the defaults
 	_rec.region = region
 	_rec.seed = seed
 	_rec.start_frame = start_frame
