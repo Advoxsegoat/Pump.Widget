@@ -187,7 +187,7 @@ func _load_recording(path: String) -> InputRecording:
 	if rec == null:
 		push_error("Main: cannot read the recording %s" % path)
 		return null
-	Arena.reset_spawn_counts(rec.seed)
+	Arena.start_seed(rec.seed)
 	return rec
 
 

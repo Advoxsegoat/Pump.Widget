@@ -194,6 +194,16 @@ static func reset_spawn_counts(first := 0) -> void:
 	_rounds = first
 
 
+## The rounds a seed has to itself: seed S's dice start at round S x SEED_ROUNDS, so that no wave of one seed rolls those of another
+## (a seed of a thousand rounds is more waves than a fight of any length sends).
+const SEED_ROUNDS := 1000
+
+
+## Starts the dice at the stream of `seed` (see SEED_ROUNDS): the combat bot's seeds and a recording's.
+static func start_seed(seed_number: int) -> void:
+	_rounds = seed_number * SEED_ROUNDS
+
+
 func _physics_process(delta: float) -> void:
 	_wave_frames += 1
 	if not automatic:

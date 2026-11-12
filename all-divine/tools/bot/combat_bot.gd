@@ -22,7 +22,7 @@ extends Node
 ##   MIXED    answers a tell with a dodge by its line (seven times in ten) or a guard, attacks in openings, counters
 ##   AGGRESS  attacks in openings, guards against an ordinary blow
 ##   COUNTER  dodges every blow by its line and counters; it starts nothing of its own
-##   MASH     holds guard and presses a direction every fourth frame, and reads nothing
+##   MASH     holds guard, presses a direction every fourth frame and palm every seventh with a foe near, and reads nothing
 ##
 ## It gives the controls at the end of each physics frame what the next will read (InputFeed), so it acts a frame behind what it
 ## sees, as a player does. Its problems are lines "bot: seed S frame F: <what>", and on the first it saves the recording to
@@ -64,6 +64,9 @@ const COUNTER_DELAY := Vector2i(3, 9)
 const COUNTER_FRAMES := 20
 ## Against how many frames a mash presses a direction.
 const MASH_EVERY := 4
+## It also presses palm every MASH_PALM_EVERY frames while a foe is within MASH_REACH metres: a masher presses attack too.
+const MASH_PALM_EVERY := 7
+const MASH_REACH := 2.0
 
 ## A problem was found: the whole line.
 signal problem_found(line: String)
@@ -430,6 +433,8 @@ func _mash(foes: Array[Actor]) -> void:
 	_held.append(Actor.GUARD_ACTION)
 	if frame % MASH_EVERY == 0:
 		_direction = Vector2.LEFT if _rng.randf() < 0.5 else Vector2.RIGHT
+	if frame % MASH_PALM_EVERY == 0 and not foes.is_empty() and _distance(foes[0]) <= MASH_REACH:
+		_pressed.append(&"palm")
 
 
 func _play(foes: Array[Actor]) -> void:

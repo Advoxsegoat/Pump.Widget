@@ -16,7 +16,7 @@ extends Resource
 @export var frames: Array = []
 ## The scene file of the region the fight was in.
 @export var region := ""
-## The seed the fight's dice were rolled from (Arena.reset_spawn_counts) and the bot played by.
+## The seed the fight's dice were rolled from (Arena.start_seed) and the bot played by.
 @export var seed := 0
 ## The arena's own frame count (the one its state hash holds) when the first entry was recorded: 0 for a recording that began with
 ## the fight, which is the only kind a replay reproduces.

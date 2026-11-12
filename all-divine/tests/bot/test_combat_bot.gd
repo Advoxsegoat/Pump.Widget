@@ -128,6 +128,21 @@ func test_mash_holds_guard_and_presses_a_direction_every_fourth_frame() -> void:
 	await _end(run)
 
 
+func test_mash_also_presses_palm_every_seventh_frame_with_a_foe_close() -> void:
+	var run := _duel(CombatBot.Policy.MASH, 1.2)
+	await frames(60)
+	var rec := (run["bot"] as CombatBot).recorder.recording()
+	var palms := []
+	for i in rec.frames.size():
+		if (rec.frames[i]["pressed"] as PackedStringArray).has("palm"):
+			palms.append(i)
+	assert_true(palms.size() >= 6, "palm pressed: %s" % [palms])
+	for i in range(1, palms.size()):
+		assert_eq(palms[i] - palms[i - 1], 7, "seven frames apart")
+	assert_true(_ids(run).has(&"palm_jab"), "and a jab starts: %s" % [_ids(run)])
+	await _end(run)
+
+
 func test_aggress_guards_an_ordinary_blow() -> void:
 	var run := _duel(CombatBot.Policy.AGGRESS)
 	await _throw(run, &"knuckle_jab")
