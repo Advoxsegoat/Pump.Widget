@@ -18,6 +18,8 @@ const L := HitProfile.Line
 ## The closest two bodies stand: two capsules of 0.35 m touching.
 const CONTACT := 0.7
 const BLADE_PART := "Knuckle_Blade"
+## The reactions he plays armed (the shared clip with the carry's arm over it): blade_<name> for each.
+const ARMED_REACTIONS: Array[StringName] = [&"flinch", &"stagger", &"parried", &"caught", &"posture_broken"]
 ## The four moves: the action that starts each, the profile's line, damage, posture damage, the frame its blow is on by, and
 ## its peril. (Poise damage and the rest are in the move files; the table here is the brief's.)
 const MOVES := {
@@ -194,7 +196,10 @@ func test_the_blade_moves_and_the_blade_knuckle_have_their_numbers() -> void:
 	assert_eq([def.max_hp, def.max_posture, def.poise], [80.0, 70.0, 8.0], "his HP, posture and poise")
 	assert_eq(def.moveset, {&"palm": &"blade_cut", &"heavy": &"blade_lunge", &"gift": &"blade_chop", &"dodge": &"knuckle_feint"}, "his moveset")
 	assert_eq(def.hidden_parts, PackedStringArray(["Knuckle_Pauldron"]), "hood on, pauldron hidden, the sword shown")
-	assert_eq(def.reactions, (load(FISTS[0]) as ActorDef).reactions, "he reacts as the fist Knuckles do")
+	var shared := (load(FISTS[0]) as ActorDef).reactions.duplicate()
+	for kind: StringName in ARMED_REACTIONS:
+		shared[kind] = StringName("blade_%s" % kind)
+	assert_eq(def.reactions, shared, "he reacts as the fist Knuckles do, but for the five that show his sword")
 	assert_eq(def.rig_scene.resource_path, "res://actors/knuckle/knuckle_rig.tscn")
 	assert_eq(def.combat.resource_path, "res://data/tuning/combat_knuckle.tres")
 	assert_ne(def.palette, null, "his own palette")
@@ -337,7 +342,7 @@ func test_the_lunge_is_caught_and_cannot_be_guarded() -> void:
 	var landed: Array = (run["landed"] as Array).map(func(l: Array) -> String: return l[1])
 	assert_true(landed.has("CAUGHT") or (got.size() > 0 and got[0][1] == "CAUGHT"), "caught: %s %s" % [run["landed"], run["got"]])
 	var b: Actor = run["b"]
-	assert_true((run["b_started"] as Array).any(func(s: Array) -> bool: return s[1] == &"caught"), "he plays caught (%s)" % [run["b_started"]])
+	assert_true((run["b_started"] as Array).any(func(s: Array) -> bool: return s[1] == &"blade_caught"), "he plays caught (%s)" % [run["b_started"]])
 	assert_true(b.stats.posture < b.stats.max_posture, "and loses posture")
 	await _free(run)
 	# A guard held from well before the blow does not take it: it lands as a HIT, not a GUARDED.
@@ -714,3 +719,38 @@ func test_the_sword_is_never_inside_his_body_or_under_the_floor_when_he_carries_
 					deepest = maxf(deepest, float(part[2]) - _distance_to_segment(point, rig.animated_pose(part[0]).origin, rig.animated_pose(part[1]).origin))
 		assert_true(deepest <= 0.001, "%s: the sword goes %.3f m into his body" % [clip, deepest])
 		assert_true(lowest > 0.05, "%s: the sword's lowest point is %.2f m above the floor" % [clip, lowest])
+
+
+static func _properties_of(resource: Resource) -> Dictionary:
+	var found := {}
+	for property in resource.get_property_list():
+		if property["usage"] & PROPERTY_USAGE_STORAGE and property["name"] not in ["resource_path", "resource_name", "script", "id", "clip"]:
+			found[property["name"]] = resource.get(property["name"])
+	return found
+
+
+func test_his_armed_reactions_are_the_shared_ones_but_for_their_clip_and_id() -> void:
+	var def := _def()
+	for kind: StringName in ARMED_REACTIONS:
+		var shared := _move(kind)
+		var armed := _move(StringName("blade_%s" % kind))
+		assert_ne(armed, null, "blade_%s is a move" % kind)
+		if armed == null:
+			continue
+		assert_eq(def.reactions[kind], armed.id, "his %s is blade_%s" % [kind, kind])
+		assert_eq(armed.clip, armed.id, "%s plays its own clip" % armed.id)
+		var want := _properties_of(shared)
+		var got := _properties_of(armed)
+		for key: String in want:
+			if key == "hits":
+				assert_eq((want[key] as Dictionary).size(), (got[key] as Dictionary).size(), "%s: the same profiles" % armed.id)
+				for name: StringName in want[key]:
+					assert_eq(_properties_of(got[key][name]), _properties_of(want[key][name]), "%s: profile %s" % [armed.id, name])
+			else:
+				assert_eq(got[key], want[key], "%s: %s is the shared move's" % [armed.id, key])
+		assert_eq(Marks.read(_clip(armed.id)), Marks.read(_clip(shared.id)), "%s has every mark of the shared clip, on the same frames" % armed.id)
+		assert_near(_clip(armed.id).length, _clip(shared.id).length, 1e-4, "%s is as long as the shared clip" % armed.id)
+	# Nobody else's reactions change.
+	for path: String in FISTS + [Duel.ABARAX]:
+		for id: StringName in (load(path) as ActorDef).reactions.values():
+			assert_false(String(id).begins_with("blade_"), "%s reacts with the shared clips" % path)

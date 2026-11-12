@@ -31,16 +31,16 @@ locomotion = ExtResource("3_tuning")
 combat = ExtResource("5_combat")
 reactions = {
 &"catch": &"catch",
-&"caught": &"caught",
+&"caught": &"blade_caught",
 &"death": &"death",
-&"flinch": &"flinch",
+&"flinch": &"blade_flinch",
 &"getup": &"getup",
 &"guard_break": &"guard_break",
 &"guard_hit": &"guard_hit",
-&"parried": &"parried",
+&"parried": &"blade_parried",
 &"parry": &"parry",
-&"posture_broken": &"posture_broken",
-&"stagger": &"stagger"
+&"posture_broken": &"blade_posture_broken",
+&"stagger": &"blade_stagger"
 }
 brain = ExtResource("6_brain")
 max_hp = 80.0

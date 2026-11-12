@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Writes the layers of the blade Knuckle's armed locomotion clips (assets/anim/layers/blade_{idle,walk,jog,sprint}.json).
 
-    tools/.venv/bin/python -I tools/anim/key_carry.py          writes the four layer files (then rebuild the library)
+    tools/.venv/bin/python -I tools/anim/key_carry.py            writes the layer files (then rebuild the library)
+    tools/.venv/bin/python -I tools/anim/key_carry.py --check    writes nothing; exits 1 if a committed file is not what this makes
+    ... --layers <dir>                                           (with either) the folder of the layer files, assets/anim/layers by default
 
 The carry is the right arm held in a low guard: the hand a little out from the hip, and the sword, which lies along the hand's
 thumb axis, pointing forward, outward and a little down where the camera sees it. CARRY turns the right arm's bones (degrees, YXZ
@@ -10,10 +12,14 @@ Each locomotion clip then keeps only a share of its own arm swing (SWING, 0 to 1
 for every frame, is the turn that takes the clip's rotation of each bone to that mix (see ClipBuilder.apply_layer: the layer is
 laid after the clip's own rotation). So the arm still moves with the stride, a little, and the sword stays where it shows.
 
-It reads the base clips from the library (assets/anim/abarax/{idle,walk,jog,sprint}.tres, which have no layer) as text.
+It reads the base clips from the library (assets/anim/abarax/<clip>.tres, which have no layer) as text. The clips are his
+locomotion (idle, walk, jog, sprint: blade_<clip>) and the five hit reactions that show the sword (flinch, stagger, parried, caught,
+posture_broken: blade_<clip>, the shared clip with the carry's arm over it, so a man who is hit shows his sword).
 """
+import argparse
 import json
 import math
+import sys
 import re
 from pathlib import Path
 
@@ -30,7 +36,8 @@ CARRY = {
     "hand_r": (-50.0, 50.0, 0.0),
 }
 # How much of its own arm swing each clip keeps (the rest is the carry's pose).
-SWING = {"idle": 0.1, "walk": 0.25, "jog": 0.25, "sprint": 0.25}
+SWING = {"idle": 0.1, "walk": 0.25, "jog": 0.25, "sprint": 0.25, "flinch": 0.3, "stagger": 0.3, "parried": 0.3, "caught": 0.3,
+         "posture_broken": 0.3}
 
 
 def quat_mul(a, b):
@@ -105,9 +112,11 @@ def sample(track, time):
     return slerp(quats[i], quats[i + 1], t)
 
 
-def main():
+def layers_for():
+    """{file name: its text} of every layer this makes."""
     idle, _ = read_clip("idle")
     target = {bone: quat_mul(sample(idle[bone], 0.0), from_euler_yxz(*[math.radians(a) for a in CARRY[bone]])) for bone in CARRY}
+    made = {}
     for clip, swing in SWING.items():
         tracks, length = read_clip(clip)
         frames = round(length * RATE)
@@ -125,9 +134,28 @@ def main():
                 previous = euler
                 keys.append([f, *[round(float(a), 3) for a in euler]])
             layer[bone] = keys
-        (LAYERS / f"blade_{clip}.json").write_text(json.dumps(layer) + "\n")
-        print(f"key_carry: blade_{clip}: {frames + 1} keys a bone")
+        made[f"blade_{clip}.json"] = json.dumps(layer) + "\n"
+    return made
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--check", action="store_true", help="write nothing; exit 1 if a file is not what this makes")
+    parser.add_argument("--layers", default=str(LAYERS), help="the folder of the layer files")
+    args = parser.parse_args(argv)
+    folder = Path(args.layers)
+    wrong = 0
+    for name, text in layers_for().items():
+        path = folder / name
+        if args.check:
+            if not path.is_file() or path.read_text() != text:
+                print(f"key_carry: {name} is not what the table makes")
+                wrong += 1
+        else:
+            path.write_text(text)
+            print(f"key_carry: {name}")
+    return 1 if wrong else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
