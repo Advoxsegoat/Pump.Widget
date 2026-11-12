@@ -308,3 +308,43 @@ func test_the_numbers_are_kept_by_the_foes_def() -> void:
 	game.queue_free()
 	await frames(2)
 	InputFeed.release()
+
+
+# --- the Drummer: a seven-blow string met blow by blow, by what is on screen ---
+
+# Abarax (the bot on a PlayerBrain) and a real Drummer, thinking for itself, three metres off. Returns {a, foe, bot, got}.
+func _drummer_fight(policy: CombatBot.Policy, seed_number: int) -> Dictionary:
+	var arena := TestArena.make(self)
+	var a := TestArena.spawn(arena, Duel.def(ActorDef.Team.PLAYER, 5.0), PlayerBrain.new(), Vector3.ZERO, "A")
+	var foe := (load(TestArena.ACTOR) as PackedScene).instantiate() as Actor
+	foe.name = "Drummer"
+	foe.def = load("res://data/actors/knuckle_drummer.tres") as ActorDef
+	foe.position = Vector3(0, 0, 3.0)
+	foe.rotation.y = PI
+	arena.add_child(foe)
+	var bot := track(CombatBot.new()) as CombatBot
+	bot.begin(a, null, seed_number, policy)
+	var run := {"a": a, "foe": foe, "bot": bot, "arena": arena, "got": {}}
+	a.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void:
+		var key: String = OUTCOME.keys()[r.outcome]
+		run["got"][key] = run["got"].get(key, 0) + 1)
+	return run
+
+
+func test_the_counter_policy_dodges_the_drummers_string_by_line_and_wins_untouched() -> void:
+	var run := _drummer_fight(CombatBot.Policy.COUNTER, 1)
+	await frames(1500)
+	assert_eq((run["a"] as Actor).stats.hp, 100.0, "not a scratch: %s" % [run["got"]])
+	assert_true(run["got"].get("EVADED", 0) >= 4, "he evaded its blows: %s" % [run["got"]])
+	assert_false(run["got"].has("HIT"), "and none landed: %s" % [run["got"]])
+	assert_true((run["foe"] as Actor).dead, "and he beat it")
+	(run["bot"] as CombatBot).finish()
+
+
+func test_mash_loses_to_the_drummer() -> void:
+	var run := _drummer_fight(CombatBot.Policy.MASH, 1)
+	await frames(1000)
+	assert_true(run["got"].get("HIT", 0) >= 3, "mashing is hit: %s" % [run["got"]])
+	assert_false((run["foe"] as Actor).dead, "and does not win")
+	assert_true((run["a"] as Actor).stats.hp < 60.0, "he is badly hurt: %.0f" % (run["a"] as Actor).stats.hp)
+	(run["bot"] as CombatBot).finish()
