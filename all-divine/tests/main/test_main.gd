@@ -1,7 +1,7 @@
 extends TestCase
 ## The main scene (main/main.tscn): it boots into PLAY in the training yard with Abarax at its spawn, the camera on him,
 ## the screen look on and the Hud over it; F5 switches to the courtyard and back; F3 shows the debug overlay, F4 turns the
-## look off, the menu button (Esc) pauses and "Paused" shows while it is paused. F11 and Alt+Enter are
+## look off, the menu button (Esc) pauses and the menu ("Paused") shows while it is paused. F11 and Alt+Enter are
 ## tests/main/test_window_toggle.gd's.
 ## The self-test (--selftest) is tests/main/test_selftest.gd's.
 
@@ -12,8 +12,20 @@ const COURTYARD := "res://world/courtyard/courtyard.tscn"
 const BILIBARA := "res://world/bilibara/bilibara.tscn"
 
 
+const SETTINGS_PATH := "user://settings_test.cfg"
+
+
+func before_each() -> void:
+	Settings.path = SETTINGS_PATH
+
+
+# The settings a test changed go back, and the file it wrote goes.
 func after_each() -> void:
 	Game.reset()
+	Settings.reset_all()
+	Settings.path = "user://settings.cfg"
+	if FileAccess.file_exists(SETTINGS_PATH):
+		DirAccess.remove_absolute(SETTINGS_PATH)
 
 
 func _main() -> Main:
@@ -74,7 +86,10 @@ func test_main_boots_into_play_with_player_and_camera() -> void:
 	var stage := _stage(main)
 	assert_true(stage.settings != null, "the look is on")
 	if stage.settings != null:
-		assert_eq(stage.settings.resource_path, DEFAULT_SETTINGS, "the default look")
+		# The look is a copy of the default with each strength at its Settings percent (100 here).
+		var default := load(DEFAULT_SETTINGS) as RenderSettings
+		for strength in [&"outline", &"dof_strength", &"bloom_strength", &"fog_strength", &"grade_strength", &"vignette_strength", &"focus_band", &"bloom_threshold"]:
+			assert_eq(stage.settings.get(strength), default.get(strength), "the default look's %s" % strength)
 	assert_eq(stage.grade, region.grade, "in the region's grade")
 	var overlay := main.get_node("DebugOverlay") as CanvasLayer
 	assert_false(overlay.visible, "the debug overlay starts hidden")
@@ -111,6 +126,43 @@ func test_f4_toggles_the_look_off_and_on() -> void:
 		assert_eq(stage.settings.get(strength), on.get(strength), "F4 again turns %s back on" % strength)
 
 
+func test_main_applies_the_look_from_the_settings_and_follows_changes() -> void:
+	var main := _main()
+	var stage := _stage(main)
+	var on := load(DEFAULT_SETTINGS) as RenderSettings
+	assert_eq(stage.settings.vignette_strength, on.vignette_strength, "at 100 the look is the default")
+	Settings.set_value("look/vignette", 0)
+	assert_eq(stage.settings.vignette_strength, 0.0, "a look setting is on the stage at once")
+	assert_eq(stage.settings.bloom_strength, on.bloom_strength, "the others are as they were")
+	_press_key(KEY_F4)
+	assert_eq(stage.settings.bloom_strength, 0.0, "F4 turns the look off")
+	_press_key(KEY_F4)
+	assert_eq(stage.settings.vignette_strength, 0.0, "and on again keeps the vignette at 0")
+	assert_eq(stage.settings.bloom_strength, on.bloom_strength)
+	Settings.set_value("sound/music", 50)
+	assert_eq(stage.settings.vignette_strength, 0.0, "a sound key does not touch it")
+	Settings.set_value("look/vignette", 100)
+	assert_eq(stage.settings.vignette_strength, on.vignette_strength, "back to 100")
+
+
+func test_main_applies_the_window_once_when_it_starts() -> void:
+	Settings.set_value("window/mode", "windowed")
+	Settings.set_value("window/scale", 2)
+	Game.reset()
+	var main := (load(MAIN) as PackedScene).instantiate() as Main
+	var window := Window.new()
+	window.mode = Window.MODE_FULLSCREEN
+	main.window = window
+	track(main)
+	var to: Dictionary = Settings.window_target(DisplayServer.screen_get_usable_rect().size)
+	assert_eq(to, {"mode": Window.MODE_WINDOWED, "size": Vector2i(1280, 720)}, "the target the settings give")
+	assert_eq([window.mode, window.size], [to.mode, to.size], "Main put its window there")
+	window.mode = Window.MODE_FULLSCREEN
+	Settings.set_value("window/scale", 3)
+	assert_eq(window.mode, Window.MODE_FULLSCREEN, "and only once: a later setting does not move it")
+	window.free()
+
+
 func test_menu_pauses_and_resumes() -> void:
 	var main := _main()
 	var player := _player(main)
@@ -127,33 +179,32 @@ func test_menu_pauses_and_resumes() -> void:
 	assert_true(player.frame > frame, "the player ticks again")
 
 
-func test_paused_shows_while_the_game_is_paused() -> void:
+func test_the_menus_heading_reads_paused_while_the_game_is_paused() -> void:
 	var main := _main()
-	var paused := main.get_node_or_null("PauseLabel") as CanvasLayer
-	if paused == null:
-		fail("main has a PauseLabel CanvasLayer")
+	var menu := main.get_node_or_null("PixelStage/Hud/Menu") as Menu
+	if menu == null:
+		fail("main has a Menu in the Hud's picture")
 		return
-	var label := paused.get_node_or_null("Label") as Label
-	if label == null:
-		fail("the PauseLabel has a Label")
-		return
-	assert_eq(label.text, "Paused")
-	assert_false(paused.visible, "hidden while playing")
+	assert_true(main.get_node_or_null("PauseLabel") == null, "the old PauseLabel is gone")
+	assert_eq(main.menu, menu)
+	assert_false(menu.visible, "hidden while playing")
 	_press_action(&"menu")
 	assert_eq(Game.state, Game.State.PAUSE)
-	assert_true(paused.visible, "shown as soon as the menu button pauses")
-	assert_true(label.is_visible_in_tree(), "the label shows")
-	assert_true(paused.can_process(), "it runs while the tree is paused")
+	assert_true(menu.visible, "shown as soon as the menu button pauses")
+	assert_true(menu.is_visible_in_tree(), "the menu shows")
+	assert_eq(menu.heading(), "Paused", "its heading reads Paused")
+	assert_true(menu.can_process(), "it runs while the tree is paused")
 	await frames(2)
-	assert_true(paused.visible, "and stays up while paused")
+	assert_true(menu.visible, "and stays up while paused")
 	_press_key(KEY_ESCAPE)
 	assert_eq(Game.state, Game.State.PLAY)
-	assert_false(paused.visible, "hidden again when the game plays")
+	assert_false(menu.visible, "hidden again when the game plays")
 	# Whatever else pauses the game (not the menu button) shows it too.
 	Game.change(Game.State.PAUSE)
-	assert_true(paused.visible, "any move into PAUSE shows it")
+	assert_true(menu.visible, "any move into PAUSE shows it")
+	assert_eq(menu.heading(), "Paused")
 	Game.change(Game.State.PLAY)
-	assert_false(paused.visible)
+	assert_false(menu.visible)
 
 
 func test_escape_is_the_menu_button() -> void:

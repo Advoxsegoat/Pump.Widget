@@ -8,6 +8,13 @@ extends Resource
 ## ActorFx reads it to decide what to start, Hud to draw the unblockable icon, and ChainFx what the dodge chain shows (its rim,
 ## afterimage, slow-down and trail); a switch that is off means the element does not appear at all.
 
+## The names of the nine switches below, in the order Settings lists them. Settings reads this, so a switch another
+## task adds shows up there once its name is added here (a test fails until it is).
+const SWITCHES: Array[StringName] = [
+	&"parry_aura_on", &"perilous_rim_on", &"heavy_wave_on", &"perilous_wave_on", &"perilous_icon_on",
+	&"parry_burst_on", &"afterimage_on", &"slowdown_on", &"chain_rim_on",
+]
+
 @export_group("Switches")
 ## The blue-white rim on an enemy's parryable attack (and on a heavy one), from its tell to its first hitbox_on.
 @export var parry_aura_on := true

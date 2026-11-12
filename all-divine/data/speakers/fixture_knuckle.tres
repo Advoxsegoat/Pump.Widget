@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="Speaker" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://story/speaker.gd" id="1_speaker"]
+[ext_resource type="Texture2D" uid="uid://ch6qo60gnpeo8" path="res://assets/portraits/goldtooth/neutral.png" id="2_neutral"]
+[ext_resource type="Texture2D" uid="uid://cejcywtcqwfrm" path="res://assets/portraits/goldtooth/smile.png" id="3_smile"]
+[ext_resource type="Texture2D" uid="uid://cli0e6i353eu4" path="res://assets/portraits/goldtooth/serious.png" id="4_serious"]
+[ext_resource type="Texture2D" uid="uid://chisttde5gmkh" path="res://assets/portraits/goldtooth/angry.png" id="5_angry"]
+[ext_resource type="Texture2D" uid="uid://d4n4ecb60x3kl" path="res://assets/portraits/goldtooth/sad.png" id="6_sad"]
+[ext_resource type="Texture2D" uid="uid://u8hey2crsweo" path="res://assets/portraits/goldtooth/surprise.png" id="7_surprise"]
+
+[resource]
+script = ExtResource("1_speaker")
+id = &"fixture_knuckle"
+display_name = "Fixture Knuckle (Gold Tooth's look)"
+portraits = {
+&"neutral": ExtResource("2_neutral"),
+&"smile": ExtResource("3_smile"),
+&"serious": ExtResource("4_serious"),
+&"angry": ExtResource("5_angry"),
+&"sad": ExtResource("6_sad"),
+&"surprise": ExtResource("7_surprise")
+}
+blip_pitch = 0.8
