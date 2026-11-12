@@ -52,7 +52,7 @@ func test_bars_are_whole_pixels_at_every_weight_and_44_at_one() -> void:
 	assert_eq(overlay.bar_height(), 44, "and no more for a weight over one")
 
 
-func test_the_box_stays_in_the_picture_above_the_bars_and_clears_them() -> void:
+func test_the_box_stays_in_the_picture_over_the_lower_bar_and_clears_the_upper_one() -> void:
 	for letterbox in [0.0, 0.3, 1.0]:
 		overlay.letterbox = letterbox
 		var box := overlay.box_rect()
@@ -60,13 +60,17 @@ func test_the_box_stays_in_the_picture_above_the_bars_and_clears_them() -> void:
 		assert_true(PICTURE.encloses(box), "inside the picture at %s" % letterbox)
 		assert_eq(box.position.x, 10, "10 px from the left; 10 px from the right")
 		assert_eq(box.end.x, 630)
-		assert_eq(box.end.y + 10, 360 - overlay.bar_height(), "its bottom is 10 px above the bars (or the picture's bottom)")
+		assert_eq(box.end.y + CineOverlay.BOTTOM, 360, "its bottom is %d px above the picture's bottom, with bars or without" % CineOverlay.BOTTOM)
+		var band := CineOverlay.free_band(true)
+		assert_eq(band.y, overlay.tab_rect().position.y, "the free band ends where the name tab begins")
+		assert_eq(CineOverlay.free_band(false).x, 0, "with no bars it starts at the top")
+		assert_eq(band.x, 44, "with them under the top bar")
 		for bar in overlay.bar_rects():
-			assert_false(box.intersects(bar), "clear of the bars")
-			assert_false(overlay.tab_rect().intersects(bar), "and so is the name tab")
+			assert_true(box.intersects(bar) == (bar.position.y > 0), "the box lies over the lower bar and clears the upper one")
+			assert_false(overlay.tab_rect().intersects(bar), "the name tab is in the free band, clear of both")
 		assert_true(PICTURE.encloses(overlay.tab_rect()), "the tab is in the picture too")
 	overlay.letterbox = 1.0
-	assert_eq(overlay.box_rect().end.y, 306, "with the bars the box ends at row 306")
+	assert_eq(overlay.box_rect().end.y, 356, "with the bars the box ends at row 356")
 
 
 func test_a_line_types_30_characters_a_second_and_blips_every_second_character() -> void:

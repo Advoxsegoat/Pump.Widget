@@ -5,8 +5,9 @@ extends Control
 ## time and suppresses the Hud (Hud.suppressed) while a scene plays; the CineCamera sets `letterbox` every frame.
 ##
 ## The bars are BAR (44) px at full weight, top and bottom: a 2.35:1 picture of 640x272. They are the only shapes that
-## cover the picture (88 of its 360 rows, 0.244). The dialogue box is BOX (620x64), MARGIN (10) px from the sides and
-## MARGIN px above the bars, or above the picture's bottom with none; the speaker's portrait is drawn in it at 48x48,
+## cover the picture (88 of its 360 rows, 0.244). The dialogue box is BOX (620x64), MARGIN (10) px from the sides and its
+## bottom BOTTOM (4) px above the picture's bottom, over the lower bar, with or without bars; the rows between the top
+## bar and the name tab's top edge are the free band (free_band), where a shot with a line frames its people; the speaker's portrait is drawn in it at 48x48,
 ## MARGIN - 2 px in, with the line of text beside it and the speaker's name on a tab at its top left.
 ##
 ## A line is typed at CPS (30) characters a second, one character every two physics frames, with a voice blip
@@ -21,6 +22,9 @@ extends Control
 const BAR := 44
 const BOX := Vector2i(620, 64)
 const MARGIN := 10
+## The box's bottom edge is this many rows above the picture's bottom: it lies over the lower bar, which it leaves no more
+## than the bar's own edge showing round it, so that the picture between the bars is the people's.
+const BOTTOM := 4
 const PORTRAIT := 48
 ## Characters typed a second, and a blip on every this many of them.
 const CPS := 30
@@ -138,9 +142,16 @@ func bar_height() -> int:
 	return roundi(clampf(letterbox, 0.0, 1.0) * BAR)
 
 
-## The dialogue box, in picture pixels: its bottom MARGIN px above the bars, or above the picture's bottom with none.
+## The dialogue box, in picture pixels: its bottom BOTTOM px above the picture's bottom, whatever the bars.
 func box_rect() -> Rect2i:
-	return Rect2i(MARGIN, PICTURE.y - bar_height() - MARGIN - BOX.y, BOX.x, BOX.y)
+	return Rect2i(MARGIN, PICTURE.y - BOTTOM - BOX.y, BOX.x, BOX.y)
+
+
+## The rows of the picture that nothing covers while a line is up: from the top bar's lower edge (the top of the picture
+## with no bars) to the name tab's upper edge, as (first row, row after the last). The camera frames a shot with a line in
+## the middle of it (CinePose.solve).
+static func free_band(bars: bool) -> Vector2i:
+	return Vector2i(BAR if bars else 0, PICTURE.y - BOTTOM - BOX.y - TAB_HEIGHT)
 
 
 ## The speaker's name tab: sits on the box's top left.

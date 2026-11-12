@@ -10,6 +10,9 @@ extends RefCounted
 
 ## The zoom each framing has when the shot names none: wide, medium, close, over-the-shoulder, insert.
 const FRAMING_ZOOM := [1, 2, 3, 2, 4]
+## The pitch each framing has when the shot names none (0): wide, medium, close, over-the-shoulder, insert. A close shot
+## looks down at a head at -40 and sees hair; between -30 and -20 faces, hands and outfits read.
+const FRAMING_PITCH := [-40.0, -30.0, -25.0, -20.0, -25.0]
 const PITCH_MIN := -65.0
 const PITCH_MAX := -15.0
 const ZOOM_MIN := 1.0
@@ -61,7 +64,13 @@ static func blend(a: CinePose, b: CinePose, t: float) -> CinePose:
 ## ORBIT the yaw, a PAN the aim to `aim_to`. OVER_SHOULDER turns the camera to look from the foreground actor toward
 ## the aim (the shot's own yaw is added to that, for nudging). Pitch is held within PITCH_MIN..PITCH_MAX and zoom
 ## within 1 to 4; at progress 0 and 1 the zoom is a whole number.
-static func solve(shot: Shot, progress: float, world: Callable, last: CinePose = null) -> CinePose:
+##
+## The dialogue box and the bars cover the picture's lower and upper edges, so the camera looks past where the person is:
+## `bars` says whether the scene is letterboxed, and for a shot that holds a line the aim is put on the middle row of the
+## free band (CineOverlay.free_band) for the whole shot, so that nothing jumps when the line appears; an OVER_SHOULDER
+## shot puts it a third of the way down the band, so that the foreground figure stays in view below. The focus stays on
+## the person.
+static func solve(shot: Shot, progress: float, world: Callable, last: CinePose = null, bars := false) -> CinePose:
 	var t := clampf(progress, 0.0, 1.0)
 	var pose := CinePose.new()
 	var up := Vector3.UP * shot.aim_height
@@ -81,9 +90,10 @@ static func solve(shot: Shot, progress: float, world: Callable, last: CinePose =
 	if t == 0.0 or t == 1.0:
 		pose.zoom = roundf(pose.zoom)
 	pose.zoom = clampf(pose.zoom, ZOOM_MIN, ZOOM_MAX)
-	pose.pitch_deg = shot.pitch_deg
-	if shot.move == Shot.CamMove.CRANE:
-		pose.pitch_deg = lerpf(shot.pitch_deg, shot.pitch_to_deg, t)
+	var own_pitch: float = shot.pitch_deg if shot.pitch_deg != 0.0 else FRAMING_PITCH[shot.framing]
+	pose.pitch_deg = own_pitch
+	if shot.move == Shot.CamMove.CRANE and shot.pitch_to_deg != 0.0:
+		pose.pitch_deg = lerpf(own_pitch, shot.pitch_to_deg, t)
 	pose.pitch_deg = clampf(pose.pitch_deg, PITCH_MIN, PITCH_MAX)
 	pose.yaw_deg = shot.yaw_deg
 	if shot.move == Shot.CamMove.ORBIT:
@@ -94,7 +104,24 @@ static func solve(shot: Shot, progress: float, world: Callable, last: CinePose =
 			var along := pose.aim - (behind as Vector3)
 			if Vector2(along.x, along.z).length() > 0.001:
 				pose.yaw_deg = rad_to_deg(atan2(-along.x, -along.z)) + shot.yaw_deg
+	_place_in_band(shot, pose, bars)
 	return pose
+
+
+# Moves the pose's aim along the camera's up so that the person it looked at is on the row of the free band the shot wants:
+# the middle for a shot with a line, a third of the way down for an over-the-shoulder shot, the picture's middle otherwise.
+static func _place_in_band(shot: Shot, pose: CinePose, bars: bool) -> void:
+	var band := CineOverlay.free_band(bars)
+	var row := -1.0
+	if shot.framing == Shot.Framing.OVER_SHOULDER:
+		row = band.x + (band.y - band.x) / 3.0
+	elif not shot.lines.is_empty():
+		row = (band.x + band.y) / 2.0
+	if row < 0.0:
+		return
+	var up := Basis.from_euler(Vector3(deg_to_rad(pose.pitch_deg), deg_to_rad(pose.yaw_deg), 0.0)).y
+	var pixels := PixelSnap.INTERNAL.y / 2.0 - row
+	pose.aim -= up * (pixels * PixelSnap.TEXEL / pose.zoom)
 
 
 # What is sharp: `focus` (a pull to `focus_to`), `aim` when the shot names none or the name is not there.

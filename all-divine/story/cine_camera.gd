@@ -12,7 +12,10 @@ extends Node3D
 ## trauma already higher (a blow) being left alone.
 ##
 ## It runs after the AnimationPlayer (its physics priority is later), counts its own physics frames, and so stops and goes
-## on with the tree when it is paused. Leaving the tree mid-scene (the node that plays the timeline is freed, a region
+## on with the tree when it is paused.
+##
+## STOPPING THE ANIMATIONPLAYER DOES NOT GIVE ANYTHING BACK: the rig's weight, the bars and the suppressed Hud stay up. ONLY
+## FREEING THIS NODE (or its parent) OR CALLING release() DOES. Whoever stops a scene early must do one of the two. Leaving the tree mid-scene (the node that plays the timeline is freed, a region
 ## changes) it gives everything back (`release`): the rig's weight and pose, the bars, the dialogue box, the Hud.
 
 ## The animated properties.
@@ -49,7 +52,7 @@ func _physics_process(_delta: float) -> void:
 		_glide_from = _pose if _last_shot >= 0 and current.blend_in > 0 else null
 		_last_shot = index
 		_since = 0
-	var pose := CinePose.solve(current, progress, world, _pose)
+	var pose := CinePose.solve(current, progress, world, _pose, scene.letterbox)
 	if _glide_from != null and _since < current.blend_in:
 		pose = CinePose.blend(_glide_from, pose, float(_since) / float(current.blend_in))
 	_since += 1

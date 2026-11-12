@@ -2,6 +2,13 @@ extends TestCase
 ## CinePose: what a shot solves to at a moment of it, and how two poses blend. Pure arithmetic, headless.
 
 
+# The row of the picture a world point is on, from a pose: the camera looks along its pitch and yaw at pose.aim, which is the
+# middle row, and a pixel is TEXEL / zoom of a metre along the camera's up.
+func _row(pose: CinePose, point: Vector3) -> float:
+	var up := Basis.from_euler(Vector3(deg_to_rad(pose.pitch_deg), deg_to_rad(pose.yaw_deg), 0.0)).y
+	return PixelSnap.INTERNAL.y / 2.0 - (point - pose.aim).dot(up) * pose.zoom / PixelSnap.TEXEL
+
+
 # A world of three named places on the floor (an actor is its feet, a mark is where it is).
 func _world(places := {}) -> Callable:
 	var found: Dictionary = {&"a": Vector3(2, 0, 0), &"b": Vector3(6, 0, 4), &"fg": Vector3(0, 0, 0)}
@@ -139,3 +146,64 @@ func test_pitch_is_clamped_and_a_missing_target_falls_back_to_the_last_aim() -> 
 	assert_vec_near(pose.focus, Vector3(7, 1, 7), 1e-6)
 	var first := CinePose.solve(lost, 0.5, _world())
 	assert_vec_near(first.aim, Vector3.ZERO, 1e-6, "and with none before it, the origin: never an error")
+
+
+func test_each_framing_has_its_own_pitch() -> void:
+	var expected := {
+		Shot.Framing.WIDE: -40.0, Shot.Framing.MEDIUM: -30.0, Shot.Framing.CLOSE: -25.0,
+		Shot.Framing.OVER_SHOULDER: -20.0, Shot.Framing.INSERT: -25.0,
+	}
+	for framing in expected:
+		var shot := _shot(framing)
+		shot.over_shoulder = &"fg"
+		assert_eq(shot.pitch_deg, 0.0, "a shot's pitch is 0, the framing's own, until set")
+		assert_near(CinePose.solve(shot, 0.0, _world()).pitch_deg, expected[framing], 1e-6, "framing %d" % framing)
+	var explicit := _shot(Shot.Framing.CLOSE)
+	explicit.pitch_deg = -50.0
+	assert_near(CinePose.solve(explicit, 0.0, _world()).pitch_deg, -50.0, 1e-6, "an explicit pitch wins")
+	var crane := _shot(Shot.Framing.MEDIUM, Shot.CamMove.CRANE)
+	crane.pitch_to_deg = -50.0
+	assert_near(CinePose.solve(crane, 0.0, _world()).pitch_deg, -30.0, 1e-6, "a crane starts at the framing's own")
+	assert_near(CinePose.solve(crane, 1.0, _world()).pitch_deg, -50.0, 1e-6)
+	var still := _shot(Shot.Framing.MEDIUM, Shot.CamMove.CRANE)
+	assert_near(CinePose.solve(still, 1.0, _world()).pitch_deg, -30.0, 1e-6, "pitch_to 0 is no crane")
+
+
+func _line_shot(framing := Shot.Framing.CLOSE) -> Shot:
+	var shot := _shot(framing)
+	shot.aim_height = 1.5
+	shot.lines.append(DialogueLine.new())
+	return shot
+
+
+func test_a_shot_with_a_line_puts_its_aim_in_the_middle_of_the_free_band_for_its_whole_length() -> void:
+	var world := _world()
+	var truth := Vector3(2, 1.5, 0)
+	for bars in [true, false]:
+		var band := CineOverlay.free_band(bars)
+		for progress in [0.0, 0.3, 1.0]:
+			var pose := CinePose.solve(_line_shot(), progress, world, null, bars)
+			assert_near(_row(pose, truth), (band.x + band.y) / 2.0, 1e-3, "the aim is mid-band at %s (bars %s)" % [progress, bars])
+	var plain := CinePose.solve(_shot(Shot.Framing.CLOSE), 0.0, world, null, true)
+	assert_vec_near(plain.aim, Vector3(2, 1.0, 0), 1e-6, "a shot with no line is framed in the middle of the picture as before")
+	var dolly := _line_shot(Shot.Framing.MEDIUM)
+	dolly.move = Shot.CamMove.DOLLY
+	dolly.zoom = 2
+	dolly.zoom_to = 4
+	var band := CineOverlay.free_band(true)
+	for progress in [0.0, 0.5, 1.0]:
+		var pose := CinePose.solve(dolly, progress, world, null, true)
+		assert_near(_row(pose, truth), (band.x + band.y) / 2.0, 1e-3, "and through a dolly (%s)" % progress)
+	var focused := CinePose.solve(_line_shot(), 0.0, world, null, true)
+	assert_vec_near(focused.focus, truth, 1e-6, "the focus stays on the person, not the offset aim")
+
+
+func test_an_over_the_shoulder_aim_is_a_third_of_the_way_down_the_free_band() -> void:
+	var shot := _shot(Shot.Framing.OVER_SHOULDER)
+	shot.aim = &"b"
+	shot.over_shoulder = &"fg"
+	var band := CineOverlay.free_band(true)
+	var pose := CinePose.solve(shot, 0.0, _world(), null, true)
+	assert_near(_row(pose, Vector3(6, 1.0, 4)), band.x + (band.y - band.x) / 3.0, 1e-3)
+	var forward := Vector3(-sin(deg_to_rad(pose.yaw_deg)), 0, -cos(deg_to_rad(pose.yaw_deg)))
+	assert_vec_near(forward, Vector3(6, 0, 4).normalized(), 1e-5, "and the camera still looks from the foreground actor toward it")

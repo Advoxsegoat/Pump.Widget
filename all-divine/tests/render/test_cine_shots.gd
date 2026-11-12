@@ -123,7 +123,7 @@ func test_each_framing_is_drawn_with_the_bars_the_box_the_portrait_and_the_text(
 		assert_true(_near(hud.get_pixelv(box.end - Vector2i.ONE), Hud.WHITE), "%s: and so is the opposite one" % key)
 		assert_true(_near(hud.get_pixel(box.position.x + 4, box.end.y - 4), Color(Hud.INK, 1.0)), "%s: ink inside it" % key)
 		assert_true(hud.get_pixel(box.position.x - 1, box.position.y + 20).a < 0.05, "%s: nothing 1 px outside it" % key)
-		assert_eq(box.end.y, 306, "%s: its bottom is on row 306, 10 px above the bars" % key)
+		assert_eq(box.end.y, 356, "%s: its bottom is on row 356, 4 rows above the picture's bottom" % key)
 		# The portrait, pixel for pixel.
 		var face := overlay.portrait().get_image()
 		var at := overlay.portrait_rect().position
