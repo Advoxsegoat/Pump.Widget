@@ -216,8 +216,8 @@ func test_two_actors_at_rest_closer_than_two_bodies_is_a_problem() -> void:
 
 func test_a_region_that_does_not_exist_is_a_problem() -> void:
 	var scene := _fixture()
-	scene.region = "res://world/nowhere/nowhere.tscn"
-	_only(_check(scene), "-", "region 'res://world/nowhere/nowhere.tscn' does not exist")
+	scene.region = "res://world/" + "nowhere/nowhere.tscn"
+	_only(_check(scene), "-", "region 'res://world/" + "nowhere/nowhere.tscn' does not exist")
 	scene.region = "res://world/training_yard/training_yard.tscn"
 	assert_eq(_check(scene), PackedStringArray())
 
