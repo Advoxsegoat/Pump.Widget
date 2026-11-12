@@ -146,7 +146,10 @@ static func _cue_tracks(anim: Animation, scene: SceneShots) -> void:
 			if not event.payload.has("shot"):
 				event.payload["shot"] = shot.id
 	events.append({"frame": scene.total_frames() - scene.lead_out - RETURN_BLEND, "kind": &"end", "payload": {"shot": scene.shots[scene.shots.size() - 1].id}})
-	events.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.frame < b.frame)  # stable for equal frames
+	for i in events.size():
+		events[i]["index"] = i
+	# The engine's sort is not stable above 16 elements: equal frames are told apart by their place in the data.
+	events.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.frame < b.frame or (a.frame == b.frame and a.index < b.index))
 	var tracks: Array[int] = []
 	var taken := {}  # frame -> how many calls are already on it
 	for event in events:

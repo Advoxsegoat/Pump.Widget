@@ -215,3 +215,31 @@ func test_a_scene_timeline_scene_plays_instead_when_set() -> void:
 	assert_false(player.has_animation(TimelineBuilder.ANIMATION), "and not the generated one")
 	assert_eq(TimelineBuilder.animation_of(player), &"edited")
 	assert_eq(TimelineBuilder.animation_of(generated), TimelineBuilder.ANIMATION)
+
+
+func test_forty_calls_on_one_frame_fire_in_data_order_in_a_scene_of_two_hundred_events() -> void:
+	var scene := _fixture()
+	var shot := scene.shots[0]
+	for i in 40:
+		var beat := ActorBeat.new()
+		beat.actor = &"abarax"
+		beat.at = 0
+		beat.face = &"foe_stop"
+		beat.blend = 0.001 * (i + 1)  # its number in the data
+		shot.beats.append(beat)
+	for i in 160:
+		var beat := ActorBeat.new()
+		beat.actor = &"abarax"
+		beat.at = 1 + i % 80
+		beat.face = &"foe_stop"
+		beat.blend = 5.0 + i
+		shot.beats.append(beat)
+	var anim := TimelineBuilder.build(scene)
+	assert_true(anim != null, TimelineBuilder.last_error)
+	var first: Array[float] = []
+	for call in _calls(anim):
+		if call[0] == 30 and call[1] == &"beat" and call[2].blend < 0.05:
+			first.append(call[2].blend)
+	assert_eq(first.size(), 40, "all forty are called")
+	for i in first.size():
+		assert_near(first[i], 0.001 * (i + 1), 1e-9, "call %d is the %dth of the data" % [i, i + 1])
