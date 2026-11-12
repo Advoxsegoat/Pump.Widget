@@ -538,3 +538,67 @@ func test_a_tab_between_words_is_white_space() -> void:
 	var built := _build("ground\t0 0\t10 10  cobble\t# a comment")
 	assert_eq(built.problems, PackedStringArray())
 	assert_true((built.root as Node).get_node_or_null("Walkable/Ground") != null, "built")
+
+
+# --- four small things added for Task 2 of the stretch ---
+
+# The dresser is a tool script, so the editor (where the owner opens these scenes) shows Bilibara's colours too; and a
+# kit piece added to the region after it is ready is dressed as it comes in.
+func test_the_kit_dresser_is_a_tool_and_dresses_what_is_added_later() -> void:
+	assert_true((KitDresser as GDScript).is_tool(), "KitDresser is @tool")
+	var built := _build("kit bilibara\npiece lantern 1 1\n")
+	var root := built.root as Node3D
+	var dresser := root.get_node("Kit") as KitDresser
+	var bilibara := dresser.material
+	assert_true(bilibara != null and bilibara != _material("kenney_town"), "the dresser holds Bilibara's material")
+	# A piece (a scene instance) added later, under a group of its own.
+	var late := (load(KENNEY % "wall") as PackedScene).instantiate() as Node3D
+	root.add_child(late)
+	for mesh: MeshInstance3D in late.find_children("*", "MeshInstance3D", true, false):
+		assert_eq(mesh.material_override, bilibara, "a piece added after the scene was ready is dressed")
+	# A run added later.
+	var run := KitRun.new()
+	run.piece = &"wall"
+	var scene := (load(KENNEY % "wall") as PackedScene).instantiate() as Node3D
+	run.part = (scene.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D).mesh
+	scene.free()
+	run.places.append(Transform3D.IDENTITY)
+	run.add_to_group(&"kit_multimesh", true)
+	root.add_child(run)
+	assert_eq(run.material_override, bilibara, "a run added later is dressed")
+	# Something that is not the kit is left alone.
+	var other := MeshInstance3D.new()
+	other.mesh = BoxMesh.new()
+	root.add_child(other)
+	assert_eq(other.material_override, null, "and a mesh that is not a kit piece is not")
+	# A node somewhere else in the tree is not the dresser's business.
+	var elsewhere := (load(KENNEY % "wall") as PackedScene).instantiate() as Node3D
+	track(elsewhere)
+	for mesh: MeshInstance3D in elsewhere.find_children("*", "MeshInstance3D", true, false):
+		assert_ne(mesh.material_override, bilibara, "a piece outside the region is not dressed")
+
+
+# A run says how big it is from its places and its piece's own box, which is right headless, where the MultiMesh's own box is
+# empty. (The render test, tests/render/test_kit_run_bounds.gd, holds it equal to the MultiMesh's own under a display.)
+func test_a_run_says_how_big_it_is_even_headless() -> void:
+	var built := _build("block 0 0 10 5 2 plain slope solid")
+	var runs := (built.root as Node).find_children("*", "KitRun", true, false)
+	assert_true(runs.size() >= 2, "a front and a roof (%d runs)" % runs.size())
+	var all := AABB()
+	var first := true
+	for node in runs:
+		var run := node as KitRun
+		var box := run.bounds()
+		assert_true(box.size.x > 0.0 and box.size.y > 0.0 and box.size.z > 0.0, "%s has a size (%s)" % [run.name, box])
+		for place in run.places:
+			assert_true(box.grow(1e-4).encloses(place * run.local * run.part.get_aabb()), "%s holds every place" % run.name)
+		all = box if first else all.merge(box)
+		first = false
+	# The block: two storeys of front on z = 5 and a roof over the footprint, so x 0..10, z 0..5, y 0 up to the roof's top.
+	assert_near(all.position.x, 0.0, 1e-3, "from the west edge")
+	assert_near(all.end.x, 10.0, 1e-3, "to the east edge")
+	assert_true(all.position.y > -1e-3 and all.position.y < 1e-3, "from the ground (%s)" % all.position.y)
+	assert_true(all.end.y > 5.0 and all.end.y < 7.0, "to a roof a little over 5 m (%s)" % all.end.y)
+	var empty := KitRun.new()
+	assert_eq(empty.bounds(), AABB(), "a run with no places has no size")
+	empty.free()
