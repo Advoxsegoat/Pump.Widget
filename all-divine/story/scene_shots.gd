@@ -62,3 +62,19 @@ func mark(name: StringName) -> SceneMark:
 		if candidate.name == name:
 			return candidate
 	return null
+
+
+## Where `mark` is in the region's own space. An ACTOR_START mark is in the space of its actor as the rehearsal mark stood
+## him (`rehearsal.<actor>`, +Z the way he faced); null when that cannot be known before the scene runs (no rehearsal
+## mark for that actor, or a space that is not one of the two).
+func region_position(mark: SceneMark) -> Variant:
+	if mark == null:
+		return null
+	if mark.space == SceneMark.Space.REGION:
+		return mark.position
+	if mark.space != SceneMark.Space.ACTOR_START:
+		return null
+	var origin := self.mark(StringName("rehearsal." + String(mark.actor)))
+	if origin == null or origin.space != SceneMark.Space.REGION:
+		return null
+	return origin.position + Basis(Vector3.UP, deg_to_rad(origin.yaw_deg)) * mark.position

@@ -62,8 +62,8 @@ func _moment() -> SceneShots:
 	var scene := SceneShots.new()
 	scene.id = &"moment"
 	scene.kind = SceneShots.Kind.MOMENT
-	scene.lead_in = 0
-	scene.lead_out = 0
+	scene.lead_in = 15
+	scene.lead_out = 15
 	var entry := CastEntry.new()
 	entry.actor = &"abarax"
 	scene.cast = [entry] as Array[CastEntry]
@@ -263,20 +263,22 @@ func test_the_kinds_have_their_lengths_and_their_rules() -> void:
 	_only(_check(scene), "-", "a MINI is 180 to 360 frames in all, this one is 400")
 	scene = _fixture()
 	scene.kind = SceneShots.Kind.CUTSCENE
-	scene.lead_in = 0
-	scene.lead_out = 0
-	_bare(scene, [15, 15, 15, 15])
-	_only(_check(scene), "-", "a CUTSCENE is 120 frames or more, this one is 60")
+	scene.lead_in = 20
+	scene.lead_out = 20
+	_bare(scene, [12, 12, 12, 12])
+	_only(_check(scene), "-", "a CUTSCENE is 120 frames or more, this one is 88")
 	var moment := _moment()
 	var second := Shot.new()
 	second.id = &"M2"
 	second.start = 60
-	second.length = 20
+	second.length = 15
+	moment.shots[0].length = 30
+	second.start = 30
 	second.aim = &"abarax"
 	moment.shots.append(second)
 	_only(_moment_check(moment), "-", "a MOMENT has one shot, this one has 2", "moment")
 	moment = _moment()
-	moment.shots[0].length = 100
+	moment.shots[0].length = 70
 	_only(_moment_check(moment), "-", "a MOMENT is 90 frames at most, this one is 100", "moment")
 	moment = _moment()
 	moment.letterbox = true
@@ -305,17 +307,15 @@ func test_a_walk_that_does_not_fit_before_the_next_beat_is_reported() -> void:
 	scene.mark(&"foe_in").position = Vector3(4.5, 0.0, 2.6)   # 3.3 m from foe_stop
 	scene.shots[0].beats[0].at = 60
 	var lines := _check(scene)
-	_only(lines, "S1", "knuckle needs 3.67 s to walk 3.3 m at WALK to 'foe_stop' but has 0.50 s (30 frames) before its next beat")
+	_only(lines, "S1", "knuckle needs 3.72 s (223 frames) to walk 3.3 m at WALK to 'foe_stop' and come to rest, but has 0.50 s (30 frames) before the end of S1")
 
 
-func test_a_walk_with_nothing_after_it_has_the_scene_to_its_end() -> void:
+func test_a_walk_has_until_the_end_of_its_shot() -> void:
 	var scene := _fixture()
 	scene.mark(&"foe_in").position = Vector3(4.5, 0.0, 2.6)
-	scene.shots[1].beats.clear()   # knuckle has no later beat in S2; its next is nothing at all
+	scene.shots[1].beats.clear()   # nothing of the foe's follows, but the walk must still be over when S1 ends
 	scene.shots[1].cues.clear()
-	scene.shots[0].beats[0].at = 0
-	var lines := _check(scene)
-	assert_eq(lines.size(), 0, "the walk has 270 frames to the end of the shots: " + "\n".join(lines))
+	_only(_check(scene), "S1", "but has 1.50 s (90 frames) before the end of S1")
 
 
 # --- notes, status, placeholders ---

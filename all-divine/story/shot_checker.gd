@@ -1,37 +1,48 @@
 class_name ShotChecker
 extends RefCounted
-## Checks that a scene's shot list names only things that exist and keeps the rules of its kind. A problem is a line of
-## text, "<scene>/<shot or ->: <problem>" ("fixture_yard_entrance/S2: gap of 10 frames between S1 and S2"); no
-## problems is the empty array. Nothing here raises an error: a bad file is reported, not thrown.
+## Checks that a scene's shot list names only things that exist and keeps the rules of its kind, so that "no problems"
+## means the scene can be played. A problem is a line of text, "<scene>/<shot or ->: <problem>"
+## ("fixture_yard_entrance/S2: gap of 10 frames between S1 and S2"); no problems is the empty array. Nothing here
+## raises an error: a bad file is reported, not thrown, and a checker that did not run to its end says so (`finished`,
+## and a line naming the rules it stopped in), so a crash is never read as OK.
 ##
-## The rules (check):
-##   the folder holds a script.md with words in it, a notes.md whose last `Status:` line says what the scene's `status`
-##       does, and the shot list's `id` is the folder's name (only when a folder is given)
-##   every cast name is unique; a SPAWN has a def the Registry knows and a mark of the scene to stand on; a speaker is in
-##       the Registry kind `speakers`; every mark has its own name (never an actor's), and an ACTOR_START mark is in the
-##       space of an actor of the cast
-##   the shots start at 0 and lie back to back (a gap or an overlap names its frames); each is 12 frames or more, its
-##       blend_in no longer than itself, its key_frame inside it
+## The rules (check), in the order they run:
+##   enums: every enum value is one that exists (the files are written by hand, as integers); a rule that would read a bad
+##       one is skipped for that item
+##   folder (given a folder): script.md has words in it, notes.md's last `Status:` line says what the scene's `status`
+##       does, the shot list's `id` is the folder's name; check_folder also reads shots.tres as text for a key its
+##       class does not have (`kindd`), and says when a file does not parse
+##   the cast: names are unique; a SPAWN has a def the Registry knows and a mark of the scene to stand on; a named live
+##       actor that plays a clip has a def; a speaker is in the Registry kind `speakers`; the player is not left with an
+##       enemy's brain
+##   marks: each has its own name (never an actor's), an ACTOR_START mark is in the space of an actor of the cast, a
+##       `rehearsal.` mark is for an actor of the cast; the `region`, when named, exists
+##   the shots start at 0 and lie back to back (a gap or an overlap names its frames); each is 12 frames or more with
+##       an aim, its blend_in no longer than itself, its key_frame inside it
 ##   a beat, a line and a cue start inside their shot; every actor, aim, focus, move_to, face, look and at_ref names an
-##       actor of the cast or a mark (`name@start` is the same thing), never a `rehearsal.` mark
+##       actor of the cast or a mark (`name@start` is the same thing), never a `rehearsal.` mark; `@pair`, the middle
+##       of a paired move, is a target only in a MOMENT; a beat does something; an actor has one clip a frame
 ##   a clip is a clip of the actor's rig (a LIVE_PLAYER's def is abarax); one that is not is an error, or, when the beat
 ##       says `placeholder`, a line that begins PLACEHOLDER (listed, not an error in a draft)
-##   a line has text of at most 160 characters in a speaker's portrait, holds at least its typing time plus 20 frames
-##       and fits in its shot, and lines of one shot do not overlap
+##   a line has text of at most 160 characters and 3 lines in a speaker's portrait, holds at least its typing time plus
+##       20 frames and fits in its shot, and lines of one shot do not overlap
 ##   a sound cue is in the Registry kind `sounds`
 ##   the camera fields fit the move (STATIC none, PAN aim_to, DOLLY a zoom_to unlike its zoom, CRANE a pitch_to_deg
 ##       unlike its pitch, ORBIT a yaw_to_deg unlike its yaw, HANDHELD a shake) and the framing (OVER_SHOULDER names the
 ##       foreground actor, no other does), zoom is 0 to 4 and pitch -15 to -65
 ##   a MINI is 180 to 360 frames in all, a MOMENT one shot of 90 frames at most with no letterbox and no beats, a
-##       CUTSCENE 120 frames or more
-##   a `move_to` from a place that is known to a mark in the same space fits before the actor's next beat or the end of
-##       the shots, by travel_seconds
+##       CUTSCENE 120 frames or more; the glides are 20 to 90 frames (15 to 90 for a MOMENT)
+##   every `move_to` a mark, from a place that is known (a spawn mark, a rehearsal mark, the mark of the actor's last
+##       walk), fits before the actor's next `move_to` or the end of its shot, by StoryWalk: the time to be at rest
+##       there. Two actors are never at rest nearer than two bodies (0.7 m) at once
 ##   an approved scene has no placeholder
+## The marks and walks are checked in the place itself by PlaceChecker, which needs the region loaded.
 
 ## What a problem starts with when it is a listed placeholder and not an error.
 const PLACEHOLDER := "placeholder: "
 const MIN_SHOT_FRAMES := 12
 const MAX_LINE_CHARACTERS := 160
+const MAX_LINE_ROWS := 3
 ## The dialogue box types this many characters a second (2 frames each) ...
 const FRAMES_PER_CHARACTER := 2
 ## ... a line must stay up for its typing time plus this many frames, and by default for this many.
@@ -40,31 +51,50 @@ const DEFAULT_HOLD_EXTRA := 45
 const MIN_PITCH := -65.0
 const MAX_PITCH := -15.0
 const DEFAULT_PITCH := -40.0
-const WALK_PUSH := 0.45
-const JOG_PUSH := 1.0
 const FRAMES_PER_SECOND := 60.0
 const MINI_FRAMES := Vector2i(180, 360)
 const MOMENT_MAX_FRAMES := 90
 const CUTSCENE_MIN_FRAMES := 120
+const GLIDE_FRAMES := Vector2i(20, 90)
+const MOMENT_GLIDE_FRAMES := Vector2i(15, 90)
+## Two bodies: the capsules are 0.35 m in radius.
+const BODIES_APART := 0.7
 const REHEARSAL := "rehearsal."
 const AT_START := "@start"
+## The middle of the two fighters in a paired move, which the Director fills in.
+const PAIR := "@pair"
 ## The zoom each framing has when a shot's `zoom` is 0.
 const FRAMING_ZOOM: Array[int] = [1, 2, 3, 2, 4]
 const STATUS_WORDS: PackedStringArray = ["draft", "in review", "approved"]
+## The rules, in order. Each returns false if it did not run to its end.
+const STAGES: Array[StringName] = [&"_check_enums", &"_check_folder", &"_check_cast", &"_check_marks", &"_check_layout",
+		&"_check_shots", &"_check_kind", &"_check_walks"]
+## Fields every resource has that a file may set.
+const COMMON_KEYS: PackedStringArray = ["script", "resource_name", "resource_local_to_scene", "resource_path"]
+
+## Whether the last `check` ran every rule to its end.
+var finished := false
+## The rules it stopped in, if it did not.
+var stopped := ""
 
 # actor def id -> {clip: true}; the rigs are built once per run.
 var _clips := {}
 var _problems := PackedStringArray()
 var _scene: SceneShots
+var _folder := ""
 var _placeholders := 0
+# Objects (by instance id) whose enums are bad: the rules that would read them skip them.
+var _bad := {}
+# The Rest intervals of the walks, for the bodies-apart rule: {actor, from, to, at (Vector3), mark}.
+var _rests: Array[Dictionary] = []
 
 
-## The seconds a body takes to cover `metres` from rest at `pace`, with `def`'s accel and decel: the formula of
-## Main._leg (the frames a push takes to cover a distance, coasting to a stop after it) solved for the time.
+## The seconds a body takes to cover `metres` from rest at `pace` and stop pushing, with `def`'s accel and decel: the
+## formula of Main._leg (the frames a push takes to cover a distance) solved for the time. It is not the time to
+## arrive: the body coasts after the push, which StoryWalk.frames counts and the checker uses.
 static func travel_seconds(def: ActorDef, pace: ActorBeat.Pace, metres: float) -> float:
-	var push := WALK_PUSH if pace == ActorBeat.Pace.WALK else JOG_PUSH
+	var v := Locomotion.new(def.locomotion).target_speed(StoryWalk.push_of(pace), false)
 	var tuning := def.locomotion
-	var v := Locomotion.new(tuning).target_speed(push, false)
 	return (metres + v * v / (2.0 * tuning.accel) - v * v / (2.0 * tuning.decel)) / v
 
 
@@ -84,8 +114,8 @@ static func is_placeholder(line: String) -> bool:
 	return colon >= 0 and line.substr(colon + 2).begins_with(PLACEHOLDER)
 
 
-## Every scene folder under `root`, checked as `check` does with its folder. A folder with no readable shots.tres is a
-## problem of its own.
+## Every scene folder under `root`, checked as `check_folder` does. A folder with no readable shots.tres is a problem of
+## its own.
 func check_all(root := "res://scenes/story") -> PackedStringArray:
 	var out := PackedStringArray()
 	for folder in scene_folders(root):
@@ -103,68 +133,195 @@ func scene_folders(root := "res://scenes/story") -> PackedStringArray:
 	return found
 
 
-## One scene folder: its shots.tres loaded and checked with the folder.
+## One scene folder: its shots.tres read as text for keys the class lacks, loaded, and checked with the folder.
 func check_folder(folder: String) -> PackedStringArray:
 	var name := folder.trim_suffix("/").get_file()
 	var path := folder.path_join("shots.tres")
-	if not ResourceLoader.exists(path):
-		return PackedStringArray(["%s/-: shots.tres is missing" % name])
-	var scene := ResourceLoader.load(path) as SceneShots
-	if scene == null:
-		return PackedStringArray(["%s/-: shots.tres is not a SceneShots" % name])
-	return check(scene, folder)
+	var loaded := _load(path, name)
+	if loaded.scene == null:
+		return loaded.problems
+	var out: PackedStringArray = loaded.problems
+	out.append_array(check(loaded.scene, folder))
+	return out
 
 
-## The problems of `scene`; with a `folder`, also those of its script.md, notes.md and id.
+## One shots.tres anywhere (a combat moment's, say), checked without a folder.
+func check_file(path: String) -> PackedStringArray:
+	var loaded := _load(path, path.get_base_dir().get_file())
+	if loaded.scene == null:
+		return loaded.problems
+	var out: PackedStringArray = loaded.problems
+	out.append_array(check(loaded.scene))
+	return out
+
+
+## The problems of `scene`; with a `folder`, also those of its script.md, notes.md and id. `finished` says whether every
+## rule ran to its end; if one did not, the last line says which.
 func check(scene: SceneShots, folder := "") -> PackedStringArray:
 	_scene = scene
+	_folder = folder
 	_problems = PackedStringArray()
 	_placeholders = 0
-	if folder != "":
-		_check_folder(folder)
-	_check_cast()
-	_check_marks()
-	_check_layout()
-	for shot in scene.shots:
-		_check_shot(shot)
-	_check_kind()
-	_check_walks()
+	_bad = {}
+	_rests = []
+	finished = false
+	stopped = ""
+	for stage in STAGES:
+		if not call(stage):
+			stopped = String(stage).trim_prefix("_check_")
+			_add("-", "the checker stopped before it finished: in the %s rules (a script error; see the engine's lines above)" % stopped)
+			return _problems
 	if scene.status == SceneShots.Status.APPROVED and _placeholders > 0:
 		_add("-", "an approved scene has no placeholder, this one has %d" % _placeholders)
+	finished = true
 	return _problems
+
+
+# --- the file ---
+
+# {scene: SceneShots or null, problems} for a shots.tres at `path`, `name` standing for it in a line.
+func _load(path: String, name: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {scene = null, problems = PackedStringArray(["%s/-: shots.tres is missing (%s)" % [name, path]])}
+	var resource := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
+	if resource == null:
+		return {scene = null, problems = PackedStringArray(["%s/-: shots.tres does not parse; see the engine's lines above (%s)" % [name, path]])}
+	var scene := resource as SceneShots
+	if scene == null:
+		return {scene = null, problems = PackedStringArray(["%s/-: shots.tres is not a SceneShots (%s)" % [name, path]])}
+	return {scene = scene, problems = _unknown_keys(path, String(scene.id) if scene.id != &"" else name)}
+
+
+# A key in the file that its resource's class does not have, which Godot would ignore in silence.
+func _unknown_keys(path: String, name: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var scripts := {}   # ext_resource id -> script path
+	var keys: Array[String] = []
+	var script_path := ""
+	var in_block := false
+	var header := RegEx.create_from_string("^\\[ext_resource\\b(?=.*type=\"Script\")(?=.*path=\"([^\"]+)\")(?=.*\\bid=\"([^\"]+)\")")
+	var key := RegEx.create_from_string("^([A-Za-z_][A-Za-z0-9_]*) = (.*)$")
+	var ext := RegEx.create_from_string("ExtResource\\(\"([^\"]+)\"\\)")
+	var lines := FileAccess.get_file_as_string(path).split("\n")
+	lines.append("[end]")
+	for text in lines:
+		if text.begins_with("["):
+			if in_block and script_path != "":
+				out.append_array(_keys_unknown_to(script_path, keys, name))
+			keys = []
+			script_path = ""
+			in_block = text.begins_with("[sub_resource") or text.begins_with("[resource]")
+			var found := header.search(text)
+			if found != null:
+				scripts[found.get_string(2)] = found.get_string(1)
+		elif in_block:
+			var match := key.search(text)
+			if match == null:
+				continue
+			if match.get_string(1) == "script":
+				var which := ext.search(match.get_string(2))
+				script_path = scripts.get(which.get_string(1), "") if which != null else ""
+			else:
+				keys.append(match.get_string(1))
+	return out
+
+
+func _keys_unknown_to(script_path: String, keys: Array[String], name: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var script := load(script_path) as GDScript
+	if script == null:
+		return out
+	var fields := PackedStringArray()
+	for info in script.get_script_property_list():
+		if info.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
+			fields.append(info.name)
+	var class_title := script.get_global_name()
+	for key in keys:
+		if fields.has(key) or COMMON_KEYS.has(key):
+			continue
+		var best := ""
+		var best_score := 0.5
+		for field in fields:
+			var score := key.similarity(field)
+			if score > best_score:
+				best = field
+				best_score = score
+		var help := " (did you mean '%s'?)" % best if best != "" else " (its fields: %s)" % ", ".join(fields)
+		out.append("%s/-: shots.tres: '%s' is not a field of %s%s; Godot ignores it" % [name, key, class_title, help])
+	return out
+
+
+# --- the enums ---
+
+func _check_enums() -> bool:
+	_enum("-", "kind", _scene.kind, SceneShots.Kind, _scene)
+	_enum("-", "status", _scene.status, SceneShots.Status, _scene)
+	for entry in _scene.cast:
+		_enum("-", "%s: source" % entry.actor, entry.source, CastEntry.Source, entry)
+		_enum("-", "%s: after" % entry.actor, entry.after, CastEntry.After, entry)
+	for mark in _scene.marks:
+		_enum("-", "mark '%s': space" % mark.name, mark.space, SceneMark.Space, mark)
+	for shot in _scene.shots:
+		_enum(String(shot.id), "framing", shot.framing, Shot.Framing, shot)
+		_enum(String(shot.id), "move", shot.move, Shot.CamMove, shot)
+		for beat in shot.beats:
+			_enum(String(shot.id), "beat at frame %d: pace" % beat.at, beat.pace, ActorBeat.Pace, beat)
+		for cue in shot.cues:
+			_enum(String(shot.id), "cue kind", cue.kind, CueEvent.Kind, cue)
+	return true
+
+
+# Notes a bad enum value `value` of `field` on `owner`: a line, and the owner is skipped by the rules that read it.
+# The field's own words come first ("framing 9 is not one of ..."), and a field label with a colon says whose it is.
+func _enum(where: String, field: String, value: int, kind: Dictionary, owner: Object) -> void:
+	if kind.values().has(value):
+		return
+	_bad[owner.get_instance_id()] = true
+	var names := PackedStringArray()
+	for key: String in kind:
+		names.append("%d (%s)" % [kind[key], key])
+	var label := field.get_slice(": ", 1) if field.contains(": ") else field
+	var owner_text := field.get_slice(": ", 0) + ": " if field.contains(": ") else ""
+	_add(where, "%s%s %d is not one of %s" % [owner_text, label, value, ", ".join(names)])
+
+
+func _ok(owner: Object) -> bool:
+	return not _bad.has(owner.get_instance_id())
 
 
 # --- the folder ---
 
-func _check_folder(folder: String) -> void:
-	var name := folder.trim_suffix("/").get_file()
+func _check_folder() -> bool:
+	if _folder == "":
+		return true
+	var name := _folder.trim_suffix("/").get_file()
 	if String(_scene.id) != name:
 		_add("-", "id '%s' is not the folder name '%s'" % [_scene.id, name])
-	var script := folder.path_join("script.md")
+	var script := _folder.path_join("script.md")
 	if not FileAccess.file_exists(script):
 		_add("-", "script.md is missing")
 	elif FileAccess.get_file_as_string(script).strip_edges() == "":
 		_add("-", "script.md is empty")
-	var notes := folder.path_join("notes.md")
+	var notes := _folder.path_join("notes.md")
 	if not FileAccess.file_exists(notes):
 		_add("-", "notes.md is missing")
-		return
+		return true
 	var last := ""
 	for text in FileAccess.get_file_as_string(notes).split("\n"):
 		if text.strip_edges().to_lower().begins_with("status:"):
 			last = text.strip_edges()
 	if last == "":
 		_add("-", "notes.md has no 'Status:' line")
-		return
+		return true
 	var said := last.substr(last.find(":") + 1).strip_edges().to_lower()
-	var want := STATUS_WORDS[_scene.status]
-	if said != want:
-		_add("-", "notes.md ends with '%s' but the scene is %s" % [last, want])
+	if _ok(_scene) and said != STATUS_WORDS[_scene.status]:
+		_add("-", "notes.md ends with '%s' but the scene is %s" % [last, STATUS_WORDS[_scene.status]])
+	return true
 
 
 # --- the cast and the marks ---
 
-func _check_cast() -> void:
+func _check_cast() -> bool:
 	var seen := {}
 	for entry in _scene.cast:
 		var who := String(entry.actor)
@@ -174,21 +331,25 @@ func _check_cast() -> void:
 		if seen.has(who):
 			_add("-", "'%s' is in the cast twice" % who)
 		seen[who] = true
-		if entry.source == CastEntry.Source.SPAWN:
-			if entry.def == null:
-				_add("-", "%s has no def to spawn" % who)
-			elif not Registry.ids(&"actors").has(String(entry.def.id)):
-				_add("-", "%s: its def '%s' is not in the Registry" % [who, entry.def.id])
-			var mark := _scene.mark(entry.spawn_mark)
-			if mark == null or String(mark.name).begins_with(REHEARSAL):
-				_add("-", "%s: spawn mark '%s' is not a mark of the scene" % [who, entry.spawn_mark])
-		elif entry.source == CastEntry.Source.LIVE_NAMED and entry.node_name == &"":
-			_add("-", "%s is LIVE_NAMED but has no node_name" % who)
+		if _ok(entry):
+			if entry.source == CastEntry.Source.SPAWN:
+				if entry.def == null:
+					_add("-", "%s has no def to spawn" % who)
+				elif not Registry.ids(&"actors").has(String(entry.def.id)):
+					_add("-", "%s: its def '%s' is not in the Registry" % [who, entry.def.id])
+				var mark := _scene.mark(entry.spawn_mark)
+				if mark == null or String(mark.name).begins_with(REHEARSAL):
+					_add("-", "%s: spawn mark '%s' is not a mark of the scene" % [who, entry.spawn_mark])
+			elif entry.source == CastEntry.Source.LIVE_NAMED and entry.node_name == &"":
+				_add("-", "%s is LIVE_NAMED but has no node_name" % who)
+			if entry.source == CastEntry.Source.LIVE_PLAYER and entry.after == CastEntry.After.ENEMY_BRAIN:
+				_add("-", "%s is the player's and cannot be left with ENEMY_BRAIN" % who)
 		if entry.speaker != &"" and not Registry.ids(&"speakers").has(String(entry.speaker)):
 			_add("-", "%s: speaker '%s' is not in the Registry" % [who, entry.speaker])
+	return true
 
 
-func _check_marks() -> void:
+func _check_marks() -> bool:
 	var seen := {}
 	for mark in _scene.marks:
 		var name := String(mark.name)
@@ -200,18 +361,21 @@ func _check_marks() -> void:
 		seen[name] = true
 		if _scene.cast_entry(mark.name) != null:
 			_add("-", "mark '%s' has the name of an actor" % name)
-		if mark.space == SceneMark.Space.ACTOR_START and _scene.cast_entry(mark.actor) == null:
+		if _ok(mark) and mark.space == SceneMark.Space.ACTOR_START and _scene.cast_entry(mark.actor) == null:
 			_add("-", "mark '%s' is placed in the space of '%s', who is not in the cast" % [name, mark.actor])
 		if name.begins_with(REHEARSAL) and _scene.cast_entry(StringName(name.trim_prefix(REHEARSAL))) == null:
 			_add("-", "rehearsal mark '%s' is for '%s', who is not in the cast" % [name, name.trim_prefix(REHEARSAL)])
+	if _scene.region != "" and not ResourceLoader.exists(_scene.region):
+		_add("-", "region '%s' does not exist" % _scene.region)
+	return true
 
 
 # --- the shot list ---
 
-func _check_layout() -> void:
+func _check_layout() -> bool:
 	if _scene.shots.is_empty():
 		_add("-", "the scene has no shots")
-		return
+		return true
 	var ids := {}
 	for i in _scene.shots.size():
 		var shot := _scene.shots[i]
@@ -224,36 +388,56 @@ func _check_layout() -> void:
 			continue
 		var before := _scene.shots[i - 1]
 		var gap := shot.start - (before.start + before.length)
+		var ends := "(%s ends at frame %d, %s starts at %d)" % [_name(before, i - 1), before.start + before.length, _name(shot, i), shot.start]
 		if gap > 0:
-			_add(_name(shot, i), "gap of %d frames between %s and %s (%s ends at frame %d, %s starts at %d)" % [
-					gap, _name(before, i - 1), _name(shot, i), _name(before, i - 1), before.start + before.length, _name(shot, i), shot.start])
+			_add(_name(shot, i), "gap of %d frames between %s and %s %s" % [gap, _name(before, i - 1), _name(shot, i), ends])
 		elif gap < 0:
-			_add(_name(shot, i), "overlap of %d frames between %s and %s (%s ends at frame %d, %s starts at %d)" % [
-					-gap, _name(before, i - 1), _name(shot, i), _name(before, i - 1), before.start + before.length, _name(shot, i), shot.start])
+			_add(_name(shot, i), "overlap of %d frames between %s and %s %s" % [-gap, _name(before, i - 1), _name(shot, i), ends])
+	return true
 
 
-func _check_shot(shot: Shot) -> void:
+func _check_shots() -> bool:
+	var ok := true
+	for shot in _scene.shots:
+		ok = _check_shot(shot) and ok
+	return ok
+
+
+func _check_shot(shot: Shot) -> bool:
 	var where := String(shot.id)
+	var ok := true
 	if shot.length < MIN_SHOT_FRAMES:
 		_add(where, "is %d frames, under the %d a shot needs" % [shot.length, MIN_SHOT_FRAMES])
+	if shot.aim == &"":
+		_add(where, "has no aim: the camera has nothing to look at")
+	if _ok(shot):
+		ok = _check_camera(shot) and ok
+	for target in [["aim", shot.aim], ["aim_to", shot.aim_to], ["over_shoulder", shot.over_shoulder],
+			["focus", shot.focus], ["focus_to", shot.focus_to]]:
+		_check_target(where, target[0], target[1])
+	if shot.length <= 0:
+		return ok   # one fault, one line: what depends on a length has none to depend on
 	if shot.blend_in > shot.length:
 		_add(where, "blend_in %d is longer than the shot (%d frames)" % [shot.blend_in, shot.length])
 	if shot.key_frame < -1 or shot.key_frame >= shot.length:
 		_add(where, "key_frame %d is outside the shot (-1 or 0 to %d)" % [shot.key_frame, shot.length - 1])
-	_check_camera(shot)
-	for target in [["aim", shot.aim], ["aim_to", shot.aim_to], ["over_shoulder", shot.over_shoulder],
-			["focus", shot.focus], ["focus_to", shot.focus_to]]:
-		_check_target(where, target[0], target[1])
+	var clips := {}   # "actor@frame" -> true
 	for beat in shot.beats:
-		_check_beat(shot, beat)
+		ok = _check_beat(shot, beat) and ok
+		if beat.clip != &"":
+			var at := "%s@%d" % [beat.actor, beat.at]
+			if clips.has(at):
+				_add(where, "%s has two clips at frame %d" % [beat.actor, beat.at])
+			clips[at] = true
 	for line in shot.lines:
-		_check_line(shot, line)
-	_check_line_overlaps(shot)
+		ok = _check_line(shot, line) and ok
+	ok = _check_line_overlaps(shot) and ok
 	for cue in shot.cues:
-		_check_cue(shot, cue)
+		ok = _check_cue(shot, cue) and ok
+	return ok
 
 
-func _check_camera(shot: Shot) -> void:
+func _check_camera(shot: Shot) -> bool:
 	var where := String(shot.id)
 	var move: String = Shot.CamMove.keys()[shot.move]
 	var framing: String = Shot.Framing.keys()[shot.framing]
@@ -295,9 +479,10 @@ func _check_camera(shot: Shot) -> void:
 		_add(where, "OVER_SHOULDER has no over_shoulder actor")
 	if shot.framing != Shot.Framing.OVER_SHOULDER and shot.over_shoulder != &"":
 		_add(where, "over_shoulder is set but the framing is %s" % framing)
+	return true
 
 
-func _check_beat(shot: Shot, beat: ActorBeat) -> void:
+func _check_beat(shot: Shot, beat: ActorBeat) -> bool:
 	var where := String(shot.id)
 	var what := "beat at frame %d" % beat.at
 	if beat.at < 0 or beat.at >= shot.length:
@@ -307,20 +492,25 @@ func _check_beat(shot: Shot, beat: ActorBeat) -> void:
 		_add(where, "%s: '%s' is not in the cast" % [what, beat.actor])
 	for target in [["move_to", beat.move_to], ["face", beat.face], ["look", beat.look]]:
 		_check_target(where, target[0], target[1], what)
+	if beat.clip == &"" and beat.move_to == &"" and beat.face == &"" and beat.look == &"":
+		_add(where, "%s does nothing: it has no clip, move_to, face or look" % what)
 	if beat.clip == &"" or entry == null:
-		return
+		return true
 	var def := _def_of(entry)
 	if def == null:
-		return  # a live actor of no known def: its clips cannot be looked up
+		if entry.source == CastEntry.Source.LIVE_NAMED:
+			_add(where, "%s plays the clip '%s' but has no def to look it up in" % [beat.actor, beat.clip])
+		return true
 	if not _clip_names(def).has(beat.clip):
 		if beat.placeholder:
 			_placeholders += 1
 			_add(where, "%s%s has no clip '%s'" % [PLACEHOLDER, beat.actor, beat.clip])
 		else:
 			_add(where, "%s has no clip '%s' in its rig (%s); fix the name, or set the beat's placeholder" % [beat.actor, beat.clip, def.id])
+	return true
 
 
-func _check_line(shot: Shot, line: DialogueLine) -> void:
+func _check_line(shot: Shot, line: DialogueLine) -> bool:
 	var where := String(shot.id)
 	var speaker: Speaker = null
 	if line.speaker == &"":
@@ -333,12 +523,15 @@ func _check_line(shot: Shot, line: DialogueLine) -> void:
 		_add(where, "speaker '%s' has no '%s' portrait" % [line.speaker, line.expr])
 	if line.text.strip_edges() == "":
 		_add(where, "the line at frame %d has no text" % line.at)
-		return
+		return true
 	if line.text.length() > MAX_LINE_CHARACTERS:
 		_add(where, "the line at frame %d is %d characters, at most %d" % [line.at, line.text.length(), MAX_LINE_CHARACTERS])
+	var rows := line.text.split("\n").size()
+	if rows > MAX_LINE_ROWS:
+		_add(where, "the line at frame %d has %d lines, the box holds %d" % [line.at, rows, MAX_LINE_ROWS])
 	if line.at < 0 or line.at >= shot.length:
 		_add(where, "line at frame %d is outside the shot (frames 0 to %d)" % [line.at, shot.length - 1])
-		return
+		return true
 	var typing := typing_frames(line.text)
 	if line.hold > 0 and line.hold < typing + MIN_HOLD_EXTRA:
 		_add(where, "the line at frame %d: a hold of %d frames is under the %d it needs (typing %d plus %d)" % [
@@ -347,9 +540,10 @@ func _check_line(shot: Shot, line: DialogueLine) -> void:
 	if end > shot.length:
 		_add(where, "the line at frame %d cannot finish: it needs frames %d to %d and the shot ends at %d" % [
 				line.at, line.at, end, shot.length])
+	return true
 
 
-func _check_line_overlaps(shot: Shot) -> void:
+func _check_line_overlaps(shot: Shot) -> bool:
 	var lines: Array[DialogueLine] = shot.lines.duplicate()
 	lines.sort_custom(func(a: DialogueLine, b: DialogueLine) -> bool: return a.at < b.at)
 	for i in range(1, lines.size()):
@@ -357,24 +551,31 @@ func _check_line_overlaps(shot: Shot) -> void:
 		if lines[i].at < before.at + hold_of(before):
 			_add(String(shot.id), "the line at frame %d overlaps the line at frame %d, which is up until frame %d" % [
 					lines[i].at, before.at, before.at + hold_of(before)])
+	return true
 
 
-func _check_cue(shot: Shot, cue: CueEvent) -> void:
+func _check_cue(shot: Shot, cue: CueEvent) -> bool:
 	var where := String(shot.id)
 	if cue.at < 0 or cue.at >= shot.length:
 		_add(where, "cue at frame %d is outside the shot (frames 0 to %d)" % [cue.at, shot.length - 1])
 	if cue.id == &"":
 		_add(where, "the cue at frame %d has no id" % cue.at)
-	elif cue.kind == CueEvent.Kind.SOUND and not Registry.ids(&"sounds").has(String(cue.id)):
+	elif _ok(cue) and cue.kind == CueEvent.Kind.SOUND and not Registry.ids(&"sounds").has(String(cue.id)):
 		_add(where, "sound '%s' is not in the Registry" % cue.id)
 	_check_target(where, "at_ref", cue.at_ref, "cue at frame %d" % cue.at)
+	return true
 
 
 # A target field: empty is fine; otherwise an actor of the cast or a mark, `@start` allowed, never a rehearsal mark.
+# `@pair` is the middle of a paired move: only a MOMENT has one.
 func _check_target(where: String, field: String, target: StringName, what := "") -> void:
 	if target == &"":
 		return
 	var prefix := what + ": " if what != "" else ""
+	if String(target) == PAIR:
+		if _scene.kind != SceneShots.Kind.MOMENT:
+			_add(where, "%s%s '%s' is the middle of a paired move, which only a MOMENT has" % [prefix, field, target])
+		return
 	var name := String(target).trim_suffix(AT_START)
 	if name.begins_with(REHEARSAL):
 		_add(where, "%s%s '%s' is a rehearsal mark, which a shot may not name" % [prefix, field, target])
@@ -392,74 +593,125 @@ func _check_target(where: String, field: String, target: StringName, what := "")
 
 # --- the kinds ---
 
-func _check_kind() -> void:
+func _check_kind() -> bool:
 	var total := _scene.total_frames()
-	match _scene.kind:
-		SceneShots.Kind.MINI:
-			if total < MINI_FRAMES.x or total > MINI_FRAMES.y:
-				_add("-", "a MINI is %d to %d frames in all, this one is %d" % [MINI_FRAMES.x, MINI_FRAMES.y, total])
-		SceneShots.Kind.CUTSCENE:
-			if total < CUTSCENE_MIN_FRAMES:
-				_add("-", "a CUTSCENE is %d frames or more, this one is %d" % [CUTSCENE_MIN_FRAMES, total])
-		SceneShots.Kind.MOMENT:
-			if _scene.shots.size() != 1:
-				_add("-", "a MOMENT has one shot, this one has %d" % _scene.shots.size())
-			if total > MOMENT_MAX_FRAMES:
-				_add("-", "a MOMENT is %d frames at most, this one is %d" % [MOMENT_MAX_FRAMES, total])
-			if _scene.letterbox:
-				_add("-", "a MOMENT has no letterbox")
-			for shot in _scene.shots:
-				if not shot.beats.is_empty():
-					_add(String(shot.id), "a MOMENT has no beats")
+	if _ok(_scene):
+		match _scene.kind:
+			SceneShots.Kind.MINI:
+				if total < MINI_FRAMES.x or total > MINI_FRAMES.y:
+					_add("-", "a MINI is %d to %d frames in all, this one is %d" % [MINI_FRAMES.x, MINI_FRAMES.y, total])
+			SceneShots.Kind.CUTSCENE:
+				if total < CUTSCENE_MIN_FRAMES:
+					_add("-", "a CUTSCENE is %d frames or more, this one is %d" % [CUTSCENE_MIN_FRAMES, total])
+			SceneShots.Kind.MOMENT:
+				if _scene.shots.size() != 1:
+					_add("-", "a MOMENT has one shot, this one has %d" % _scene.shots.size())
+				if total > MOMENT_MAX_FRAMES:
+					_add("-", "a MOMENT is %d frames at most, this one is %d" % [MOMENT_MAX_FRAMES, total])
+				if _scene.letterbox:
+					_add("-", "a MOMENT has no letterbox")
+				for shot in _scene.shots:
+					if not shot.beats.is_empty():
+						_add(String(shot.id), "a MOMENT has no beats")
+	var glide := MOMENT_GLIDE_FRAMES if _scene.kind == SceneShots.Kind.MOMENT else GLIDE_FRAMES
+	for field in [["lead_in", _scene.lead_in], ["lead_out", _scene.lead_out]]:
+		if field[1] < glide.x or field[1] > glide.y:
+			_add("-", "%s %d is not %d to %d" % [field[0], field[1], glide.x, glide.y])
+	return true
 
 
 # --- walking ---
 
-# Each actor's beats in time order: a `move_to` a mark from a place that is known, in the same space, must be walkable
-# before the actor's next beat (or the end of the shots). Where a body stands is known from its spawn mark and from the
-# mark of its last `move_to`; anywhere else it is not known and nothing is claimed.
-func _check_walks() -> void:
+# Each actor's `move_to`s in time order, by StoryWalk: a walk to a mark, from a place that is known, is over (the body
+# at rest within the arrival distance) before the actor's next `move_to` or the end of its shot. Where a body stands is
+# known from its spawn mark (a spawned actor) or its rehearsal mark (a live one) and from the mark of its last walk.
+# Then no two bodies are at rest nearer than two bodies.
+func _check_walks() -> bool:
 	var end := 0
 	for shot in _scene.shots:
 		end = maxi(end, shot.start + shot.length)
 	for entry in _scene.cast:
-		var def := _def_of(entry)
-		if def == null or def.locomotion == null:
+		if not _ok(entry):
 			continue
-		var beats := []  # {frame, beat, shot}
+		var def := _def_of(entry)
+		var beats: Array[Dictionary] = []   # {frame, beat, shot} of the walks
 		for shot in _scene.shots:
 			for beat in shot.beats:
-				if beat.actor == entry.actor:
+				if beat.actor == entry.actor and beat.move_to != &"" and _ok(beat):
 					beats.append({frame = shot.start + beat.at, beat = beat, shot = shot})
 		beats.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.frame < b.frame)
 		var known: SceneMark = null
 		if entry.source == CastEntry.Source.SPAWN:
 			known = _scene.mark(entry.spawn_mark)
+		else:
+			known = _scene.mark(StringName(REHEARSAL + String(entry.actor)))
+		var walking := not beats.is_empty()
+		if walking and known == null and entry.source != CastEntry.Source.SPAWN:
+			_add(String(beats[0].shot.id), "%s walks but the scene has no '%s%s' mark to start it from" % [entry.actor, REHEARSAL, entry.actor])
+		if walking and (def == null or def.locomotion == null):
+			if entry.source != CastEntry.Source.SPAWN:   # a spawn with no def is reported with the cast
+				_add(String(beats[0].shot.id), "%s walks but has no def to take its speed from" % entry.actor)
+			continue
+		var first: int = beats[0].frame if walking else end
+		_rest(entry, known, 0, first)
 		for i in beats.size():
 			var beat: ActorBeat = beats[i].beat
-			if beat.move_to == &"":
-				continue
+			var shot: Shot = beats[i].shot
 			var to := _scene.mark(StringName(String(beat.move_to).trim_suffix(AT_START)))
-			if to != null and known != null and _same_space(known, to):
-				var metres := known.position.distance_to(to.position)
-				var next := end
-				for j in range(i + 1, beats.size()):
-					if beats[j].frame > beats[i].frame:
-						next = beats[j].frame
-						break
-				var needed := travel_seconds(def, beat.pace, metres)
-				var left := float(next - beats[i].frame) / FRAMES_PER_SECOND
-				if needed > left + 0.0001:
-					_add(String(beats[i].shot.id), "%s needs %.2f s to walk %.1f m at %s to '%s' but has %.2f s (%d frames) before %s" % [
-							entry.actor, needed, metres, ActorBeat.Pace.keys()[beat.pace], beat.move_to, left, next - beats[i].frame,
-							"its next beat" if next != end else "the end of the shots"])
+			var next: int = beats[i + 1].frame if i + 1 < beats.size() else end
+			if to == null:
+				_rest(entry, null, beats[i].frame, next)   # walking to an actor: not measured
+				known = null
+				continue
+			var from_at: Variant = _scene.region_position(known)
+			var to_at: Variant = _scene.region_position(to)
+			var metres := -1.0
+			if from_at != null and to_at != null:
+				metres = Vector2(from_at.x - to_at.x, from_at.z - to_at.z).length()
+			elif known != null and known.space == to.space and known.actor == to.actor:
+				metres = Vector2(known.position.x - to.position.x, known.position.z - to.position.z).length()
+			var arrive: int = beats[i].frame
+			if metres >= 0.0 and def != null and def.locomotion != null:
+				var needed := StoryWalk.frames(def.locomotion, beat.pace, metres)
+				var limit: int = mini(next if i + 1 < beats.size() else end, shot.start + shot.length)
+				var left: int = limit - beats[i].frame
+				arrive += needed
+				if needed > left:
+					_add(String(shot.id), "%s needs %.2f s (%d frames) to walk %.1f m at %s to '%s' and come to rest, but has %.2f s (%d frames) before %s" % [
+							entry.actor, float(needed) / FRAMES_PER_SECOND, needed, metres, ActorBeat.Pace.keys()[beat.pace], beat.move_to,
+							float(left) / FRAMES_PER_SECOND, left, "its next move_to" if limit == next and i + 1 < beats.size() else "the end of %s" % shot.id])
+			_rest(entry, to, mini(arrive, next), next)
 			known = to
+	_check_bodies_apart()
+	return true
 
 
-func _same_space(a: SceneMark, b: SceneMark) -> bool:
-	if a.space != b.space:
-		return false
-	return a.space == SceneMark.Space.REGION or a.actor == b.actor
+# Notes that `entry`'s body is at rest at `mark` from frame `from` up to frame `to`.
+func _rest(entry: CastEntry, mark: SceneMark, from: int, to: int) -> void:
+	if mark == null or to <= from:
+		return
+	var at: Variant = _scene.region_position(mark)
+	if at != null:
+		_rests.append({actor = entry.actor, from = from, to = to, at = at, mark = mark.name})
+
+
+func _check_bodies_apart() -> void:
+	var reported := {}
+	for i in _rests.size():
+		for j in range(i + 1, _rests.size()):
+			var a := _rests[i]
+			var b := _rests[j]
+			if a.actor == b.actor:
+				continue
+			var from := maxi(a.from, b.from)
+			if from >= mini(a.to, b.to):
+				continue
+			var apart := Vector2(a.at.x - b.at.x, a.at.z - b.at.z).length()
+			var key := "%s|%s" % [a.actor, b.actor]
+			if apart < BODIES_APART and not reported.has(key):
+				reported[key] = true
+				_add("-", "%s and %s stand %.1f m apart at rest from frame %d (marks '%s' and '%s'), under %.1f m: two bodies" % [
+						b.actor, a.actor, apart, from, b.mark, a.mark, BODIES_APART])
 
 
 # --- helpers ---
