@@ -97,7 +97,7 @@ func _process(delta: float) -> void:
 	refresh()
 	var cmd := nav.tick(delta)
 	if cmd != MenuNav.Cmd.NONE:
-		press(cmd)
+		press(cmd, true)
 	# A pad picked up or put down changes the footer; values change under their rows: draw what is there now.
 	queue_redraw()
 
@@ -163,6 +163,7 @@ func play_sample(cue: StringName, bus: StringName, key: String) -> void:
 func close() -> void:
 	is_open = false
 	visible = false
+	sample_player.stop()  # a sample started a moment ago must not play on into the fight
 
 
 ## Shows the page `id` (built by MenuPages unless `built` is given), with its starting row selected.
@@ -197,8 +198,9 @@ func handle(event: InputEvent) -> bool:
 
 
 ## Does what the command `cmd` means on the page shown: moves the selection (it wraps, and skips text), adjusts or chooses
-## the selected row, or goes back.
-func press(cmd: MenuNav.Cmd) -> void:
+## the selected row, or goes back. A `repeat` is a held direction coming round again: it moves the selection and steps a slider,
+## but never flips a switch, a choice (the window's Mode and Size act at once) or anything else that a fresh press means.
+func press(cmd: MenuNav.Cmd, repeat := false) -> void:
 	var row := _selected()
 	match cmd:
 		MenuNav.Cmd.UP:
@@ -206,7 +208,7 @@ func press(cmd: MenuNav.Cmd) -> void:
 		MenuNav.Cmd.DOWN:
 			_move(1)
 		MenuNav.Cmd.LEFT, MenuNav.Cmd.RIGHT:
-			if row != null and row.enabled and row.on_step.is_valid():
+			if row != null and row.enabled and row.on_step.is_valid() and (not repeat or row.kind == MenuRow.Kind.SLIDER):
 				row.on_step.call(-1 if cmd == MenuNav.Cmd.LEFT else 1)
 		MenuNav.Cmd.CHOOSE:
 			if row != null and row.enabled and row.on_choose.is_valid():
@@ -264,6 +266,7 @@ func layout() -> Dictionary:
 			fill = row.fill(),
 			enabled = row.enabled,
 			selected = i == index and row.selectable(),
+			colour = _colour_of(row, i == index and row.selectable()),
 			rect = Rect2i(left, line, width, PITCH),
 			text_at = Vector2i(left + INDENT, line + rise),
 			value_at = Vector2i(left + width - wide, line + rise),
@@ -280,12 +283,22 @@ func layout() -> Dictionary:
 	}
 
 
-## What is drawn for each row of the page shown, as {index (in the page), label, value, kind, enabled, selected, rect, text_at, value_at, chevron, bar, fill}: the
+## What is drawn for each row of the page shown, as {index (in the page), label, value, kind, enabled, selected, colour (the label's), rect, text_at, value_at, chevron, bar, fill}: the
 ## rect is the row's line, text_at where its label starts, value_at its right-hand text, chevron the cells' box.
 func rows() -> Array[Dictionary]:
 	var shown: Array[Dictionary] = []
 	shown.assign(layout().rows)
 	return shown
+
+
+# The colour a row's label is drawn in: rose when selected, warm white when live, and the dim note colour for a row switched off and
+# for a line of words (which is not a row, and must not read as one).
+func _colour_of(row: MenuRow, selected: bool) -> Color:
+	if selected:
+		return Hud.ROSE
+	if row.kind == MenuRow.Kind.TEXT or not row.enabled:
+		return Color(Hud.POSTURE, DIM_ALPHA)
+	return Hud.WHITE
 
 
 func _selected() -> MenuRow:
@@ -370,13 +383,7 @@ func _draw() -> void:
 		draw_rect(Rect2(edge), Hud.GOLD)
 	draw_string(font, Vector2(map.heading_at), _heading, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, Hud.GOLD)
 	for shown: Dictionary in map.rows:
-		var colour := Hud.WHITE
-		if _rows[shown.index].kind == MenuRow.Kind.TEXT:
-			colour = Hud.POSTURE
-		elif not shown.enabled:
-			colour = Color(Hud.POSTURE, DIM_ALPHA)
-		if shown.selected:
-			colour = Hud.ROSE
+		var colour: Color = shown.colour
 		draw_string(font, Vector2(shown.text_at), shown.label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, colour)
 		if not (shown.value as String).is_empty():
 			var value_colour := colour if shown.selected or not shown.enabled else Hud.GOLD
