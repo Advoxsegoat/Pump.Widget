@@ -54,6 +54,7 @@ F0 (Foundation) is built: a lit courtyard to walk in, with Abarax moving, dash-s
 
 - UI Task 1: settings that persist. `Settings` (an autoload) holds 24 keys in `user://settings.cfg`: the nine effect switches (`ReadabilityTuning.SWITCHES`), camera shake and camera dips, the six screen-look strengths, the five sound buses and the window (mode and scale). A change applies at once (`Settings.changed`) and is kept across runs; a damaged or hand-edited file gives each bad key its default without a word, and a value is read as a plain literal only. The test runner, the self-test, any `-s` tool and a run given `-- --no-player-settings` (the reel recorder passes it) use the defaults and never read or write the player's file.
 - UI Task 2: the pause menu. Esc (Start) opens a small panel at the top left of the game's own picture (Resume, Quit with a confirm; Quit is left out on the web), driven by keyboard or pad, and the fight comes back exactly as it was: a button held from before the pause is still held (a charge goes on, a guard stays up), nothing pressed while paused reaches the fight, and the HUD's clocks, the effects' timers and the refusal cue count play frames (`Game.play_frames`), not the engine's. The debug keys F5 to F9 are off while paused. A page is as wide as it needs (at most 224 px) and scrolls past fourteen rows; the window cannot be made smaller than 640×360 (`tools/test.sh`: 1316 passed, 0 failed; `--selftest` exit 0).
+- UI Task 3: the settings screen. The pause menu's Settings row opens Effects (the nine switches), Camera (shake, dips), Screen look (outline, depth of field, bloom, fog, colour grade, vignette), Sound (master, music, effects, voice, interface: each step plays a sample at the level set, silent at 0), Window (fullscreen or a window; its size, never smaller than 640×360 or larger than the screen; left out on the web) and Restore defaults, which asks first. Each row changes exactly its one key, a change is seen and heard at once with the game paused and is kept in `user://settings.cfg`, the panel is measured with the widest value a row can show so nothing moves, and walking the pages changes nothing in the fight behind them: only the slow-down switch changes how a fight plays (`tools/test.sh`: 1528 passed, 0 failed).
 
 ### The Director
 
@@ -119,6 +120,10 @@ F1 Combat core (spec §9). Its plan is written, awaiting the owner's review: [`d
 4. Try the menu with the pad's stick (a flick moves one row; held, it repeats) and with the keys; a sloppy diagonal on the stick moves by whichever way it crossed first.
 5. Resize the window while paused; it will not go below 640×360.
 6. Does the panel sit well at the top left, or does it cover something you want to see while paused?
+7. Settings: turn the afterimage and the slow-down off and fight a Flurry; set shake to 0 and take a hit; set Master to 0 and back; hold Left on a sound slider and listen to how often the sample plays.
+8. Window: switch to a window at ×2 and ×3 and back to fullscreen on your real screen, and press F11 with the Size row selected (none of this could be tried on a real screen here).
+9. Quit and start again: is everything as you left it? Delete `settings.cfg` by hand and start: are the defaults back without a word?
+10. On and Off are both drawn in gold and are told apart by the word only: should Off be dim?
 
 ## Known limits / notes for later
 
