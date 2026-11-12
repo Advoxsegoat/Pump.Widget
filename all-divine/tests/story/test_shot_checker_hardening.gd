@@ -5,7 +5,11 @@ extends TestCase
 
 const FOLDER := "res://scenes/story/fixture_yard_entrance"
 const SCENE := "fixture_yard_entrance"
-const TEMP := "user://shot_hardening"
+var TEMP := ""   # a folder of this run's own: two runs at once never share one
+
+
+func before_each() -> void:
+	TEMP = "user://shot_hardening_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
 
 
 func after_each() -> void:
@@ -249,6 +253,19 @@ func test_a_named_live_actor_that_plays_a_clip_has_a_def() -> void:
 	_only(_check(scene), "S2", "guard plays the clip 'idle' but has no def to look it up in")
 	guard.def = Registry.fetch(&"actors", &"knuckle_1") as ActorDef
 	assert_eq(_check(scene), PackedStringArray())
+
+
+func test_a_named_live_actor_that_walks_has_a_def() -> void:
+	var scene := _fixture()
+	var guard := CastEntry.new()
+	guard.actor = &"guard"
+	guard.source = CastEntry.Source.LIVE_NAMED
+	guard.node_name = &"Guard"
+	scene.cast.append(guard)
+	scene.marks.append(_mark(&"guard_at", Vector3(5, 0, 5)))
+	scene.marks.append(_mark(&"rehearsal.guard", Vector3(6, 0, 5)))
+	scene.shots[1].beats.append(_beat(&"guard", 0, {move_to = &"guard_at"}))
+	_only(_check(scene), "S2", "guard walks but has no def to take its speed from")
 
 
 func test_two_actors_at_rest_closer_than_two_bodies_is_a_problem() -> void:

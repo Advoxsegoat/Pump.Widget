@@ -3,9 +3,9 @@ extends SceneTree
 ##   tools/godot.sh -s res://tools/story_check.gd [--final] [--scene=<id>] [-- <file.tres> ...]
 ## Checks every scene folder under res://scenes/story, or the one named (`--scene=<id>`), or the shots.tres files named
 ## after the `--` (Godot takes a bare .tres on its command line for a scene to run, so paths follow `--`; a path is
-## res://..., user://..., absolute, or relative to the project). Each scene's rules are ShotChecker's; each is also
+## res://..., user://..., absolute, or relative to the project). `--scene` and paths do not go together (usage, exit 2). Each scene's rules are ShotChecker's; each is also
 ## checked in its place (the region loaded here, `region` of the scene, or the training yard when it names none: the
-## floor under every mark, room for a body, the walks' lines clear). Prints each problem as
+## floor under every mark, room for a body, a body able to walk to it from the region's Spawn, the walks' lines clear). Prints each problem as
 ## "story_check: <scene>/<shot or ->: <problem>" and exits 1; otherwise prints "story_check: N scenes OK (P placeholders)"
 ## and exits 0. A placeholder (a beat marked `placeholder` whose clip is not made yet) is listed but is not a problem in a
 ## draft; it is one in an approved scene, or with --final. Exits 2 for a wrong command line. The options may stand
@@ -56,12 +56,16 @@ func _run(args: PackedStringArray) -> int:
 			return 2
 		else:
 			files.append(arg)
+	if only != "" and not files.is_empty():
+		printerr("story_check: --scene and file paths do not go together")
+		printerr(USAGE)
+		return 2
 	var registry := root.get_node("Registry")
 	var problems := PackedStringArray()
 	for problem: String in registry.scan():
 		problems.append("registry: " + problem)
 	var checker: RefCounted = (load(CHECKER) as GDScript).new()
-	# What to check: {name, lines (problems of the data), scene (null if it did not load)}.
+	# What to check: {lines (problems of the data), scene (null if it did not load: the file is read once)}.
 	var jobs: Array[Dictionary] = []
 	if files.is_empty():
 		var folders: PackedStringArray = checker.scene_folders(SCENES)
@@ -71,18 +75,19 @@ func _run(args: PackedStringArray) -> int:
 				return 1
 			folders = PackedStringArray([only])
 		for folder in folders:
-			jobs.append({lines = checker.check_folder(SCENES.path_join(folder)), path = SCENES.path_join(folder).path_join("shots.tres")})
+			var lines: PackedStringArray = checker.check_folder(SCENES.path_join(folder))
+			jobs.append({lines = lines, scene = checker.loaded_scene})
 	else:
 		for file in files:
 			var path := file if file.begins_with("res://") or file.begins_with("user://") or file.begins_with("/") else "res://" + file
-			jobs.append({lines = checker.check_file(path), path = path})
+			var lines: PackedStringArray = checker.check_file(path)
+			jobs.append({lines = lines, scene = checker.loaded_scene})
 	var regions := {}   # region path -> the instanced region, kept for the place checks
 	var placeholders := PackedStringArray()
 	for job in jobs:
 		var lines: PackedStringArray = job.lines
-		var scene := ResourceLoader.load(job.path, "", ResourceLoader.CACHE_MODE_IGNORE) as Resource
-		if scene != null and scene.get_script() == load("res://story/scene_shots.gd"):
-			lines.append_array(await _place_lines(checker, scene, regions))
+		if job.scene != null:
+			lines.append_array(await _place_lines(checker, job.scene, regions))
 		for line in lines:
 			if checker.is_placeholder(line) and not final:
 				placeholders.append(line)
@@ -115,4 +120,5 @@ func _place_lines(checker: RefCounted, scene: Resource, regions: Dictionary) -> 
 		await physics_frame
 		await physics_frame
 	var region: Node3D = regions[path]
-	return checker.check_place(scene, region.get_world_3d().direct_space_state)
+	var marker := region.get_node_or_null("Spawn") as Node3D
+	return checker.check_place(scene, region.get_world_3d().direct_space_state, marker.global_position if marker != null else null)

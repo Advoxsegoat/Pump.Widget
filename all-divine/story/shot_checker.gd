@@ -65,11 +65,11 @@ const BODY_HEIGHT := 1.8
 const BODY_LIFT := 0.05
 const FLOOR_TOLERANCE := 0.1
 const WALK_SAMPLE := 0.1
-## A mark is inside the region if walls stop a body on all four sides, seen at this height above the floor (a low kerb
-## counts) within this distance.
-const OPEN_HEIGHT := 0.15
-const OPEN_DISTANCE := 80.0
-const OPEN_DIRECTIONS := {"north": Vector3(0, 0, -1), "east": Vector3(1, 0, 0), "south": Vector3(0, 0, 1), "west": Vector3(-1, 0, 0)}
+## The region's floor is flooded from its Spawn on a grid of this many metres; neighbouring floors join when they differ
+## in height by no more than STEP (a ramp's rise over a cell, a low step; a kerb of 0.3 m is not one).
+const CELL := 0.5
+const STEP := 0.26
+const MAX_CELLS := 250000
 const REHEARSAL := "rehearsal."
 const AT_START := "@start"
 ## The middle of the two fighters in a paired move, which the Director fills in.
@@ -87,6 +87,8 @@ const COMMON_KEYS: PackedStringArray = ["script", "resource_name", "resource_loc
 var finished := false
 ## The rules it stopped in, if it did not.
 var stopped := ""
+## The scene the last check_folder or check_file loaded (null if it did not load), so a caller loads each file once.
+var loaded_scene: SceneShots
 
 # The mechanism that says a rule did not run to its end. A script error aborts a function without a word to its caller,
 # so every function (but the static ones, which are pure sums, and these two) enters by `_enter(&"name")` first and
@@ -106,6 +108,8 @@ var _placeholders := 0
 var _bad := {}
 # The walks that were measured, for the place check: {actor, shot, from, to (Vector3, region space), from_mark, to_mark}.
 var _walks: Array[Dictionary] = []
+# The cells of a region's floor that a body can walk to from Spawn, once per region and run: {space|spawn: {Vector2i: floor y}}.
+var _reach_cache := {}
 # The Rest intervals of the walks, for the bodies-apart rule: {actor, from, to, at (Vector3), mark}.
 var _rests: Array[Dictionary] = []
 
@@ -175,9 +179,11 @@ func scene_folders(root := "res://scenes/story") -> PackedStringArray:
 ## One scene folder: its shots.tres read as text for keys the class lacks, loaded, and checked with the folder.
 func check_folder(folder: String) -> PackedStringArray:
 	_enter(&"check_folder")
+	loaded_scene = null
 	var name := folder.trim_suffix("/").get_file()
 	var path := folder.path_join("shots.tres")
 	var loaded := _load(path, name)
+	loaded_scene = null if loaded.get("blocking", false) else loaded.scene
 	if loaded.scene == null:
 		return _leave(&"check_folder", loaded.problems)
 	var out: PackedStringArray = loaded.problems
@@ -191,7 +197,9 @@ func check_folder(folder: String) -> PackedStringArray:
 ## One shots.tres anywhere (a combat moment's, say), checked without a folder.
 func check_file(path: String) -> PackedStringArray:
 	_enter(&"check_file")
+	loaded_scene = null
 	var loaded := _load(path, path.get_base_dir().get_file())
+	loaded_scene = null if loaded.get("blocking", false) else loaded.scene
 	if loaded.scene == null:
 		return _leave(&"check_file", loaded.problems)
 	var out: PackedStringArray = loaded.problems
@@ -926,14 +934,14 @@ func _check_bodies_apart() -> void:
 ## walls on all four sides (a mark with an open side is outside the region); and the straight line of every walk
 ## the checker measured is clear for a body. Each failure is a line naming the mark or walk, where, and what is in the
 ## way. The tool loads the region; the other rules do not need it.
-func check_place(scene: SceneShots, space: PhysicsDirectSpaceState3D) -> PackedStringArray:
+func check_place(scene: SceneShots, space: PhysicsDirectSpaceState3D, spawn: Variant = null) -> PackedStringArray:
 	_enter(&"check_place")
 	var rule_lines := check(scene)   # it leaves the walks it measured; if it stopped, its lines say so and are the answer
 	if not finished:
 		return _leave(&"check_place", rule_lines)
 	_problems = PackedStringArray()
 	_broken = ""
-	_place_rules(scene, space)
+	_place_rules(scene, space, spawn)
 	var open := _first_open_above(&"check_place")
 	if _broken == "" and open != "":
 		_broken = open
@@ -945,12 +953,19 @@ func check_place(scene: SceneShots, space: PhysicsDirectSpaceState3D) -> PackedS
 
 
 # The marks and the walks, in the space.
-func _place_rules(scene: SceneShots, space: PhysicsDirectSpaceState3D) -> void:
+func _place_rules(scene: SceneShots, space: PhysicsDirectSpaceState3D, spawn: Variant) -> void:
 	_enter(&"_place_rules")
+	var reach := {}
+	if spawn == null:
+		_add("-", "the region has no Spawn marker, so no mark can be shown to be reachable")
+	else:
+		reach = _reach(space, spawn)
+		if reach.is_empty():
+			_add("-", "the region's Spawn at %s has no walkable floor under it or no room for a body, so no mark can be shown to be reachable" % _where(spawn))
 	var failed := {}
 	for mark in scene.marks:
 		var at: Variant = scene.region_position(mark)
-		if at != null and not _mark_in_place(space, mark, at):
+		if at != null and not _mark_in_place(space, mark, at, reach):
 			failed[mark.name] = true
 	for walk in _walks:
 		if failed.has(walk.from_mark) or failed.has(walk.to_mark):
@@ -976,7 +991,7 @@ func _first_open_above(function: StringName) -> String:
 
 
 # False, with a line, if a body cannot stand at `mark` (at `at` in the region).
-func _mark_in_place(space: PhysicsDirectSpaceState3D, mark: SceneMark, at: Vector3) -> bool:
+func _mark_in_place(space: PhysicsDirectSpaceState3D, mark: SceneMark, at: Vector3, reach: Dictionary) -> bool:
 	_enter(&"_mark_in_place")
 	var here := "mark '%s' at %s" % [mark.name, _where(at)]
 	var floor_hit := _ray(space, at + Vector3(0, 0.5, 0), at + Vector3(0, -0.6, 0))
@@ -989,15 +1004,94 @@ func _mark_in_place(space: PhysicsDirectSpaceState3D, mark: SceneMark, at: Vecto
 	if not hits.is_empty():
 		_add("-", "%s: a body does not fit there, %s is in the way" % [here, ", ".join(hits)])
 		return _leave(&"_mark_in_place", false)
-	var open := PackedStringArray()
-	for direction: String in OPEN_DIRECTIONS:
-		var from := at + Vector3(0, OPEN_HEIGHT, 0)
-		if _ray(space, from, from + OPEN_DIRECTIONS[direction] * OPEN_DISTANCE).is_empty():
-			open.append(direction)
-	if not open.is_empty():
-		_add("-", "%s: nothing stops a body to the %s, so it is outside the region's walls (or the region has none there)" % [here, " and ".join(open)])
+	if not reach.is_empty() and not _reached(space, at, reach):
+		_add("-", "%s: cannot be reached from Spawn: %s" % [here, _why_not_reached(space, at, reach)])
 		return _leave(&"_mark_in_place", false)
 	return _leave(&"_mark_in_place", true)
+
+
+# The cells of the region's floor a body can walk to from `spawn`: {Vector2i: floor height}. A cell is walkable when
+# there is floor in it and a body's capsule there touches nothing; a neighbour joins when its floor is within STEP of
+# this one's. Empty if the Spawn itself is not on walkable floor.
+func _reach(space: PhysicsDirectSpaceState3D, spawn: Vector3) -> Dictionary:
+	_enter(&"_reach")
+	var key := "%s|%s" % [space.get_instance_id(), spawn]
+	if _reach_cache.has(key):
+		return _leave(&"_reach", _reach_cache[key])
+	var cells := {}
+	var start := Vector2i(roundi(spawn.x / CELL), roundi(spawn.z / CELL))
+	var floor_y: Variant = _stand(space, Vector2(start) * CELL, spawn.y + STEP, spawn.y - STEP)
+	if floor_y != null:
+		cells[start] = floor_y
+		var queue: Array[Vector2i] = [start]
+		var next := 0
+		while next < queue.size() and cells.size() < MAX_CELLS:
+			var cell := queue[next]
+			next += 1
+			for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var neighbour: Vector2i = cell + step
+				if cells.has(neighbour):
+					continue
+				var here: float = cells[cell]
+				var there: Variant = _stand(space, Vector2(neighbour) * CELL, here + STEP + 0.02, here - STEP - 0.02)
+				if there != null:
+					cells[neighbour] = there
+					queue.append(neighbour)
+	_reach_cache[key] = cells
+	return _leave(&"_reach", cells)
+
+
+# The height of the floor at (x, z) between `from_y` and `to_y` if a body can stand on it, else null.
+func _stand(space: PhysicsDirectSpaceState3D, xz: Vector2, from_y: float, to_y: float) -> Variant:
+	_enter(&"_stand")
+	var hit := _ray(space, Vector3(xz.x, from_y, xz.y), Vector3(xz.x, to_y, xz.y))
+	if hit.is_empty():
+		return _leave(&"_stand", null)
+	var at := Vector3(xz.x, hit.position.y, xz.y)
+	if not _body_hits(space, at).is_empty():
+		return _leave(&"_stand", null)
+	return _leave(&"_stand", at.y)
+
+
+# Whether a body can walk from a reached cell next to `at` straight to it.
+func _reached(space: PhysicsDirectSpaceState3D, at: Vector3, reach: Dictionary) -> bool:
+	_enter(&"_reached")
+	var centre := Vector2i(roundi(at.x / CELL), roundi(at.z / CELL))
+	for dx in range(-1, 2):
+		for dz in range(-1, 2):
+			var cell := centre + Vector2i(dx, dz)
+			if reach.has(cell) and absf(float(reach[cell]) - at.y) <= STEP:
+				var from := Vector3(cell.x * CELL, reach[cell], cell.y * CELL)
+				if _line_blockers(space, from, at).is_empty():
+					return _leave(&"_reached", true)
+	return _leave(&"_reached", false)
+
+
+# The names of what stands in a body's way along a straight line (empty: clear), sampled every WALK_SAMPLE metres.
+func _line_blockers(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3) -> PackedStringArray:
+	_enter(&"_line_blockers")
+	var length := Vector2(from.x - to.x, from.z - to.z).length()
+	var steps := maxi(1, ceili(length / WALK_SAMPLE))
+	for step in steps + 1:
+		var hits := _body_hits(space, from.lerp(to, float(step) / float(steps)))
+		if not hits.is_empty():
+			return _leave(&"_line_blockers", hits)
+	return _leave(&"_line_blockers", PackedStringArray())
+
+
+# What to tell a writer about a mark no body reaches: how near the reached floor comes, and what is between.
+func _why_not_reached(space: PhysicsDirectSpaceState3D, at: Vector3, reach: Dictionary) -> String:
+	_enter(&"_why_not_reached")
+	var best := Vector3.ZERO
+	var best_apart := INF
+	for cell: Vector2i in reach:
+		var apart := Vector2(cell.x * CELL - at.x, cell.y * CELL - at.z).length()
+		if apart < best_apart:
+			best_apart = apart
+			best = Vector3(cell.x * CELL, reach[cell], cell.y * CELL)
+	var blockers := _line_blockers(space, best, at)
+	var between := "%s is in the way" % ", ".join(blockers) if not blockers.is_empty() else "no floor within a step of %.2f m joins them (a gap, or a rise or drop over that)" % STEP
+	return _leave(&"_why_not_reached", "the nearest floor a body reaches is %.1f m away, at %s, and %s" % [best_apart, _where(best), between])
 
 
 # The names of what the world has where an actor's capsule would stand at `at` (empty: room for a body).
