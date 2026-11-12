@@ -17,6 +17,7 @@ extends SceneTree
 const REGION := preload("res://world/region.gd")
 const LAYERS := preload("res://core/layers.gd")
 const BLOCKS := preload("res://tools/world/region_blocks.gd")
+const DRESSER := preload("res://world/kit_dresser.gd")
 const FLAGSTONE := preload("res://world/materials/flagstone.tres")
 ## The stones a curb or a ground plate can be made of, by the name a layout gives.
 const STONES := {
@@ -26,7 +27,12 @@ const STONES := {
 	"tan_earth": preload("res://world/materials/tan_earth.tres"),
 	"snow": preload("res://world/materials/snow.tres"),
 }
-const KENNEY := "res://assets/env/kenney_town/%s.glb"
+const KENNEY_DIR := "res://assets/env/kenney_town/"
+const KENNEY := KENNEY_DIR + "%s.glb"
+## The colours a layout can ask its kit pieces to be drawn in (`kit NAME`): a material over the kit's own.
+const KITS := {
+	"bilibara": preload("res://world/materials/kenney_town_bilibara.tres"),
+}
 ## Kenney pieces are this many times their size: a tile of 2.5 m, a wall 2.5 m tall.
 const SCALE := 2.5
 const TILE := 2.5
@@ -118,6 +124,8 @@ class Builder:
 	var _lamp := {}  # the `lamps` line: colour, range, energy, up, world
 	var _blocks  # the helper for ground, block, water and vat (region_blocks.gd)
 	var _boxes := {}  # the bounds of each Kenney piece loaded so far, by name
+	var _kit := ""  # the `kit` line's name, and the line it was on
+	var _kit_line := 0
 	var _counts := {}  # how many nodes of each name so far
 	var _line := 0
 	var _world_and_feet := 0  # the collision bits of `world` and `ik_surface`
@@ -141,6 +149,7 @@ class Builder:
 				var is_ground := words[0] == "terrace"
 				if (pass_kind == "ground") == is_ground:
 					_command(words)
+		_dress_the_kit()
 		_own(_root, _root)
 		# The helper holds the builder and the builder the helper: let go, or neither is ever freed.
 		_blocks = null
@@ -266,6 +275,14 @@ class Builder:
 				var n := _numbers(args, 2, 2)
 				if n.size() == 2:
 					_blocks.vat(Vector2(n[0], n[1]))
+			"kit":
+				if args.size() != 1 or not KITS.has(args[0]):
+					_problem("kit needs a name: %s" % ", ".join(KITS.keys()))
+				elif not _kit.is_empty():
+					_problem("a second kit line (the first is on line %d)" % _kit_line)
+				else:
+					_kit = args[0]
+					_kit_line = _line
 			"sky":
 				if args.size() == 1:
 					_environment().background_color = Color(args[0])
@@ -529,6 +546,16 @@ class Builder:
 			holder.environment = env
 			_root.add_child(holder)
 		return holder.environment
+
+	# A KitDresser in the region: every kit piece of the layout, whatever command placed it, is drawn in the material the `kit`
+	# line names (world/kit_dresser.gd says why it is a node and not a change to each piece).
+	func _dress_the_kit() -> void:
+		if _kit.is_empty():
+			return
+		var dresser := DRESSER.new()
+		dresser.name = "Kit"
+		dresser.material = KITS[_kit]
+		_root.add_child(dresser)
 
 	# --- geometry ---
 

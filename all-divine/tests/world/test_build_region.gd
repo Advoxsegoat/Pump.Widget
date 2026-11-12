@@ -405,3 +405,47 @@ func test_every_listed_kenney_piece_is_in_the_toon_material() -> void:
 				assert_eq(mesh.get_active_material(i), expected, "%s surface %d" % [name, i])
 		scene.free()
 	assert_true(listed >= 42, "the list was read (%d pieces)" % listed)
+
+
+# --- `kit` ---
+
+# The material of every mesh of every kit piece under `root`, as resource paths.
+func _kit_materials(root: Node) -> Dictionary:
+	var found := {}
+	for piece in _pieces(root):
+		for mesh: MeshInstance3D in piece.find_children("*", "MeshInstance3D", true, false):
+			for i in mesh.mesh.get_surface_count():
+				found[mesh.get_active_material(i).resource_path] = true
+	return found
+
+
+func test_kit_bilibara_draws_every_piece_of_the_layout_in_its_colours() -> void:
+	var layout := "ground 0 0 10 10 cobble\nblock 0 0 10 5 2 frontage slope solid\nedge wall 0 7.5 5 7.5 s solid\npiece banner-red 7 7\nlamps #ffb98a 6 0.5 3.45 world\nlantern 8 8\nkit bilibara\n"
+	var built := _build(layout)
+	assert_eq(built.problems, PackedStringArray())
+	var materials := _kit_materials(built.root)
+	assert_eq(materials.keys(), [MATERIALS % "kenney_town_bilibara"], "every piece in the one material: %s" % [materials.keys()])
+	assert_true(_pieces(built.root).size() > 10, "and there are pieces")
+	# And so the saved scene draws them: a small scene, with the dresser in it, whose pieces take the material on entering
+	# the tree.
+	var packed := PackedScene.new()
+	assert_eq(packed.pack(built.root as Node), OK)
+	var again := track(packed.instantiate()) as Node
+	assert_true(again.get_node_or_null("Kit") is KitDresser, "a KitDresser called Kit")
+	assert_eq(_kit_materials(again).keys(), [MATERIALS % "kenney_town_bilibara"], "the saved scene draws its pieces in the same material")
+	# Wherever the line stands.
+	var first := _build("kit bilibara\npiece lantern 1 1\n")
+	assert_eq(_kit_materials(first.root).keys(), [MATERIALS % "kenney_town_bilibara"])
+	# Without the line, the kit's own.
+	var plain := _build(layout.replace("kit bilibara\n", ""))
+	assert_eq(_kit_materials(plain.root).keys(), [MATERIALS % "kenney_town"], "the kit's own material without the line")
+
+
+func test_a_bad_or_second_kit_line_is_a_problem() -> void:
+	var unknown := _build("\nkit castle")
+	assert_eq(unknown.problems.size(), 1, "an unknown kit: %s" % [unknown.problems])
+	assert_true((unknown.problems[0] as String).begins_with("T.txt:2:"), "names its line")
+	var twice := _build("kit bilibara\n\nkit bilibara")
+	assert_eq(twice.problems.size(), 1, "a second kit line: %s" % [twice.problems])
+	assert_true((twice.problems[0] as String).begins_with("T.txt:3:"), "names its line")
+	assert_eq(_build("kit").problems.size(), 1, "kit needs a name")

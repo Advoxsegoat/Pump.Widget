@@ -256,3 +256,64 @@ func test_no_ground_texture_is_recompressed_by_the_editor() -> void:
 		assert_eq(config.load("res://assets/env/textures/" + file), OK, file)
 		assert_eq(config.get_value("params", "detect_3d/compress_to", -1), 0, "%s: detect_3d/compress_to" % file)
 	assert_true(seen >= 5, "the textures' imports were found (%d)" % seen)
+
+
+# --- Bilibara's own colours for the kit ---
+
+const KIT_COLORMAP := "res://assets/env/kenney_town/Textures/colormap.png"
+const BILIBARA_COLORMAP := "res://assets/env/textures/bilibara_colormap.png"
+
+
+func _kit_colormap() -> Image:
+	var img := Image.new()
+	img.load_png_from_buffer(FileAccess.get_file_as_bytes(KIT_COLORMAP))
+	img.convert(Image.FORMAT_RGB8)
+	return img
+
+
+# The kit's colormap drawn in Bilibara's colours: every one of its colours (1,900-odd, swatches and their shading) is
+# given a colour, none loud: saturation at most 0.40, value at most 0.72. Roofs are slate-indigo, plaster a cold stone of
+# value 0.50 to 0.66, timber and trim a dull rose-gold, boards dark wood.
+func test_bilibara_colormap_gives_every_kit_colour_a_quiet_one() -> void:
+	var kit := _kit_colormap()
+	var made := MAKE_TEXTURES.bilibara_colormap()
+	assert_eq(made.get_size(), kit.get_size(), "the same size as the kit's")
+	var seen := {}
+	for y in kit.get_height():
+		for x in kit.get_width():
+			var from := kit.get_pixel(x, y)
+			var to := made.get_pixel(x, y)
+			if seen.has(from.to_html(false)):
+				assert_eq(to, seen[from.to_html(false)], "a colour is always mapped to the same colour")
+				continue
+			seen[from.to_html(false)] = to
+			assert_true(to.s <= 0.40 + 1e-3 and to.v <= 0.72 + 1e-3, "%s becomes %s: saturation %.2f, value %.2f" % [from.to_html(false), to.to_html(false), to.s, to.v])
+			if from != Color.BLACK:
+				assert_ne(to, from, "%s is changed" % from.to_html(false))
+	assert_true(seen.size() > 1500, "the kit's map has %d colours" % seen.size())
+	var roof: Color = seen["45a087"]
+	var roof_red: Color = seen["c74a5c"]
+	var plaster: Color = seen["adb5d9"]
+	var shade: Color = seen["8d93b1"]
+	var trim: Color = seen["cc8665"]
+	var board: Color = seen["794939"]
+	assert_true(roof.v <= 0.40 and roof.b > roof.g and roof.b > roof.r, "the cyan roof is slate-indigo (%s)" % roof.to_html(false))
+	assert_true(roof_red.v <= 0.32 and roof_red.b > roof_red.g, "the pink roof is a dark plum-indigo (%s)" % roof_red.to_html(false))
+	assert_true(plaster.v >= 0.50 and plaster.v <= 0.66 and plaster.b >= plaster.r, "plaster is a cold stone (%s)" % plaster.to_html(false))
+	assert_true(shade.v >= 0.45 and shade.v < plaster.v, "and its shade a little darker (%s)" % shade.to_html(false))
+	assert_true(trim.r > trim.g and trim.g > trim.b and trim.v >= 0.40 and trim.v <= 0.66, "trim is a dull rose-gold (%s)" % trim.to_html(false))
+	assert_true(board.v <= 0.46 and board.r >= board.b, "boards are dark wood (%s)" % board.to_html(false))
+
+
+func test_bilibara_colormap_is_made_the_same_every_time_and_has_its_material() -> void:
+	var made := MAKE_TEXTURES.bilibara_colormap()
+	assert_eq(made.get_data(), MAKE_TEXTURES.bilibara_colormap().get_data(), "two makes are the same")
+	var committed := Image.load_from_file(ProjectSettings.globalize_path(BILIBARA_COLORMAP))
+	assert_true(committed != null, "the committed colormap loads")
+	if committed != null:
+		committed.convert(made.get_format())
+		assert_eq(committed.get_data(), made.get_data(), "the committed colormap is what make_textures makes")
+	var material := _world_material("kenney_town_bilibara", false)
+	if material != null:
+		assert_eq((material.get_shader_parameter(&"albedo_tex") as Texture2D).resource_path, BILIBARA_COLORMAP)
+		assert_eq(material.get_shader_parameter(&"texels_per_metre"), 32.0)

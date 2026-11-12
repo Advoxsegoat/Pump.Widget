@@ -1,10 +1,12 @@
 extends SceneTree
 ## Makes the textures we draw ourselves:
 ##   tools/godot.sh -s res://tools/art/make_textures.gd
-## writes assets/env/textures/flagstone.png, slate.png, cobble.png, tan_earth.png and snow.png, the same bytes every time. Run `tools/godot.sh --import`
+## writes assets/env/textures/flagstone.png, slate.png, cobble.png, tan_earth.png, snow.png and bilibara_colormap.png (the
+## Kenney kit's colormap in Bilibara's colours), the same bytes every time. Run `tools/godot.sh --import`
 ## afterwards. Exits 0, or 1 if a file could not be written.
 
 const OUT_DIR := "res://assets/env/textures"
+const KIT_COLORMAP := "res://assets/env/kenney_town/Textures/colormap.png"
 ## Texels per metre in the world, and the flagstone tile's side: 2 m, so 64 texels.
 const TEXELS_PER_METRE := 32
 const FLAGSTONE_SIZE := 2 * TEXELS_PER_METRE
@@ -67,7 +69,7 @@ const CLUMP_MAX := 5
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	for made: Array in [["flagstone.png", flagstone()], ["slate.png", slate()], ["cobble.png", cobble()],
-			["tan_earth.png", tan_earth()], ["snow.png", snow()]]:
+			["tan_earth.png", tan_earth()], ["snow.png", snow()], ["bilibara_colormap.png", bilibara_colormap()]]:
 		var path := OUT_DIR.path_join(made[0])
 		var error := (made[1] as Image).save_png(ProjectSettings.globalize_path(path))
 		if error != OK:
@@ -277,6 +279,56 @@ static func snow() -> Image:
 	for i in size * size:
 		colours.append(SNOWS[1] if shadowed[i] == 1 else SNOWS[0])
 	return _image(colours, size)
+
+
+## The Kenney kit's colormap drawn in Bilibara's colours: each of its colours (the flat swatches and their shading) is
+## replaced by bilibara_colour's, so a kit piece keeps its light and dark parts and loses its toy-town colours. A pure
+## mapping: the same bytes every time. The kit has one colormap, so a layout that says `kit bilibara` draws every piece in
+## the result (world/materials/kenney_town_bilibara.tres).
+static func bilibara_colormap() -> Image:
+	var kit := Image.new()
+	kit.load_png_from_buffer(FileAccess.get_file_as_bytes(KIT_COLORMAP))
+	kit.convert(Image.FORMAT_RGB8)
+	var made := {}
+	var colours: Array[Color] = []
+	for y in kit.get_height():
+		for x in kit.get_width():
+			var from := kit.get_pixel(x, y)
+			var key := from.to_rgba32()
+			if not made.has(key):
+				made[key] = bilibara_colour(from)
+			colours.append(made[key])
+	return _image(colours, kit.get_width())
+
+
+## What the kit's colour `c` becomes in Bilibara (the book's slate-indigo mansards, cold Beaux-Arts stone and dull
+## rose-gold trim). The kit's colours fall in a few families, by hue; each family keeps its own light and dark, laid on a
+## narrow range of value, so that walls are mid-value (a white jacket and a dark coat both stand out against them) and nothing
+## is loud: saturation never over 0.40 and value never over 0.72. First values: the snow-noon light may move them.
+##   blue-greys and neutrals (plaster, stone, white): cold stone, value 0.25 + 0.45 v (a pale plaster 0.63)
+##   warm oranges and peaches (trim, frames, shutters): dull rose-gold, the darker browns (boards) dark wood
+##   cyan and teal (the roofs), and the saturated blues and violets: slate-indigo
+##   reds and pinks (the other roof): a dark plum
+##   greens (trees, hedges): a dark muted green
+static func bilibara_colour(c: Color) -> Color:
+	if c.v <= 0.0:
+		return c
+	var h := c.h
+	var s := c.s
+	var v := c.v
+	if s < 0.04:
+		return Color.from_hsv(0.63, 0.08, 0.25 + 0.45 * v)
+	if h >= 0.93 or h < 0.02:
+		return Color.from_hsv(0.77, 0.31, 0.10 + 0.17 * v)
+	if h < 0.12:
+		if v < 0.66:
+			return Color.from_hsv(0.99, 0.20, 0.20 + 0.40 * v)
+		return Color.from_hsv(0.04, 0.30, clampf(0.40 + 1.2 * (v - 0.70), 0.28, 0.68))
+	if h < 0.445:
+		return Color.from_hsv(0.40, 0.25, 0.20 + 0.30 * v)
+	if h < 0.55 or s >= 0.35:
+		return Color.from_hsv(0.64, 0.38, 0.16 + 0.26 * v)
+	return Color.from_hsv(0.63, minf(0.10 + 0.3 * s, 0.20), 0.25 + 0.45 * v)
 
 
 # A size x size RGB image of `colours`, row by row.
