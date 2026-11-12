@@ -120,16 +120,20 @@ func _let_go(by: String) -> void:
 
 
 # The left stick's axis moved to `value`: a direction goes down once past the flick, and is ready again below the release.
+# One push gives one command: a diagonal, whose second axis passes the flick while the first is already pushed, gives none.
 func _stick(axis: JoyAxis, value: float) -> Cmd:
+	var other := JOY_AXIS_LEFT_Y if axis == JOY_AXIS_LEFT_X else JOY_AXIS_LEFT_X
 	var result := Cmd.NONE
-	for sign in [-1, 1]:
-		var direction := [axis, sign]
-		var strength: float = value * sign
+	for way in [-1, 1]:
+		var direction := [axis, way]
+		var strength: float = value * way
 		if _stick_latched.get(direction, false):
 			if strength < Bindings.DIRECTION_RELEASE:
 				_stick_latched[direction] = false
 				_let_go("stick %d %d" % direction)
 		elif strength >= Bindings.FLICK_DEADZONE:
+			var partner_down: bool = _stick_latched.get([other, -1], false) or _stick_latched.get([other, 1], false)
 			_stick_latched[direction] = true
-			result = _pressed(_STICK[direction], "stick %d %d" % direction)
+			if not partner_down:
+				result = _pressed(_STICK[direction], "stick %d %d" % direction)
 	return result

@@ -58,6 +58,8 @@ const SELFTEST_HEAVY_FRAMES := 70
 var look_on := true
 ## The window F11 and Alt+Enter switch: the game's own, unless a test gives it another before Main is ready.
 var window: Window = null
+## What the menu's Quit does: ends the game. A test puts its own here.
+var quit_game: Callable = func() -> void: get_tree().quit()
 
 
 func _ready() -> void:
@@ -76,7 +78,8 @@ func _ready() -> void:
 	Settings.apply_window(window)
 	Settings.changed.connect(_on_setting_changed)
 	menu.window = window
-	menu.quit_requested.connect(func() -> void: get_tree().quit())
+	menu.quit_requested.connect(func() -> void: quit_game.call())
+	window.min_size = Vector2i(PixelSnap.INTERNAL)
 	Game.state_changed.connect(_on_game_state_changed)
 	_apply_look()
 	_enter_region()

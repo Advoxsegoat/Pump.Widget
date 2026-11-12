@@ -823,3 +823,65 @@ func test_a_stick_already_pushed_when_the_menu_opens_moves_nothing_through_open(
 	assert_eq(menu.index, menu.rows().size() - 1, "let go and pushed again it moves (up from the first wraps to the last)")
 	Input.parse_input_event(rest)
 	Input.flush_buffered_events()
+
+
+# --- small things ---
+
+func test_the_refusal_cue_gate_counts_play_frames() -> void:
+	var main := await _main()
+	var refuse := func() -> void:
+		main.player.stats.spend_stamina(1000.0)
+		main.player.runner.start(Registry.fetch(&"moves", &"palm_jab") as MoveData)
+	refuse.call()
+	assert_true(Sfx.last_played().has(&"stamina_refused"), "the first refused press sounds the cue")
+	Game.change(Game.State.PAUSE)
+	await frames(300)
+	Game.change(Game.State.PLAY)
+	await frames(3)
+	main.player.runner.stop()
+	refuse.call()
+	assert_false(Sfx.last_played().has(&"stamina_refused"), "a refused press 3 play frames after a 300-frame pause is still inside the gate")
+
+
+func test_the_window_cannot_be_smaller_than_the_picture() -> void:
+	Game.reset()
+	var window := Window.new()
+	var main := (load(MAIN) as PackedScene).instantiate() as Main
+	main.window = window
+	track(main)
+	assert_eq(window.min_size, Vector2i(640, 360), "the picture's own size")
+	window.free()
+
+
+func test_main_quits_when_the_menu_asks_and_gives_the_menu_its_window() -> void:
+	Game.reset()
+	var window := Window.new()
+	var main := (load(MAIN) as PackedScene).instantiate() as Main
+	main.window = window
+	var quits := []
+	main.quit_game = func() -> void: quits.append(1)
+	track(main)
+	assert_eq(main.menu.window, window, "the menu has Main's window")
+	main.menu.quit_requested.emit()
+	assert_eq(quits, [1], "Main quits when the menu asks, once")
+	window.free()
+
+
+func test_the_menu_follows_settings_on_web_and_the_footer_follows_the_device() -> void:
+	Settings.on_web = true
+	var web := Menu.new()
+	assert_true(web.web, "on the web the menu is the web's")
+	web.free()
+	Settings.on_web = false
+	var home := Menu.new()
+	assert_false(home.web, "off it, not")
+	home.free()
+	Settings.on_web = OS.has_feature("web")
+	var menu := track(Menu.new()) as Menu
+	Inputs._device = Inputs.Device.KEYBOARD_MOUSE
+	assert_eq(menu.footer(), "Enter: choose   Esc: back")
+	Inputs._device = Inputs.Device.GAMEPAD
+	menu.pad_present = func() -> bool: return true
+	assert_eq(menu.footer(), "A: choose   B: back", "a pad in hand and connected")
+	menu.pad_present = func() -> bool: return false
+	assert_eq(menu.footer(), "Enter: choose   Esc: back", "a pad in hand but unplugged: the keyboard's")

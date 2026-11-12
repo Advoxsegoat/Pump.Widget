@@ -87,14 +87,14 @@ func close() -> void:
 
 
 ## Shows the page `id` (built by MenuPages unless `built` is given), with its starting row selected.
-func show_page(id: StringName, built: Dictionary = {}) -> void:
-	if built.is_empty():
+func show_page(id: StringName, built: MenuPage = null) -> void:
+	if built == null:
 		built = MenuPages.build(id, self)
 	page = id
 	_heading = built.heading
 	_rows = built.rows
 	_back = built.back
-	index = clampi(built.get("start", 0), 0, maxi(_rows.size() - 1, 0))
+	index = clampi(built.start, 0, maxi(_rows.size() - 1, 0))
 	if not _rows.is_empty() and not _rows[index].selectable():
 		_move(1)
 	queue_redraw()
@@ -193,7 +193,7 @@ func rows() -> Array[Dictionary]:
 
 
 func _selected() -> MenuRow:
-	return _rows[index] if index >= 0 and index < _rows.size() else null
+	return _rows[index] if index >= 0 and index < _rows.size() and _rows[index].selectable() else null
 
 
 # The selection moves `step` (-1 or 1) rows, wrapping and skipping rows that are only text.

@@ -74,7 +74,7 @@ var tuning: ReadabilityTuning = TUNING
 var icon_shape: HitProfile.Perilous = HitProfile.Perilous.NONE
 
 var _actor: Actor
-var _refused_cue_at := -1000  # the physics frame the refusal cue last sounded on
+var _refused_cue_at := -1000  # the play frame (Game.play_frames) the refusal cue last sounded on
 var _plan := {}  # the rim of the tell in progress, driven every frame (_drive_rim); empty with none
 var _tell_end := &""  # the mark that ends the tell in progress (hitbox_on or hitbox_off), or &"" with none
 var _offs_left := 0  # for a perilous tell: how many hitbox_off marks are still to come
@@ -125,7 +125,7 @@ func _on_mark(kind: StringName, args: Dictionary) -> void:
 
 func _on_move_refused(_move: MoveData, _reason: StringName) -> void:
 	# One cue in REFUSAL_FRAMES at most, however fast the press is mashed (the Hud blinks as seldom).
-	var now := Engine.get_physics_frames()
+	var now := Game.play_frames  # play frames: a pause does not wear the gate down, as it does not the Hud's blink
 	if _actor.def.team == ActorDef.Team.PLAYER and now - _refused_cue_at >= REFUSAL_FRAMES:
 		_refused_cue_at = now
 		Sfx.play(&"stamina_refused")

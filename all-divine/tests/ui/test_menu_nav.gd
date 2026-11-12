@@ -155,7 +155,7 @@ func test_selection_wraps_at_both_ends() -> void:
 	assert_eq(menu.index, 0, "down from the last selects the first")
 	# A TEXT row is never selected.
 	var page := MenuPages.build(&"root", menu)
-	(page["rows"] as Array).insert(1, MenuRow.text("A note"))
+	page.rows.insert(1, MenuRow.text("A note"))
 	menu.show_page(&"root", page)
 	assert_eq(menu.index, 0)
 	menu.press(C.DOWN)
@@ -164,3 +164,48 @@ func test_selection_wraps_at_both_ends() -> void:
 	assert_eq(menu.index, 0, "and so does up")
 	menu.press(C.UP)
 	assert_eq(menu.rows()[menu.index].label, "Quit", "wrapping lands on a real row")
+
+
+func test_a_built_page_is_a_typed_page() -> void:
+	var menu := track(Menu.new()) as Menu
+	var page: Variant = MenuPages.build(&"root", menu)
+	assert_true(page is MenuPage, "MenuPages.build gives a MenuPage")
+	if page is MenuPage:
+		assert_eq([page.heading, page.rows.size(), page.back.is_valid(), page.start], ["Paused", 2, true, 0])
+
+
+func test_a_diagonal_flick_gives_one_command() -> void:
+	var nav := MenuNav.new()
+	assert_eq(nav.command(_axis(JOY_AXIS_LEFT_X, 0.8)), C.RIGHT, "the first axis past the flick gives its command")
+	assert_eq(nav.command(_axis(JOY_AXIS_LEFT_Y, 0.9)), C.NONE, "the second, in the same push, gives none")
+	assert_eq(nav.command(_axis(JOY_AXIS_LEFT_X, 0.0)), C.NONE)
+	assert_eq(nav.command(_axis(JOY_AXIS_LEFT_Y, 0.0)), C.NONE)
+	assert_eq(nav.command(_axis(JOY_AXIS_LEFT_Y, -0.9)), C.UP, "let go, a push on the other axis gives its own")
+	assert_eq(nav.command(_axis(JOY_AXIS_LEFT_X, -0.9)), C.NONE, "and its diagonal partner none")
+	assert_eq(nav.command(_axis(JOY_AXIS_LEFT_Y, 0.0)), C.NONE)
+	assert_eq(nav.command(_axis(JOY_AXIS_LEFT_X, -0.9)), C.NONE, "the other axis is still pushed: nothing new until both are let go")
+	assert_eq(nav.command(_axis(JOY_AXIS_LEFT_X, 0.0)), C.NONE)
+	assert_eq(nav.command(_axis(JOY_AXIS_LEFT_X, -0.9)), C.LEFT, "all let go, pushed again")
+
+
+func test_a_disabled_row_is_passed_over_and_when_none_can_be_selected_nothing_is() -> void:
+	var menu := track(Menu.new()) as Menu
+	var page := MenuPages.build(&"root", menu)
+	var middle := MenuRow.action("Middle", func() -> void: pass)
+	middle.enabled = false
+	page.rows.insert(1, middle)
+	menu.show_page(&"root", page)
+	assert_eq(menu.rows()[0].label, "Resume")
+	menu.press(C.DOWN)
+	assert_eq(menu.rows()[menu.index].label, "Quit", "Down passes over the disabled row")
+	menu.press(C.UP)
+	assert_eq(menu.rows()[menu.index].label, "Resume", "and so does Up")
+	assert_eq(menu.rows().map(func(r: Dictionary) -> bool: return r.selected), [true, false, false])
+	for row in page.rows:
+		row.enabled = false
+	menu.show_page(&"root", page)
+	assert_eq(menu.rows().filter(func(r: Dictionary) -> bool: return r.selected).size(), 0, "with every row disabled, none is selected")
+	menu.press(C.DOWN)
+	menu.press(C.CHOOSE)
+	menu.press(C.LEFT)
+	assert_eq(menu.rows().filter(func(r: Dictionary) -> bool: return r.selected).size(), 0, "and moving or choosing does nothing")

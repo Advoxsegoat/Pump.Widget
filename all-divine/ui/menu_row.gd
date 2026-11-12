@@ -32,9 +32,9 @@ static func text(words: String) -> MenuRow:
 	return row
 
 
-## Whether the row can be selected.
+## Whether the row can be selected: not a line of words, and not one that is switched off.
 func selectable() -> bool:
-	return kind != Kind.TEXT
+	return kind != Kind.TEXT and enabled
 
 
 ## The right-hand text, or "" for a row with none.
