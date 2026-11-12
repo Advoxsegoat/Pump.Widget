@@ -486,3 +486,55 @@ func test_a_bad_or_second_kit_line_is_a_problem() -> void:
 	assert_eq(twice.problems.size(), 1, "a second kit line: %s" % [twice.problems])
 	assert_true((twice.problems[0] as String).begins_with("T.txt:3:"), "names its line")
 	assert_eq(_build("kit").problems.size(), 1, "kit needs a name")
+
+
+# --- the small things: one honest problem to a bad line ---
+
+func test_a_word_that_is_not_a_colour_is_a_problem_and_builds_nothing() -> void:
+	for line in ["fill -35 25 notacolour 1.3", "moon -35 25 notacolour 1.3", "sun -50 35 #zzz 1.0", "lamps notacolour 6 0.5 3.45", "lamps nope 6 0.5 3.45 world",
+			"sky notacolour", "ambient notacolour 0.4"]:
+		var built := _build("\n" + line)
+		assert_eq(built.problems.size(), 1, "%s is one problem: %s" % [line, built.problems])
+		if built.problems.size() == 1:
+			assert_true((built.problems[0] as String).begins_with("T.txt:2:"), "%s names its line" % line)
+		assert_eq((built.root as Node).find_children("*", "Light3D", true, false).size(), 0, "%s builds no light" % line)
+		assert_eq((built.root as Node).find_children("*", "WorldEnvironment", true, false).size(), 0, "%s builds no environment" % line)
+
+
+func test_a_short_line_is_one_problem_and_not_two() -> void:
+	for line in ["ground 0 0 5 cobble", "ground 0 0 5", "water 0 0 5 5", "block 0 0 5 5", "vat 5", "lamps #ffb98a 6 0.5 world", "lamps #ffb98a 6 0.5",
+			"block 0 0 5 5 1 plain", "fill -35 25 1.3", "kit bilibara extra", "ground 0 0 5 5 cobble visual extra", "water 0 0 5 5 0 liquor extra"]:
+		var built := _build(line)
+		assert_eq(built.problems.size(), 1, "%s is one problem: %s" % [line, built.problems])
+
+
+func test_a_second_light_for_the_bodies_is_a_problem() -> void:
+	for text in ["fill -35 25 #ffffff 1\nfill -30 20 #ffffff 1", "moon -35 25 #ffffff 1\nfill -30 20 #ffffff 1", "fill -35 25 #ffffff 1\nmoon -30 20 #ffffff 1"]:
+		var built := _build(text)
+		assert_eq(built.problems.size(), 1, "%s: %s" % [text.replace("\n", " / "), built.problems])
+		if built.problems.size() == 1:
+			assert_true((built.problems[0] as String).begins_with("T.txt:2:"), "the second names its line")
+		assert_eq((built.root as Node).find_children("*", "DirectionalLight3D", true, false).size(), 1, "only the first is built")
+
+
+func test_ground_or_water_laid_twice_over_the_same_place_is_a_problem() -> void:
+	var twice := _build("ground 0 0 10 10 cobble\n# a comment\nground 5 5 15 15 snow visual")
+	assert_eq(twice.problems.size(), 1, "overlapping ground: %s" % [twice.problems])
+	if twice.problems.size() == 1:
+		assert_true((twice.problems[0] as String).begins_with("T.txt:3:") and "line 1" in twice.problems[0], "naming both lines: %s" % twice.problems[0])
+	assert_eq(_build("ground 0 0 10 10 cobble\nground 10 0 20 10 snow").problems, PackedStringArray(), "plates that touch are fine")
+	var wet := _build("water 0 0 10 10 -0.9\nwater 5 5 15 15 -0.9")
+	assert_eq(wet.problems.size(), 1, "overlapping water at one height: %s" % [wet.problems])
+	assert_eq(_build("water 0 0 10 10 -0.9\nwater 5 5 15 15 0.05 liquor").problems, PackedStringArray(), "water at another height is fine")
+
+
+func test_a_block_longer_than_60_m_is_a_problem() -> void:
+	assert_eq(_build("block 0 0 60 5 1 plain flat").problems, PackedStringArray(), "60 m is fine")
+	assert_eq(_build("block 0 0 62.5 5 1 plain flat").problems.size(), 1, "62.5 m is a problem")
+	assert_eq(_build("block 0 0 5 62.5 1 plain flat").problems.size(), 1, "the other side too")
+
+
+func test_a_tab_between_words_is_white_space() -> void:
+	var built := _build("ground\t0 0\t10 10  cobble\t# a comment")
+	assert_eq(built.problems, PackedStringArray())
+	assert_true((built.root as Node).get_node_or_null("Walkable/Ground") != null, "built")

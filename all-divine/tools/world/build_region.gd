@@ -1,7 +1,35 @@
 extends SceneTree
 ## Builds a region from its layout:
 ##   tools/godot.sh -s res://tools/world/build_region.gd -- <layout.txt> <out.tscn>
-## reads the layout (world/courtyard/layout.txt's header says what each line does) and writes a Region as the scene.
+## reads the layout and writes a Region as the scene. A layout is one command a line; a # at the start of a line, or
+## followed by a space, starts a comment (a colour's # does not); words are separated by spaces or tabs. Metres: x runs
+## east, z south (toward the camera, which looks north), y up. Yaw is in degrees about +Y. Colours are #rrggbb.
+## world/courtyard/layout.txt's header has the older commands with a picture; all of them, in short:
+##   floor W D                          the floor: a flagstone box W x D, top at y = 0
+##   terrace X0 Z0 X1 Z1 H              a raised floor H high
+##   stairs X0 Z0 X1 Z1 N UP            N steps climbing toward UP (n, e, s, w), with a smooth walk ramp
+##   ramp X0 Z0 X1 Z1 UP                a wedge up toward UP
+##   edge PIECE X0 Z0 X1 Z1 FACING [solid]   a wall-like Kenney piece every 2.5 m along a line, its face toward FACING
+##   piece PIECE X Z [YAW] [y=Y]        a Kenney piece, colliding as MODELS says
+##   curb X0 Z0 X1 Z1 H [STONE] [moonlit]    a low solid box of STONE (flagstone, slate, cobble, tan_earth, snow)
+##   ground X0 Z0 X1 Z1 STONE [visual]  a plate of ground 1 m thick with its top at y = 0, at most 12.5 m a side: solid and
+##                                      walkable (world, ik_surface; under Walkable), or `visual`: only seen (under
+##                                      Backdrop); two plates may not overlap
+##   block X0 Z0 X1 Z1 STOREYS STYLE ROOF [solid]   a building over whole 2.5 m tiles (at most 60 m a side), 1 to 5
+##                                      storeys: its south face and roof, drawn as a few MultiMeshes (STYLE: frontage,
+##                                      tannery, shed, plain; ROOF: flat, slope, high), solid (one box, under Blocks) or
+##                                      backdrop (no collider, no shadow)
+##   water X0 Z0 X1 Z1 Y [liquor]       a thin plane at height Y, seen only; two at one height may not overlap
+##   vat X Z                            a 2.5 m slate box 1 m high, solid, with liquor in it
+##   lantern X Z [shadow]               a lantern with its lamp (see lamps)
+##   lamps COLOUR RANGE ENERGY UP [world]   every lantern's lamp; `world`: it lights the world and not the bodies
+##   marker NAME X Z [YAW]  /  poi NAME X Z UP    a Marker3D, and one to glance at
+##   sun PITCH YAW COLOUR ENERGY        the DirectionalLight3D, with shadows
+##   moon PITCH YAW COLOUR ENERGY  /  fill PITCH YAW COLOUR ENERGY    a light for the bodies of actors only, no shadows
+##                                      (a night's moon, a day's fill); the sun leaves the bodies to it; one in a region
+##   sky COLOUR  /  ambient COLOUR ENERGY    the background and the ambient light
+##   kit NAME                           draw every kit piece of the layout in that kit's colours (bilibara), once a layout
+##   script PATH  /  grade PATH         the region's script, and its GradeProfile
 ## It is run once per region: from then on the scene is the source (STATE.md says so), and building again would
 ## overwrite whatever was changed in it. Run `tools/godot.sh --import` afterwards. Exits 0; 1 if the layout has a
 ## problem (each is printed with its line) or the scene could not be written. The courtyard's own wrapper is
@@ -27,15 +55,10 @@ const STONES := {
 	"tan_earth": preload("res://world/materials/tan_earth.tres"),
 	"snow": preload("res://world/materials/snow.tres"),
 }
-const KENNEY_DIR := "res://assets/env/kenney_town/"
-const KENNEY := KENNEY_DIR + "%s.glb"
 ## The colours a layout can ask its kit pieces to be drawn in (`kit NAME`): a material over the kit's own.
 const KITS := {
 	"bilibara": preload("res://world/materials/kenney_town_bilibara.tres"),
 }
-## Kenney pieces are this many times their size: a tile of 2.5 m, a wall 2.5 m tall.
-const SCALE := 2.5
-const TILE := 2.5
 ## How a piece collides, when not as a box round all of it: "none", "cylinder" (round all of it), "post" (a
 ## pole POST_RADIUS thick, its full height) or "trunk" (a tree's trunk, TRUNK_RADIUS by TRUNK_HEIGHT).
 const MODELS := {
@@ -113,29 +136,21 @@ static func _pascal_case(file_name: String) -> String:
 
 
 ## Builds a Region from a layout's text; what went wrong is in `problems`, what was built in `notes`.
-class Builder:
-	var problems := PackedStringArray()
+class Builder extends "res://tools/world/region_nodes.gd":
 	var notes := PackedStringArray()
-	## The layout's path, for the problems' lines.
-	var layout := ""
 
-	var _root: Node3D
 	var _terraces: Array[Dictionary] = []  # {rect: Rect2 over (x, z), height}
 	var _lamp := {}  # the `lamps` line: colour, range, energy, up, world
-	var _blocks  # the helper for ground, block, water and vat (region_blocks.gd)
-	var _boxes := {}  # the bounds of each Kenney piece loaded so far, by name
-	var _part_cache := {}  # the meshes of each, by name
+	var _grounds: Array[Dictionary] = []  # the `ground` lines so far: {rect, line}, for plates laid over one another
+	var _waters: Array[Dictionary] = []  # the same for `water`: {rect, y, line}
+	var _bodies_light_line := 0  # the line of the moon or the fill, which a region has only one of
 	var _kit := ""  # the `kit` line's name, and the line it was on
 	var _kit_line := 0
-	var _counts := {}  # how many nodes of each name so far
-	var _line := 0
-	var _world_and_feet := 0  # the collision bits of `world` and `ik_surface`
 	var _feet := 0  # of `ik_surface` alone
 
 	func build(text: String, root_name: String) -> Node3D:
-		_world_and_feet = LAYERS.WORLD | LAYERS.IK_SURFACE
+		world_and_feet = LAYERS.WORLD | LAYERS.IK_SURFACE
 		_feet = LAYERS.IK_SURFACE
-		_blocks = BLOCKS.new(self, STONES, SCALE)
 		_root = Node3D.new()
 		_root.name = root_name
 		_root.set_script(REGION)
@@ -144,7 +159,7 @@ class Builder:
 		for pass_kind in ["ground", "rest"]:
 			for i in lines.size():
 				_line = i + 1
-				var words := _without_comment(lines[i]).split(" ", false)
+				var words := _without_comment(lines[i].replace("\t", " ")).split(" ", false)
 				if words.is_empty():
 					continue
 				var is_ground := words[0] == "terrace"
@@ -152,8 +167,6 @@ class Builder:
 					_command(words)
 		_dress_the_kit()
 		_own(_root, _root)
-		# The helper holds the builder and the builder the helper: let go, or neither is ever freed.
-		_blocks = null
 		return _root
 
 	# --- commands ---
@@ -181,7 +194,7 @@ class Builder:
 					_ramp(_rect(n), up)
 			"edge":
 				if args.size() < 6:
-					_problem("edge needs PIECE X0 Z0 X1 Z1 FACING [solid]")
+					problem("edge needs PIECE X0 Z0 X1 Z1 FACING [solid]")
 					return
 				var n := _numbers(args.slice(1, 5), 4, 4)
 				var facing := _way(args, 5)
@@ -189,146 +202,148 @@ class Builder:
 					_edge(args[0], Vector2(n[0], n[1]), Vector2(n[2], n[3]), facing, args.size() > 6 and args[6] == "solid")
 			"piece":
 				if args.is_empty():
-					_problem("piece needs PIECE X Z [YAW] [y=Y]")
+					problem("piece needs PIECE X Z [YAW] [y=Y]")
 					return
 				var y: Variant = _y_option(args)
 				var n := _numbers(PackedStringArray(Array(args.slice(1)).filter(func(a: String) -> bool: return not a.begins_with("y="))), 2, 3)
 				if n.size() >= 2:
 					var at := Vector3(n[0], 0.0, n[1])
 					at.y = y if y != null else _ground(Vector2(at.x, at.z))
-					_piece(_group("Props"), args[0], at, n[2] if n.size() > 2 else 0.0)
+					_piece(group_node("Props"), args[0], at, n[2] if n.size() > 2 else 0.0)
 			"curb":
 				var options := Array(args.slice(5))
 				var moonlit := options.has("moonlit")
 				options.erase("moonlit")
 				if options.size() > 1 or (options.size() == 1 and not STONES.has(options[0])):
-					_problem("curb needs X0 Z0 X1 Z1 H [STONE] [moonlit], the stone one of %s" % ", ".join(STONES.keys()))
+					problem("curb needs X0 Z0 X1 Z1 H [STONE] [moonlit], the stone one of %s" % ", ".join(STONES.keys()))
 					return
 				var n := _numbers(args.slice(0, 5), 5, 5)
 				if n.size() == 5:
 					_curb(_rect(n), n[4], STONES[options[0]] if options.size() == 1 else FLAGSTONE, moonlit)
 			"lamps":
 				var world := args.size() == 5 and args[4] == "world"
+				if args.size() != 4 and not world:
+					problem("lamps needs COLOUR RANGE ENERGY UP [world]")
+					return
 				var n := _numbers(args.slice(1, 4), 3, 3)
-				if (args.size() == 4 or world) and n.size() == 3:
+				if _is_colour(args[0]) and n.size() == 3:
 					_lamp = {colour = Color(args[0]), range = n[0], energy = n[1], up = n[2], world = world}
-				else:
-					_problem("lamps needs COLOUR RANGE ENERGY UP [world]")
 			"lantern":
 				var n := _numbers(PackedStringArray(Array(args).filter(func(a: String) -> bool: return a != "shadow")), 2, 2)
 				if n.size() == 2:
 					_lantern(Vector2(n[0], n[1]), args.has("shadow"))
 			"marker":
 				if args.is_empty():
-					_problem("marker needs NAME X Z [YAW]")
+					problem("marker needs NAME X Z [YAW]")
 					return
 				var n := _numbers(args.slice(1), 2, 3)
 				if n.size() >= 2:
 					_marker(args[0], Vector2(n[0], n[1]), 0.0, n[2] if n.size() > 2 else 0.0, false)
 			"poi":
 				if args.is_empty():
-					_problem("poi needs NAME X Z UP")
+					problem("poi needs NAME X Z UP")
 					return
 				var n := _numbers(args.slice(1), 3, 3)
 				if n.size() == 3:
 					_marker(args[0], Vector2(n[0], n[1]), n[2], 0.0, true)
 			"sun":
-				var n := _numbers(args.slice(0, 2) + args.slice(3), 3, 3)
-				if args.size() == 4 and n.size() == 3:
-					_sun(n[0], n[1], Color(args[2]), n[2])
-				else:
-					_problem("sun needs PITCH YAW COLOUR ENERGY")
+				var light := _light_words(args, "sun")
+				if not light.is_empty():
+					_sun(light[0], light[1], light[2], light[3])
 			"moon":
-				var n := _numbers(args.slice(0, 2) + args.slice(3), 3, 3)
-				if args.size() == 4 and n.size() == 3:
-					_moon(n[0], n[1], Color(args[2]), n[2])
-				else:
-					_problem("moon needs PITCH YAW COLOUR ENERGY")
+				var light := _light_words(args, "moon")
+				if not light.is_empty():
+					_moon(light[0], light[1], light[2], light[3])
 			"fill":
-				if args.size() != 4:
-					_problem("fill needs PITCH YAW COLOUR ENERGY")
-					return
-				var n := _numbers(args.slice(0, 2) + args.slice(3), 3, 3)
-				if n.size() == 3:
-					_fill(n[0], n[1], Color(args[2]), n[2])
+				var light := _light_words(args, "fill")
+				if not light.is_empty():
+					_fill(light[0], light[1], light[2], light[3])
 			"ground":
-				var n := _numbers(args.slice(0, 4), 4, 4)
 				var visual := args.size() == 6 and args[5] == "visual"
 				if args.size() < 5 or args.size() > 6 or (args.size() == 6 and not visual):
-					_problem("ground needs X0 Z0 X1 Z1 STONE [visual]")
-				elif n.size() == 4:
-					_blocks.ground(_rect(n), args[4], visual)
+					problem("ground needs X0 Z0 X1 Z1 STONE [visual]")
+					return
+				var n := _numbers(args.slice(0, 4), 4, 4)
+				if n.size() != 4:
+					return
+				if not STONES.has(args[4]):
+					problem("ground needs X0 Z0 X1 Z1 STONE [visual], the stone one of %s" % ", ".join(STONES.keys()))
+				elif _clear_of(_grounds, _rect(n), "ground"):
+					BLOCKS.ground(self, _rect(n), STONES[args[4]], visual)
 			"block":
-				var n := _numbers(args.slice(0, 5), 5, 5)
 				var solid := args.size() == 8 and args[7] == "solid"
 				if args.size() < 7 or args.size() > 8 or (args.size() == 8 and not solid):
-					_problem("block needs X0 Z0 X1 Z1 STOREYS STYLE ROOF [solid]")
-				elif n.size() == 5:
-					_blocks.block(_rect(n), n[4], args[5], args[6], solid)
-			"water":
+					problem("block needs X0 Z0 X1 Z1 STOREYS STYLE ROOF [solid]")
+					return
 				var n := _numbers(args.slice(0, 5), 5, 5)
+				if n.size() == 5:
+					BLOCKS.block(self, _rect(n), n[4], args[5], args[6], solid)
+			"water":
 				var liquor := args.size() == 6 and args[5] == "liquor"
 				if args.size() < 5 or args.size() > 6 or (args.size() == 6 and not liquor):
-					_problem("water needs X0 Z0 X1 Z1 Y [liquor]")
-				elif n.size() == 5:
-					_blocks.water(_rect(n), n[4], liquor)
+					problem("water needs X0 Z0 X1 Z1 Y [liquor]")
+					return
+				var n := _numbers(args.slice(0, 5), 5, 5)
+				if n.size() == 5 and _clear_of(_waters, _rect(n), "water", n[4]):
+					BLOCKS.water(self, _rect(n), n[4], liquor)
 			"vat":
 				var n := _numbers(args, 2, 2)
 				if n.size() == 2:
-					_blocks.vat(Vector2(n[0], n[1]))
+					BLOCKS.vat(self, Vector2(n[0], n[1]))
 			"kit":
 				if args.size() != 1 or not KITS.has(args[0]):
-					_problem("kit needs a name: %s" % ", ".join(KITS.keys()))
+					problem("kit needs a name: %s" % ", ".join(KITS.keys()))
 				elif not _kit.is_empty():
-					_problem("a second kit line (the first is on line %d)" % _kit_line)
+					problem("a second kit line (the first is on line %d)" % _kit_line)
 				else:
 					_kit = args[0]
 					_kit_line = _line
 			"sky":
-				if args.size() == 1:
+				if args.size() != 1:
+					problem("sky needs COLOUR")
+				elif _is_colour(args[0]):
 					_environment().background_color = Color(args[0])
-				else:
-					_problem("sky needs COLOUR")
 			"ambient":
+				if args.size() != 2:
+					problem("ambient needs COLOUR ENERGY")
+					return
 				var n := _numbers(args.slice(1), 1, 1)
-				if args.size() == 2 and n.size() == 1:
+				if _is_colour(args[0]) and n.size() == 1:
 					var env := _environment()
 					env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 					env.ambient_light_color = Color(args[0])
 					env.ambient_light_energy = n[0]
-				else:
-					_problem("ambient needs COLOUR ENERGY")
 			"script":
 				if args.size() == 1 and ResourceLoader.exists(args[0]) and load(args[0]) is Script:
 					_root.set_script(load(args[0]))
 				else:
-					_problem("script needs the path of a script (a Region's, or one that extends it)")
+					problem("script needs the path of a script (a Region's, or one that extends it)")
 			"grade":
 				if args.size() == 1 and ResourceLoader.exists(args[0]):
 					_root.set(&"grade", load(args[0]))
 				else:
-					_problem("grade needs the path of a GradeProfile")
+					problem("grade needs the path of a GradeProfile")
 			_:
-				_problem("unknown command '%s'" % words[0])
+				problem("unknown command '%s'" % words[0])
 
 	# A box of floor, top at y = 0, in the flagstones, on world and ik_surface.
 	func _floor(width: float, depth: float) -> void:
-		var body := _body("Floor", _root, _world_and_feet)
-		_box(body, Vector3(width, 1.0, depth), Transform3D(Basis(), Vector3(0, -0.5, 0)), FLAGSTONE)
+		var body := make_body("Floor", _root, world_and_feet)
+		add_box(body, Vector3(width, 1.0, depth), Transform3D(Basis(), Vector3(0, -0.5, 0)), FLAGSTONE)
 
 	func _terrace(rect: Rect2, height: float) -> void:
 		_terraces.append({rect = rect, height = height})
-		var body := _body(_name("Terrace"), _root, _world_and_feet)
+		var body := make_body(unique_name("Terrace"), _root, world_and_feet)
 		var centre := rect.get_center()
-		_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, height / 2, centre.y)), FLAGSTONE)
+		add_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, height / 2, centre.y)), FLAGSTONE)
 
 	# A low box of `stone` over `rect`, `height` high, solid as it is seen and no further: a curb. `moonlit`: it is drawn
 	# on the bodies' render layer as well as the world's, so that a region's moon lights it as it lights the fighters (a
 	# barrier has to show in the dark).
 	func _curb(rect: Rect2, height: float, stone: Material, moonlit: bool) -> void:
-		var body := _body(_name("Curb"), _root, _world_and_feet)
+		var body := make_body(unique_name("Curb"), _root, world_and_feet)
 		var centre := rect.get_center()
-		_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, height / 2, centre.y)), stone)
+		add_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, height / 2, centre.y)), stone)
 		if moonlit:
 			(body.get_node("Mesh") as MeshInstance3D).layers = LAYERS.RENDER_WORLD | LAYERS.RENDER_BODIES
 
@@ -338,27 +353,27 @@ class Builder:
 		var length: float = frame.length
 		var top := _ground(frame.top_edge + up * 0.5)
 		if count < 1 or top <= 0.0:
-			_problem("stairs need at least one step and higher ground past their top (found %.2f m)" % top)
+			problem("stairs need at least one step and higher ground past their top (found %.2f m)" % top)
 			return
 		var rise := top / count
 		var run := length / count
 		var stairs := Node3D.new()
-		stairs.name = _name("Stairs")
+		stairs.name = unique_name("Stairs")
 		stairs.transform = frame.transform
 		_root.add_child(stairs)
 		# Step i's tread is at (i + 1) rise, from i run to (i + 1) run up the stairs (toward local -Z); the
 		# last is level with the ground it climbs to.
-		var steps := _body("Steps", stairs, _feet)
+		var steps := make_body("Steps", stairs, _feet)
 		for i in count:
 			var height := (i + 1) * rise
-			_box(steps, Vector3(frame.width, height, run), Transform3D(Basis(), Vector3(0, height / 2, -(i + 0.5) * run)), FLAGSTONE)
+			add_box(steps, Vector3(frame.width, height, run), Transform3D(Basis(), Vector3(0, height / 2, -(i + 0.5) * run)), FLAGSTONE)
 		# The walk ramp: from half a run before the first step, on the floor, to the middle of the top tread.
 		var angle := atan2(rise, run)
 		var ramp_length := count * run / cos(angle)
 		var tilt := Basis(Vector3.RIGHT, angle)
 		var start := Vector3(0, 0, run / 2)
-		var walk := _body("WalkRamp", stairs, LAYERS.WORLD)
-		_box(walk, Vector3(frame.width, WALK_RAMP_THICKNESS, ramp_length),
+		var walk := make_body("WalkRamp", stairs, LAYERS.WORLD)
+		add_box(walk, Vector3(frame.width, WALK_RAMP_THICKNESS, ramp_length),
 				Transform3D(tilt, start + tilt * Vector3(0, -WALK_RAMP_THICKNESS / 2, -ramp_length / 2)), null)
 		notes.append("%s: %d steps, rise %.4f m, run %.4f m, up to %.2f m; its walk ramp %.1f degrees" % [
 				stairs.name, count, rise, run, top, rad_to_deg(angle)])
@@ -370,9 +385,9 @@ class Builder:
 		var width: float = frame.width
 		var top := _ground(frame.top_edge + up * 0.5)
 		if top <= 0.0:
-			_problem("a ramp needs higher ground past its top")
+			problem("a ramp needs higher ground past its top")
 			return
-		var body := _body(_name("Ramp"), _root, _world_and_feet)
+		var body := make_body(unique_name("Ramp"), _root, world_and_feet)
 		body.transform = frame.transform
 		var points := PackedVector3Array()
 		for x in [-width / 2, width / 2]:
@@ -402,17 +417,17 @@ class Builder:
 		var length := along.length()
 		var count := roundi(length / TILE)
 		if not (is_zero_approx(along.x) or is_zero_approx(along.y)) or count < 1 or not is_equal_approx(count * TILE, length):
-			_problem("an edge runs along x or z, a whole number of %.1f m tiles long" % TILE)
+			problem("an edge runs along x or z, a whole number of %.1f m tiles long" % TILE)
 			return
 		if not is_zero_approx(along.normalized().dot(facing)):
-			_problem("an edge faces across its line, not along it")
+			problem("an edge faces across its line, not along it")
 			return
-		var box := _local_box(piece)
+		var box := local_box(piece)
 		if box.size == Vector3.ZERO:
 			return
 		var run := Node3D.new()
-		run.name = _name(_pascal(piece) + "Run")
-		_group("Edges").add_child(run)
+		run.name = unique_name(pascal(piece) + "Run")
+		group_node("Edges").add_child(run)
 		# The piece's slab is along its tile's side at local +x: its face toward the tile is at local x = box.x0.
 		# Turned so local +x points behind the face (away from `facing`), placed so that face is on the line.
 		var yaw := atan2(facing.y, -facing.x)
@@ -421,27 +436,27 @@ class Builder:
 			var on_line := a + along.normalized() * (k + 0.5) * TILE
 			var base := _ground(on_line + facing * 0.5)
 			var origin := on_line + facing * box.position.x * SCALE
-			var model := _model(piece, run, _pascal(piece) + str(k + 1))
+			var model := make_model(piece, run, pascal(piece) + str(k + 1))
 			model.transform = Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * SCALE), Vector3(origin.x, base, origin.y))
 			top = maxf(top, base + box.end.y * SCALE)
 		if solid:
 			var depth := maxf(SOLID_DEPTH, box.size.x * SCALE)
 			var middle := (a + b) / 2 - facing * depth / 2
 			var size := Vector3(length, top, depth) if is_zero_approx(along.y) else Vector3(depth, top, length)
-			var body := _body("Body", run, _world_and_feet)
-			_box(body, size, Transform3D(Basis(), Vector3(middle.x, top / 2, middle.y)), null)
+			var body := make_body("Body", run, world_and_feet)
+			add_box(body, size, Transform3D(Basis(), Vector3(middle.x, top / 2, middle.y)), null)
 
 	# A Kenney piece standing at `at`, turned `yaw` degrees, colliding as MODELS says: a holder named after it
 	# (unscaled) with the piece's scene (Model, at SCALE) and its Body.
 	func _piece(parent: Node3D, piece: String, at: Vector3, yaw: float) -> Node3D:
-		var box := _local_box(piece)
+		var box := local_box(piece)
 		if box.size == Vector3.ZERO:
 			return null
 		var holder := Node3D.new()
-		holder.name = _name(_pascal(piece))
+		holder.name = unique_name(pascal(piece))
 		holder.transform = Transform3D(Basis(Vector3.UP, deg_to_rad(yaw)), at)
 		parent.add_child(holder)
-		var model := _model(piece, holder, "Model")
+		var model := make_model(piece, holder, "Model")
 		model.scale = Vector3.ONE * SCALE
 		var size := box.size * SCALE
 		var centre := box.get_center() * SCALE
@@ -455,15 +470,15 @@ class Builder:
 			"trunk":
 				_cylinder(holder, TRUNK_RADIUS, TRUNK_HEIGHT, Vector3(0, TRUNK_HEIGHT / 2, 0))
 			_:
-				_box(_body("Body", holder, _world_and_feet), size, Transform3D(Basis(), centre), null)
+				add_box(make_body("Body", holder, world_and_feet), size, Transform3D(Basis(), centre), null)
 		return holder
 
 	# A lantern at `at` with its lamp (the `lamps` line), which casts shadows if `shadow`.
 	func _lantern(at: Vector2, shadow: bool) -> void:
 		if _lamp.is_empty():
-			_problem("a lantern needs a lamps line before it")
+			problem("a lantern needs a lamps line before it")
 			return
-		var holder := _piece(_group("Lanterns"), "lantern", Vector3(at.x, _ground(at), at.y), 0.0)
+		var holder := _piece(group_node("Lanterns"), "lantern", Vector3(at.x, _ground(at), at.y), 0.0)
 		if holder == null:
 			return
 		var lamp := OmniLight3D.new()
@@ -484,7 +499,7 @@ class Builder:
 		marker.transform = Transform3D(Basis(Vector3.UP, deg_to_rad(yaw)), Vector3(at.x, _ground(at) + up, at.y))
 		if poi:
 			marker.add_to_group(&"poi", true)
-			_group("PointsOfInterest").add_child(marker)
+			group_node("PointsOfInterest").add_child(marker)
 		else:
 			_root.add_child(marker)
 
@@ -510,6 +525,10 @@ class Builder:
 		_bodies_light("Fill", pitch, yaw, colour, energy)
 
 	func _bodies_light(light_name: String, pitch: float, yaw: float, colour: Color, energy: float) -> void:
+		if _bodies_light_line != 0:
+			problem("a region has one light for its bodies (the moon or the fill): the first is on line %d" % _bodies_light_line)
+			return
+		_bodies_light_line = _line
 		var light := DirectionalLight3D.new()
 		light.name = light_name
 		light.rotation_degrees = Vector3(pitch, yaw, 0)
@@ -548,6 +567,34 @@ class Builder:
 			_root.add_child(holder)
 		return holder.environment
 
+	# PITCH YAW COLOUR ENERGY as [pitch, yaw, colour, energy]; empty, with one problem, if the line is not that.
+	func _light_words(args: PackedStringArray, command: String) -> Array:
+		if args.size() != 4:
+			problem("%s needs PITCH YAW COLOUR ENERGY" % command)
+			return []
+		var n := _numbers(args.slice(0, 2) + args.slice(3), 3, 3)
+		if not _is_colour(args[2]) or n.size() != 3:
+			return []
+		return [n[0], n[1], Color(args[2]), n[2]]
+
+	# Whether `word` is a colour (#rrggbb, or rrggbb); a problem if not.
+	func _is_colour(word: String) -> bool:
+		if Color.html_is_valid(word):
+			return true
+		problem("'%s' is not a colour (#rrggbb)" % word)
+		return false
+
+	# Whether `rect` (of the `kind` line at height `y`) overlaps none of `before`, the rectangles of the lines of that kind so
+	# far at the same height (their tops would be at one height and fight): a problem naming the earlier line if it does.
+	# Remembers it if not.
+	func _clear_of(before: Array[Dictionary], rect: Rect2, kind: String, y := 0.0) -> bool:
+		for other in before:
+			if is_equal_approx(other.y, y) and rect.intersection(other.rect).get_area() > 1e-6:
+				problem("this %s overlaps the one on line %d (their tops would fight)" % [kind, other.line])
+				return false
+		before.append({rect = rect, y = y, line = _line})
+		return true
+
 	# A KitDresser in the region: every kit piece of the layout, whatever command placed it, is drawn in the material the `kit`
 	# line names (world/kit_dresser.gd says why it is a node and not a change to each piece).
 	func _dress_the_kit() -> void:
@@ -584,99 +631,6 @@ class Builder:
 				height = maxf(height, terrace.height)
 		return height
 
-	# The bounds of a Kenney piece's meshes in its own space, unscaled; a zero box (and a problem) if there is
-	# no such piece.
-	func _local_box(piece: String) -> AABB:
-		if _boxes.has(piece):
-			return _boxes[piece]
-		var path := KENNEY % piece
-		if not ResourceLoader.exists(path):
-			_problem("no Kenney piece '%s' (%s)" % [piece, path])
-			return AABB()
-		var scene := (load(path) as PackedScene).instantiate() as Node3D
-		var boxes: Array[AABB] = []
-		_mesh_boxes(scene, Transform3D(), boxes)
-		scene.free()
-		if boxes.is_empty():
-			_problem("the Kenney piece '%s' has no mesh" % piece)
-			return AABB()
-		var box := boxes[0]
-		for b in boxes:
-			box = box.merge(b)
-		_boxes[piece] = box
-		return box
-
-	# The meshes of a Kenney piece, each with its transform in the piece's own space ({mesh, local}): what a MultiMesh of the
-	# piece is made of. Empty (and a problem) if there is no such piece.
-	func _parts(piece: String) -> Array:
-		if _part_cache.has(piece):
-			return _part_cache[piece]
-		var path := KENNEY % piece
-		if not ResourceLoader.exists(path):
-			_problem("no Kenney piece '%s' (%s)" % [piece, path])
-			return []
-		var scene := (load(path) as PackedScene).instantiate() as Node3D
-		var found: Array = []
-		_collect_parts(scene, Transform3D(), found)
-		scene.free()
-		if found.is_empty():
-			_problem("the Kenney piece '%s' has no mesh" % piece)
-			return []
-		_part_cache[piece] = found
-		return found
-
-	func _collect_parts(node: Node, to_root: Transform3D, found: Array) -> void:
-		for child in node.get_children():
-			if child is Node3D:
-				var t := to_root * (child as Node3D).transform
-				if child is MeshInstance3D:
-					found.append({mesh = (child as MeshInstance3D).mesh, local = t})
-				_collect_parts(child, t, found)
-
-	# The bounds of each mesh under `node`, in the space `to_root` takes `node`'s space to.
-	func _mesh_boxes(node: Node, to_root: Transform3D, boxes: Array[AABB]) -> void:
-		for child in node.get_children():
-			if child is Node3D:
-				var t := to_root * (child as Node3D).transform
-				if child is MeshInstance3D:
-					boxes.append(t * (child as MeshInstance3D).get_aabb())
-				_mesh_boxes(child, t, boxes)
-
-	# --- nodes ---
-
-	func _model(piece: String, parent: Node3D, model_name: String) -> Node3D:
-		var model := (load(KENNEY % piece) as PackedScene).instantiate() as Node3D
-		model.name = model_name
-		parent.add_child(model)
-		return model
-
-	func _body(body_name: String, parent: Node3D, layers: int) -> StaticBody3D:
-		var body := StaticBody3D.new()
-		body.name = body_name
-		body.collision_layer = layers
-		body.collision_mask = 0
-		parent.add_child(body)
-		return body
-
-	# A box shape on `body` (and, with a material, a box mesh in it).
-	func _box(body: StaticBody3D, size: Vector3, at: Transform3D, material: Material) -> void:
-		var shape := BoxShape3D.new()
-		shape.size = size
-		var collision := CollisionShape3D.new()
-		collision.name = _name("Shape", body)
-		collision.shape = shape
-		collision.transform = at
-		body.add_child(collision)
-		if material != null:
-			var mesh := BoxMesh.new()
-			mesh.size = size
-			var instance := MeshInstance3D.new()
-			instance.name = _name("Mesh", body)
-			instance.mesh = mesh
-			instance.material_override = material
-			instance.transform = at
-			body.add_child(instance)
-
 	func _cylinder(holder: Node3D, radius: float, height: float, at: Vector3) -> void:
 		var shape := CylinderShape3D.new()
 		shape.radius = radius
@@ -685,29 +639,7 @@ class Builder:
 		collision.name = "Shape"
 		collision.shape = shape
 		collision.position = at
-		_body("Body", holder, _world_and_feet).add_child(collision)
-
-	# The child of the root called `group_name`, made the first time.
-	func _group(group_name: String) -> Node3D:
-		var node := _root.get_node_or_null(NodePath(group_name)) as Node3D
-		if node == null:
-			node = Node3D.new()
-			node.name = group_name
-			_root.add_child(node)
-		return node
-
-	# `base`, or base1, base2, ... once there is more than one (counted per parent when `parent` is given).
-	func _name(base: String, parent: Node = null) -> String:
-		var key := base if parent == null else "%s/%s" % [parent.get_instance_id(), base]
-		_counts[key] = _counts.get(key, 0) + 1
-		var n: int = _counts[key]
-		return base if n == 1 else base + str(n)
-
-	static func _pascal(piece: String) -> String:
-		var out := ""
-		for part in piece.split("-"):
-			out += part.capitalize()
-		return out
+		make_body("Body", holder, world_and_feet).add_child(collision)
 
 	# Makes `owner` own `node`'s subtree (not the insides of instanced pieces), so the scene saves it.
 	func _own(node: Node, owner: Node) -> void:
@@ -722,17 +654,17 @@ class Builder:
 		var out: Array[float] = []
 		for word in words:
 			if not word.is_valid_float():
-				_problem("'%s' is not a number" % word)
+				problem("'%s' is not a number" % word)
 				return []
 			out.append(word.to_float())
 		if out.size() < least or out.size() > most:
-			_problem("expected %s numbers, found %d" % [str(least) if least == most else "%d to %d" % [least, most], out.size()])
+			problem("expected %s numbers, found %d" % [str(least) if least == most else "%d to %d" % [least, most], out.size()])
 			return []
 		return out
 
 	func _way(words: PackedStringArray, index: int) -> Vector2:
 		if index >= words.size() or not WAYS.has(words[index]):
-			_problem("expected a way (n, e, s or w) as word %d" % (index + 2))
+			problem("expected a way (n, e, s or w) as word %d" % (index + 2))
 			return Vector2.ZERO
 		return WAYS[words[index]]
 
@@ -743,7 +675,7 @@ class Builder:
 				var value := word.trim_prefix("y=")
 				if value.is_valid_float():
 					return value.to_float()
-				_problem("'%s' is not a height" % word)
+				problem("'%s' is not a height" % word)
 		return null
 
 	# The line less its comment: a # at its start or followed by a space, and the rest (a colour's # is not one).
@@ -758,6 +690,3 @@ class Builder:
 		var a := Vector2(minf(n[0], n[2]), minf(n[1], n[3]))
 		var b := Vector2(maxf(n[0], n[2]), maxf(n[1], n[3]))
 		return Rect2(a, b - a)
-
-	func _problem(what: String) -> void:
-		problems.append("%s:%d: %s" % [layout, _line, what])
