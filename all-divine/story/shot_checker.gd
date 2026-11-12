@@ -154,7 +154,8 @@ func check_folder(folder: String) -> PackedStringArray:
 	if loaded.scene == null:
 		return loaded.problems
 	var out: PackedStringArray = loaded.problems
-	out.append_array(check(loaded.scene, folder))
+	if not loaded.get("blocking", false):
+		out.append_array(check(loaded.scene, folder))
 	return out
 
 
@@ -164,7 +165,8 @@ func check_file(path: String) -> PackedStringArray:
 	if loaded.scene == null:
 		return loaded.problems
 	var out: PackedStringArray = loaded.problems
-	out.append_array(check(loaded.scene))
+	if not loaded.get("blocking", false):
+		out.append_array(check(loaded.scene))
 	return out
 
 
@@ -193,54 +195,75 @@ func check(scene: SceneShots, folder := "") -> PackedStringArray:
 
 # --- the file ---
 
-# {scene: SceneShots or null, problems} for a shots.tres at `path`, `name` standing for it in a line.
+# {scene: SceneShots or null, problems, blocking} for a shots.tres at `path`, `name` standing for it in a line.
 func _load(path: String, name: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {scene = null, problems = PackedStringArray(["%s/-: %s is missing (%s)" % [name, path.get_file(), path]])}
 	var resource := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
 	if resource == null:
+		# the text may say why: an element of the wrong class in a typed array fails some loads outright
+		var why: PackedStringArray = _file_problems(path, name).lines
+		if not why.is_empty():
+			return {scene = null, problems = why}
 		return {scene = null, problems = PackedStringArray(["%s/-: %s does not parse; see the engine's lines above (%s)" % [name, path.get_file(), path]])}
 	var scene := resource as SceneShots
 	if scene == null:
 		return {scene = null, problems = PackedStringArray(["%s/-: %s is not a SceneShots (%s)" % [name, path.get_file(), path]])}
-	return {scene = scene, problems = _unknown_keys(path, String(scene.id) if scene.id != &"" else name)}
+	var file := _file_problems(path, String(scene.id) if scene.id != &"" else name)
+	return {scene = scene, problems = file.lines, blocking = file.blocking}
 
 
-# A key in the file that its resource's class does not have, which Godot would ignore in silence.
-func _unknown_keys(path: String, name: String) -> PackedStringArray:
-	var out := PackedStringArray()
+# What the file's text says that the loaded scene would not show: a key its resource's class does not have (Godot ignores
+# it in silence), and an element of a typed array that is of another class, a string or null (the loader prints an
+# error and drops the whole array). Returns {lines, blocking}: blocking when an array lost elements, since the scene
+# that loaded is then not what was written and checking it would only list what the loss caused.
+func _file_problems(path: String, name: String) -> Dictionary:
 	var scripts := {}   # ext_resource id -> script path
-	var keys: Array[String] = []
-	var script_path := ""
-	var in_block := false
+	var blocks: Array[Dictionary] = []   # {id, script, keys: [[key, value]]}
 	var header := RegEx.create_from_string("^\\[ext_resource\\b(?=.*type=\"Script\")(?=.*path=\"([^\"]+)\")(?=.*\\bid=\"([^\"]+)\")")
+	var sub_id := RegEx.create_from_string("^\\[sub_resource\\b.*\\bid=\"([^\"]+)\"")
 	var key := RegEx.create_from_string("^([A-Za-z_][A-Za-z0-9_]*) = (.*)$")
 	var ext := RegEx.create_from_string("ExtResource\\(\"([^\"]+)\"\\)")
+	var block: Dictionary = {}
 	var lines := FileAccess.get_file_as_string(path).split("\n")
 	lines.append("[end]")
 	for text in lines:
 		if text.begins_with("["):
-			if in_block and script_path != "":
-				out.append_array(_keys_unknown_to(script_path, keys, name))
-			keys = []
-			script_path = ""
-			in_block = text.begins_with("[sub_resource") or text.begins_with("[resource]")
+			if not block.is_empty():
+				blocks.append(block)
+			block = {}
+			if text.begins_with("[sub_resource") or text.begins_with("[resource]"):
+				var found_id := sub_id.search(text)
+				block = {id = found_id.get_string(1) if found_id != null else "", script = "", keys = []}
 			var found := header.search(text)
 			if found != null:
 				scripts[found.get_string(2)] = found.get_string(1)
-		elif in_block:
+		elif not block.is_empty():
 			var match := key.search(text)
 			if match == null:
 				continue
 			if match.get_string(1) == "script":
 				var which := ext.search(match.get_string(2))
-				script_path = scripts.get(which.get_string(1), "") if which != null else ""
+				block.script = scripts.get(which.get_string(1), "") if which != null else ""
 			else:
-				keys.append(match.get_string(1))
-	return out
+				block.keys.append([match.get_string(1), match.get_string(2)])
+	var out := PackedStringArray()
+	var by_id := {}
+	for each in blocks:
+		if each.id != "":
+			by_id[each.id] = each
+	for each in blocks:
+		if each.script != "":
+			out.append_array(_keys_unknown_to(each.script, each.keys, name))
+	var dropped := PackedStringArray()
+	for each in blocks:
+		if each.script != "":
+			dropped.append_array(_dropped_elements(each, scripts, by_id, name))
+	out.append_array(dropped)
+	return {lines = out, blocking = not dropped.is_empty()}
 
 
-func _keys_unknown_to(script_path: String, keys: Array[String], name: String) -> PackedStringArray:
+func _keys_unknown_to(script_path: String, keys: Array, name: String) -> PackedStringArray:
 	var out := PackedStringArray()
 	var script := load(script_path) as GDScript
 	if script == null:
@@ -250,7 +273,8 @@ func _keys_unknown_to(script_path: String, keys: Array[String], name: String) ->
 		if info.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
 			fields.append(info.name)
 	var class_title := script.get_global_name()
-	for key in keys:
+	for pair in keys:
+		var key: String = pair[0]
 		if fields.has(key) or COMMON_KEYS.has(key):
 			continue
 		var best := ""
@@ -261,7 +285,81 @@ func _keys_unknown_to(script_path: String, keys: Array[String], name: String) ->
 				best = field
 				best_score = score
 		var help := " (did you mean '%s'?)" % best if best != "" else " (its fields: %s)" % ", ".join(fields)
-		out.append("%s/-: shots.tres: '%s' is not a field of %s%s; Godot ignores it" % [name, key, class_title, help])
+		var where := _owner_label(script, pair, keys)
+		out.append("%s/-: shots.tres: '%s' is not a field of %s%s%s; Godot ignores it" % [name, key, class_title, help, "" if where == class_title else "; found in " + where])
+	return out
+
+
+# "SceneShots" for the file's own resource, "Shot 'S2'" for a sub-resource with an id of its own (a shot, a cast entry, a mark).
+func _owner_label(script: GDScript, _pair: Array, keys: Array) -> String:
+	var title := script.get_global_name()
+	for each in keys:
+		if each[0] in ["id", "actor", "name"]:
+			return "%s '%s'" % [title, String(each[1]).trim_prefix("&").trim_prefix("\"").trim_suffix("\"")] if title != "SceneShots" else title
+	return title
+
+
+# The elements of a typed array in a block that the loader would drop: other than the array's own class, strings, null.
+func _dropped_elements(block: Dictionary, scripts: Dictionary, by_id: Dictionary, name: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var script := load(block.script) as GDScript
+	var owner_text: String = _owner_label(script, [], block.keys) if script != null else String(block.script)
+	var typed := RegEx.create_from_string("^Array\\[ExtResource\\(\"([^\"]+)\"\\)\\]\\(\\[")
+	var sub := RegEx.create_from_string("^SubResource\\(\"([^\"]+)\"\\)$")
+	for pair in block.keys:
+		var value: String = pair[1]
+		var found := typed.search(value)
+		if found == null:
+			continue
+		var wanted: String = scripts.get(found.get_string(1), "")
+		var wanted_script := load(wanted) as GDScript
+		var title: String = wanted_script.get_global_name() if wanted_script != null else wanted.get_file()
+		var wrong := 0
+		var empty := 0
+		for element in _elements(value.substr(found.get_end())):
+			var as_sub := sub.search(element)
+			if element == "null":
+				empty += 1
+			elif as_sub == null or not by_id.has(as_sub.get_string(1)) or by_id[as_sub.get_string(1)].script != wanted:
+				wrong += 1
+		if wrong > 0:
+			out.append("%s/-: shots.tres: %s: '%s' has %d element%s that is not %s %s (the loader drops the whole array)" % [
+					name, owner_text, pair[0], wrong, "" if wrong == 1 else "s", "an" if title[0] in "AEIOU" else "a", title])
+		if empty > 0:
+			out.append("%s/-: shots.tres: %s: '%s' has %d empty (null) element%s" % [name, owner_text, pair[0], empty, "" if empty == 1 else "s"])
+	return out
+
+
+# The top-level elements of an array's text, which starts just inside its `[` and ends at the matching `]`.
+func _elements(text: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var depth := 0
+	var quoted := false
+	var current := ""
+	for i in text.length():
+		var c := text[i]
+		if quoted:
+			current += c
+			if c == "\"" and text[i - 1] != "\\":
+				quoted = false
+		elif c == "\"":
+			quoted = true
+			current += c
+		elif c == "(" or c == "[" or c == "{":
+			depth += 1
+			current += c
+		elif (c == ")" or c == "]" or c == "}") and depth > 0:
+			depth -= 1
+			current += c
+		elif c == "]":
+			break
+		elif c == "," and depth == 0:
+			out.append(current.strip_edges())
+			current = ""
+		else:
+			current += c
+	if current.strip_edges() != "":
+		out.append(current.strip_edges())
 	return out
 
 

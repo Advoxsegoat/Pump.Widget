@@ -146,6 +146,35 @@ func test_a_file_that_is_a_resource_but_not_a_scene_and_a_missing_file() -> void
 	_only(ShotChecker.new().check_folder(TEMP.path_join("nothing_here")), "-", "shots.tres is missing", "nothing_here")
 
 
+# What the loader dropped from a typed array, or left empty, is a problem.
+
+# `text` with `element` appended to the first array line that starts `field = `.
+func _append(text: String, field: String, element: String) -> String:
+	var start := text.find("\n" + field + " = ") + 1
+	var end := text.find("\n", start)
+	var line := text.substr(start, end - start)
+	return text.substr(0, start) + line.left(line.length() - 2) + ", " + element + "])" + text.substr(end)
+
+
+func test_an_element_of_the_wrong_class_or_a_string_in_a_typed_array_is_one_line() -> void:
+	for case in [["cast", "SubResource(\"shot_%s\")", "SceneShots: 'cast' has 1 element that is not a CastEntry (the loader drops the whole array)"],
+			["shots", "\"oops\"", "SceneShots: 'shots' has 1 element that is not a Shot (the loader drops the whole array)"],
+			["beats", "SubResource(\"cue_%s\")", "Shot 'S1': 'beats' has 1 element that is not an ActorBeat (the loader drops the whole array)"]]:
+		var dir := _folder_with(func(text: String) -> String:
+			var other := RegEx.create_from_string("id=\"(%s)_(\\d+)\"" % ("shot" if case[0] == "cast" else "cue")).search(text)
+			var element: String = case[1] % other.get_string(2) if case[1].contains("%s") else case[1]
+			return _append(text, case[0], element))
+		var lines: PackedStringArray = quietly(func() -> PackedStringArray: return ShotChecker.new().check_folder(dir))
+		_only(lines, "-", case[2])
+		_wipe(TEMP)
+
+
+func test_an_empty_element_in_an_array_is_one_line_and_the_rest_is_not_read() -> void:
+	var dir := _folder_with(func(text: String) -> String: return _append(text, "marks", "null"))
+	var lines: PackedStringArray = quietly(func() -> PackedStringArray: return ShotChecker.new().check_folder(dir))
+	_only(lines, "-", "SceneShots: 'marks' has 1 empty (null) element")
+
+
 # --- walks ---
 
 func test_a_live_actors_walk_is_checked_from_his_rehearsal_mark() -> void:
