@@ -9,12 +9,13 @@ extends Node
 ## puts on the look (data/render/default_settings.tres) in the region's grade; and the Arena, if the region is one, begins
 ## its first wave with him as its target.
 ##
-## F1 (a pad's Select) shows or hides the controls list; F3 shows or hides the debug overlay; F4 turns the screen look off
+## F1 (a pad's Select) shows or hides the controls list; F2 enters the Bilibara stretch; F3 shows or hides the debug overlay; F4 turns the screen look off
 ## and on; F5 switches the region; F6, F7 and F8 spawn a tier I, II or III Knuckle and F9 resets the fight (the Arena's
 ## debug keys, which Main passes on); F11 or Alt+Enter switches between
 ## borderless fullscreen, where the game starts, and a 1280x720 window (WindowToggle); the menu button (Esc,
-## Start) pauses and resumes, and "Paused" shows while it is paused (PauseLabel). This node runs while the game
-## is paused (to hear the menu button); the stage, and so the world in it, stops.
+## Start) pauses, and the pause menu (Menu, in the Hud's picture) shows while it is paused: its Resume row or the menu button
+## resumes. While it is open F5 to F9 do nothing and every other event goes to the menu. This node runs while the game
+## is paused (to hear the menu button and give the menu its events); the stage, and so the world in it, stops.
 ##
 ## With --record=<path> the controls are written down (core/replay/recorder.gd) and saved to the path when the game ends, and with
 ## --replay=<path> that recording is played back into Abarax through the real input path (its seed's dice rolled first), the
@@ -32,6 +33,7 @@ const EXIT_REFUSED := 2
 const EXIT_DIVERGED := 3
 const YARD := "res://world/training_yard/training_yard.tscn"
 const COURTYARD := "res://world/courtyard/courtyard.tscn"
+const BILIBARA := "res://world/bilibara/bilibara.tscn"
 ## How far Abarax walks toward the Knuckle in the self-test before he waits for it, and the stick's push.
 const SELFTEST_APPROACH := 2.0
 const SELFTEST_WALK_PUSH := 0.6
@@ -58,11 +60,14 @@ const SELFTEST_HEAVY_FRAMES := 70
 @onready var player: Actor = $PixelStage/World/Player
 @onready var camera_rig: CameraRig = $PixelStage/World/CameraRig
 @onready var overlay: DebugOverlay = $DebugOverlay
+@onready var menu: Menu = $PixelStage/Hud/Menu
 
 ## Whether the screen look is on (F4).
 var look_on := true
-## The window F11 and Alt+Enter switch: the game's own, unless a test gives it another.
-@onready var window: Window = get_window()
+## The window F11 and Alt+Enter switch: the game's own, unless a test gives it another before Main is ready.
+var window: Window = null
+## What the menu's Quit does: ends the game. A test puts its own here.
+var quit_game: Callable = func() -> void: get_tree().quit()
 
 var _recorder: InputRecorder  # the InputRecorder of --record, or null
 var _record_path := ""
@@ -71,6 +76,8 @@ var _quit_after_replay := false  # --replay was given: a headless game ends with
 
 
 func _ready() -> void:
+	if window == null:
+		window = get_window()
 	if Game.state != Game.State.PLAY:
 		Game.change(Game.State.PLAY)
 	player.place(region.spawn())
@@ -81,6 +88,12 @@ func _ready() -> void:
 	camera_rig.stage = stage
 	camera_rig.snap_now()
 	overlay.actor = player
+	Settings.apply_window(window)
+	Settings.changed.connect(_on_setting_changed)
+	menu.window = window
+	menu.quit_requested.connect(func() -> void: quit_game.call())
+	window.min_size = Vector2i(PixelSnap.INTERNAL)
+	Game.state_changed.connect(_on_game_state_changed)
 	_apply_look()
 	var arguments := parse_arguments(OS.get_cmdline_user_args())
 	var replaying: InputRecording = null
@@ -105,6 +118,7 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if WindowToggle.is_toggle(event):
 		WindowToggle.apply(window)
+		Settings.note_window_mode(window.mode)
 		get_viewport().set_input_as_handled()
 		return
 	var key := event as InputEventKey
@@ -121,11 +135,19 @@ func _unhandled_input(event: InputEvent) -> void:
 				_apply_look()
 				get_viewport().set_input_as_handled()
 				return
+			KEY_F2:
+				enter_stretch()
+				get_viewport().set_input_as_handled()
+				return
 			KEY_F5:
+				if Game.state == Game.State.PAUSE:
+					return  # the debug keys are for the fight, not the menu
 				switch_region()
 				get_viewport().set_input_as_handled()
 				return
 			KEY_F6, KEY_F7, KEY_F8, KEY_F9:
+				if Game.state == Game.State.PAUSE:
+					return
 				# The arena lives in the stage's own viewport, which the window's keys never reach.
 				if arena() != null and arena().debug_key(key.keycode):
 					get_viewport().set_input_as_handled()
@@ -139,11 +161,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		hud.toggle_hints()
 		get_viewport().set_input_as_handled()
 		return
+	if Game.state == Game.State.PAUSE:
+		# The menu takes the rest, and what it does with it (resuming too) is its own.
+		if menu.handle(event):
+			get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed(&"menu"):
 		if Game.state == Game.State.PLAY:
 			Game.change(Game.State.PAUSE)
-		elif Game.state == Game.State.PAUSE:
-			Game.change(Game.State.PLAY)
 		get_viewport().set_input_as_handled()
 
 
@@ -249,7 +274,11 @@ func arena() -> Arena:
 ## put at its spawn (standing, with full bars, if he was dead), the camera snaps to him, the look takes its grade, and an
 ## arena begins its first wave. The old region, and any foes in it, are freed.
 func switch_region() -> void:
-	var to := COURTYARD if region.scene_file_path == YARD else YARD
+	_go_to(COURTYARD if region.scene_file_path == YARD else YARD)
+
+
+# Replaces the region with the scene `to` (switch_region says what it does).
+func _go_to(to: String) -> void:
 	var old := region
 	if old is Arena:
 		(old as Arena).clear_foes()  # ends what holds them (pairs, the lock) before they go with the region
@@ -269,6 +298,12 @@ func switch_region() -> void:
 	camera_rig.snap_now()
 	_apply_look()
 	_enter_region()
+
+
+## Enters the Bilibara stretch (F2, the debug key): what switch_region does, with that scene. It is a plain region, so no
+## arena runs and the Hud follows none.
+func enter_stretch() -> void:
+	_go_to(BILIBARA)
 
 
 ## Starts the self-test's circuit: Abarax fights the tier I Knuckle the arena sends, through selftest_circuit, and the
@@ -333,9 +368,22 @@ func _enter_region() -> void:
 			fight.begin(player)
 
 
-# The look on (default_settings) or off (RenderSettings.off()), in the region's grade.
+# The look on (default_settings, each strength times its Settings percent) or off (RenderSettings.off()), in the
+# region's grade.
 func _apply_look() -> void:
-	stage.apply_settings(DEFAULT_SETTINGS if look_on else DEFAULT_SETTINGS.off(), region.grade)
+	stage.apply_settings(Settings.look_of(DEFAULT_SETTINGS) if look_on else DEFAULT_SETTINGS.off(), region.grade)
+
+
+# Any way out of the pause leaves the buttons held and pressed in it out of the fight (Inputs.quarantine).
+func _on_game_state_changed(from: Game.State, to: Game.State) -> void:
+	if from == Game.State.PAUSE and to == Game.State.PLAY:
+		Inputs.quarantine()
+
+
+# A look setting changed: the stage takes it now.
+func _on_setting_changed(key: String) -> void:
+	if key.begins_with("look/"):
+		_apply_look()
 
 
 # A ScriptBrain step pushing the stick `push` along `dir` for as long as it takes, from rest, to cover

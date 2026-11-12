@@ -28,6 +28,9 @@ const MOUSE_SWEEP_PX := 8.0
 ## ... and within how long (the sum starts again after a pause this long).
 const MOUSE_SWEEP_SECONDS := 0.25
 
+## After quarantine() no press at all is reported for this many physics frames (see there).
+const QUARANTINE_FRAMES := 2
+
 const _SECTION := "bindings"
 
 ## The kinds of device the player aims with.
@@ -51,6 +54,10 @@ var _sweep_px := 0.0
 var _sweep_began := 0.0
 var _injected_move: Variant = null  # a Vector2 given by inject_move, or null
 var _injected_direction: Variant = null  # a Vector2 given by inject_direction, or null
+var _quarantined: Dictionary = {}  # gameplay action -> true while it is held from before the quarantine
+var _was_down: Dictionary = {}  # gameplay action -> whether it was down at the latest physics frame
+var _paused_down: Dictionary = {}  # gameplay action -> true while it is down, having gone down while the game was paused
+var _quarantined_at := -QUARANTINE_FRAMES  # the physics frame quarantine() was called on
 
 
 func _ready() -> void:
@@ -71,6 +78,7 @@ func _init() -> void:
 
 func _physics_process(_delta: float) -> void:
 	direction_pressed_this_frame()
+	_watch_pause()
 
 
 # The last device is that of the last event that is a press, or a move past the deadzone. An event that lets go
@@ -174,7 +182,11 @@ func move_vector(devices: Array[int] = Input.get_connected_joypads()) -> Vector2
 func pressed_this_frame() -> Array[StringName]:
 	var pressed: Array[StringName] = []
 	var flicks := _flicks_this_frame()
+	if Engine.get_physics_frames() - _quarantined_at < QUARANTINE_FRAMES:
+		return pressed
 	for action in GAMEPLAY:
+		if _held_over(action):
+			continue
 		if Bindings.FLICK_RELEASE.has(action):
 			if flicks.has(action):
 				pressed.append(action)
@@ -250,9 +262,46 @@ func _flicks_this_frame() -> Array[StringName]:
 	return _flicks
 
 
-## True while the action is down.
+## True while the action is down (and not one quarantine() holds out).
 func held(action: StringName) -> bool:
-	return Input.is_action_pressed(action)
+	return Input.is_action_pressed(action) and not _held_over(action)
+
+
+## Keeps what went down while the game was paused out of the fight: the menu calls it as the game leaves the pause, so that the
+## press that closed it (Space, A and Enter are a dash-step, the left mouse button a palm, Esc and Start the menu button) is not also a
+## move on the first frame back. Every gameplay action that went down in the pause is dead until it is let go (pressed_this_frame
+## leaves it out, held says false), and for QUARANTINE_FRAMES physics frames no press at all is reported (a press that came in
+## with the close, on a button the player let go of at once). What was already held when the pause began is not touched: a charge
+## goes on, a guard stays up, as the fight is given back as it was; and what was held and let go in the pause is simply up.
+## Movement is not touched either: a direction held through the close is a hold, not a press.
+func quarantine() -> void:
+	_quarantined_at = Engine.get_physics_frames()
+	_quarantined.clear()
+	for action in GAMEPLAY:
+		if Input.is_action_pressed(action) and (_paused_down.has(action) or not _was_down.get(action, false)):
+			_quarantined[action] = true
+
+
+# Notes, every physics frame, which gameplay actions are down and which of them went down while the game was paused.
+func _watch_pause() -> void:
+	var paused := get_tree().paused
+	for action in GAMEPLAY:
+		var down := Input.is_action_pressed(action)
+		if not down:
+			_paused_down.erase(action)
+		elif paused and not _was_down.get(action, false):
+			_paused_down[action] = true
+		_was_down[action] = down
+
+
+# Whether `action` is still held from before quarantine(); once it is let go, it is free again.
+func _held_over(action: StringName) -> bool:
+	if not _quarantined.has(action):
+		return false
+	if Input.is_action_pressed(action):
+		return true
+	_quarantined.erase(action)
+	return false
 
 
 ## Binds `event` to `action`, in place of the action's first event of the same kind (gamepad, or

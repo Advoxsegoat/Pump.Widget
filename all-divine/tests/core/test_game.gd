@@ -80,3 +80,23 @@ func test_reset_returns_to_boot_and_unpauses() -> void:
 	Game.reset()
 	assert_eq(Game.state, S.BOOT)
 	assert_false(get_tree().paused)
+
+func test_play_frames_count_only_while_playing() -> void:
+	Game.change(S.PLAY)
+	var start: int = Game.play_frames
+	await frames(5)
+	assert_eq(Game.play_frames - start, 5, "five physics frames, five play frames")
+	Game.change(S.PAUSE)
+	var paused_at: int = Game.play_frames
+	await frames(30)
+	assert_eq(Game.play_frames, paused_at, "a pause stops the count")
+	Game.change(S.PLAY)
+	await frames(4)
+	assert_eq(Game.play_frames - paused_at, 4, "and it carries on from where it stopped")
+
+func test_reset_zeroes_play_frames() -> void:
+	Game.change(S.PLAY)
+	await frames(3)
+	assert_true(Game.play_frames > 0, "some frames counted")
+	Game.reset()
+	assert_eq(Game.play_frames, 0)
