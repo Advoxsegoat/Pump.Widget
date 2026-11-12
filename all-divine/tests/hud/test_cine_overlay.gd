@@ -189,3 +189,20 @@ func test_a_suppressed_hud_draws_nothing_and_an_unsuppressed_one_is_unchanged() 
 	counting._draw()
 	assert_eq([counting.bars_drawn, counting.pips_drawn], [2, 2], "and lifting it brings the drawing back")
 	counting.free()
+
+
+func test_a_line_break_is_a_line_break() -> void:
+	var parts := ["First row.", "Second row, a little longer.", "Third."]
+	var text := "\n".join(parts)
+	assert_eq(overlay.lines_of(text), PackedStringArray(parts), "three rows by newline are three rows")
+	assert_eq(overlay.lines_of("a\n\nb"), PackedStringArray(["a", "b"]), "an empty row is dropped")
+	overlay.show_line(abarax, text, &"neutral", 600)
+	overlay.advance(text.length() * 2)
+	assert_eq(overlay.rows_shown(), PackedStringArray(parts), "drawn on three rows, none run into the next")
+	var long_part := "Mmmmmmmmm ".repeat(12).strip_edges()
+	var mixed := overlay.lines_of(long_part + "\nTail.")
+	assert_true(mixed.size() >= 3 and mixed[mixed.size() - 1] == "Tail.", "a part that wraps keeps its break: %s" % [mixed])
+	assert_eq("".join(mixed).replace(" ", ""), long_part.replace(" ", "") + "Tail.")
+	overlay.advance(2)
+	overlay.close()
+	assert_eq(overlay.rows_shown().size(), 0)

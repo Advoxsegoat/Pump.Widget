@@ -170,6 +170,18 @@ func portrait() -> Texture2D:
 	return picture if picture != null else _speaker.portraits.get(&"neutral") as Texture2D
 
 
+## The rows of the line up now as drawn, each as far as it is typed.
+func rows_shown() -> PackedStringArray:
+	var shown := PackedStringArray()
+	if not _showing:
+		return shown
+	var typed := _typed()
+	for row in _rows:
+		if typed > row.x:
+			shown.append(_text.substr(row.x, mini(row.y, typed - row.x)))
+	return shown
+
+
 ## The characters typed so far of the line up now (nothing when none is).
 func visible_text() -> String:
 	return _text.substr(0, _typed()) if _showing else ""
@@ -209,24 +221,34 @@ func _typed() -> int:
 	return mini(_text.length(), _elapsed * CPS / 60)
 
 
-# The rows of `text`, as (start, length) in it.
+# The rows of `text`, as (start, length) in it: each part between line breaks, wrapped.
 func _wrap(text: String) -> Array[Vector2i]:
 	var rows: Array[Vector2i] = []
+	var start := 0
+	for part in text.split("\n"):
+		rows.append_array(_wrap_part(text, start, start + part.length()))
+		start += part.length() + 1
+	return rows
+
+
+# The rows of text[from:to], which has no line break in it.
+func _wrap_part(text: String, from: int, to: int) -> Array[Vector2i]:
+	var rows: Array[Vector2i] = []
 	var width := float(text_rect().size.x)
-	var pos := 0
-	while pos < text.length():
-		while pos < text.length() and text[pos] == " ":
+	var pos := from
+	while pos < to:
+		while pos < to and text[pos] == " ":
 			pos += 1
-		if pos >= text.length():
+		if pos >= to:
 			break
 		var fit := pos  # the furthest end at which text[pos:fit] fits
 		var space := -1  # the last space in what fits
-		while fit < text.length() and text_width(text.substr(pos, fit + 1 - pos)) <= width:
+		while fit < to and text_width(text.substr(pos, fit + 1 - pos)) <= width:
 			fit += 1
 			if text[fit - 1] == " ":
 				space = fit - 1
-		if fit >= text.length():
-			rows.append(Vector2i(pos, text.length() - pos))
+		if fit >= to:
+			rows.append(Vector2i(pos, to - pos))
 			break
 		if fit == pos:
 			fit = pos + 1  # a letter wider than the row: it goes alone
