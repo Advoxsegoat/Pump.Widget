@@ -76,6 +76,11 @@ const SNAPSHOT_LENGTH := 0.01
 ## The tree's parameters.
 const LOCO_SPEED := &"parameters/loco/blend_position"
 const LOCO_SCALE := &"parameters/loco_scale/scale"
+
+## How much larger than its model the body is (set_model_scale), and the rate its locomotion clips play at (LocomotionTuning.cadence).
+var model_scale := 1.0
+var cadence := 1.0
+
 const MOVE_AB := &"parameters/move_ab/blend_amount"
 const MOVE_BLEND := &"parameters/move_blend/blend_amount"
 const SLOT_NODES: Array[StringName] = [&"move_a", &"move_b"]
@@ -265,6 +270,7 @@ func hide_parts(parts: PackedStringArray) -> PackedStringArray:
 ## ride its bones and the travel of its clips' root (the move runner reads it through the skeleton's transform), so a
 ## larger body strides further and its planted feet do not skate; and the Hurtbox. 1 is the model as built.
 func set_model_scale(s: float) -> void:
+	model_scale = s
 	($Model as Node3D).scale = Vector3.ONE * s
 	hurtbox.scale = Vector3.ONE * s
 
@@ -396,8 +402,9 @@ static func stepped_time(t: float, fps: int) -> float:
 ## Sets the locomotion blend: `speed` in m/s picks between idle, walk, jog and sprint (the blend points
 ## sit at those clips' ground speeds), and `backward` plays the cycle in reverse.
 func set_locomotion(speed: float, backward: bool) -> void:
-	tree.set(LOCO_SPEED, speed)
-	tree.set(LOCO_SCALE, -1.0 if backward else 1.0)
+	var stride := model_scale * cadence if not is_equal_approx(cadence, 1.0) else 1.0
+	tree.set(LOCO_SPEED, speed / stride)
+	tree.set(LOCO_SCALE, (-1.0 if backward else 1.0) * cadence)
 
 
 ## Sets how far the way the actor moves is from the way it faces: `angle` in radians about up (positive

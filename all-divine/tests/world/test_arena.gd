@@ -61,7 +61,7 @@ func _press_key(key: Key) -> void:
 		get_viewport().push_input(event)
 
 
-func test_the_wave_data_is_the_six_waves() -> void:
+func test_the_wave_data_is_the_ten_waves() -> void:
 	var set := load(WAVES) as ArenaWaveSet
 	assert_true(set != null, "data/arena/waves.tres is an ArenaWaveSet")
 	if set == null:
@@ -69,14 +69,17 @@ func test_the_wave_data_is_the_six_waves() -> void:
 	var shown: Array = []
 	for wave in set.waves:
 		assert_eq(wave.defs.size(), wave.count.size(), "a count for each def")
-		var tiers: Array = []
+		var who: Array = []
 		for i in wave.defs.size():
-			tiers.append([TIERS[wave.defs[i].id], wave.count[i]])
-		shown.append(tiers)
-	assert_eq(shown, [[[1, 1]], [[1, 2]], [[2, 1]], [[2, 1], [1, 1]], [[3, 1]], [[3, 1], [2, 1]]],
-			"1x I; 2x I; 1x II; II + I; 1x III; III + II")
+			who.append([String(wave.defs[i].id), wave.count[i]])
+		shown.append(who)
+	assert_eq(shown, [
+		[["knuckle_1", 1]], [["knuckle_1", 2]], [["knuckle_drummer", 1]], [["knuckle_2", 1]], [["knuckle_2", 1], ["knuckle_1", 1]],
+		[["knuckle_drummer", 1], ["knuckle_1", 1]], [["knuckle_heavy", 1]], [["knuckle_3", 1]], [["knuckle_3", 1], ["knuckle_2", 1]],
+		[["knuckle_heavy", 1], ["knuckle_1", 1]],
+	], "1x I; 2x I; the Drummer; 1x II; II + I; the Drummer + I; the heavy; 1x III; III + II; the heavy + I")
 	var bare := Arena.new()
-	assert_eq(bare.waves.size(), 6, "and the arena has them by default")
+	assert_eq(bare.waves.size(), 10, "and the arena has them by default")
 	bare.free()
 
 
@@ -94,9 +97,9 @@ func test_waves_spawn_their_defs_at_the_enemy_spawns() -> void:
 	var to_him := arena.player.global_position - first[0].global_position
 	to_him.y = 0.0
 	assert_true(first[0].facing().dot(to_him.normalized()) > 0.95, "facing the player")
-	# Wave 3 is a tier II and a tier I, at the first two spawns in turn.
-	arena.start_wave(3)
-	assert_eq(started, [3] as Array[int], "wave_started(3)")
+	# Wave 4 is a tier II and a tier I, at the first two spawns in turn.
+	arena.start_wave(4)
+	assert_eq(started, [4] as Array[int], "wave_started(4)")
 	var fresh := _foes(arena).filter(func(a: Actor) -> bool: return not first.has(a))
 	assert_eq(fresh.size(), 2, "two more")
 	var tiers := fresh.map(func(a: Actor) -> int: return _tier(a))
@@ -136,7 +139,7 @@ func test_a_cleared_wave_starts_the_next_after_three_seconds() -> void:
 
 func test_the_last_wave_is_followed_by_the_first_again() -> void:
 	var arena := _arena()
-	arena.start_wave(5)
+	arena.start_wave(arena.wave_count() - 1)
 	for foe in _foes(arena):
 		foe.die()
 	await frames(185)

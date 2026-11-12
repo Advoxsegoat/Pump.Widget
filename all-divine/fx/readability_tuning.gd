@@ -76,9 +76,13 @@ const SWITCHES: Array[StringName] = [
 @export var burst_ring_color := Color("fff1c8")
 
 @export_group("Chain")
-## The chain's rim on Abarax: its colour, and how strong it is at Quick and at Flurry (0 to 1; none at Slip).
+## The chain's rim on Abarax: its colour, and how strong it is at Flurry (0 to 1; none at Slip).
 @export var chain_rim_color := Color("fff1c8")
-@export_range(0.0, 1.0) var chain_rim_quick := 0.5
+## At Flurry it is steady at `chain_rim_flurry`; at Quick it breathes, between `chain_rim_quick_low` and 1 of it, on a cycle of
+## `chain_rim_quick_period` frames of the actor's own clock (a smooth rise and fall): Quick is told from Flurry by movement, since
+## a dimmer rim reads as shadow against the lamplit ground.
+@export_range(0.0, 1.0) var chain_rim_quick_low := 0.35
+@export var chain_rim_quick_period := 24
 @export_range(0.0, 1.0) var chain_rim_flurry := 1.0
 ## The afterimage: its colour, a pale lilac that stands out from the yard's dark blue ground and its warm lamplit pools alike (the
 ## alpha is how solid it starts) and how many frames it takes to fade away.

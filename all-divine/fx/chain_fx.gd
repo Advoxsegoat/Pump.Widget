@@ -6,8 +6,8 @@ extends Node
 ##
 ##   an evade          the cue evade_whoosh at pitch 2^(min(count, 12) / 12): a semitone a link, an octave at the twelfth
 ##   a perfect dodge   an afterimage (the stance he left, aging on his own clock), and the cue perfect_dodge; at Flurry every evade leaves an afterimage
-##   from Quick on     a white-gold rim on the body (Rig.hold_aura, the stencil-masked hull a tell's rim is): half the brightness at
-##                     Quick, full at Flurry, off when the chain ends
+##   from Quick on     a white-gold rim on the body (Rig.hold_aura, the stencil-masked hull a tell's rim is): breathing between
+##                     0.35 and full on a 24-frame cycle at Quick (told from Flurry by movement), steady at Flurry, off when the chain ends
 ##   knocked out       the rim off, the cue knocked_out (at Quick or Flurry: at Slip a blow is an ordinary hit), sounded when the blow's hit-stop is over, so the impact is heard and then the loss, no whoosh and no afterimage on that frame
 ##   a counter         the palm trail it shows is the tuning's trail_scales times its size, by the tempo it cashed in
 ##
@@ -160,21 +160,21 @@ func _drive_rim() -> void:
 	if (_fx != null and _fx.rim_busy()) or (rig.aura_active() and not rig.aura_held()):
 		_rim = false  # a tell, or a burst, has the body
 		return
-	# Half strength is half the brightness at full opacity: a half-transparent rim mixes with the dark blue ground and goes grey, and
-	# the chain's tempo is told by a gold that stays gold.
-	var color := tuning.chain_rim_color
 	rig.rim_width_px = tuning.rim_width_px
-	rig.hold_aura(Color(color.r * level, color.g * level, color.b * level, color.a), 1.0)
+	rig.hold_aura(tuning.chain_rim_color, level)
 	_rim = true
 
 
-# How strong the rim is: none at Slip (or with the switch off, or dead), half at Quick, full at Flurry (the tuning's).
+# How strong the rim is: none at Slip (or with the switch off, or dead), breathing at Quick, steady at Flurry (the tuning's).
 func _rim_level() -> float:
 	if not tuning.chain_rim_on or _actor.dead:
 		return 0.0
 	match _actor.chain.tempo():
 		DodgeChain.Tempo.QUICK:
-			return tuning.chain_rim_quick
+			# it breathes: a smooth cycle from the low strength up to full and back, on his own clock (a held frame holds it)
+			var cycle := float(_actor.buffer_frame % maxi(tuning.chain_rim_quick_period, 1)) / float(maxi(tuning.chain_rim_quick_period, 1))
+			var swell := 0.5 - 0.5 * cos(TAU * cycle)
+			return tuning.chain_rim_flurry * lerpf(tuning.chain_rim_quick_low, 1.0, swell)
 		DodgeChain.Tempo.FLURRY:
 			return tuning.chain_rim_flurry
 	return 0.0
