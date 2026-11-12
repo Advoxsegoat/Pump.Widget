@@ -805,6 +805,48 @@ func test_a_button_held_across_the_close_acts_again_when_let_go_and_pressed() ->
 	assert_true(started.size() > 0, "and it acts: %s" % [started])
 
 
+func test_a_button_pressed_early_in_the_pause_and_held_to_the_close_stays_dead_until_let_go() -> void:
+	# Pressed some frames into the pause, so that the frame before the close it was already down: only the note of what went
+	# down while paused (not "was it up a frame ago") keeps it out of the fight.
+	var main := await _main()
+	var started := _watch(main.player)
+	Game.change(Game.State.PAUSE)
+	await frames(2)
+	_mouse()
+	await frames(6)
+	Game.change(Game.State.PLAY)
+	await frames(8)
+	assert_false(Inputs.held(&"palm"), "the left mouse button, down since early in the pause, is not a held palm")
+	assert_eq(started, [], "and Abarax starts nothing")
+	_mouse(false)
+	await frames(2)
+	_mouse()
+	await frames(3)
+	assert_true(Inputs.held(&"palm"), "let go and pressed again, it is held")
+	_mouse(false)
+
+
+func test_an_entry_left_from_one_pause_does_not_eat_a_real_hold_in_the_next() -> void:
+	var main := await _main()
+	Game.change(Game.State.PAUSE)
+	await frames(2)
+	_mouse()
+	await frames(3)
+	_mouse(false)
+	await frames(3)
+	Game.change(Game.State.PLAY)
+	await frames(5)
+	_mouse()
+	await frames(6)
+	assert_true(Inputs.held(&"palm"), "a palm held in play")
+	Game.change(Game.State.PAUSE)
+	await frames(3)
+	Game.change(Game.State.PLAY)
+	await frames(2)
+	assert_true(Inputs.held(&"palm"), "is still held after a second pause: what the first pause saw is forgotten")
+	_mouse(false)
+
+
 func test_a_stick_already_pushed_when_the_menu_opens_moves_nothing_through_open() -> void:
 	var menu := track(Menu.new()) as Menu
 	var push := InputEventJoypadMotion.new()
