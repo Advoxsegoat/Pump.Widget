@@ -80,22 +80,24 @@ ground 27.5 -75 40 -65 tan_earth
 ground 15 -65 27.5 -55 tan_earth
 ground 27.5 -65 40 -55 tan_earth
 
-# --- The solid masses: three storeys of plain wall under a flat roof (7.83 m), the yard's flanks two ---
+# --- The solid masses: three storeys under a flat roof (7.83 m) where they stand within 9 m south of walkable ground in their column
+# (T2, T3, T6, T7), under a sloping or a high roof where nothing walkable lies north of them in the line of sight; the yard's flanks two.
+# frontage: stone fronts with shops and shutters (the street's north row, the court, the Lazyman's back); tannery: wooden works. ---
 # The Lazyman's back and the court's west cap, the street's north row (the lane mouth is x 25..30) and the lane's east flank
-block -40 -25 -35 -5 3 plain flat solid
-block -30 -10 25 -5 3 plain flat solid
-block 30 -20 32.5 -5 3 plain flat solid
-block 32.5 -5 35 5 3 plain flat solid
-block -42.5 -5 -40 5 3 plain flat solid
+block -40 -25 -35 -5 3 frontage slope solid
+block -30 -10 25 -5 3 frontage flat solid
+block 30 -20 32.5 -5 3 frontage flat solid
+block 32.5 -5 35 5 3 frontage high solid
+block -42.5 -5 -40 5 3 frontage high solid
 # The works north of the Rack Walk, and the walls of the alcove
-block -40 -45 -10 -25 3 plain flat solid
-block -10 -45 25 -25 3 plain flat solid
-block 30 -45 40 -37.5 3 plain flat solid
-block 37.5 -37.5 40 -30 3 plain flat solid
+block -40 -45 -10 -25 3 tannery flat solid
+block -10 -45 25 -25 3 tannery flat solid
+block 30 -45 40 -37.5 3 tannery slope solid
+block 37.5 -37.5 40 -30 3 tannery high solid
 # The yard's north wall and its two flanks
-block 12.5 -80 42.5 -75 3 plain flat solid
-block 12.5 -75 15 -55 2 plain flat solid
-block 40 -75 42.5 -55 2 plain flat solid
+block 12.5 -80 42.5 -75 3 tannery slope solid
+block 12.5 -75 15 -55 2 tannery high solid
+block 40 -75 42.5 -55 2 tannery high solid
 
 # --- The low walls (0.6 m: a body against one is hidden only below about 0.3 m), where a flank stands south of other ground ---
 curb 22.5 -55 25 -45 0.6 slate name=LowWall1
@@ -125,6 +127,12 @@ piece pillar-stone -29.875 -5.1
 # --- The yard's vats, for cover ---
 vat 20 -66.25
 vat 35 -66.25
+
+# --- Fronts: banners as the pink neon of the street (a banner hangs on the face, turned to the south) ---
+piece banner-red -37.5 -3.925 90 y=0.8
+piece banner-red -22.5 -3.925 90 y=0.8
+piece banner-green -10 -3.925 90 y=0.8
+piece banner-red 6.25 -3.925 90 y=0.8
 
 # --- The harbor, south of the street (unwalkable, seen only): the cobbled apron, the quay's low wall, the water, drifts of snow ---
 ground -40 5.4 -27.5 9 cobble visual
@@ -183,6 +191,8 @@ marker HandDoor_3 35 -73.8 0
 # --- Points of interest (UP metres above the ground) ---
 poi ShrinePlinth_A -35 0 1.0
 poi ShrinePlinth_B 36.25 -33.75 1.0
+poi Lazymans -38.75 -5 1.8
+poi HatShop -10 -5 1.6
 poi ShortcutGate -32.5 -5 1.0
 poi YardGate 27.5 -55 1.4
 poi YardCentre 27.5 -65 1.0

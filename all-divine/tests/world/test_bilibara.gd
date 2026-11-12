@@ -41,6 +41,7 @@ const MARKERS := {
 const POIS := {
 	"ShrinePlinth_A": [-35, 0, 1.0], "ShrinePlinth_B": [36.25, -33.75, 1.0], "ShortcutGate": [-32.5, -5, 1.0],
 	"YardGate": [27.5, -55, 1.4], "YardCentre": [27.5, -65, 1.0], "VatWest": [20, -66.25, 1.0], "VatEast": [35, -66.25, 1.0],
+	"Lazymans": [-38.75, -5, 1.8], "HatShop": [-10, -5, 1.6],
 }
 
 ## The flood fill, made once for the run (the stretch does not change): {free, ground, reached} by cell.
@@ -968,3 +969,52 @@ func test_every_piece_is_a_kenney_toon_piece_at_two_and_a_half_times() -> void:
 	assert_eq(off_scale, PackedStringArray(), "pieces not at x2.5")
 	assert_eq(not_toon, PackedStringArray(), "pieces not in toon_world with the Bilibara colormap")
 	assert_true(seen.size() > 50, "and many were looked at (%d)" % seen.size())
+
+
+## The solid masses and what each wears: its rectangle (x0 z0 x1 z1), the style of its front and the roof. The ones in a flat roof
+## stand within 9 m south of walkable ground in their column, so their top is the sight line's 7.83 m.
+const MASSES := [
+	{rect = Rect2(-40, -25, 5, 20), style = "frontage", roof = "roof"}, {rect = Rect2(-30, -10, 55, 5), style = "frontage", roof = "roof-flat"},
+	{rect = Rect2(30, -20, 2.5, 15), style = "frontage", roof = "roof-flat"}, {rect = Rect2(32.5, -5, 2.5, 10), style = "frontage", roof = "roof-high"},
+	{rect = Rect2(-42.5, -5, 2.5, 10), style = "frontage", roof = "roof-high"}, {rect = Rect2(-40, -45, 30, 20), style = "tannery", roof = "roof-flat"},
+	{rect = Rect2(-10, -45, 35, 20), style = "tannery", roof = "roof-flat"}, {rect = Rect2(30, -45, 10, 7.5), style = "tannery", roof = "roof"},
+	{rect = Rect2(37.5, -37.5, 2.5, 7.5), style = "tannery", roof = "roof-high"}, {rect = Rect2(12.5, -80, 30, 5), style = "tannery", roof = "roof"},
+	{rect = Rect2(12.5, -75, 2.5, 20), style = "tannery", roof = "roof-high"}, {rect = Rect2(40, -75, 2.5, 20), style = "tannery", roof = "roof-high"},
+]
+
+
+func test_every_solid_mass_has_a_front_of_its_style_and_a_roof() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var blocks := region.get_node("Blocks").get_children()
+	assert_eq(blocks.size(), MASSES.size(), "%d solid masses" % MASSES.size())
+	var matched := {}
+	for block in blocks:
+		var shape := block.get_node("Body/Shape") as CollisionShape3D
+		var size := (shape.shape as BoxShape3D).size
+		var rect := Rect2(shape.global_position.x - size.x / 2.0, shape.global_position.z - size.z / 2.0, size.x, size.z)
+		var found := MASSES.filter(func(m: Dictionary) -> bool: return (m.rect as Rect2).is_equal_approx(rect))
+		assert_eq(found.size(), 1, "%s (%s) is one of the masses" % [block.name, rect])
+		if found.size() != 1:
+			continue
+		matched[found[0].rect] = true
+		var want: Dictionary = found[0]
+		var front := block.get_node("Front").get_children().map(func(r: Node) -> String: return String((r as KitRun).piece))
+		var wood := front.filter(func(p: String) -> bool: return p.begins_with("wall-wood"))
+		assert_eq(wood.size() == front.size(), want.style == "tannery", "%s: a %s front (%s)" % [block.name, want.style, front])
+		assert_false(front.has("balcony-wall"), "%s: no balcony (its frame is a hole)" % block.name)
+		if rect.size.x >= 12.5:
+			if want.style == "frontage":
+				assert_true(front.has("wall-door") and front.has("wall-window-small") and front.has("wall-window-shutters"), "%s: a stone front with a door, windows and shutters" % block.name)
+			else:
+				assert_true(front.has("wall-wood-door") and front.has("wall-wood-window-small"), "%s: planks with a door and windows" % block.name)
+		var roofs := block.get_node("Roof").get_children().map(func(r: Node) -> String: return String((r as KitRun).piece))
+		assert_eq(roofs.filter(func(p: String) -> bool: return p != want.roof), [], "%s: roofed in %s" % [block.name, want.roof])
+		assert_true(roofs.size() > 0, "%s has a roof" % block.name)
+		if want.roof == "roof-flat":
+			var top := 0.0
+			for run: KitRun in block.get_node("Roof").get_children():
+				top = maxf(top, run.bounds().end.y)
+			assert_near(top, 7.83, 0.02, "%s: a flat roof's top is the sight line's 7.83 m" % block.name)
+	assert_eq(matched.size(), MASSES.size(), "every mass was found")

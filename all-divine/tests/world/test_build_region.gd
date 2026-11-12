@@ -172,7 +172,7 @@ func test_a_blocks_pieces_are_a_few_multimeshes_and_not_a_mesh_each() -> void:
 
 
 func test_the_styles_choose_pieces_by_storey_and_tile_index() -> void:
-	# frontage: a ground storey of door, wall, window, wall, window, wall; the upper of shutters, shutters, wall, balcony.
+	# frontage: a ground storey of door, shutters, window, shutters, wall, window; the upper of shutters, window, wall, window.
 	var built := _build("block 0 0 15 5 2 frontage flat")
 	var by_tile := {}
 	for piece: Dictionary in _placed(built.root):
@@ -181,8 +181,8 @@ func test_the_styles_choose_pieces_by_storey_and_tile_index() -> void:
 		var tile := floori(_box(piece).get_center().x / TILE)
 		var storey := roundi(piece.xf.origin.y / TILE)
 		by_tile[Vector2i(tile, storey)] = piece.piece
-	var ground := ["wall-door", "wall", "wall-window-small", "wall", "wall-window-small", "wall"]
-	var upper := ["wall-window-shutters", "wall-window-shutters", "wall", "balcony-wall"]
+	var ground := ["wall-door", "wall-window-shutters", "wall-window-small", "wall-window-shutters", "wall", "wall-window-small"]
+	var upper := ["wall-window-shutters", "wall-window-small", "wall", "wall-window-small"]
 	for k in 6:
 		assert_eq(by_tile.get(Vector2i(k, 0)), ground[k], "ground storey, tile %d" % k)
 		assert_eq(by_tile.get(Vector2i(k, 1)), upper[k % 4], "upper storey, tile %d" % k)
@@ -192,9 +192,11 @@ func test_the_styles_choose_pieces_by_storey_and_tile_index() -> void:
 		names[piece.piece] = true
 	for expected in ["wall-wood-door", "wall-wood", "wall-wood-window-small", "wall-wood-window-shutters", "roof"]:
 		assert_true(names.has(expected), "a tannery has %s" % expected)
-	var shed := _build("block 0 0 5 5 1 shed high")
+	var shed := _build("block 0 0 10 5 1 shed high")
 	var plain := _build("block 0 0 5 5 1 plain flat")
-	assert_true(_placed(shed.root, "wall-wood").size() == 2 and _placed(shed.root, "roof-high").size() == 4, "a shed is wall-wood under roof-high")
+	assert_true(_placed(shed.root, "wall-wood").size() == 2 and _placed(shed.root, "wall-wood-window-small").size() == 1 and _placed(shed.root, "wall-wood-door").size() == 1 \
+			and _placed(shed.root, "roof-high").size() == 8, "a shed is wall-wood with a window and a door under roof-high")
+	assert_eq(_placed(_build("block 0 0 15 5 3 frontage flat").root, "balcony-wall").size(), 0, "no style uses the balcony (its frame is a hole)")
 	assert_true(_placed(plain.root, "wall").size() == 2 and _placed(plain.root, "roof-flat").size() == 4, "plain is wall under roof-flat")
 
 

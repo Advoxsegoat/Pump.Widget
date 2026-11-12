@@ -30,15 +30,19 @@ const SOUTH_YAW := PI / 2
 ## What a style is built of: the pieces of its ground storey and of every storey above, each cycled by the tile's index
 ## from the west end of the front.
 const STYLES := {
+	# Stone fronts with shops and shutters below and windows above. The balcony piece is a frame with nothing in it, which showed
+	# the sky through the front, so no style uses it; `wall-doorway-round` is an open arch for the same reason.
 	"frontage": {
-		ground = ["wall-door", "wall", "wall-window-small", "wall", "wall-window-small", "wall"],
-		upper = ["wall-window-shutters", "wall-window-shutters", "wall", "balcony-wall"],
+		ground = ["wall-door", "wall-window-shutters", "wall-window-small", "wall-window-shutters", "wall", "wall-window-small"],
+		upper = ["wall-window-shutters", "wall-window-small", "wall", "wall-window-small"],
 	},
+	# Wooden works: planks with doors and shuttered lofts.
 	"tannery": {
-		ground = ["wall-wood-door", "wall-wood", "wall-wood", "wall-wood-window-small"],
+		ground = ["wall-wood-door", "wall-wood-window-small", "wall-wood", "wall-wood-window-shutters", "wall-wood", "wall-wood-window-small"],
 		upper = ["wall-wood-window-shutters", "wall-wood", "wall-wood-window-small", "wall-wood"],
 	},
-	"shed": {ground = ["wall-wood"], upper = ["wall-wood"]},
+	# A low wooden shed: planks, a door and a window.
+	"shed": {ground = ["wall-wood", "wall-wood-window-small", "wall-wood", "wall-wood-door"], upper = ["wall-wood", "wall-wood-window-small"]},
 	"plain": {ground = ["wall"], upper = ["wall"]},
 }
 ## The roofs: one piece to a tile of the footprint.
