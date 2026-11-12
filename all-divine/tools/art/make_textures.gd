@@ -30,15 +30,23 @@ const SLATE_SIZE := 2 * TEXELS_PER_METRE
 const SLATE_SEED := 11
 ## A kerbstone is this many texels long, its joint included: a metre.
 const KERBSTONE := TEXELS_PER_METRE
-## Bilibara's street: dark blue-grey cobbles with snow packed in the joints. A row is 10 to 14 texels high and a cobble 9 to
-## 15 long, joints included. (The colours are first values: the snow-noon light may move them.)
-const COBBLES: Array[Color] = [Color8(72, 70, 80), Color8(80, 78, 88), Color8(64, 63, 74), Color8(86, 82, 90)]
-const SNOW_JOINT := Color8(176, 186, 198)
+## Bilibara's street: a calm mosaic of cold blue-grey setts, told by tone and not by bright lines. A sett is 5 to 9 texels
+## wide and 5 to 7 deep, its joint included; the rows wobble (a row's lower edge steps a texel from sett to sett) and are laid
+## in an irregular bond, so no straight joint crosses the tile (the camera draws a texel row 0.64 of a pixel tall, and a
+## straight bright joint would be dropped and found again as it moves). The joints are a little darker than the darkest
+## stone, and a few setts carry frost: the snow that lies on the street is the `snow` ground. (The colours are first
+## values: the snow-noon light may move them.)
+const COBBLES: Array[Color] = [Color8(80, 84, 100), Color8(86, 90, 106), Color8(92, 96, 112), Color8(98, 102, 118)]
+const COBBLE_JOINT := Color8(66, 70, 86)
+const FROST := Color8(120, 130, 148)
 const COBBLE_SEED := 13
-const COBBLE_ROW_MIN := 10
-const COBBLE_ROW_MAX := 14
-const COBBLE_MIN := 9
-const COBBLE_MAX := 15
+const COBBLE_DEPTH_MIN := 5
+const COBBLE_DEPTH_MAX := 7
+const COBBLE_WIDTH_MIN := 5
+const COBBLE_WIDTH_MAX := 9
+## The share of setts that carry frost, and of such a sett's texels that are frost (about 4% of the tile in all).
+const FROSTED_SETTS := 0.35
+const FROST_SHARE := 0.12
 ## The Tanneries' earth: warm browns in blotches 4 to 8 texels across, with a few texels of lime.
 const EARTHS: Array[Color] = [Color8(86, 72, 60), Color8(94, 80, 66), Color8(78, 66, 56)]
 const LIME := Color8(124, 114, 100)
@@ -47,10 +55,13 @@ const BLOTCH_MIN := 4
 const BLOTCH_MAX := 8
 ## The share of the earth's texels that are lime.
 const LIME_SHARE := 0.04
-## Snow: two whites, the second a tenth of the texels, scattered.
-const SNOWS: Array[Color] = [Color8(228, 234, 242), Color8(214, 222, 234)]
+## Snow: a cold blue-grey light ground, not white (a man in white must stand out on it), with a tenth of its texels in a
+## bluer shadow tone, in soft clumps of two to five texels.
+const SNOWS: Array[Color] = [Color8(150, 162, 172), Color8(130, 144, 160)]
 const SNOW_SEED := 19
-const SNOW_SPECKLE := 0.10
+const SNOW_SHADOW := 0.10
+const CLUMP_MIN := 2
+const CLUMP_MAX := 5
 
 
 func _initialize() -> void:
@@ -133,36 +144,64 @@ static func slate() -> Image:
 	return Image.create_from_data(size, size, false, Image.FORMAT_RGB8, bytes)
 
 
-## Bilibara's street: a 2 m tile of cobbles laid in rows like the flagstones (a one-texel joint under each row and at each
-## cobble's end), each cobble one of the four COBBLES (speckled with the next one up or down), the joints SNOW_JOINT. It
-## tiles seamlessly; the same seeded random numbers (COBBLE_SEED) make the same tile.
+## Bilibara's street: a 2 m tile of setts (see COBBLES), each a row's sett of one of the four tones, with a one-texel joint
+## under it and at its end; the rows' lower edges sit a texel above, on or below their line, sett by sett. It tiles seamlessly; the same seeded
+## random numbers (COBBLE_SEED) make the same tile.
 static func cobble() -> Image:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = COBBLE_SEED
 	var size := FLAGSTONE_SIZE
-	var grey := PackedInt32Array()
-	grey.resize(size * size)
-	grey.fill(-1)
-	var y0 := 0
-	for height in _split(rng, size, COBBLE_ROW_MIN, COBBLE_ROW_MAX):
-		var x0 := rng.randi_range(0, size - 1)
-		var last := -1
-		for length in _split(rng, size, COBBLE_MIN, COBBLE_MAX):
-			var g := rng.randi_range(0, COBBLES.size() - 1)
-			if g == last:
-				g = (g + 1 + rng.randi_range(0, COBBLES.size() - 2)) % COBBLES.size()
-			last = g
-			for dy in height - 1:
-				for dx in length - 1:
-					var speckled := g
-					if rng.randf() < SPECKLE:
-						speckled = clampi(g + (1 if rng.randf() < 0.5 else -1), 0, COBBLES.size() - 1)
-					grey[(y0 + dy) * size + (x0 + dx) % size] = speckled
-			x0 += length
-		y0 += height
+	var depths := _split_within(rng, size, COBBLE_DEPTH_MIN, COBBLE_DEPTH_MAX)
+	# Each row's setts: {x, length, tone, step, frosted}, and the joint's y under the row at every column.
+	var rows: Array[Array] = []
+	var edges: Array[PackedInt32Array] = []
+	var bottom := 0
+	for depth in depths:
+		bottom += depth
+		var setts: Array = []
+		var x := rng.randi_range(0, size - 1)
+		var last_tone := -1
+		var edge := PackedInt32Array()
+		edge.resize(size)
+		# The steps are dealt like cards (every three setts hold one of each), so that no line of the row holds most of the
+		# joints, which would be a straight joint across the tile.
+		var deal: Array[int] = []
+		for length in _split_within(rng, size, COBBLE_WIDTH_MIN, COBBLE_WIDTH_MAX):
+			if deal.is_empty():
+				deal = [-1, 0, 1]
+				for i in [2, 1]:
+					var j := rng.randi_range(0, i)
+					var held := deal[i]
+					deal[i] = deal[j]
+					deal[j] = held
+			var step: int = deal.pop_back()
+			var tone := rng.randi_range(0, COBBLES.size() - 1)
+			if tone == last_tone:
+				tone = (tone + 1 + rng.randi_range(0, COBBLES.size() - 2)) % COBBLES.size()
+			last_tone = tone
+			setts.append({x = x, length = length, tone = tone, step = step, frosted = rng.randf() < FROSTED_SETTS})
+			for dx in length:
+				edge[(x + dx) % size] = bottom + step
+			x += length
+		rows.append(setts)
+		edges.append(edge)
 	var colours: Array[Color] = []
-	for i in size * size:
-		colours.append(SNOW_JOINT if grey[i] < 0 else COBBLES[grey[i]])
+	colours.resize(size * size)
+	colours.fill(COBBLE_JOINT)
+	for r in rows.size():
+		var above := edges[r - 1] if r > 0 else edges[rows.size() - 1]
+		var above_shift := 0 if r > 0 else size
+		for sett: Dictionary in rows[r]:
+			for dx in sett.length:
+				var column: int = (sett.x + dx) % size
+				var joint_here: int = edges[r][column]
+				for y in range(above[column] - above_shift + 1, joint_here):
+					var c := COBBLES[sett.tone]
+					if dx == sett.length - 1:
+						c = COBBLE_JOINT
+					elif sett.frosted and rng.randf() < FROST_SHARE:
+						c = FROST
+					colours[posmod(y, size) * size + column] = c
 	return _image(colours, size)
 
 
@@ -202,15 +241,41 @@ static func tan_earth() -> Image:
 	return _image(colours, size)
 
 
-## Snow: a 2 m tile of one white with a scatter of a second (SNOW_SPECKLE of the texels). The same seeded random numbers
-## (SNOW_SEED) make the same tile.
+## Snow: a 2 m tile of a cold light blue-grey with SNOW_SHADOW of its texels in a bluer tone, in clumps of CLUMP_MIN to
+## CLUMP_MAX texels that do not touch one another (not even at a corner), so each is seen as one soft patch. It wraps. The
+## same seeded random numbers (SNOW_SEED) make the same tile.
 static func snow() -> Image:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = SNOW_SEED
 	var size := FLAGSTONE_SIZE
+	var shadowed := PackedByteArray()
+	shadowed.resize(size * size)
+	var taken := PackedByteArray()  # a clump's texels and the ring round them
+	taken.resize(size * size)
+	var left := roundi(size * size * SNOW_SHADOW)
+	var steps := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	while left > 0:
+		var at := Vector2i(rng.randi_range(0, size - 1), rng.randi_range(0, size - 1))
+		var cells: Array[Vector2i] = [at]
+		for i in rng.randi_range(CLUMP_MIN, CLUMP_MAX) - 1:
+			var next: Vector2i = cells[rng.randi_range(0, cells.size() - 1)] + steps[rng.randi_range(0, 3)]
+			next = Vector2i(posmod(next.x, size), posmod(next.y, size))
+			if not cells.has(next):
+				cells.append(next)
+		var free := cells.size() >= CLUMP_MIN
+		for cell in cells:
+			free = free and taken[cell.y * size + cell.x] == 0
+		if not free:
+			continue
+		for cell in cells:
+			shadowed[cell.y * size + cell.x] = 1
+			for dy in range(-1, 2):
+				for dx in range(-1, 2):
+					taken[posmod(cell.y + dy, size) * size + posmod(cell.x + dx, size)] = 1
+		left -= cells.size()
 	var colours: Array[Color] = []
 	for i in size * size:
-		colours.append(SNOWS[1] if rng.randf() < SNOW_SPECKLE else SNOWS[0])
+		colours.append(SNOWS[1] if shadowed[i] == 1 else SNOWS[0])
 	return _image(colours, size)
 
 
@@ -239,3 +304,24 @@ static func _split(rng: RandomNumberGenerator, total: int, low: int, high: int) 
 		parts.append(length)
 		left -= length
 	return parts
+
+
+# `total` split into random lengths that add up to it exactly, every one from `low` to `high` (tried again until they do).
+static func _split_within(rng: RandomNumberGenerator, total: int, low: int, high: int) -> PackedInt32Array:
+	while true:
+		var parts := PackedInt32Array()
+		var left := total
+		while left > 0:
+			if left <= high:
+				if left >= low:
+					parts.append(left)
+					left = 0
+				else:
+					break
+			else:
+				var length := rng.randi_range(low, high)
+				parts.append(length)
+				left -= length
+		if left == 0:
+			return parts
+	return PackedInt32Array()
