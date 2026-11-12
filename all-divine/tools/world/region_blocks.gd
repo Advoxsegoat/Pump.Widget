@@ -18,6 +18,8 @@ const MAX_PLATE := 12.5
 ## The most a block is long on a side (a typo of a zero more would build a town).
 const MAX_BLOCK := 60.0
 const PLATE_THICKNESS := 1.0
+## The most a run (a MultiMesh of one piece) is long on a side: five tiles. See _lay.
+const MAX_RUN := 12.5
 const MIN_STOREYS := 1
 const MAX_STOREYS := 5
 ## A south face is turned this much from the kit's own way: a wall piece's slab is on its tile's +x side, and a face
@@ -110,7 +112,7 @@ static func block(b: NODES, rect: Rect2, storeys: float, style: String, roof: St
 			# The face of the piece (its slab's near side, local x = box.position.x) is on the line z = south.
 			var on_line := Vector2(rect.position.x + (k + 0.5) * NODES.TILE, south)
 			laid.append({piece = piece, at = Vector3(on_line.x, storey * NODES.TILE, on_line.y + box.position.x * NODES.SCALE)})
-	_lay(b, front, laid)
+	_lay(b, front, laid, rect.position, false)
 	var cover := Node3D.new()
 	cover.name = "Roof"
 	holder.add_child(cover)
@@ -119,7 +121,7 @@ static func block(b: NODES, rect: Rect2, storeys: float, style: String, roof: St
 		for j in rows:
 			var centre := rect.position + Vector2((i + 0.5) * NODES.TILE, (j + 0.5) * NODES.TILE)
 			laid.append({piece = ROOFS[roof], at = Vector3(centre.x, count * NODES.TILE, centre.y)})
-	_lay(b, cover, laid)
+	_lay(b, cover, laid, rect.position, true)
 	if solid:
 		var body := b.make_body("Body", holder, b.world_and_feet)
 		var height := count * NODES.TILE
@@ -159,25 +161,33 @@ static func _plate(parent: Node3D, node_name: String, mesh: Mesh, material: Mate
 
 
 # The pieces `laid` ({piece, at}) under `parent`, a kind at a time: for each mesh of each kind of piece one MultiMesh of
-# every place the kind stands, so that a row of walls is a few draws and not one for every tile. The pieces are turned to
-# the south and at the kit's scale. (One to a block and not one to the whole place: the lights of Compatibility reach a
-# mesh as a whole, up to eight of them, and a row the length of a street would take the first eight lanterns of it.)
-static func _lay(b: NODES, parent: Node3D, laid: Array[Dictionary]) -> void:
-	var kinds := {}
+# every place the kind stands in one stretch of the block, so that a row of walls is a few draws and not one for every
+# tile. The pieces are turned to the south and at the kit's scale. A run is at most MAX_RUN long (along x, and along z too
+# when `across_z`, a roof's): the lights of Compatibility reach a mesh as a whole, up to eight of them, and a row the
+# length of a street would take the first eight lanterns of it and leave the rest of it dark; short runs are each reached by
+# the lamps beside them. `origin` is the block's north-west corner, where the stretches start.
+static func _lay(b: NODES, parent: Node3D, laid: Array[Dictionary], origin: Vector2, across_z: bool) -> void:
+	var kinds := {}  # piece -> chunk -> the places
 	for one in laid:
+		var chunk := Vector2i(floori((one.at.x - origin.x) / MAX_RUN), floori((one.at.z - origin.y) / MAX_RUN) if across_z else 0)
 		if not kinds.has(one.piece):
-			kinds[one.piece] = []
-		kinds[one.piece].append(Transform3D(Basis(Vector3.UP, SOUTH_YAW).scaled(Vector3.ONE * NODES.SCALE), one.at))
+			kinds[one.piece] = {}
+		if not kinds[one.piece].has(chunk):
+			kinds[one.piece][chunk] = []
+		kinds[one.piece][chunk].append(Transform3D(Basis(Vector3.UP, SOUTH_YAW).scaled(Vector3.ONE * NODES.SCALE), one.at))
 	for piece: String in kinds:
 		var parts: Array = b.mesh_parts(piece)
 		if parts.is_empty():
 			return
-		for part: Dictionary in parts:
-			var run := RUN.new()
-			run.name = b.unique_name(NODES.pascal(piece), parent)
-			run.piece = StringName(piece)
-			run.part = part.mesh
-			run.local = part.local
-			run.places.assign(kinds[piece])
-			run.add_to_group(&"kit_multimesh", true)
-			parent.add_child(run)
+		var chunks: Array = kinds[piece].keys()
+		chunks.sort()
+		for chunk: Vector2i in chunks:
+			for part: Dictionary in parts:
+				var run := RUN.new()
+				run.name = b.unique_name(NODES.pascal(piece), parent)
+				run.piece = StringName(piece)
+				run.part = part.mesh
+				run.local = part.local
+				run.places.assign(kinds[piece][chunk])
+				run.add_to_group(&"kit_multimesh", true)
+				parent.add_child(run)

@@ -39,7 +39,7 @@ func _placed(node: Node, piece := "") -> Array[Dictionary]:
 			var run := child as KitRun
 			var material: Material = run.material_override if run.material_override != null else run.part.surface_get_material(0)
 			for i in run.places.size():
-				var key := "%s|%s|%d" % [run.get_parent().get_path(), run.piece, i]
+				var key := "%s|%s|%s" % [run.get_parent().get_path(), run.piece, run.places[i].origin]
 				if not by_key.has(key):
 					by_key[key] = {piece = String(run.piece), xf = run.global_transform * run.places[i], meshes = []}
 					found.append(by_key[key])
@@ -602,3 +602,28 @@ func test_a_run_says_how_big_it_is_even_headless() -> void:
 	var empty := KitRun.new()
 	assert_eq(empty.bounds(), AABB(), "a run with no places has no size")
 	empty.free()
+
+
+# A run is lit evenly: this renderer lights a mesh as a whole with at most eight omni lights, so a long block beside a
+# street's lanterns would be lit by a few lamps in one place and dark elsewhere. No run spans more than 12.5 m (five tiles).
+func test_no_run_of_a_block_is_longer_than_five_tiles() -> void:
+	var built := _build("block 0 0 60 7.5 3 frontage slope solid\nblock 0 20 60 60 2 tannery flat")
+	assert_eq(built.problems, PackedStringArray())
+	var runs := (built.root as Node).find_children("*", "KitRun", true, false)
+	var most_x := 0.0
+	var most_z := 0.0
+	for node in runs:
+		var run := node as KitRun
+		var box := run.bounds()
+		most_x = maxf(most_x, box.size.x)
+		most_z = maxf(most_z, box.size.z)
+		assert_true(box.size.x <= 12.5 + 1e-3, "%s is %.2f m along x" % [run.get_path(), box.size.x])
+		assert_true(box.size.z <= 12.5 + 1e-3, "%s is %.2f m along z" % [run.get_path(), box.size.z])
+	assert_true(most_x > 10.0, "and the runs are not needlessly small (%.2f m)" % most_x)
+	# Every piece is still placed once: 24 tiles x 3 storeys of front, 24 x 3 of roof; 24 x 2 of front, 24 x 16 of roof.
+	assert_eq(_placed(built.root).size(), 24 * 3 + 24 * 3 + 24 * 2 + 24 * 16, "the same pieces, split into runs")
+	var spots := {}
+	for piece: Dictionary in _placed(built.root):
+		var key := "%s|%s" % [piece.piece, piece.xf.origin]
+		assert_false(spots.has(key), "%s is not placed twice at one spot" % key)
+		spots[key] = true
