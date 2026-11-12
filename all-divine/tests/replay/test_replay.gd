@@ -209,7 +209,7 @@ func _replay_game(rec: InputRecording) -> int:
 
 # Plays `how` for the bot in a new game of `seed` until it has `count` frames recorded: [the recording, the state hash at the end, whether
 # the fight was ever slowed (ChainSlow, on a perfect dodge), the problems the bot found]. The game is freed.
-func _record_bot(seed: int, how: CombatBot.Policy, count: int) -> Array:
+func _record_bot(seed: int, how: CombatBot.Policy, count: int, pause_at := -1) -> Array:
 	var game := _game(seed)
 	var bot := track(CombatBot.new()) as CombatBot
 	bot.listen_for_errors = true
@@ -218,6 +218,10 @@ func _record_bot(seed: int, how: CombatBot.Policy, count: int) -> Array:
 	while bot.recorder.recording().frames.size() < count:
 		await frames(1)
 		slowed = slowed or Melee.slowed()
+		if bot.recorder.recording().frames.size() == pause_at:
+			Game.change(Game.State.PAUSE)  # the game is paused for 200 frames here and given back
+			await frames(200)
+			Game.change(Game.State.PLAY)
 	bot.finish()
 	var result := [bot.recorder.recording(), game.arena().state_hash(), slowed, bot.problems]
 	bot.recorder.set_physics_process(false)
@@ -245,3 +249,11 @@ func test_a_fight_the_bot_played_replays_to_the_same_hash_with_the_slow_down_fro
 	await frames(100)
 	assert_eq(Engine.get_physics_frames(), at + 100)
 	assert_eq(await _replay_game(from_file), recorded[1], "played from the file, a hundred frames later")
+
+
+func test_a_bot_run_paused_for_two_hundred_frames_is_the_run_never_paused() -> void:
+	var plain := await _record_bot(SLOW_SEED, CombatBot.Policy.COUNTER, FRAMES)
+	var paused := await _record_bot(SLOW_SEED, CombatBot.Policy.COUNTER, FRAMES, 60)
+	assert_eq(paused[1], plain[1], "the same end hash")
+	assert_eq((paused[0] as InputRecording).frames, (plain[0] as InputRecording).frames, "the same controls: the pause is not in the recording")
+	assert_eq(paused[3], PackedStringArray(), "and the bot found no problem in it")
