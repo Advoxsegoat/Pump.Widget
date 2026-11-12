@@ -307,6 +307,7 @@ func test_the_numbers_are_kept_by_the_foes_def() -> void:
 	assert_true(foes[&"knuckle_1"]["dealt"] > 0.0, "the counter dealt: %s" % [foes])
 	assert_near(foes[&"knuckle_1"]["dealt"], bot.damage_dealt, 0.01, "the rows add up to the run's")
 	assert_near(foes[&"knuckle_1"]["taken"], bot.damage_taken, 0.01)
+	assert_true(bot.watch._progress_at > 30, "damage dealt to a foe is progress for the watch: a long duel (a 140 HP heavy takes minutes) is not a stall")
 	assert_eq(bot.foe_lines().size(), 1)
 	assert_true(bot.foe_lines()[0].contains("foe knuckle_1:"), bot.foe_lines()[0])
 	await _end(run)

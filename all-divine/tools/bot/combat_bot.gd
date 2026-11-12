@@ -169,6 +169,8 @@ func begin(player: Actor, arena: Arena, seed_value: int, how: Policy = Policy.MI
 		TestLogger.shared().push_context(true)
 	player.hit_landed.connect(func(r: HitResult, e: HitEvent) -> void:
 		damage_dealt += r.hp_damage
+		if r.hp_damage > 0.0:
+			watch.note_progress(frame)  # a foe is being worn down: a long duel is not a fight that goes nowhere
 		_row(e.target)["dealt"] += r.hp_damage)
 	player.got_hit.connect(_on_got_hit)
 	player.died.connect(func() -> void:
