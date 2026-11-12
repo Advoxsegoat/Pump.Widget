@@ -9,6 +9,7 @@ const MAIN := "res://main/main.tscn"
 const DEFAULT_SETTINGS := "res://data/render/default_settings.tres"
 const YARD := "res://world/training_yard/training_yard.tscn"
 const COURTYARD := "res://world/courtyard/courtyard.tscn"
+const BILIBARA := "res://world/bilibara/bilibara.tscn"
 
 
 func after_each() -> void:
@@ -278,3 +279,24 @@ func test_a_region_that_loads_warms_the_afterimage_shader_too() -> void:
 		if (node as Afterimage).warming and not node.is_queued_for_deletion():
 			left += 1
 	assert_eq(left, 0, "and is gone after them")
+
+
+# F2 is the debug key into the Bilibara stretch: a plain Region (no Arena, so the Hud follows none), Abarax at its Spawn; and F5
+# from there goes to the yard, as it does from any region that is not the yard.
+func test_f2_enters_the_stretch_and_f5_leaves_it_for_the_yard() -> void:
+	var main := _main()
+	var player := _player(main)
+	var yard := _region(main)
+	_press_key(KEY_F2)
+	var stretch := _region(main)
+	assert_eq(stretch.scene_file_path, BILIBARA, "F2 goes to the stretch")
+	assert_true(stretch is Region and not stretch is Arena, "a plain Region (the node keeps the name Region, as every region does)")
+	assert_false(is_instance_valid(yard) and yard.is_inside_tree(), "the yard is gone")
+	assert_eq(main.arena(), null, "no Arena")
+	assert_vec_near(player.global_position, stretch.spawn().origin, 0.01, "Abarax is at its Spawn")
+	assert_eq(main.hud.arena, null, "the Hud is bound to none")
+	assert_eq(_rig(main).target, player, "the camera is on him")
+	await frames(2)
+	_press_key(KEY_F5)
+	assert_eq(_region(main).scene_file_path, YARD, "F5 from the stretch goes to the yard")
+	assert_eq(main.hud.arena, _region(main), "with its waves")
