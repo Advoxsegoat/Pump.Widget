@@ -11,6 +11,7 @@ extends RefCounted
 ## north faces are edge-on or hidden and are not built. Everything here is flat on y = 0.
 
 const LAYERS := preload("res://core/layers.gd")
+const RUN := preload("res://world/kit_run.gd")
 const KENNEY_TILE := 2.5
 ## The most a ground plate is long on a side: a plate any longer would be a place no seam in the stone ever shows.
 const MAX_PLATE := 12.5
@@ -108,6 +109,7 @@ func block(rect: Rect2, storeys: float, style: String, roof: String, solid: bool
 	front.name = "Front"
 	holder.add_child(front)
 	var south := rect.end.y
+	var laid: Array[Dictionary] = []
 	for storey in count:
 		var pieces: Array = STYLES[style].ground if storey == 0 else STYLES[style].upper
 		for k in columns:
@@ -118,20 +120,23 @@ func block(rect: Rect2, storeys: float, style: String, roof: String, solid: bool
 			# The face of the piece (its slab's near side, local x = box.position.x) is on the line z = south.
 			var on_line := Vector2(rect.position.x + (k + 0.5) * KENNEY_TILE, south)
 			var at := Vector3(on_line.x, storey * KENNEY_TILE, on_line.y + box.position.x * _scale)
-			_place(front, piece, at)
+			laid.append({piece = piece, at = at})
+	_lay(front, laid)
 	var cover := Node3D.new()
 	cover.name = "Roof"
 	holder.add_child(cover)
+	laid = []
 	for i in columns:
 		for j in rows:
 			var centre := rect.position + Vector2((i + 0.5) * KENNEY_TILE, (j + 0.5) * KENNEY_TILE)
-			_place(cover, ROOFS[roof], Vector3(centre.x, count * KENNEY_TILE, centre.y))
+			laid.append({piece = ROOFS[roof], at = Vector3(centre.x, count * KENNEY_TILE, centre.y)})
+	_lay(cover, laid)
 	if solid:
 		var body: StaticBody3D = _b._body("Body", holder, _b._world_and_feet)
 		var height := count * KENNEY_TILE
 		_b._box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(rect.get_center().x, height / 2, rect.get_center().y)), null)
 	else:
-		for mesh: MeshInstance3D in holder.find_children("*", "MeshInstance3D", true, false):
+		for mesh: GeometryInstance3D in holder.find_children("*", "GeometryInstance3D", true, false):
 			mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
@@ -164,7 +169,26 @@ func _plate(parent: Node3D, node_name: String, mesh: Mesh, material: Material) -
 	return instance
 
 
-# A Kenney piece under `parent` at `at`, at the kit's scale and turned to the south.
-func _place(parent: Node3D, piece: String, at: Vector3) -> void:
-	var model: Node3D = _b._model(piece, parent, _b._name(_b._pascal(piece), parent))
-	model.transform = Transform3D(Basis(Vector3.UP, SOUTH_YAW).scaled(Vector3.ONE * _scale), at)
+# The pieces `laid` ({piece, at}) under `parent`, a kind at a time: for each mesh of each kind of piece one MultiMesh of
+# every place the kind stands, so that a row of walls is a few draws and not one for every tile. The pieces are turned to
+# the south and at the kit's scale. (One to a block and not one to the whole place: the lights of Compatibility reach a
+# mesh as a whole, up to eight of them, and a row the length of a street would take the first eight lanterns of it.)
+func _lay(parent: Node3D, laid: Array[Dictionary]) -> void:
+	var kinds := {}
+	for one in laid:
+		if not kinds.has(one.piece):
+			kinds[one.piece] = []
+		kinds[one.piece].append(Transform3D(Basis(Vector3.UP, SOUTH_YAW).scaled(Vector3.ONE * _scale), one.at))
+	for piece: String in kinds:
+		var parts: Array = _b._parts(piece)
+		if parts.is_empty():
+			return
+		for part: Dictionary in parts:
+			var run := RUN.new()
+			run.name = _b._name(_b._pascal(piece), parent)
+			run.piece = StringName(piece)
+			run.part = part.mesh
+			run.local = part.local
+			run.places.assign(kinds[piece])
+			run.add_to_group(&"kit_multimesh", true)
+			parent.add_child(run)

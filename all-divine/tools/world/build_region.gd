@@ -124,6 +124,7 @@ class Builder:
 	var _lamp := {}  # the `lamps` line: colour, range, energy, up, world
 	var _blocks  # the helper for ground, block, water and vat (region_blocks.gd)
 	var _boxes := {}  # the bounds of each Kenney piece loaded so far, by name
+	var _part_cache := {}  # the meshes of each, by name
 	var _kit := ""  # the `kit` line's name, and the line it was on
 	var _kit_line := 0
 	var _counts := {}  # how many nodes of each name so far
@@ -604,6 +605,33 @@ class Builder:
 			box = box.merge(b)
 		_boxes[piece] = box
 		return box
+
+	# The meshes of a Kenney piece, each with its transform in the piece's own space ({mesh, local}): what a MultiMesh of the
+	# piece is made of. Empty (and a problem) if there is no such piece.
+	func _parts(piece: String) -> Array:
+		if _part_cache.has(piece):
+			return _part_cache[piece]
+		var path := KENNEY % piece
+		if not ResourceLoader.exists(path):
+			_problem("no Kenney piece '%s' (%s)" % [piece, path])
+			return []
+		var scene := (load(path) as PackedScene).instantiate() as Node3D
+		var found: Array = []
+		_collect_parts(scene, Transform3D(), found)
+		scene.free()
+		if found.is_empty():
+			_problem("the Kenney piece '%s' has no mesh" % piece)
+			return []
+		_part_cache[piece] = found
+		return found
+
+	func _collect_parts(node: Node, to_root: Transform3D, found: Array) -> void:
+		for child in node.get_children():
+			if child is Node3D:
+				var t := to_root * (child as Node3D).transform
+				if child is MeshInstance3D:
+					found.append({mesh = (child as MeshInstance3D).mesh, local = t})
+				_collect_parts(child, t, found)
 
 	# The bounds of each mesh under `node`, in the space `to_root` takes `node`'s space to.
 	func _mesh_boxes(node: Node, to_root: Transform3D, boxes: Array[AABB]) -> void:

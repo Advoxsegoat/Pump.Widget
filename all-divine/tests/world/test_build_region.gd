@@ -27,21 +27,37 @@ func _bodies(node: Node) -> Array[StaticBody3D]:
 	return found
 
 
-# Every Kenney piece instance under `node`, by the piece's name.
-func _pieces(node: Node, piece := "") -> Array[Node3D]:
-	var found: Array[Node3D] = []
+# Every kit piece placed under `node` (of the piece named `piece`, or any), whether it is a scene instance (`piece`, `edge`,
+# `lantern`) or one instance of a block's MultiMeshes: {piece, xf (the piece's own transform), meshes: [{mesh, xf, material}]},
+# the material being the one the piece is drawn in as things stand. The MultiMeshInstance3Ds of one piece are the sub-meshes
+# of it, named alike, in the same order of instances, and carry the piece's name and the sub-mesh's own transform as meta.
+func _placed(node: Node, piece := "") -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	var by_key := {}
 	for child in node.find_children("*", "Node3D", true, false):
-		if child.scene_file_path.begins_with(KENNEY_DIR) and (piece == "" or child.scene_file_path == KENNEY % piece):
-			found.append(child as Node3D)
-	return found
+		if child is KitRun:
+			var run := child as KitRun
+			var material: Material = run.material_override if run.material_override != null else run.part.surface_get_material(0)
+			for i in run.places.size():
+				var key := "%s|%s|%d" % [run.get_parent().get_path(), run.piece, i]
+				if not by_key.has(key):
+					by_key[key] = {piece = String(run.piece), xf = run.global_transform * run.places[i], meshes = []}
+					found.append(by_key[key])
+				by_key[key].meshes.append({mesh = run.part, xf = run.global_transform * run.places[i] * run.local, material = material})
+		elif child.scene_file_path.begins_with(KENNEY_DIR):
+			var record := {piece = child.scene_file_path.get_file().get_basename(), xf = child.global_transform, meshes = []}
+			for mesh: MeshInstance3D in child.find_children("*", "MeshInstance3D", true, false):
+				record.meshes.append({mesh = mesh.mesh, xf = mesh.global_transform, material = mesh.get_active_material(0)})
+			found.append(record)
+	return found.filter(func(r: Dictionary) -> bool: return piece == "" or r.piece == piece)
 
 
-# The bounds of the meshes under `node` in world space.
-func _world_box(node: Node3D) -> AABB:
+# The bounds of a placed piece's meshes in world space.
+func _box(placed: Dictionary) -> AABB:
 	var box := AABB()
 	var first := true
-	for mesh: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
-		var b := mesh.global_transform * mesh.get_aabb()
+	for m: Dictionary in placed.meshes:
+		var b: AABB = m.xf * m.mesh.get_aabb()
 		box = b if first else box.merge(b)
 		first = false
 	return box
@@ -109,42 +125,62 @@ func test_a_block_stacks_its_front_by_storeys_and_roofs_its_footprint() -> void:
 	var built := _build("block 0 0 10 5 3 frontage flat")
 	assert_eq(built.problems, PackedStringArray())
 	var root := built.root as Node
-	var roofs := _pieces(root, "roof-flat")
-	var front := _pieces(root).filter(func(n: Node3D) -> bool: return n.scene_file_path != KENNEY % "roof-flat")
+	var roofs := _placed(root, "roof-flat")
+	var front := _placed(root).filter(func(p: Dictionary) -> bool: return p.piece != "roof-flat")
 	assert_eq(front.size(), 12, "4 tiles x 3 storeys of front")
 	assert_eq(roofs.size(), 8, "4 x 2 tiles of roof")
 	var storeys := {}
-	for piece: Node3D in front:
-		storeys[snappedf(piece.global_position.y, 0.001)] = true
-		assert_vec_near(piece.global_basis.get_scale(), Vector3.ONE * 2.5, 1e-4, "%s at x2.5" % piece.name)
-		assert_near(_world_box(piece).end.z, 5.0, 1e-3, "%s: the face is on z = 5" % piece.name)
+	for piece: Dictionary in front:
+		storeys[snappedf(piece.xf.origin.y, 0.001)] = true
+		assert_vec_near(piece.xf.basis.get_scale(), Vector3.ONE * 2.5, 1e-4, "%s at x2.5" % piece.piece)
+		assert_near(_box(piece).end.z, 5.0, 1e-3, "%s: the face is on z = 5" % piece.piece)
 	assert_eq(storeys.keys(), [0.0, 2.5, 5.0], "at y = 0, 2.5 and 5")
-	for roof: Node3D in roofs:
-		assert_near(roof.global_position.y, 7.5, 1e-6, "roofs at y = 7.5")
-		assert_vec_near(roof.global_basis.get_scale(), Vector3.ONE * 2.5, 1e-4)
+	for roof: Dictionary in roofs:
+		assert_near(roof.xf.origin.y, 7.5, 1e-6, "roofs at y = 7.5")
+		assert_vec_near(roof.xf.basis.get_scale(), Vector3.ONE * 2.5, 1e-4)
 	var centres := {}
-	for roof: Node3D in roofs:
-		centres[Vector2(snappedf(roof.global_position.x, 0.01), snappedf(roof.global_position.z, 0.01))] = true
+	for roof: Dictionary in roofs:
+		centres[Vector2(snappedf(roof.xf.origin.x, 0.01), snappedf(roof.xf.origin.z, 0.01))] = true
 	assert_eq(centres.size(), 8, "one to a tile")
 	for x in [1.25, 3.75, 6.25, 8.75]:
 		for z in [1.25, 3.75]:
 			assert_true(centres.has(Vector2(x, z)), "a roof tile at (%s, %s)" % [x, z])
 	# Their material is the kit's colormap.
-	for piece: Node3D in front + roofs:
-		for mesh: MeshInstance3D in piece.find_children("*", "MeshInstance3D", true, false):
-			assert_eq(mesh.get_active_material(0), _material("kenney_town"), "%s is in the kit's material" % piece.name)
+	for piece: Dictionary in front + roofs:
+		for m: Dictionary in piece.meshes:
+			assert_eq(m.material, _material("kenney_town"), "%s is in the kit's material" % piece.piece)
+
+
+# A block's pieces are drawn a kind at a time: one MultiMesh to each mesh of each piece kind in the block, and no
+# MeshInstance3D for any of them (a wall tile or a roof tile each would be a draw of its own).
+func test_a_blocks_pieces_are_a_few_multimeshes_and_not_a_mesh_each() -> void:
+	var built := _build("block 0 0 10 5 3 frontage flat solid\nblock 12.5 0 22.5 5 3 frontage flat")
+	assert_eq(built.problems, PackedStringArray())
+	var root := built.root as Node
+	assert_eq(root.find_children("*", "MeshInstance3D", true, false).size(), 0, "no mesh to a tile")
+	var multimeshes := root.find_children("*", "MultiMeshInstance3D", true, false)
+	var instances := 0
+	for mm: MultiMeshInstance3D in multimeshes:
+		assert_true(mm is KitRun, "%s is a KitRun" % mm.name)
+		instances += (mm as KitRun).places.size()
+		assert_true(mm.is_in_group(&"kit_multimesh"), "%s is in the group kit_multimesh" % mm.name)
+		assert_eq(mm.multimesh.instance_count, (mm as KitRun).places.size(), "%s draws its places" % mm.name)
+	assert_true(instances >= 40, "the 40 pieces of two blocks are instances (%d in all)" % instances)
+	assert_true(multimeshes.size() <= 2 * 14, "a few multimeshes: %d for 2 blocks of 5 kinds of wall and a roof" % multimeshes.size())
+	assert_true(multimeshes.size() < instances / 2.0, "far fewer than the pieces")
+	assert_eq(_placed(root).size(), 40, "every piece is still a placed piece")
 
 
 func test_the_styles_choose_pieces_by_storey_and_tile_index() -> void:
 	# frontage: a ground storey of door, wall, window, wall, window, wall; the upper of shutters, shutters, wall, balcony.
 	var built := _build("block 0 0 15 5 2 frontage flat")
 	var by_tile := {}
-	for piece: Node3D in _pieces(built.root, ""):
-		if piece.scene_file_path == KENNEY % "roof-flat":
+	for piece: Dictionary in _placed(built.root):
+		if piece.piece == "roof-flat":
 			continue
-		var tile := floori(_world_box(piece).get_center().x / TILE)
-		var storey := roundi(piece.global_position.y / TILE)
-		by_tile[Vector2i(tile, storey)] = piece.scene_file_path.get_file().get_basename()
+		var tile := floori(_box(piece).get_center().x / TILE)
+		var storey := roundi(piece.xf.origin.y / TILE)
+		by_tile[Vector2i(tile, storey)] = piece.piece
 	var ground := ["wall-door", "wall", "wall-window-small", "wall", "wall-window-small", "wall"]
 	var upper := ["wall-window-shutters", "wall-window-shutters", "wall", "balcony-wall"]
 	for k in 6:
@@ -152,14 +188,14 @@ func test_the_styles_choose_pieces_by_storey_and_tile_index() -> void:
 		assert_eq(by_tile.get(Vector2i(k, 1)), upper[k % 4], "upper storey, tile %d" % k)
 	var wood := _build("block 0 0 12.5 5 2 tannery slope")
 	var names := {}
-	for piece: Node3D in _pieces(wood.root, ""):
-		names[piece.scene_file_path.get_file().get_basename()] = true
+	for piece: Dictionary in _placed(wood.root):
+		names[piece.piece] = true
 	for expected in ["wall-wood-door", "wall-wood", "wall-wood-window-small", "wall-wood-window-shutters", "roof"]:
 		assert_true(names.has(expected), "a tannery has %s" % expected)
 	var shed := _build("block 0 0 5 5 1 shed high")
 	var plain := _build("block 0 0 5 5 1 plain flat")
-	assert_true(_pieces(shed.root, "wall-wood").size() == 2 and _pieces(shed.root, "roof-high").size() == 4, "a shed is wall-wood under roof-high")
-	assert_true(_pieces(plain.root, "wall").size() == 2 and _pieces(plain.root, "roof-flat").size() == 4, "plain is wall under roof-flat")
+	assert_true(_placed(shed.root, "wall-wood").size() == 2 and _placed(shed.root, "roof-high").size() == 4, "a shed is wall-wood under roof-high")
+	assert_true(_placed(plain.root, "wall").size() == 2 and _placed(plain.root, "roof-flat").size() == 4, "plain is wall under roof-flat")
 
 
 func test_a_solid_block_has_one_box_over_its_footprint_and_casts_shadows() -> void:
@@ -175,15 +211,17 @@ func test_a_solid_block_has_one_box_over_its_footprint_and_casts_shadows() -> vo
 	var shape := body.find_children("*", "CollisionShape3D", true, false)[0] as CollisionShape3D
 	assert_vec_near((shape.shape as BoxShape3D).size, Vector3(10, 7.5, 5), 1e-6, "10 x 7.5 x 5")
 	assert_vec_near(shape.global_position, Vector3(5, 3.75, 2.5), 1e-6, "over the footprint, from the ground up")
-	for mesh: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
+	var drawn := root.find_children("*", "GeometryInstance3D", true, false)
+	assert_true(drawn.size() > 0)
+	for mesh: GeometryInstance3D in drawn:
 		assert_ne(mesh.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "%s casts shadows" % mesh.name)
 	var visual := _build("block 0 0 10 5 3 frontage flat")
 	var vroot := visual.root as Node
 	assert_true(vroot.get_node_or_null("Backdrop") != null and vroot.get_node_or_null("Blocks") == null, "under Backdrop")
 	assert_eq(vroot.find_children("*", "CollisionObject3D", true, false).size(), 0, "no collider")
-	var meshes := vroot.find_children("*", "MeshInstance3D", true, false)
+	var meshes := vroot.find_children("*", "GeometryInstance3D", true, false)
 	assert_true(meshes.size() > 0)
-	for mesh: MeshInstance3D in meshes:
+	for mesh: GeometryInstance3D in meshes:
 		assert_eq(mesh.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "%s casts no shadow" % mesh.name)
 
 
@@ -198,17 +236,17 @@ func test_a_block_that_is_not_whole_tiles_or_has_an_unknown_style_or_roof_is_a_p
 			assert_true((built.problems[0] as String).begins_with("T.txt:2:"), "%s names its line" % line)
 
 
-# The height at which a ray straight down at (x, z) meets the meshes under `node`; -INF if it misses.
-func _height_at(node: Node3D, x: float, z: float) -> float:
+# The height at which a ray straight down at (x, z) meets the meshes of a placed piece; -INF if it misses.
+func _height_at(placed: Dictionary, x: float, z: float) -> float:
 	var best := -INF
-	for mesh: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
-		var triangles := mesh.mesh.generate_triangle_mesh()
-		var to_local := mesh.global_transform.affine_inverse()
+	for m: Dictionary in placed.meshes:
+		var triangles: TriangleMesh = m.mesh.generate_triangle_mesh()
+		var to_local: Transform3D = (m.xf as Transform3D).affine_inverse()
 		var from := to_local * Vector3(x, 20.0, z)
 		var direction := (to_local.basis * Vector3.DOWN).normalized()
 		var hit := triangles.intersect_ray(from, direction)
 		if not hit.is_empty():
-			best = maxf(best, (mesh.global_transform * (hit.position as Vector3)).y)
+			best = maxf(best, (m.xf * (hit.position as Vector3)).y)
 	return best
 
 
@@ -216,11 +254,11 @@ func test_a_slope_roof_is_higher_at_its_north_edge() -> void:
 	for roof in ["slope", "high"]:
 		var built := _build("block 0 0 5 5 1 plain %s" % roof)
 		assert_eq(built.problems, PackedStringArray())
-		var tiles := _pieces(built.root, "roof" if roof == "slope" else "roof-high")
+		var tiles := _placed(built.root, "roof" if roof == "slope" else "roof-high")
 		assert_eq(tiles.size(), 4, "%s: four tiles" % roof)
-		for tile: Node3D in tiles:
-			var north := _height_at(tile, tile.global_position.x, tile.global_position.z - 0.5)
-			var south := _height_at(tile, tile.global_position.x, tile.global_position.z + 0.5)
+		for tile: Dictionary in tiles:
+			var north := _height_at(tile, tile.xf.origin.x, tile.xf.origin.z - 0.5)
+			var south := _height_at(tile, tile.xf.origin.x, tile.xf.origin.z + 0.5)
 			assert_true(north >= south + 0.2, "%s: 0.5 m north of the centre is at %.2f, 0.5 m south at %.2f" % [roof, north, south])
 			assert_true(south > 2.5 - 0.01, "%s: the roof stands on the top storey (%.2f)" % [roof, south])
 
@@ -412,10 +450,9 @@ func test_every_listed_kenney_piece_is_in_the_toon_material() -> void:
 # The material of every mesh of every kit piece under `root`, as resource paths.
 func _kit_materials(root: Node) -> Dictionary:
 	var found := {}
-	for piece in _pieces(root):
-		for mesh: MeshInstance3D in piece.find_children("*", "MeshInstance3D", true, false):
-			for i in mesh.mesh.get_surface_count():
-				found[mesh.get_active_material(i).resource_path] = true
+	for piece: Dictionary in _placed(root):
+		for m: Dictionary in piece.meshes:
+			found[(m.material as Material).resource_path] = true
 	return found
 
 
@@ -425,7 +462,7 @@ func test_kit_bilibara_draws_every_piece_of_the_layout_in_its_colours() -> void:
 	assert_eq(built.problems, PackedStringArray())
 	var materials := _kit_materials(built.root)
 	assert_eq(materials.keys(), [MATERIALS % "kenney_town_bilibara"], "every piece in the one material: %s" % [materials.keys()])
-	assert_true(_pieces(built.root).size() > 10, "and there are pieces")
+	assert_true(_placed(built.root).size() > 10, "and there are pieces")
 	# And so the saved scene draws them: a small scene, with the dresser in it, whose pieces take the material on entering
 	# the tree.
 	var packed := PackedScene.new()
