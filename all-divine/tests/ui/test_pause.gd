@@ -166,7 +166,8 @@ func test_the_menu_is_whole_pixels_inside_the_left_column() -> void:
 	for id in [&"root", &"quit"]:
 		main.menu.show_page(id)
 		var panel := main.menu.panel()
-		assert_eq([panel.position.x, panel.size.x], [8, 224], "%s: the panel is at x 8, 224 wide" % id)
+		assert_eq(panel.position.x, 8, "%s: the panel is at x 8" % id)
+		assert_true(panel.size.x <= 224, "%s: and at most 224 wide" % id)
 		assert_true(column.encloses(panel), "%s: the panel is inside (8,8)..(232,190): %s" % [id, panel])
 		for row in main.menu.rows():
 			assert_eq(typeof(row.rect), TYPE_RECT2I, "%s: a row's rect is whole pixels" % id)

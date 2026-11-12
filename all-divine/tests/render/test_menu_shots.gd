@@ -68,3 +68,35 @@ func test_every_page_is_shot_at_640_and_at_1080() -> void:
 				if not area.has_point(Vector2i(x, y)) and stage.get_pixel(x, y) != without.get_pixel(x, y):
 					differs += 1
 		assert_eq(differs, 0, "%s: the fight outside the panel is untouched" % id)
+
+
+# A page of twenty rows that is not one of the game's (the controls page will be the first long one), scrolled by Down presses:
+# saved as out/menu/scrolled_640.png and scrolled_1080.png, and its arrows are drawn where the layout says.
+func test_a_scrolled_page_is_shot_with_its_arrows() -> void:
+	Game.reset()
+	Arena.reset_spawn_counts()
+	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
+	await frames(90)
+	Game.change(Game.State.PAUSE)
+	var page := MenuPage.new()
+	page.heading = "A page of twenty rows"
+	page.back = func() -> void: pass
+	for i in 20:
+		var row := MenuRow.action("Row %d" % (i + 1), func() -> void: pass)
+		row.kind = MenuRow.Kind.SLIDER
+		row.value_text = func() -> String: return "%d%%" % (i * 5)
+		page.rows.append(row)
+	main.menu.show_page(&"scrolled", page)
+	for i in 17:
+		main.menu.press(MenuNav.Cmd.DOWN)
+	await frames(2)
+	await _settle()
+	var picture := main.stage.hud.get_texture().get_image()
+	_save(picture, "scrolled_640.png")
+	_save(get_viewport().get_texture().get_image(), "scrolled_1080.png")
+	var layout := main.menu.layout()
+	assert_true(main.menu.panel().end.y <= 190, "the panel ends above y 190")
+	for arrow: Rect2i in [layout.arrow_up, layout.arrow_down]:
+		assert_true(arrow.size != Vector2i.ZERO, "both arrows show (rows hidden above and below)")
+		var c := picture.get_pixelv(arrow.position + Vector2i(2, 0) if arrow == layout.arrow_down else arrow.position + Vector2i(2, 2))
+		assert_true(absf(c.r - Hud.GOLD.r) < 0.03 and absf(c.g - Hud.GOLD.g) < 0.03 and c.a > 0.8, "the arrow is gold at its tip row: %s" % c.to_html(false))
