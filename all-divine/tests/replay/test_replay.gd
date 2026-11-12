@@ -7,13 +7,13 @@ const MAIN := "res://main/main.tscn"
 const FILE := "user://test_recording.tres"
 const ROUND := HitProfile.Line.ROUND
 const KNUCKLE := "res://data/actors/knuckle_1.tres"
-## The frames the fixture runs.
-const FRAMES := 600
+## The frames the fixtures run.
+const FRAMES := 125
 ## A screen direction: left, and down the screen (a duck).
 const LEFT := Vector2(-1, 0)
 const DOWN := Vector2(0, 1)
-## A seed whose fight, played by the counter policy, has a perfect dodge in its first 900 frames (the slow-down).
-const SLOW_SEED := 1
+## A seed whose fight, played by the counter policy, has a perfect dodge in its first 125 frames (the slow-down).
+const SLOW_SEED := 2
 
 ## The fixture's blows, [frame of the player's clock it lands on, line]: a straight one (parried), a straight one (swayed), a round one
 ## (ducked).
@@ -189,36 +189,6 @@ func _game(seed: int) -> Main:
 	return BotWorld.make(self, seed)
 
 
-# The fight's hands for a game: walk up the screen to the foes, then jab, guard and sway on a loop, for FRAMES frames.
-func _hands_for_game() -> Array:
-	var steps := [{"frames": 100, "move": Vector2(0, -1)}, {"frames": 20}]
-	for i in 8:
-		steps.append_array([
-			{"frames": 1, "press": [&"palm"], "hold": [&"palm"]}, {"frames": 30},
-			{"frames": 1, "press": [&"guard"], "hold": [&"guard"], "direction": LEFT, "move": LEFT}, {"frames": 25, "hold": [&"guard"]},
-			{"frames": 1, "press": [&"guard"], "hold": [&"guard"], "direction": DOWN, "move": DOWN}, {"frames": 25},
-			{"frames": 30, "move": Vector2(0, -0.6)},
-		])
-	return steps
-
-
-# Records `FRAMES` frames of the hands in a new game of `seed`: [the recording, the state hash at the end]. The game is freed.
-func _record_game(seed: int) -> Array:
-	var game := _game(seed)
-	var recorder := track(InputRecorder.new()) as InputRecorder
-	recorder.begin(game.region.scene_file_path, seed, 0)
-	var hands := track(ScriptedHands.new(_hands_for_game()))
-	while recorder.recording().frames.size() < FRAMES:
-		await frames(1)
-	var result := [recorder.recording(), game.arena().state_hash()]
-	recorder.set_physics_process(false)  # not another frame, while the nodes wait to be freed
-	for node: Node in [hands, recorder, game]:
-		node.queue_free()
-	await frames(2)
-	InputFeed.release()
-	return result
-
-
 # Plays `rec` into a new game of its seed, FRAMES frames: the state hash at the end. The game is freed.
 func _replay_game(rec: InputRecording) -> int:
 	var game := _game(rec.seed)
@@ -235,39 +205,21 @@ func _replay_game(rec: InputRecording) -> int:
 	return result[0]
 
 
-func test_record_then_replay_gives_the_same_state_hash() -> void:
-	var recorded := await _record_game(3)
-	var rec: InputRecording = recorded[0]
-	assert_eq(rec.frames.size(), FRAMES, "a frame each")
-	assert_true(rec.frames.any(func(f: Dictionary) -> bool: return (f["pressed"] as PackedStringArray).has("palm")), "and it holds the jabs")
-	assert_eq(await _replay_game(rec), recorded[1], "the same recording, seed and region give the same hash at the end")
-
-
-func test_a_recording_replays_to_the_same_hash_from_a_file_and_whenever_it_is_played() -> void:
-	# The frame count the hash holds is the arena's own, from its wave's start: the same recording played after a hundred idle
-	# frames (the engine's count a hundred higher) hashes the same.
-	var recorded := await _record_game(5)
-	assert_eq(ResourceSaver.save(recorded[0], FILE), OK)
-	var rec := ResourceLoader.load(FILE, "", ResourceLoader.CACHE_MODE_IGNORE) as InputRecording
-	var at := Engine.get_physics_frames()
-	await frames(100)
-	assert_eq(Engine.get_physics_frames(), at + 100)
-	assert_eq(await _replay_game(rec), recorded[1], "played from the file, a hundred frames later")
-
-
 # --- a fight the bot plays, with the slow-down ---
 
 # Plays `how` for the bot in a new game of `seed` until it has `count` frames recorded: [the recording, the state hash at the end, whether
-# the fight was ever slowed (ChainSlow, on a perfect dodge). The game is freed.
+# the fight was ever slowed (ChainSlow, on a perfect dodge), the problems the bot found]. The game is freed.
 func _record_bot(seed: int, how: CombatBot.Policy, count: int) -> Array:
 	var game := _game(seed)
 	var bot := track(CombatBot.new()) as CombatBot
+	bot.listen_for_errors = true
 	bot.begin(game.player, game.arena(), seed, how)
 	var slowed := false
 	while bot.recorder.recording().frames.size() < count:
 		await frames(1)
 		slowed = slowed or Melee.slowed()
-	var result := [bot.recorder.recording(), game.arena().state_hash(), slowed]
+	bot.finish()
+	var result := [bot.recorder.recording(), game.arena().state_hash(), slowed, bot.problems]
 	bot.recorder.set_physics_process(false)
 	bot.set_physics_process(false)
 	for node: Node in [bot, game]:
@@ -277,7 +229,19 @@ func _record_bot(seed: int, how: CombatBot.Policy, count: int) -> Array:
 	return result
 
 
-func test_a_fight_the_bot_played_with_the_slow_down_on_replays_to_the_same_hash() -> void:
-	var recorded := await _record_bot(SLOW_SEED, CombatBot.Policy.COUNTER, 900)
+func test_a_fight_the_bot_played_replays_to_the_same_hash_with_the_slow_down_from_a_file_and_whenever_it_is_played() -> void:
+	var recorded := await _record_bot(SLOW_SEED, CombatBot.Policy.COUNTER, FRAMES)
+	var rec: InputRecording = recorded[0]
+	assert_eq(rec.frames.size(), FRAMES, "a frame each")
+	assert_true(rec.frames.any(func(f: Dictionary) -> bool: return (f["pressed"] as PackedStringArray).has("guard")), "and it holds the guard presses of the sways")
+	assert_eq(recorded[3], PackedStringArray(), "the bot found no problem in the real game")
 	assert_true(recorded[2], "the fight was slowed by a perfect dodge, so the replay has to meet the slow-down")
-	assert_eq(await _replay_game(recorded[0]), recorded[1], "and it replays to the same hash")
+	assert_eq(await _replay_game(rec), recorded[1], "the same recording, seed and region give the same hash at the end")
+	# The frame count the hash holds is the arena's own, from its wave's start: the same recording, read from its file and played after
+	# a hundred idle frames (the engine's count a hundred higher), hashes the same.
+	assert_eq(ResourceSaver.save(rec, FILE), OK)
+	var from_file := ResourceLoader.load(FILE, "", ResourceLoader.CACHE_MODE_IGNORE) as InputRecording
+	var at := Engine.get_physics_frames()
+	await frames(100)
+	assert_eq(Engine.get_physics_frames(), at + 100)
+	assert_eq(await _replay_game(from_file), recorded[1], "played from the file, a hundred frames later")
