@@ -36,6 +36,7 @@ func test_a_clean_run_prints_a_line_for_its_seed_and_exits_zero() -> void:
 	var run := _run(["--seeds=1", "--frames=120"])
 	assert_eq(run["code"], 0, run["text"])
 	assert_true(String(run["text"]).contains("bot seed 1: waves 0, deaths 0, problems 0"), run["text"])
+	assert_true(String(run["text"]).contains("reaction 14"), "the line says what the reaction was: %s" % run["text"])
 
 
 func test_arguments_it_cannot_read_exit_two() -> void:
@@ -49,5 +50,8 @@ func test_the_arguments_are_parsed_together() -> void:
 	assert_eq(asked["frames"], 500)
 	assert_eq(asked["policies"], [CombatBot.Policy.COUNTER] as Array[CombatBot.Policy])
 	assert_true(asked["detail"])
-	assert_eq(BotRunner.parse(PackedStringArray()), {"seeds": [1] as Array[int], "frames": 7200, "policies": [CombatBot.Policy.MIXED] as Array[CombatBot.Policy], "detail": false}, "the defaults")
+	assert_eq(asked["reaction"], 14, "the reaction defaults to the bot's")
+	assert_eq(BotRunner.parse(PackedStringArray(["--reaction=10"]))["reaction"], 10)
+	assert_eq(BotRunner.parse(PackedStringArray(["--reaction=0"]))["reaction"], 0, "and 0 is a reaction of none")
+	assert_eq(BotRunner.parse(PackedStringArray()), {"seeds": [1] as Array[int], "frames": 7200, "policies": [CombatBot.Policy.MIXED] as Array[CombatBot.Policy], "detail": false, "reaction": 14}, "the defaults")
 	assert_true(quietly(func() -> Variant: return BotRunner.parse(PackedStringArray(["--seeds=x"]))).is_empty(), "unreadable gives nothing")

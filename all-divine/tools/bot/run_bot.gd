@@ -1,6 +1,6 @@
 extends SceneTree
 ## The combat bot's command:
-##   tools/godot.sh -s res://tools/bot/run_bot.gd -- [--seeds=1-10] [--frames=7200] [--policy=mixed|aggress|counter|mash|all]
+##   tools/godot.sh -s res://tools/bot/run_bot.gd -- [--seeds=1-10] [--frames=7200] [--policy=mixed|aggress|counter|mash|all] [--reaction=14] [--detail]
 ## Plays each seed (see BotRunner) and prints a line for it ("bot seed 3: waves 4, deaths 1, problems 0 (...)"); exits 1 if any seed
 ## had a problem. The fight is played on the fixed clock, as fast as the machine goes: without --fixed-fps 60 it would run in real time,
 ## so a run is played by a Godot of its own started with it, one for each seed (and run again if it dies).
@@ -39,7 +39,7 @@ func _supervise(runner: Variant, asked: Dictionary) -> int:
 			var policy_name: String = runner.policy_name(policy)
 			var code := -1
 			for attempt in RETRIES + 1:
-				code = _child(["--seeds=%d" % seed_number, "--frames=%d" % asked["frames"], "--policy=%s" % policy_name] + (["--detail"] if asked["detail"] else []))
+				code = _child(["--seeds=%d" % seed_number, "--frames=%d" % asked["frames"], "--policy=%s" % policy_name, "--reaction=%d" % asked["reaction"]] + (["--detail"] if asked["detail"] else []))
 				if code == 0 or code == 1:
 					break
 				printerr("run_bot: Godot died (exit %d) on seed %d, policy %s%s" % [code, seed_number, policy_name, "; running it again" if attempt < RETRIES else ""])

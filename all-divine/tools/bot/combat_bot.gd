@@ -44,6 +44,10 @@ const CROWD_RANGE := 2.0
 ## The frames before a blow lands that an answer is pressed, from the earliest to the latest: a sway or duck's window opens on its
 ## third frame and lasts at least six (a Flurry sway), the hop is airborne from its third to its twenty-eighth, and a parry window
 ## lasts ten frames from the press.
+## The reaction a bot has unless it is told another.
+const DEFAULT_REACTION := 14
+## The fewest frames before a blow that a dodge can be pressed and be in time.
+const DODGE_LEAD_MIN := 4
 const SWAY_LEAD := Vector2i(4, 8)
 const HOP_LEAD := Vector2i(4, 7)
 const CATCH_LEAD := Vector2i(3, 6)
@@ -70,10 +74,19 @@ const MASH_REACH := 2.0
 
 ## A problem was found: the whole line.
 signal problem_found(line: String)
+## A defence was pressed: how many frames after the tell that prompted it, and on which frame of the bot's.
+signal answered(since_tell: int, at_frame: int)
 
 ## The seed every choice is made from, and the one the recording and the replay file carry.
 var rng_seed := 0
 var policy: Policy = Policy.MIXED
+## How late the bot sees the fight, in frames: everything it knows of a foe (that a tell began, which blow, that a held swing was let go,
+## where it stands and whether it is open) is what was true this many frames ago, plus a seeded jitter of up to `reaction_jitter` either way,
+## and it acts on nothing newer. It knows how long each blow takes from its tell (a player learns that). 0 sees the fight as it is.
+var reaction_frames := DEFAULT_REACTION
+var reaction_jitter := 3
+## The fewest frames from a tell to the defence pressed for it over the run (-1 for none yet).
+var fewest_reaction := -1
 ## Physics frames the bot has played.
 var frame := 0
 ## Every problem found, as lines "bot: seed S frame F: ...".
@@ -88,7 +101,7 @@ var deaths := 0
 ## the highest tempo reached with one the nearest, the waves cleared that held one (each def in a wave has it), his deaths to one.
 var by_foe := {}
 ## Where a failing run's recording is saved.
-var replay_dir := "res://out/replays"
+var replay_dir := ProjectSettings.globalize_path("res://").path_join("out/replays")
 ## Whether engine errors and warnings count as problems (they are heard through TestLogger from begin to finish).
 var listen_for_errors := false
 var watch := BotWatch.new()
@@ -112,6 +125,7 @@ var _in_combo := false  # a combo is on (it ends when no move plays)
 var _rest_until := 0  # no new combo before this frame
 var _backing_off := false
 var _last_attacker: Actor  # who last struck him
+var _history := {}  # foe id -> [[where it stood, whether it was open], ...], one per frame, the latest last
 var _heard := 0  # how many of the logger's lines have been taken in
 
 
@@ -184,9 +198,9 @@ func save_replay() -> Error:
 
 ## One line of what the run came to: waves cleared, deaths and problems, then the numbers the policies are compared by.
 func summary() -> String:
-	return "bot seed %d: waves %d, deaths %d, problems %d (%s: dealt %d, taken %d, highest tempo %s)" % [
-			rng_seed, waves_cleared, deaths, problems.size(), POLICIES.find_key(policy), roundi(damage_dealt), roundi(damage_taken),
-			DodgeChain.Tempo.keys()[highest_tempo].to_lower()]
+	return "bot seed %d: waves %d, deaths %d, problems %d (%s, reaction %d: dealt %d, taken %d, highest tempo %s, fewest frames from a tell to a defence %d)" % [
+			rng_seed, waves_cleared, deaths, problems.size(), POLICIES.find_key(policy), reaction_frames, roundi(damage_dealt), roundi(damage_taken),
+			DodgeChain.Tempo.keys()[highest_tempo].to_lower(), fewest_reaction]
 
 
 ## The numbers of the run by the foe's def id (by_foe).
@@ -223,6 +237,7 @@ func _physics_process(_delta: float) -> void:
 		return
 	frame += 1
 	_watch_foes()
+	_sample_foes()
 	_look_for_problems()
 	InputFeed.apply(_decide())
 
@@ -311,6 +326,17 @@ func _on_tell(foe: Actor) -> void:
 		"low": profile.height == HitProfile.Height.LOW, "perilous": perilous, "acted": false,
 	}
 	_plan(blow)
+	var delay := 0
+	if reaction_frames > 0:
+		delay = maxi(reaction_frames + _rng.randi_range(-reaction_jitter, reaction_jitter), 0)
+	blow["tell_f"] = frame  # the frame of the tell and the frames from it to the blow: all a player learns of it
+	blow["tell_at"] = frame
+	blow["eta0"] = (float(blow["hit_at"]) - foe.runner.time) * Marks.RATE
+	blow["known_at"] = frame + delay
+	blow["delay"] = delay
+	blow["held"] = false
+	blow["checked"] = false
+	blow["gone"] = -1
 	_blows.append(blow)
 
 
@@ -356,22 +382,56 @@ func _eta(blow: Dictionary) -> float:
 	return (float(blow["hit_at"]) - foe.runner.time) * Marks.RATE
 
 
-# Drops the blows that are no longer coming or are long past.
+# Frames until `blow` lands as far as the bot knows: with a reaction, what the tell (or the release of a held swing) said, run on at
+# the rate of the frames since; without, the true time on the foe's clock.
+func _estimate(blow: Dictionary) -> float:
+	if reaction_frames <= 0:
+		return _eta(blow)
+	return float(blow["eta0"]) - float(frame - int(blow["tell_f"]))
+
+
+# Drops the blows that are no longer coming or are long past. With a reaction, a blow that is cancelled is dropped that many frames
+# after (the bot sees it late), and a swing the foe holds is noted, and when it is let go the estimate starts again from there.
 func _forget_blows() -> void:
+	if reaction_frames > 0:
+		for blow in _blows:
+			var foe: Actor = blow["foe"]
+			if is_instance_valid(foe) and foe.runner.charging:
+				blow["held"] = true
+			elif blow["held"] and _eta(blow) != INF:
+				blow["held"] = false
+				blow["tell_f"] = frame
+				blow["eta0"] = _eta(blow)
+				blow["known_at"] = frame + int(blow["delay"])
+			if _eta(blow) == INF and int(blow["gone"]) < 0:
+				blow["gone"] = frame
 	_blows = _blows.filter(func(blow: Dictionary) -> bool:
+		if reaction_frames > 0:
+			return (int(blow["gone"]) < 0 or frame < int(blow["gone"]) + int(blow["delay"])) and _estimate(blow) > -30.0
 		var eta := _eta(blow)
 		return eta != INF and eta > -30.0)
 
 
-# The blow whose answer is due now: the soonest of those in reach whose eta is down to their lead, that the foe is not holding
-# back (a held charge has no time but its own: a player sees the hold and waits).
+# The blow whose answer is due now: the soonest of those in reach whose time is down to their lead, that the foe is not holding
+# back (a held charge has no time but its own: a player sees the hold and waits). With a reaction, one the bot has had time to see.
 func _due_blow() -> Dictionary:
 	var best := {}
 	var best_eta := INF
 	for blow in _blows:
 		var foe: Actor = blow["foe"]
-		var eta := _eta(blow)
-		if blow["acted"] or eta == INF or foe.runner.charging or _distance(foe) > THREAT_RANGE:
+		var eta := _estimate(blow)
+		if blow["acted"] or _distance(foe) > THREAT_RANGE:
+			continue
+		if reaction_frames > 0:
+			if frame < int(blow["known_at"]) or blow["held"] or eta < 0.0:
+				continue
+			if not blow["checked"]:
+				# the first time it can act: a dodge needs its lead, and a blow that is nearer than that is guarded, or hit
+				blow["checked"] = true
+				if COST.has(blow["answer"]) and ceili(eta - 0.01) < DODGE_LEAD_MIN:
+					blow["answer"] = Answer.GUARD if blow["perilous"] != HitProfile.Perilous.SWEEP and blow["perilous"] != HitProfile.Perilous.GRAB and not blow["low"] else Answer.NONE
+					blow["lead"] = 99
+		elif eta == INF or foe.runner.charging:
 			continue
 		if ceili(eta - 0.01) <= int(blow["lead"]) and eta < best_eta:
 			best = blow
@@ -416,7 +476,32 @@ func _foes() -> Array[Actor]:
 
 
 func _distance(foe: Actor) -> float:
-	return Vector2(foe.global_position.x - _player.global_position.x, foe.global_position.z - _player.global_position.z).length()
+	return (_seen(foe)[0] - Vector2(_player.global_position.x, _player.global_position.z)).length()
+
+
+# Notes where each foe stands and whether it is open, once a frame, for _seen.
+func _sample_foes() -> void:
+	if reaction_frames <= 0:
+		return
+	for node in get_tree().get_nodes_in_group(Actor.LOCKABLE_GROUP):
+		var foe := node as Actor
+		if foe == null or foe == _player:
+			continue
+		var list: Array = _history.get_or_add(foe.get_instance_id(), [])
+		list.append([Vector2(foe.global_position.x, foe.global_position.z), _is_open_now(foe)])
+		if list.size() > reaction_frames + reaction_jitter + 2:
+			list.pop_front()
+
+
+# [where `foe` stood, whether it was open] as the bot sees it: reaction_frames ago (as it is, with no reaction, or before it was seen).
+func _seen(foe: Actor) -> Array:
+	var here := [Vector2(foe.global_position.x, foe.global_position.z), null]
+	if reaction_frames <= 0:
+		return here
+	var list: Array = _history.get(foe.get_instance_id(), [])
+	if list.size() <= reaction_frames:
+		return list[0] if not list.is_empty() else here
+	return list[list.size() - 1 - reaction_frames]
 
 
 # The entry for the next frame: the stick on the screen (the camera's yaw taken off the world's direction), the presses and holds.
@@ -482,6 +567,9 @@ func _answer(blow: Dictionary) -> bool:
 			_tap_guard(GUARD_FRAMES)
 		_:
 			return false
+	var since: int = frame - int(blow["tell_at"])
+	fewest_reaction = since if fewest_reaction < 0 else mini(fewest_reaction, since)
+	answered.emit(since, frame)
 	return true
 
 
@@ -554,6 +642,12 @@ func _combo(foes: Array[Actor]) -> bool:
 
 # Whether `foe` is in recovery, or reeling (a reaction, but not getting up).
 func _is_open(foe: Actor) -> bool:
+	var seen: Variant = _seen(foe)[1]
+	return seen if seen is bool else _is_open_now(foe)
+
+
+# Whether `foe` is open this very frame.
+func _is_open_now(foe: Actor) -> bool:
 	var move := foe.runner.current
 	if move == null or foe.paired_with != null:
 		return false
@@ -566,7 +660,9 @@ func _is_open(foe: Actor) -> bool:
 func _blows_soon(frames: int) -> Array[Dictionary]:
 	var soon: Array[Dictionary] = []
 	for blow in _blows:
-		if not blow["acted"] and _eta(blow) <= frames and _distance(blow["foe"]) <= THREAT_RANGE:
+		if blow["acted"] or _distance(blow["foe"]) > THREAT_RANGE or (reaction_frames > 0 and frame < int(blow["known_at"])):
+			continue
+		if _estimate(blow) <= frames:
 			soon.append(blow)
 	return soon
 
@@ -601,7 +697,7 @@ func _move(foes: Array[Actor]) -> void:
 
 # The unit direction on the ground (world x, z) from the player to `foe`.
 func _toward(foe: Actor) -> Vector2:
-	var flat := Vector2(foe.global_position.x - _player.global_position.x, foe.global_position.z - _player.global_position.z)
+	var flat: Vector2 = _seen(foe)[0] - Vector2(_player.global_position.x, _player.global_position.z)
 	return flat.normalized() if not flat.is_zero_approx() else Vector2.ZERO
 
 

@@ -4,25 +4,31 @@ extends TestCase
 ## time, and that over whole seeds of the real game it finds no problem. A soft-lock it is shown is reported and its replay saved.
 
 const KNUCKLE := "res://data/actors/knuckle_1.tres"
-const REPLAYS := "res://out/replays"
 const OUTCOME := HitResult.Outcome
+
+
+# Where a failing run's recording is saved, joined at run time (out/ is not in a fresh checkout).
+func _replays() -> String:
+	return ProjectSettings.globalize_path("res://").path_join("out/replays")
 
 
 func after_each() -> void:
 	InputFeed.release()
 	for seed_number in [9001, 9002]:
 		for suffix in ["", "_counter"]:
-			DirAccess.remove_absolute("%s/seed_%d%s.tres" % [REPLAYS, seed_number, suffix])
+			DirAccess.remove_absolute("%s/seed_%d%s.tres" % [_replays(), seed_number, suffix])
 	Game.reset()
 	await frames(1)
 
 
 # Abarax (a PlayerBrain, the bot on it) and a Knuckle `gap` metres off that throws nothing by itself.
 func _duel(policy: CombatBot.Policy, gap := 1.0, seed_number := 1) -> Dictionary:
+	# The answers are tried at reaction 0 (the blow met on its exact frame); what the reaction does is tried by the tests at the end.
 	var run := Duel.make(self, [], [], gap, load(KNUCKLE) as ActorDef)
 	var a: Actor = run["a"]
 	a.set_brain(PlayerBrain.new())
 	var bot := track(CombatBot.new()) as CombatBot
+	bot.reaction_frames = 0
 	bot.begin(a, null, seed_number, policy)
 	run["bot"] = bot
 	run["got"] = []
@@ -254,7 +260,7 @@ func test_bot_reports_a_soft_lock_and_saves_its_replay() -> void:
 	assert_true(bot.problems[0].begins_with("bot: seed 9001 frame "), bot.problems[0])
 	assert_true(bot.problems[0].contains("endless_knuckle_jab"), bot.problems[0])
 	assert_eq(heard.size(), bot.problems.size(), "and it was said as it was found")
-	var path := "%s/seed_9001.tres" % REPLAYS
+	var path := "%s/seed_9001.tres" % _replays()
 	assert_true(FileAccess.file_exists(path), "the run's recording is saved to %s" % path)
 	var rec := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as InputRecording
 	assert_true(rec != null and rec.seed == 9001 and rec.frames.size() > 50, "and it is the run's")
@@ -319,6 +325,7 @@ func _drummer_fight(policy: CombatBot.Policy, seed_number: int) -> Dictionary:
 	foe.rotation.y = PI
 	arena.add_child(foe)
 	var bot := track(CombatBot.new()) as CombatBot
+	bot.reaction_frames = 0
 	bot.begin(a, null, seed_number, policy)
 	var run := {"a": a, "foe": foe, "bot": bot, "arena": arena, "got": {}}
 	a.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void:
@@ -334,3 +341,102 @@ func test_the_counter_policy_dodges_the_drummers_string_by_line_untouched() -> v
 	assert_true(run["got"].get("EVADED", 0) >= 4, "he evaded its blows: %s" % [run["got"]])
 	assert_false(run["got"].has("HIT"), "and none landed: %s" % [run["got"]])
 	(run["bot"] as CombatBot).finish()
+
+
+# --- the bot sees the fight late (reaction_frames) ---
+
+# The bot's recorded controls against a tier I Knuckle that thinks for itself, 240 frames: with reaction 0 they are what they were before
+# reaction_frames existed (the hash of the recording, taken then).
+const BEFORE_REACTION := {CombatBot.Policy.COUNTER: 1082102833, CombatBot.Policy.MIXED: 1880729488}
+
+
+func _knuckle_fight(policy: CombatBot.Policy, seed_number: int, reaction: int) -> Dictionary:
+	var arena := TestArena.make(self)
+	var a := TestArena.spawn(arena, Duel.def(ActorDef.Team.PLAYER, 5.0), PlayerBrain.new(), Vector3.ZERO, "A")
+	var foe := (load(TestArena.ACTOR) as PackedScene).instantiate() as Actor
+	foe.name = "Foe"
+	foe.def = load(KNUCKLE) as ActorDef
+	foe.position = Vector3(0, 0, 2.5)
+	foe.rotation.y = PI
+	arena.add_child(foe)
+	var bot := track(CombatBot.new()) as CombatBot
+	bot.reaction_frames = reaction
+	bot.begin(a, null, seed_number, policy)
+	return {"arena": arena, "a": a, "foe": foe, "bot": bot}
+
+
+func test_with_reaction_zero_the_bot_is_what_it_was() -> void:
+	for policy: CombatBot.Policy in BEFORE_REACTION:
+		var run := _knuckle_fight(policy, 7, 0)
+		await frames(240)
+		(run["bot"] as CombatBot).finish()
+		assert_eq((run["bot"] as CombatBot).recorder.recording().frames.hash(), BEFORE_REACTION[policy], "policy %d plays the controls it played" % policy)
+		(run["bot"] as CombatBot).free()
+		(run["arena"] as Node).free()
+		await frames(2)
+		InputFeed.release()
+
+
+func test_no_defence_is_pressed_sooner_than_the_reaction_after_the_tell_that_prompted_it() -> void:
+	# A tier I foe throws jab, cross, hook, sweep, thrust and grab in turn, thirty-eight times, at three seeds; with reaction 14 and a jitter
+	# of 3, nothing is answered sooner than 11 frames after its tell.
+	var fewest := [999]
+	var answered := [0]
+	var blows := [&"knuckle_jab", &"knuckle_cross", &"knuckle_hook", &"knuckle_sweep", &"knuckle_thrust", &"knuckle_grab"]
+	for seed_number in [1, 2, 3]:
+		var run := _knuckle_fight(CombatBot.Policy.COUNTER, seed_number, 14)
+		var bot: CombatBot = run["bot"]
+		(run["foe"] as Actor).set_brain(ScriptBrain.new([]))  # it throws only what this test starts
+		bot.answered.connect(func(since_tell: int, _at: int) -> void:
+			fewest[0] = mini(fewest[0], since_tell)
+			answered[0] += 1)
+		await frames(20)
+		for i in 13:
+			(run["foe"] as Actor).stats.refill()
+			(run["a"] as Actor).stats.refill()
+			(run["foe"] as Actor).runner.start(Registry.fetch(&"moves", blows[(i + seed_number) % blows.size()]) as MoveData, true)
+			await frames(75)
+		bot.finish()
+		(run["bot"] as CombatBot).free()
+		(run["arena"] as Node).free()
+		await frames(2)
+		InputFeed.release()
+	assert_true(answered[0] >= 12, "it answered many of the 39 blows: %d" % answered[0])
+	assert_true(fewest[0] >= 11, "the soonest defence was %d frames after its tell" % fewest[0])
+
+
+# A tier I foe holds its jab at the charge mark and lets it go: [the bot frame it was let go on, the frames the bot's defences were
+# pressed on, Abarax's HP at the end].
+func _delayed_swing(reaction: int, jitter: int) -> Array:
+	var run := _knuckle_fight(CombatBot.Policy.COUNTER, 1, reaction)
+	var foe: Actor = run["foe"]
+	var bot: CombatBot = run["bot"]
+	bot.reaction_jitter = jitter
+	var hold := EndlessMove.make(foe, &"knuckle_jab")  # for the action that holds the charge
+	foe.set_brain(ScriptBrain.new([{"frames": 40, "hold": [hold["action"]]}]))
+	var answers := []
+	bot.answered.connect(func(_since_tell: int, at: int) -> void: answers.append(at))
+	var released := [-1]
+	await frames(10)
+	foe.runner.start(Registry.fetch(&"moves", &"knuckle_jab") as MoveData, true)
+	var was_charging := false
+	for i in 100:
+		await frames(1)
+		if was_charging and not foe.runner.charging and released[0] < 0:
+			released[0] = bot.frame
+		was_charging = foe.runner.charging
+	var result := [released[0], answers, (run["a"] as Actor).stats.hp]
+	bot.finish()
+	await _end({"bot": bot, "arena": run["arena"]})
+	return result
+
+
+func test_a_delayed_swing_is_answered_no_sooner_than_the_reaction_after_its_release() -> void:
+	var late := await _delayed_swing(14, 3)
+	assert_true(late[0] > 0, "the foe held its swing and let it go")
+	for at: int in late[1]:
+		assert_true(at >= int(late[0]) + 11, "answered on frame %d, the swing was released on %d" % [at, late[0]])
+	assert_true(late[2] < 100.0, "and a swing let go a few frames from landing is not dodged on sight at reaction 14: HP %d" % late[2])
+	var quick := await _delayed_swing(4, 0)
+	assert_false(quick[1].is_empty(), "a bot with a reaction of 4 does answer it")
+	assert_true(int(quick[1][0]) >= int(quick[0]) + 4, "but not before four frames after the release: %s, released %d" % [quick[1], quick[0]])
