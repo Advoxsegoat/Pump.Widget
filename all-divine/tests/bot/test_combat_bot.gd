@@ -15,7 +15,7 @@ func _replays() -> String:
 func after_each() -> void:
 	InputFeed.release()
 	for seed_number in [9001, 9002]:
-		for suffix in ["", "_counter"]:
+		for suffix in ["", "_counter", "_finding"]:
 			DirAccess.remove_absolute("%s/seed_%d%s.tres" % [_replays(), seed_number, suffix])
 	Game.reset()
 	await frames(1)
@@ -440,3 +440,23 @@ func test_a_delayed_swing_is_answered_no_sooner_than_the_reaction_after_its_rele
 	var quick := await _delayed_swing(4, 0)
 	assert_false(quick[1].is_empty(), "a bot with a reaction of 4 does answer it")
 	assert_true(int(quick[1][0]) >= int(quick[0]) + 4, "but not before four frames after the release: %s, released %d" % [quick[1], quick[0]])
+
+
+func test_a_wave_the_player_dies_in_five_times_is_a_finding_not_a_problem_and_its_replay_is_saved() -> void:
+	var game := BotWorld.make(self, 9002)
+	var bot := track(CombatBot.new()) as CombatBot
+	bot.begin(game.player, game.arena(), 9002)
+	assert_true(bot.watch.bounds.size.x < 30.0, "the bot took the arena's bounds: %s" % [bot.watch.bounds])
+	bot.watch.deaths_limit = 1  # five deaths cost a minute of fights; the rule is the watch's, tried in its own test
+	await frames(5)
+	game.player.stats.hp = 0.0
+	game.player.die()
+	await frames(5)
+	bot.finish()
+	assert_eq(bot.problems, PackedStringArray(), "a death is not a failure")
+	assert_eq(bot.findings.size(), 1, "but a wave that could not be cleared is a finding: %s" % [bot.findings])
+	assert_true(FileAccess.file_exists("%s/seed_9002_finding.tres" % _replays()), "with its replay")
+	bot.queue_free()
+	game.queue_free()
+	await frames(2)
+	InputFeed.release()

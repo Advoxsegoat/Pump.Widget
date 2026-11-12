@@ -12,6 +12,9 @@ extends RefCounted
 
 ## The ground the fight is in, as a rect of the ground plane (x, z): the yard's 25 m inside its walls, and a half metre.
 var bounds := Rect2(-13.0, -13.0, 26.0, 26.0)
+## How many deaths in one wave, with none of it cleared between, make a finding (not a failure: a wave a policy cannot beat is
+## something to know, and its replay to look at).
+var deaths_limit := 5
 ## An actor below this is through the floor.
 var floor_y := -5.0
 ## A move may last its clip and this many frames more.
@@ -31,6 +34,7 @@ var _last_position := Vector3.INF  # the player's, last frame
 var _idle := 0  # frames the player has done nothing
 var _started_this_frame := false  # the player started a move since the last check
 var _watched := {}  # actor id -> true, the actors whose runner it listens to
+var _deaths := {}  # wave index -> deaths in it since it was last cleared
 var _progress_at := -1  # the frame a wave last started or was cleared; -1 until the bot says there are waves
 
 
@@ -128,3 +132,38 @@ func _check_player(_frame: int, player: Actor, found: PackedStringArray) -> void
 	_started_this_frame = false
 	if _idle > stuck_frames:
 		_say("player", "the player has done nothing for %d frames (%d s) while alive" % [_idle, _idle / 60], found)
+
+
+## The player died in wave `wave`. Returns a line when this is the death that makes a finding (the deaths_limit-th in the wave since
+## it was last cleared), once; "" otherwise.
+func note_death(wave: int) -> String:
+	_deaths[wave] = int(_deaths.get(wave, 0)) + 1
+	if int(_deaths[wave]) != deaths_limit:
+		return ""
+	var words := ["no", "one", "two", "three", "four", "five"]
+	return "wave %d was not cleared in %s deaths" % [wave, words[deaths_limit] if deaths_limit < words.size() else str(deaths_limit)]
+
+
+## Wave `wave` was cleared: its deaths are counted afresh.
+func note_cleared(wave: int) -> void:
+	_deaths.erase(wave)
+
+
+## The walkable ground of `arena` as a rect of the ground plane (x, z), found where the walls are: rays along the four directions from
+## its spawn, at the height of a kerb's foot, against the world layer, and a half metre beyond what they meet. Where one meets nothing
+## the rect runs 100 m that way. The arena must be in the tree, with a physics frame lived.
+static func bounds_of(arena: Node3D) -> Rect2:
+	var space := arena.get_world_3d().direct_space_state
+	var from := arena.global_position
+	if arena is Region:
+		from = (arena as Region).spawn().origin
+	from.y += 0.15
+	var reach := {}
+	for dir: Vector2 in [Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]:
+		var to := from + Vector3(dir.x, 0.0, dir.y) * 100.0
+		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, to, Layers.WORLD))
+		var far: Vector3 = hit["position"] if not hit.is_empty() else to
+		reach[dir] = Vector2(far.x, far.z)
+	var margin := 0.5
+	return Rect2(Vector2(reach[Vector2.LEFT].x - margin, reach[Vector2.UP].y - margin),
+			Vector2(reach[Vector2.RIGHT].x - reach[Vector2.LEFT].x + 2.0 * margin, reach[Vector2.DOWN].y - reach[Vector2.UP].y + 2.0 * margin))

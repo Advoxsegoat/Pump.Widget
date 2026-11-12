@@ -74,6 +74,8 @@ const MASH_REACH := 2.0
 
 ## A problem was found: the whole line.
 signal problem_found(line: String)
+## Something to know that is not a failure was found: the whole line.
+signal finding_found(line: String)
 ## A defence was pressed: how many frames after the tell that prompted it, and on which frame of the bot's.
 signal answered(since_tell: int, at_frame: int)
 
@@ -91,6 +93,8 @@ var fewest_reaction := -1
 var frame := 0
 ## Every problem found, as lines "bot: seed S frame F: ...".
 var problems := PackedStringArray()
+## Findings: what the run met that is worth knowing and is not a failure (a wave it could not clear), as lines like the problems'.
+var findings := PackedStringArray()
 ## What the player did over the run: HP taken off foes and off him, the chain's highest tempo (a DodgeChain.Tempo), waves cleared, deaths.
 var damage_dealt := 0.0
 var damage_taken := 0.0
@@ -155,7 +159,10 @@ func begin(player: Actor, arena: Arena, seed_value: int, how: Policy = Policy.MI
 	player.got_hit.connect(_on_got_hit)
 	player.died.connect(func() -> void:
 		deaths += 1
-		_row(_last_attacker)["deaths"] += 1)
+		_row(_last_attacker)["deaths"] += 1
+		var finding := watch.note_death(arena.wave if arena != null else -1)
+		if not finding.is_empty():
+			_find(finding))
 	if player.chain != null:
 		player.chain.changed.connect(func(_count: int, tempo: DodgeChain.Tempo) -> void:
 			highest_tempo = maxi(highest_tempo, tempo)
@@ -163,8 +170,10 @@ func begin(player: Actor, arena: Arena, seed_value: int, how: Policy = Policy.MI
 			row["tempo"] = maxi(row["tempo"], tempo))
 	if arena != null:
 		arena.wave_started.connect(func(_i: int) -> void: watch.note_progress(frame))
+		watch.bounds = BotWatch.bounds_of(arena) if arena.is_inside_tree() else watch.bounds
 		arena.wave_cleared.connect(func(i: int) -> void:
 			waves_cleared += 1
+			watch.note_cleared(i)
 			var seen := {}
 			for def in _arena.waves[i].defs:
 				if not seen.has(def.id):
@@ -187,9 +196,9 @@ func finish() -> void:
 
 
 ## Where this run's recording is saved.
-func replay_path() -> String:
+func replay_path(kind := "") -> String:
 	var suffix := "" if policy == Policy.MIXED else "_%s" % POLICIES.find_key(policy)
-	return "%s/seed_%d%s.tres" % [replay_dir, rng_seed, suffix]
+	return "%s/seed_%d%s%s.tres" % [replay_dir, rng_seed, suffix, "_%s" % kind if not kind.is_empty() else ""]
 
 
 ## Saves the recording so far to replay_path(); returns what saving gave.
@@ -259,6 +268,14 @@ func _take_in_errors() -> void:
 	while _heard < heard.size():
 		_report("engine: " + heard[_heard])
 		_heard += 1
+
+
+func _find(text: String) -> void:
+	var line := "bot: seed %d frame %d: finding: %s" % [rng_seed, frame, text]
+	findings.append(line)
+	finding_found.emit(line)
+	if recorder != null:
+		recorder.save(replay_path("finding"))
 
 
 func _report(text: String) -> void:

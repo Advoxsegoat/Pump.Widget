@@ -120,3 +120,28 @@ func test_no_wave_progress_for_ninety_seconds_is_a_soft_lock() -> void:
 	assert_true(String(out[0]).contains("wave"), str(out))
 	watch.note_progress(6000)
 	assert_true(watch.check(6100, a, [a]).is_empty(), "progress starts the count again")
+
+
+func test_a_wave_not_cleared_in_five_deaths_is_a_finding_and_a_clear_starts_the_count_again() -> void:
+	var watch := BotWatch.new()
+	for i in 4:
+		assert_eq(watch.note_death(3), "", "death %d in wave 3 is only a death" % (i + 1))
+	var finding := watch.note_death(3)
+	assert_true(finding.contains("wave 3") and finding.contains("five deaths"), "the fifth is a finding: %s" % finding)
+	assert_eq(watch.note_death(3), "", "and it is said once")
+	assert_eq(watch.note_death(4), "", "another wave counts for itself")
+	watch.note_cleared(4)
+	for i in 3:
+		watch.note_death(4)
+	assert_eq(watch.note_death(4), "", "a wave cleared in between starts its count again: four deaths since is not five")
+	assert_true(watch.note_death(4).contains("five deaths"), "and the fifth since is a finding")
+
+
+func test_the_bounds_are_the_walkable_ground_of_the_arena() -> void:
+	var yard := track((load("res://world/training_yard/training_yard.tscn") as PackedScene).instantiate()) as Node3D
+	await frames(2)
+	var bounds := BotWatch.bounds_of(yard)
+	assert_true(bounds.position.x < -12.0 and bounds.position.x > -14.0, "the west wall: %s" % [bounds])
+	assert_true(bounds.end.x > 12.0 and bounds.end.x < 14.0, "the east wall: %s" % [bounds])
+	assert_true(bounds.position.y < -12.0 and bounds.position.y > -14.0, "the north wall: %s" % [bounds])
+	assert_true(bounds.end.y > 12.0 and bounds.end.y < 14.0, "the south kerb, a low one the ray still finds: %s" % [bounds])

@@ -77,6 +77,8 @@ func run(host: Node, args: PackedStringArray) -> int:
 			if asked["detail"]:
 				for line in result["foes"]:
 					print("  " + line)
+			for line in result["findings"]:
+				print(line + " (its recording is saved to %s)" % result["finding_replay"])
 			for line in result["problems"]:
 				printerr(line)
 			if not (result["problems"] as PackedStringArray).is_empty():
@@ -98,7 +100,7 @@ func _play(host: Node, seed_number: int, policy: CombatBot.Policy, frames: int, 
 	while bot.frame < frames:
 		await tree.physics_frame
 	bot.finish()
-	var result := {"summary": bot.summary(), "problems": bot.problems, "replay": bot.replay_path(), "foes": bot.foe_lines()}
+	var result := {"summary": bot.summary(), "problems": bot.problems, "replay": bot.replay_path(), "finding_replay": bot.replay_path("finding"), "foes": bot.foe_lines(), "findings": bot.findings}
 	bot.queue_free()
 	game.queue_free()
 	await tree.physics_frame
