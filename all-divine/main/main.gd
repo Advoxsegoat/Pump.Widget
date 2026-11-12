@@ -9,7 +9,7 @@ extends Node
 ## puts on the look (data/render/default_settings.tres) in the region's grade; and the Arena, if the region is one, begins
 ## its first wave with him as its target.
 ##
-## F1 (a pad's Select) shows or hides the controls list; F3 shows or hides the debug overlay; F4 turns the screen look off
+## F1 (a pad's Select) shows or hides the controls list; F2 enters the Bilibara stretch; F3 shows or hides the debug overlay; F4 turns the screen look off
 ## and on; F5 switches the region; F6, F7 and F8 spawn a tier I, II or III Knuckle and F9 resets the fight (the Arena's
 ## debug keys, which Main passes on); F11 or Alt+Enter switches between
 ## borderless fullscreen, where the game starts, and a 1280x720 window (WindowToggle); the menu button (Esc,
@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS := preload("res://data/render/default_settings.tres")
 const SELFTEST_FRAMES := 600
 const YARD := "res://world/training_yard/training_yard.tscn"
 const COURTYARD := "res://world/courtyard/courtyard.tscn"
+const BILIBARA := "res://world/bilibara/bilibara.tscn"
 ## How far Abarax walks toward the Knuckle in the self-test before he waits for it, and the stick's push.
 const SELFTEST_APPROACH := 2.0
 const SELFTEST_WALK_PUSH := 0.6
@@ -105,6 +106,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				_apply_look()
 				get_viewport().set_input_as_handled()
 				return
+			KEY_F2:
+				enter_stretch()
+				get_viewport().set_input_as_handled()
+				return
 			KEY_F5:
 				if Game.state == Game.State.PAUSE:
 					return  # the debug keys are for the fight, not the menu
@@ -147,7 +152,11 @@ func arena() -> Arena:
 ## put at its spawn (standing, with full bars, if he was dead), the camera snaps to him, the look takes its grade, and an
 ## arena begins its first wave. The old region, and any foes in it, are freed.
 func switch_region() -> void:
-	var to := COURTYARD if region.scene_file_path == YARD else YARD
+	_go_to(COURTYARD if region.scene_file_path == YARD else YARD)
+
+
+# Replaces the region with the scene `to` (switch_region says what it does).
+func _go_to(to: String) -> void:
 	var old := region
 	if old is Arena:
 		(old as Arena).clear_foes()  # ends what holds them (pairs, the lock) before they go with the region
@@ -167,6 +176,12 @@ func switch_region() -> void:
 	camera_rig.snap_now()
 	_apply_look()
 	_enter_region()
+
+
+## Enters the Bilibara stretch (F2, the debug key): what switch_region does, with that scene. It is a plain region, so no
+## arena runs and the Hud follows none.
+func enter_stretch() -> void:
+	_go_to(BILIBARA)
 
 
 ## Starts the self-test's circuit: Abarax fights the tier I Knuckle the arena sends, through selftest_circuit, and the
