@@ -82,7 +82,7 @@ func test_the_hud_in_a_fight_shot() -> void:
 	Game.reset()
 	Arena.reset_spawn_counts()
 	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
-	main.arena().start_wave(3)  # a tier II and a tier I
+	main.arena().start_wave(4)  # a tier II and a tier I
 	var foes := main.arena().enemies()
 	for foe in foes:
 		foe.set_brain(Brain.new())

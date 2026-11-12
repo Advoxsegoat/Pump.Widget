@@ -20,6 +20,8 @@ var max_radius := 1.0
 var seconds := 0.4
 ## Whether it faces the camera instead of lying down.
 var billboard := false
+## The radius it starts at: 0 for a wave that spreads from a point, or a ring that is already there and goes outward.
+var start_radius := 0.0
 
 var _age := 0.0
 var _mesh: MeshInstance3D
@@ -28,8 +30,10 @@ var _material: ShaderMaterial
 
 ## A wave of `radius` metres over `seconds`, in `color`, with a ring `ring_width` thick and a disc of `fill_alpha` inside;
 ## `billboard` stands it facing the camera.
-static func make(radius: float, seconds_: float, color: Color, ring_width: float, fill_alpha: float, face_camera := false) -> GroundWave:
+## `from_radius` is where it starts (default: from nothing).
+static func make(radius: float, seconds_: float, color: Color, ring_width: float, fill_alpha: float, face_camera := false, from_radius := 0.0) -> GroundWave:
 	var wave := GroundWave.new()
+	wave.start_radius = from_radius
 	wave.max_radius = radius
 	wave.seconds = seconds_
 	wave.billboard = face_camera
@@ -41,7 +45,7 @@ static func make(radius: float, seconds_: float, color: Color, ring_width: float
 
 ## The ring's radius now, in metres.
 func radius() -> float:
-	return max_radius * _grown()
+	return lerpf(start_radius, max_radius, _grown())
 
 
 ## How much of the ring shows now: all of it for the first FADE_FROM of its time, so that it reads as it spreads, then less

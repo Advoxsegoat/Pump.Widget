@@ -30,10 +30,13 @@ const STEPPED_CLEARANCE := 0.06
 ##          0.131 m off the line at the closest
 ##   getup  it starts lying on his back, and played from idle, as here, the scarf whips into that pose and is 0.127 m
 ##          off for a few frames (in play it comes from the finisher victim's lying pose, where it lies already)
+##   blade_lunge  the thrust's Sword_Dash with a sword's reach: Abarax's scarf, played in the stepped clip, comes within 0.053 m
+##          of the line at its closest (knuckle_thrust's, the same motion, is clear of the stepped floor)
 const CLIP_CLEARANCE := {
 	&"hop": 0.10,
 	&"counter_hook": 0.126,
 	&"getup": 0.122,
+	&"blade_lunge": 0.048,
 }
 const TORSO: Array[StringName] = [&"pelvis", &"spine_01", &"spine_02", &"spine_03", &"neck_01"]
 const JOINTS: Array[StringName] = [&"scarf_02", &"scarf_03", &"scarf_04"]
@@ -214,11 +217,11 @@ func test_scarf_stays_out_of_the_torso_in_every_clip() -> void:
 
 
 # The names of the rig's clips (the actor's library).
-# The Knuckle's own clips (knuckle_*) are left out: only the Knuckle plays them, and it has no scarf. (The clips it
+# The Knuckle's own clips (knuckle_*, the Drummer's drum_* and the heavy Knuckle's heavy_*) are left out: only a Knuckle plays them, and it has no scarf. (The clips it
 # plays Abarax in, as a grab's `grabbed`, are his, and stay in.)
 func _clip_names() -> PackedStringArray:
 	var r: Rig = track(load(RIG).instantiate())
-	var names := PackedStringArray(Array(r.tree.get_animation_list()).filter(func(c: StringName) -> bool: return not String(c).begins_with("knuckle_")))
+	var names := PackedStringArray(Array(r.tree.get_animation_list()).filter(func(c: StringName) -> bool: return not String(c).begins_with("knuckle_") and not String(c).begins_with("drum_") and not String(c).begins_with("heavy_")))
 	r.free()
 	return names
 

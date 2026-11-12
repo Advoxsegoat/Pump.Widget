@@ -12,6 +12,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import gltf_inspect  # noqa: E402
 
@@ -25,7 +27,7 @@ ABARAX_GLB = ROOT / "assets" / "characters" / "abarax" / "abarax.glb"
 KNUCKLE_GLB = ROOT / "assets" / "characters" / "knuckle" / "knuckle.glb"
 
 # The slot table (tools/anim/build_knuckle.py): which slots each mesh may carry, and those it must.
-SKIN, HAIR, EYES, MAIN, SEC, PANTS, BOOTS, HOOD, METAL = range(9)
+SKIN, HAIR, EYES, MAIN, SEC, PANTS, BOOTS, HOOD, METAL, STEEL = range(10)
 SLOTS_BY_MESH = {
     "Knuckle_Head": {SKIN, HAIR, EYES},
     "Knuckle_Hair": {HAIR},
@@ -36,6 +38,7 @@ SLOTS_BY_MESH = {
     "Knuckle_Boots": {BOOTS, METAL},
     "Knuckle_Hood": {HOOD, SEC},
     "Knuckle_Pauldron": {METAL, SEC},
+    "Knuckle_Blade": {SEC, METAL, STEEL},
 }
 MUST_HAVE = {
     "Knuckle_Head": {SKIN, HAIR, EYES},
@@ -47,6 +50,7 @@ MUST_HAVE = {
     "Knuckle_Boots": {BOOTS},
     "Knuckle_Hood": {HOOD},
     "Knuckle_Pauldron": {METAL},
+    "Knuckle_Blade": {STEEL},
 }
 
 
@@ -90,7 +94,7 @@ class BuildKnuckle(unittest.TestCase):
             slots = gltf_inspect.uv2_slots(self.j, self.path, mesh=mesh)
             self.assertTrue(slots <= allowed, f"{mesh}: {sorted(slots)} not within {sorted(allowed)}")
             self.assertTrue(MUST_HAVE[mesh] <= slots, f"{mesh}: {sorted(slots)} lacks {sorted(MUST_HAVE[mesh] - slots)}")
-        self.assertEqual(gltf_inspect.uv2_slots(self.j, self.path), set(range(9)), "all nine slots are used")
+        self.assertEqual(gltf_inspect.uv2_slots(self.j, self.path), set(range(10)), "all ten slots are used")
         names = gltf_inspect.joint_names(self.j)
         self.assertEqual(len(names), 65, "no scarf: the 65 joints of the base")
         self.assertEqual(set(names), set(BASE))
@@ -103,6 +107,31 @@ class BuildKnuckle(unittest.TestCase):
         for name in BASE:
             self.assertLess(math.dist(abarax[name], knuckle[name]), 1e-4, f"{name} stands where Abarax's does")
             self.assertEqual(parents_k[name], parents_a[name], f"{name}'s parent")
+
+    def test_the_blade_is_one_rigid_part_on_the_right_hand(self):
+        # A straight blade 0.75 m from its guard to its tip, skinned to hand_r alone (so it follows every clip as the
+        # hand does), lying along the hand's own thumb axis (its z) from the guard on, with the grip in the fist.
+        buffers = gltf_inspect._buffers(self.j, self.path)
+        index = next(i for i, m in enumerate(self.j["meshes"]) if m["name"] == "Knuckle_Blade")
+        node = next(n for n in self.j["nodes"] if n.get("mesh") == index)
+        joints = self.j["skins"][node["skin"]]["joints"]
+        hand = next(i for i, n in enumerate(joints) if self.j["nodes"][n]["name"] == "hand_r")
+        points = []
+        for primitive in self.j["meshes"][index]["primitives"]:
+            attrs = primitive["attributes"]
+            points += [tuple(p) for p in gltf_inspect._read_accessor(self.j, buffers, attrs["POSITION"])]
+            for ids, weights in zip(gltf_inspect._read_accessor(self.j, buffers, attrs["JOINTS_0"]),
+                                    gltf_inspect._read_accessor(self.j, buffers, attrs["WEIGHTS_0"])):
+                self.assertEqual({int(i) for i, w in zip(ids, weights) if w > 1e-4}, {hand}, "every vertex is the hand's alone")
+        to_hand = np.linalg.inv(np.array(gltf_inspect.joint_world_matrices(self.j)["hand_r"]))
+        local = (to_hand @ np.array([[*p, 1.0] for p in points]).T).T[:, :3]
+        blade = local[local[:, 2] > 0.052 + 1e-4]  # the vertices past the guard's face: the blade
+        length = float(blade[:, 2].max()) - 0.052
+        self.assertAlmostEqual(length, 0.75, delta=0.005, msg="0.75 m from the guard to the tip")
+        self.assertLess(float(np.ptp(blade[:, 0])), 0.03, "a flat blade: its thickness is small")
+        self.assertTrue(0.095 <= float(np.ptp(blade[:, 1])) <= 0.115, "and a cleaver's breadth, about 10 cm, wide")
+        self.assertTrue(float(local[:, 2].min()) < -0.05, "the grip and pommel lie behind the guard, in the fist")
+        self.assertLess(len(points) // 3, 200, "a small mesh: the whole model stays within its budget")
 
     def test_no_textures_one_material_and_skinned(self):
         self.assertEqual(self.j.get("images", []), [])

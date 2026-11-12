@@ -21,6 +21,12 @@ enum Team { PLAYER, ENEMY }
 ## its paired moves stand their follower off (Pairing.offset_of). A tier III Knuckle is 1.04. Its look_height is set to
 ## match. The body's capsule (actor.tscn, 0.35 m in radius) does not scale: at 1.04 it is 1.4 cm narrower than the body.
 @export_range(0.5, 1.5) var model_scale := 1.0
+## How much further off its root than the model's own its body hangs for the paired moves it follows (a finisher on it): the lead
+## closes in by this, so his blows reach it (Pairing.offset_of). 1 for every body but the heavy Knuckle's.
+@export_range(0.5, 1.5) var pair_reach := 1.0
+## Whether the foot planter keeps its toes out of the floor as well as its ankles (FootPlanter.keep_toes_up): a body larger than the
+## model's, whose stride pitches the foot toes-down further.
+@export var keep_toes_up := false
 ## Input action -> move id, for the moves the actor starts from rest. Moves reached by cancelling into
 ## them are named by their clips' cancel_open marks instead.
 @export var moveset: Dictionary = {}
@@ -55,5 +61,8 @@ enum Team { PLAYER, ENEMY }
 @export var surface_sound := &"surface_cloth"
 ## The sound cue of its voice when a blow lands on it; none is silent.
 @export var hurt_voice := &""
+## The clips his locomotion plays in place of the rig's own idle, walk, jog and sprint: base clip name -> clip name (the blade
+## Knuckle carries his sword in `blade_idle` and the rest). Empty: the rig's own, as every other actor has them. Rig.set_locomotion_clips.
+@export var locomotion_clips: Dictionary = {}
 ## Clips the rig must have, and that must not leave the bind pose showing (see ClipChecker).
 @export var required_clips := PackedStringArray(["idle", "walk", "jog", "sprint"])
