@@ -33,6 +33,7 @@ func _shot(framing: Shot.Framing, aim: StringName, height: float, zoom := 0) -> 
 	shot.aim_height = height
 	shot.zoom = zoom
 	shot.length = 60
+	shot.lines.append(DialogueLine.new())  # a shot that holds a line is framed in the free band
 	return shot
 
 
@@ -70,7 +71,7 @@ func _world() -> Callable:
 
 
 func _frame_with(shot: Shot, speaker_id: StringName, text: String, expr: StringName) -> void:
-	main.camera_rig.cine = CinePose.solve(shot, 0.0, _world())
+	main.camera_rig.cine = CinePose.solve(shot, 0.0, _world(), null, true)
 	main.camera_rig.cine_weight = 1.0
 	overlay.letterbox = 1.0
 	overlay.show_line(Registry.fetch(&"speakers", speaker_id) as Speaker, text, expr, 600)
@@ -104,6 +105,11 @@ func test_each_framing_is_drawn_with_the_bars_the_box_the_portrait_and_the_text(
 	var ots := _shot(Shot.Framing.OVER_SHOULDER, &"abarax", 1.5)
 	ots.over_shoulder = &"knuckle"
 	shots["over_the_shoulder"] = [ots, &"abarax", "A longer line, to see two rows of text at this size: the fixture's lines are short.", &"surprise"]
+	# The close shot from four sides (the storyboard's yaw): for a person facing north, 180 shows his face.
+	for yaw in [0, 45, 90, 180]:
+		var turned := _shot(Shot.Framing.CLOSE, &"abarax", 1.5)
+		turned.yaw_deg = yaw
+		shots["close_yaw_%d" % yaw] = [turned, &"abarax", "Fixture line two.", &"smile"]
 	for key in shots:
 		var entry: Array = shots[key]
 		overlay.close()
