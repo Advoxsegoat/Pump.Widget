@@ -775,3 +775,65 @@ func test_nothing_gets_over_a_low_wall_or_the_gate() -> void:
 				follower.queue_free()
 				await frames(1)
 	assert_eq(crossed, PackedStringArray(), "no pairing carries a body across the gate or up on it")
+
+
+# --- The backdrop and the sight line (Task 3) ---
+
+# What a body can be hidden by, as boxes in world space ({box, name}): every mesh of the region that is not the walkable ground (a
+# plate's top is at y = 0, under any head), with a kit run taken at KitRun.bounds() (a MultiMesh's own box is zero headless).
+func _occluders(region: Region) -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	var walkable := region.get_node_or_null("Walkable")
+	for node: Node3D in region.find_children("*", "Node3D", true, false):
+		if walkable != null and walkable.is_ancestor_of(node):
+			continue
+		var box := AABB()
+		if node is KitRun:
+			box = (node as KitRun).bounds()
+		elif node is MeshInstance3D and (node as MeshInstance3D).mesh != null and not String(node.name).begins_with("Water"):
+			box = node.global_transform * (node as MeshInstance3D).get_aabb()
+		else:
+			continue
+		if box.size == Vector3.ZERO or String(node.name).begins_with("Ground"):
+			continue
+		found.append({box = box, name = String(region.get_path_to(node))})
+	return found
+
+
+func test_nothing_stands_between_the_camera_and_a_body_anywhere_it_can_stand() -> void:   # Review Focus 1
+	var region := _region()
+	if region == null:
+		return
+	var fill := await _fill(region)
+	var reached: Dictionary = fill.reached
+	var occluders := _occluders(region)
+	assert_true(occluders.size() > 40, "there are meshes to look through (%d)" % occluders.size())
+	# The camera is DISTANCE from what it looks at, along its pitch: up and south of the cell. The segment is the brief's, from the
+	# head (2 m up) to the camera; a second, along the view's own direction from the head (the true line of an orthographic camera,
+	# which is steeper), is held too.
+	var pitch := deg_to_rad(-CameraRig.PITCH_DEG)
+	var to_camera := Vector3(0.0, CameraRig.DISTANCE * sin(pitch), CameraRig.DISTANCE * cos(pitch))
+	var hits := {}  # mesh -> the first cell it hides a body at
+	var tested := 0
+	for cell: Vector2i in reached.keys():
+		var at := _middle(cell)
+		for dx: float in [-0.35, 0.0, 0.35]:
+			var base := Vector3(at.x + dx, 0.0, at.y)
+			var head := base + Vector3(0.0, 2.0, 0.0)
+			var ends: Array[Vector3] = [base + to_camera, head + to_camera]
+			for entry in occluders:
+				var box: AABB = entry.box
+				if box.size.x < 0.8 or box.position.x > base.x or box.end.x < base.x or box.end.z < at.y:
+					continue
+				tested += 1
+				for end in ends:
+					if box.intersects_segment(head, end):
+						if not hits.has(entry.name):
+							hits[entry.name] = "cell %s (x offset %.2f)" % [at, dx]
+						break
+	assert_true(tested > 0, "the test looked at something (%d box checks)" % tested)
+	var shown := PackedStringArray()
+	for mesh_name: String in hits:
+		if shown.size() < 8:
+			shown.append("%s hides a body at %s" % [mesh_name, hits[mesh_name]])
+	assert_eq(shown, PackedStringArray(), "nothing stands between the camera and a body (%d meshes do)" % hits.size())
