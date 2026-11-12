@@ -12,12 +12,12 @@
 # and sun; the dressing (Task 3), the backdrop (Task 3) and the light (Task 4) come after, so it is bare.
 #
 # The camera looks north from the south, so a tall thing south of a body hides it: every edge that faces south is a kerb
-# (0.3 m, slate), a low wall (1.25 m) or the gate (1.2 m); the tall masses stand north of the ground they close, or at
+# (0.3 m, slate), a low wall (0.6 m) or the gate (a 0.6 m board in an open frame); the tall masses stand north of the ground they close, or at
 # least 9 m south of any other.
 #
 # One character is 5 m, the left column starts at x = -45 and a row is labelled with its north edge (the camera looks up the
 # page). A = court A (slate), s = Rue Caillou (cobble), l = the Tanneries lane, R = the Rack Walk, o = the loop lane (tan
-# earth), B = alcove B (slate), Y = the Tanneries yard (tan earth), # = a tall mass, w = a low wall (1.25 m), . = nothing to
+# earth), B = alcove B (slate), Y = the Tanneries yard (tan earth), # = a tall mass, w = a low wall (0.6 m), . = nothing to
 # walk on. The kerbs (south of the street, the Rack Walk, the alcove and the yard), the gate (south end of the loop lane,
 # between court A and the street's north row) and the pillar posts are too thin to show.
 #
@@ -41,7 +41,7 @@
 #
 # Where the plan's table and the builder part (listed in the Task 2 report): T6 is two blocks (the builder's
 # longest block is 60 m, T6 is 65); T7b stops at the alcove (its north end is T7's, and two blocks may not overlap); the low
-# walls are 1.25 m boxes of slate (`curb`), which the builder gives a footprint as wide as the table's, where a row of
+# walls are 0.6 m boxes of slate (`curb`), which the builder gives a footprint as wide as the table's, where a row of
 # wall-half pieces would be 1 m deep.
 
 kit bilibara
@@ -97,12 +97,12 @@ block 12.5 -80 42.5 -75 3 plain flat solid
 block 12.5 -75 15 -55 2 plain flat solid
 block 40 -75 42.5 -55 2 plain flat solid
 
-# --- The low walls (1.25 m), where a flank stands south of other ground ---
-curb 22.5 -55 25 -45 1.25 slate
-curb 30 -55 32.5 -45 1.25 slate
-curb 30 -30 32.5 -20 1.25 slate
-curb 22.5 -20 25 -10 1.25 slate
-curb -30 -20 -27.5 -10 1.25 slate
+# --- The low walls (0.6 m: a body against one is hidden only below about 0.3 m), where a flank stands south of other ground ---
+curb 22.5 -55 25 -45 0.6 slate name=LowWall1
+curb 30 -55 32.5 -45 0.6 slate name=LowWall2
+curb 30 -30 32.5 -20 0.6 slate name=LowWall3
+curb 22.5 -20 25 -10 0.6 slate name=LowWall4
+curb -30 -20 -27.5 -10 0.6 slate name=LowWall5
 
 # --- The kerbs (0.3 m, slate, 0.4 m thick, south of the edge): the street and court, the Rack Walk, the alcove, the yard ---
 curb -40 5 32.5 5.4 0.3 slate
@@ -111,9 +111,12 @@ curb 32.5 -30 37.5 -29.6 0.3 slate
 curb 15 -55 22.5 -54.6 0.3 slate
 curb 32.5 -55 40 -54.6 0.3 slate
 
-# --- The gate: the shortcut, shut. A 1.2 m box in the slot between the Lazyman's back and the street's row, on world and
+# --- The gate: the shortcut, shut. A 0.6 m board in the slot between the Lazyman's back and the street's row, on world and
 # ik_surface (a curb is both); Task 3 dresses it. A pillar post at each of its ends and at the yard's mouth. ---
-curb -35 -5.5 -30 -4.5 1.2 slate
+curb -35 -5.5 -30 -4.5 0.6 slate name=Gate
+# The rail across the tops of the posts: 0.1 m thick, its underside 2.4 m up, above any head (it hides nothing of a body). Task 3 dresses
+# the gate; the board and the rail are what a gate is until then.
+curb -35.125 -5.15 -29.875 -5.05 0.12 slate name=GateRail y=2.4
 piece pillar-stone 24.875 -55.125
 piece pillar-stone 30.125 -55.125
 piece pillar-stone -35.125 -5.1

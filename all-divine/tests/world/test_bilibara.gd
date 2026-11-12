@@ -536,7 +536,8 @@ func test_every_south_edge_is_a_kerb_a_low_wall_or_the_gate() -> void:
 			continue
 		var at := _middle(cell)
 		# A cell whose south neighbour is walled by the SIDE of a wall (a flank beside an open lane) has nothing straight south
-		# of it within the capsule's reach: it is not a south edge, and the east and west flanks are the shoves' business.
+		# of it within the capsule's reach: the ray cannot judge it, and test_nothing_tall_touches_walkable_ground_on_its_south_side
+		# does, over every solid of the scene.
 		var near := space.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(at.x, 0.15, at.y), Vector3(at.x, 0.15, at.y + CELL + BODY), Layers.WORLD))
 		if near.is_empty():
 			continue
@@ -547,11 +548,11 @@ func test_every_south_edge_is_a_kerb_a_low_wall_or_the_gate() -> void:
 			tall.append("%s: %s" % [at, (chest["collider"] as Node).get_path()])
 		# Shin height: the kerb, a low wall, the gate (or a post): something low, and no other.
 		var shin := space.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(at.x, 0.15, at.y), Vector3(at.x, 0.15, at.y + 6.0), Layers.WORLD))
-		if shin.is_empty() or (not _low_or_post(shin["collider"] as StaticBody3D, 1.3, true) and not_low.size() < 5):
+		if shin.is_empty() or (not _low_or_post(shin["collider"] as StaticBody3D, 0.65, true) and not String((shin["collider"] as Node).name).begins_with("Vat") and not_low.size() < 5):
 			not_low.append("%s: %s" % [at, shin.get("collider")])
 	assert_true(south_edges > 100, "there are south edges to look at (%d cells)" % south_edges)
 	assert_eq(tall, PackedStringArray(), "at chest height nothing taller than 1.3 m stands south of a south edge")
-	assert_eq(not_low, PackedStringArray(), "at shin height every south edge is a kerb, a low wall or the gate")
+	assert_eq(not_low, PackedStringArray(), "at shin height every south edge is a kerb, a low wall (0.6 m), the gate's board, a post or a vat")
 
 
 # Whether `body`'s collision boxes are all no higher than `most` (a kerb, a low wall, the gate), or, with `post_ok`, it is a post:
@@ -619,3 +620,50 @@ func test_the_kerbs_alone_hold_a_dash_step_a_lunge_and_a_shove() -> void:
 		assert_true(up < 0.05, "%s: and the body does not ride up it (y %.3f)" % [place.name, up])
 		knuckle.queue_free()
 		await frames(1)
+
+
+# The camera looks north from the south, so whatever stands on the south side of walkable ground hides a fighter's legs, and the
+# higher it is the more: a wall h high hides everything below h - 0.84 d of a body whose centre is d north of it. Nothing that
+# touches walkable ground on its south side is higher than 0.65 m (a fighter's shins), bar a post narrower than 0.8 m and the two
+# vats. (A solid with ground just north of its north face is what "touches on its south side" means; a mass beside a lane touches
+# it on its east or west.) A rail raised above a head (its underside at 1.8 m or more) hides nothing of a body.
+func test_nothing_tall_touches_walkable_ground_on_its_south_side() -> void:
+	var region := _region()
+	if region == null:
+		return
+	await frames(2)
+	var space := region.get_world_3d().direct_space_state
+	var tall := PackedStringArray()
+	var low := 0
+	for body: StaticBody3D in region.find_children("*", "StaticBody3D", true, false):
+		if body.get_parent().name == &"Walkable" or String(body.name).begins_with("Vat"):
+			continue
+		for shape: CollisionShape3D in body.find_children("*", "CollisionShape3D", true, false):
+			var box := (shape.shape as BoxShape3D).size
+			var centre := shape.global_position
+			var top := centre.y + box.y / 2.0
+			if centre.y - box.y / 2.0 >= 1.8 or (box.x < 0.8 and box.z < 0.8):
+				continue
+			var x := centre.x - box.x / 2.0 + 0.05
+			var north := false
+			while x < centre.x + box.x / 2.0 - 0.04:
+				north = north or _ground_under(space, Vector2(x, centre.z - box.z / 2.0 - 0.1))
+				x += 0.25
+			if north and top > 0.65 + 1e-6:
+				tall.append("%s is %.2f m high with ground on its north side" % [body.get_path(), top])
+			elif north:
+				low += 1
+	assert_eq(tall, PackedStringArray(), "nothing higher than 0.65 m stands on the south side of walkable ground")
+	assert_true(low >= 10, "and there are kerbs, low walls and a gate that do (%d)" % low)
+	# They are found by name: the five low walls and the gate and its rail.
+	for wall in 5:
+		assert_true(region.get_node_or_null("LowWall%d" % (wall + 1)) is StaticBody3D, "LowWall%d" % (wall + 1))
+	assert_true(region.get_node_or_null("Gate") is StaticBody3D, "the Gate")
+	var rail := region.get_node_or_null("GateRail") as StaticBody3D
+	assert_true(rail != null, "the GateRail")
+	if rail != null:
+		var shape := rail.get_node("Shape") as CollisionShape3D
+		var size := (shape.shape as BoxShape3D).size
+		assert_true(size.y <= 0.12 + 1e-6 and size.z <= 0.12 + 1e-6, "the rail is no thicker than 0.12 m (%s)" % size)
+		assert_true(shape.global_position.y - size.y / 2.0 >= 2.4 - 1e-6, "its underside is at 2.4 m or higher")
+		assert_true(shape.global_position.x - size.x / 2.0 <= -35.125 + 1e-3 and shape.global_position.x + size.x / 2.0 >= -29.875 - 1e-3, "across the tops of the two posts")
