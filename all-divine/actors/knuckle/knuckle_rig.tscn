@@ -1,4 +1,4 @@
-[gd_scene load_steps=28 format=3]
+[gd_scene load_steps=29 format=3]
 
 [ext_resource type="Script" path="res://actors/rig.gd" id="1_rig"]
 [ext_resource type="PackedScene" path="res://assets/characters/knuckle/knuckle.glb" id="2_model"]
@@ -98,6 +98,10 @@ radius = 0.16
 [sub_resource type="CapsuleShape3D" id="body"]
 radius = 0.35
 height = 1.7
+
+[sub_resource type="CylinderShape3D" id="slam_ring_zone"]
+height = 0.5
+radius = 1.65
 
 [node name="Rig" type="Node3D"]
 script = ExtResource("1_rig")
@@ -242,5 +246,16 @@ monitoring = false
 [node name="shape" type="CollisionShape3D" parent="Hurtbox"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("body")
+
+[node name="slam_ring" type="Node3D" parent="Hitboxes"]
+
+[node name="zone" type="Area3D" parent="Hitboxes/slam_ring"]
+collision_layer = 16
+collision_mask = 8
+monitoring = false
+
+[node name="shape" type="CollisionShape3D" parent="Hitboxes/slam_ring/zone"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.25, 0)
+shape = SubResource("slam_ring_zone")
 
 [editable path="Model"]

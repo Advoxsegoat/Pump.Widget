@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="LocomotionTuning" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://actors/locomotion_tuning.gd" id="1_tuning"]
+
+[resource]
+script = ExtResource("1_tuning")
+walk_speed = 0.8
+jog_speed = 4.4
+sprint_speed = 6.8
+cadence = 0.68
+accel = 10.0
+decel = 16.0
+turn_rate_deg = 240.0
+walk_threshold = 0.5

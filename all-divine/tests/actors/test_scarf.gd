@@ -214,11 +214,11 @@ func test_scarf_stays_out_of_the_torso_in_every_clip() -> void:
 
 
 # The names of the rig's clips (the actor's library).
-# The Knuckle's own clips (knuckle_*) are left out: only the Knuckle plays them, and it has no scarf. (The clips it
+# The Knuckle's own clips (knuckle_*, the Drummer's drum_* and the heavy Knuckle's heavy_*) are left out: only a Knuckle plays them, and it has no scarf. (The clips it
 # plays Abarax in, as a grab's `grabbed`, are his, and stay in.)
 func _clip_names() -> PackedStringArray:
 	var r: Rig = track(load(RIG).instantiate())
-	var names := PackedStringArray(Array(r.tree.get_animation_list()).filter(func(c: StringName) -> bool: return not String(c).begins_with("knuckle_")))
+	var names := PackedStringArray(Array(r.tree.get_animation_list()).filter(func(c: StringName) -> bool: return not String(c).begins_with("knuckle_") and not String(c).begins_with("drum_") and not String(c).begins_with("heavy_")))
 	r.free()
 	return names
 

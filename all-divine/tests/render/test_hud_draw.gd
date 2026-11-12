@@ -18,7 +18,7 @@ func _fight() -> Dictionary:
 	Game.reset()
 	Arena.reset_spawn_counts()
 	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
-	main.arena().start_wave(3)
+	main.arena().start_wave(4)  # a tier II and a tier I
 	var foes := main.arena().enemies()
 	for foe in foes:
 		foe.set_brain(Brain.new())
@@ -154,7 +154,7 @@ func test_the_wave_pips_are_drawn_cleared_on_and_coming() -> void:
 	await frames(2)
 	var img := await _picture(main)
 	var states: Array[int] = main.hud.pip_states()
-	assert_eq(states, [Hud.Pip.CLEARED, Hud.Pip.CLEARED, Hud.Pip.ON, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING] as Array[int])
+	assert_eq(states, [Hud.Pip.CLEARED, Hud.Pip.CLEARED, Hud.Pip.ON, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING, Hud.Pip.COMING] as Array[int])
 	var width := states.size() * Hud.PIP + (states.size() - 1) * Hud.PIP_GAP
 	var x0 := (640 - width) / 2
 	for i in states.size():
