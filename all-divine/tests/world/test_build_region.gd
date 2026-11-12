@@ -457,7 +457,7 @@ func _kit_materials(root: Node) -> Dictionary:
 
 
 func test_kit_bilibara_draws_every_piece_of_the_layout_in_its_colours() -> void:
-	var layout := "ground 0 0 10 10 cobble\nblock 0 0 10 5 2 frontage slope solid\nedge wall 0 7.5 5 7.5 s solid\npiece banner-red 7 7\nlamps #ffb98a 6 0.5 3.45 world\nlantern 8 8\nkit bilibara\n"
+	var layout := "ground 0 5 10 15 cobble\nblock 0 0 10 5 2 frontage slope solid\nedge wall 0 7.5 5 7.5 s solid\npiece banner-red 7 7\nlamps #ffb98a 6 0.5 3.45 world\nlantern 8 8\nkit bilibara\n"
 	var built := _build(layout)
 	assert_eq(built.problems, PackedStringArray())
 	var materials := _kit_materials(built.root)
@@ -627,3 +627,23 @@ func test_no_run_of_a_block_is_longer_than_five_tiles() -> void:
 		var key := "%s|%s" % [piece.piece, piece.xf.origin]
 		assert_false(spots.has(key), "%s is not placed twice at one spot" % key)
 		spots[key] = true
+
+
+# Two masses in one place, or a solid mass over ground a body walks on, are mistakes in the layout: each is one problem that
+# names both lines, whichever comes first.
+func test_overlapping_blocks_or_a_solid_block_over_walkable_ground_are_problems() -> void:
+	var twice := _build("block 0 0 10 5 3 plain flat solid\n# a comment\nblock 7.5 0 17.5 5 2 plain flat")
+	assert_eq(twice.problems.size(), 1, "two blocks that overlap: %s" % [twice.problems])
+	if twice.problems.size() == 1:
+		assert_true((twice.problems[0] as String).begins_with("T.txt:3:") and "line 1" in twice.problems[0], "naming both lines: %s" % twice.problems[0])
+	var behind := _build("block 0 0 10 5 3 plain flat\nblock 5 -5 15 2.5 1 plain flat")
+	assert_eq(behind.problems.size(), 1, "two backdrop blocks too: %s" % [behind.problems])
+	assert_eq(_build("block 0 0 10 5 3 plain flat solid\nblock 10 0 20 5 3 plain flat solid\nblock 0 5 20 10 1 plain flat").problems, PackedStringArray(), "blocks that touch are fine")
+	for text in ["ground 0 0 10 10 cobble\nblock 5 5 15 15 3 plain flat solid", "block 5 5 15 15 3 plain flat solid\nground 0 0 10 10 cobble"]:
+		var over := _build(text)
+		assert_eq(over.problems.size(), 1, "a solid block over walkable ground (%s): %s" % [text.replace("\n", " / "), over.problems])
+		if over.problems.size() == 1:
+			assert_true("line 1" in over.problems[0] and (over.problems[0] as String).begins_with("T.txt:2:"), "the later line names the earlier: %s" % over.problems[0])
+	assert_eq(_build("ground 0 0 10 10 cobble\nblock 10 0 20 10 3 plain flat solid").problems, PackedStringArray(), "a block beside the ground is fine")
+	assert_eq(_build("ground 0 0 10 10 cobble visual\nblock 5 5 15 15 3 plain flat solid").problems, PackedStringArray(), "a block over seen-only ground is fine")
+	assert_eq(_build("ground 0 0 10 10 cobble\nblock 5 5 15 15 3 plain flat").problems, PackedStringArray(), "and a backdrop block over walkable ground is a picture, not a mass")

@@ -142,6 +142,8 @@ class Builder extends "res://tools/world/region_nodes.gd":
 	var _terraces: Array[Dictionary] = []  # {rect: Rect2 over (x, z), height}
 	var _lamp := {}  # the `lamps` line: colour, range, energy, up, world
 	var _grounds: Array[Dictionary] = []  # the `ground` lines so far: {rect, line}, for plates laid over one another
+	var _walkable_grounds: Array[Dictionary] = []  # the solid (not `visual`) ones: {rect, line}, which no solid block may stand over
+	var _blocks: Array[Dictionary] = []  # the `block` lines so far: {rect, solid, line}
 	var _waters: Array[Dictionary] = []  # the same for `water`: {rect, y, line}
 	var _bodies_light_line := 0  # the line of the moon or the fill, which a region has only one of
 	var _kit := ""  # the `kit` line's name, and the line it was on
@@ -269,6 +271,7 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				if not STONES.has(args[4]):
 					problem("ground needs X0 Z0 X1 Z1 STONE [visual], the stone one of %s" % ", ".join(STONES.keys()))
 				elif _clear_of(_grounds, _rect(n), "ground"):
+					_clear_of_solid_blocks(_rect(n), visual)
 					BLOCKS.ground(self, _rect(n), STONES[args[4]], visual)
 			"block":
 				var solid := args.size() == 8 and args[7] == "solid"
@@ -277,6 +280,7 @@ class Builder extends "res://tools/world/region_nodes.gd":
 					return
 				var n := _numbers(args.slice(0, 5), 5, 5)
 				if n.size() == 5:
+					_clear_of_masses(_rect(n), solid)
 					BLOCKS.block(self, _rect(n), n[4], args[5], args[6], solid)
 			"water":
 				var liquor := args.size() == 6 and args[5] == "liquor"
@@ -594,6 +598,29 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				return false
 		before.append({rect = rect, y = y, line = _line})
 		return true
+
+	# Whether the block over `rect` lies clear of every block before it and, if `solid`, of every walkable ground before it: a
+	# problem naming the earlier line for each that it overlaps (two masses in one place, or a mass a body would stand inside).
+	# Remembers it.
+	func _clear_of_masses(rect: Rect2, solid: bool) -> void:
+		for other in _blocks:
+			if rect.intersection(other.rect).get_area() > 1e-6:
+				problem("this block overlaps the block on line %d" % other.line)
+		if solid:
+			for ground in _walkable_grounds:
+				if rect.intersection(ground.rect).get_area() > 1e-6:
+					problem("this solid block lies over the walkable ground on line %d" % ground.line)
+		_blocks.append({rect = rect, solid = solid, line = _line})
+
+	# The same for a ground plate laid after the blocks: a problem for each solid block that it lies under (a `visual` plate is
+	# only seen and is not walked on). Remembers a walkable one.
+	func _clear_of_solid_blocks(rect: Rect2, visual: bool) -> void:
+		if visual:
+			return
+		for other in _blocks:
+			if other.solid and rect.intersection(other.rect).get_area() > 1e-6:
+				problem("this walkable ground lies under the solid block on line %d" % other.line)
+		_walkable_grounds.append({rect = rect, line = _line})
 
 	# A KitDresser in the region: every kit piece of the layout, whatever command placed it, is drawn in the material the `kit`
 	# line names (world/kit_dresser.gd says why it is a node and not a change to each piece).
