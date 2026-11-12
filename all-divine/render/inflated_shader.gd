@@ -13,16 +13,17 @@ extends RefCounted
 
 const SNIPPET := "\n// Added by InflatedShader: the body drawn thicker.\nuniform float inflate = 0.0;\nvoid vertex() {\n\tVERTEX += NORMAL * inflate;\n}\n"
 
-static var _made := {}  # Shader -> the Shader with the function added
+const META := &"inflated"
 
 
-## `base` with the inflating vertex function added (made once per shader and kept). `base` must have no vertex function of its own.
+## `base` with the inflating vertex function added (made once per shader and kept on it, as its metadata: a cache in a static would
+## still hold the shader when the engine exits). `base` must have no vertex function of its own.
 static func of(base: Shader) -> Shader:
-	if not _made.has(base):
+	if not base.has_meta(META):
 		var thick := Shader.new()
 		thick.code = base.code + SNIPPET
-		_made[base] = thick
-	return _made[base]
+		base.set_meta(META, thick)
+	return base.get_meta(META) as Shader
 
 
 ## Whether `shader` is one this made.
