@@ -17,15 +17,31 @@ const META := &"inflated"
 
 
 ## `base` with the inflating vertex function added (made once per shader and kept on it, as its metadata: a cache in a static would
-## still hold the shader when the engine exits). `base` must have no vertex function of its own.
+## still hold the shader when the engine exits). If the function cannot be added safely (problem_with) it reports why, once, and
+## returns `base` itself: the body is drawn thin, not broken.
 static func of(base: Shader) -> Shader:
 	if not base.has_meta(META):
-		var thick := Shader.new()
-		thick.code = base.code + SNIPPET
-		base.set_meta(META, thick)
-	return base.get_meta(META) as Shader
+		var why := problem_with(base)
+		if not why.is_empty():
+			push_error("InflatedShader: %s: %s; the body is drawn without its inflate" % [base.resource_path if not base.resource_path.is_empty() else "a shader", why])
+			base.set_meta(META, false)  # refused, and said so: not the shader itself (a cycle would leak)
+		else:
+			var thick := Shader.new()
+			thick.code = base.code + SNIPPET
+			base.set_meta(META, thick)
+	var made: Variant = base.get_meta(META)
+	return made as Shader if made is Shader else base
 
 
-## Whether `shader` is one this made.
+## Why the function cannot be added to `base`'s source (it has a vertex function of its own, or a uniform called `inflate`), or "".
+static func problem_with(base: Shader) -> String:
+	if RegEx.create_from_string("\\bvoid\\s+vertex\\s*\\(").search(base.code) != null:
+		return "it already has a vertex function, so the added one would not compile"
+	if RegEx.create_from_string("\\buniform\\s+\\w+\\s+inflate\\b").search(base.code) != null:
+		return "it already has a uniform called inflate"
+	return ""
+
+
+## Whether `shader` is one this made (the base handed back for a refusal is not).
 static func is_inflated(shader: Shader) -> bool:
 	return shader != null and shader.code.ends_with(SNIPPET)
