@@ -216,7 +216,7 @@ func test_the_stretch_is_a_plain_region_with_its_markers_pois_and_no_enemy_spawn
 	assert_vec_near(sun.rotation_degrees, Vector3(-60, 30, 0), 1e-3, "the sun's way")
 	assert_near(sun.light_energy, 0.25, 1e-6, "its energy")
 	assert_eq(sun.light_color.to_html(false), "f4f7ff", "and colour")
-	assert_eq(region.find_children("Vat*", "StaticBody3D", true, false).size(), 2, "two vats")
+	assert_eq(region.find_children("Vat*", "StaticBody3D", true, false).size(), 5, "five vats: two in the yard, three in the drying yard")
 	assert_true(region.get_node_or_null("Kit") is KitDresser, "drawn in Bilibara's colours (kit bilibara)")
 
 
@@ -837,3 +837,134 @@ func test_nothing_stands_between_the_camera_and_a_body_anywhere_it_can_stand() -
 		if shown.size() < 8:
 			shown.append("%s hides a body at %s" % [mesh_name, hits[mesh_name]])
 	assert_eq(shown, PackedStringArray(), "nothing stands between the camera and a body (%d meshes do)" % hits.size())
+
+
+func test_the_backdrop_is_never_walkable_and_never_shades_the_ground() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var backdrop := region.get_node_or_null("Backdrop")
+	assert_true(backdrop != null, "a Backdrop group")
+	if backdrop == null:
+		return
+	assert_eq(backdrop.find_children("*", "CollisionObject3D", true, false).size(), 0, "nothing under Backdrop is a collider")
+	var shading := PackedStringArray()
+	var meshes := backdrop.find_children("*", "GeometryInstance3D", true, false)
+	for mesh: GeometryInstance3D in meshes:
+		if mesh.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+			shading.append(String(region.get_path_to(mesh)))
+	assert_eq(shading, PackedStringArray(), "no mesh under Backdrop casts a shadow")
+	assert_true(meshes.size() >= 10, "and it holds the picture beyond the places (%d meshes)" % meshes.size())
+	var blocks := region.get_node_or_null("Blocks")
+	assert_true(blocks != null, "a Blocks group")
+	if blocks != null:
+		for block: Node in blocks.get_children():
+			assert_true(block.get_node_or_null("Body") is StaticBody3D, "%s under Blocks is solid" % block.name)
+	var walkable := region.get_node("Walkable")
+	for mesh: Node in meshes:
+		assert_false(walkable.is_ancestor_of(mesh), "%s is not in Walkable" % mesh.name)
+
+
+# Every kit piece of the region, as {node, box (world, from its meshes), piece}: a placed scene (Props, Edges, Lanterns) and a run's
+# places alike.
+func _kit_instances(region: Region) -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	for node: Node3D in region.find_children("*", "Node3D", true, false):
+		if node is KitRun:
+			var run := node as KitRun
+			for place in run.places:
+				found.append({node = node, piece = String(run.piece), at = (run.global_transform * place).origin, scale = (run.global_transform * place).basis.get_scale()})
+		elif node.scene_file_path.begins_with("res://assets/env/kenney_town/"):
+			found.append({node = node, piece = node.scene_file_path.get_file().get_basename(), at = node.global_position, scale = node.global_basis.get_scale()})
+	return found
+
+
+func test_the_drying_yard_and_the_harbor_are_dressed_and_unwalkable() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var fill := await _fill(region)
+	var reached: Dictionary = fill.reached
+	var ground: Dictionary = fill.ground
+	var kit := _kit_instances(region)
+	var count := func(piece: String) -> int: return kit.filter(func(k: Dictionary) -> bool: return k.piece == piece).size()
+	assert_true(count.call("poles-horizontal") >= 12, "at least 12 poles-horizontal (%d)" % count.call("poles-horizontal"))
+	assert_true(count.call("poles") >= 12, "at least 12 poles (%d)" % count.call("poles"))
+	assert_true(count.call("planks") >= 6, "at least 6 planks (%d)" % count.call("planks"))
+	assert_true(count.call("rock-large") >= 2, "at least 2 rock-large (%d)" % count.call("rock-large"))
+	# South of the Rack Walk's kerb (z -19.6): the three vats, and every rack at least 3 m back from it (and nothing there taller
+	# than 1.7 + 0.71 s, s metres from the kerb: the vats, the rocks and the racks are, at those distances).
+	var vats := region.find_children("Vat*", "StaticBody3D", true, false).filter(func(v: Node3D) -> bool: return (v.get_node("Shape") as Node3D).global_position.z > -19.6 and (v.get_node("Shape") as Node3D).global_position.z < -10.0)
+	assert_eq(vats.size(), 3, "three vats in the drying yard")
+	for spot: Vector2 in [Vector2(-20, -15), Vector2(-5, -15), Vector2(10, -15)]:
+		assert_true(vats.any(func(v: Node3D) -> bool: return Vector2((v.get_node("Shape") as Node3D).global_position.x, (v.get_node("Shape") as Node3D).global_position.z).distance_to(spot) < 0.3), "a vat at %s" % spot)
+	var dressing := region.get_node("Props").find_children("*", "Node3D", true, false)
+	var too_near := PackedStringArray()
+	for k in kit:
+		if k.piece in ["poles", "poles-horizontal"] and k.at.z - (-19.6) < 3.0 + 1.0:
+			too_near.append("%s at %s" % [k.piece, k.at])
+	assert_eq(too_near, PackedStringArray(), "racks start 3 m from the kerb")
+	var tall_near := PackedStringArray()
+	for k in kit:
+		if k.at.z > -19.6 and k.at.z < -10.0 and k.at.x > -30.0 and k.at.x < 22.5 and k.piece not in ["planks"]:
+			var most: float = 1.7 + 0.71 * (k.at.z + 19.6 - 1.3)
+			var height: float = {"poles": 2.5, "poles-horizontal": 2.5, "rock-large": 2.91}.get(k.piece, 1.0)
+			if height > most:
+				tall_near.append("%s at %s is %.2f m, the line allows %.2f" % [k.piece, k.at, height, most])
+	assert_eq(tall_near, PackedStringArray(), "nothing in the drying yard stands above the line of sight")
+	# The harbor: the water at y -0.9 from z 9.25 to 32, a quay wall of wall-half along z 9, an apron of visual cobble.
+	var water := region.find_children("Water*", "MeshInstance3D", true, false).filter(func(w: MeshInstance3D) -> bool: return is_equal_approx(w.global_position.y, -0.9))
+	assert_eq(water.size(), 1, "one sheet of water at y -0.9")
+	if water.size() == 1:
+		var plane := (water[0] as MeshInstance3D).mesh as PlaneMesh
+		var w := water[0] as MeshInstance3D
+		assert_near(w.global_position.z - plane.size.y / 2.0, 9.25, 1e-3, "from z 9.25")
+		assert_near(w.global_position.z + plane.size.y / 2.0, 32.0, 1e-3, "to z 32")
+	assert_true(count.call("wall-half") >= 28, "the quay wall is wall-half every tile (%d)" % count.call("wall-half"))
+	var quay := kit.filter(func(k: Dictionary) -> bool: return k.piece == "wall-half")
+	assert_true(quay.all(func(k: Dictionary) -> bool: return absf(k.at.z - 9.0) < 1.3 and k.at.y < 0.01), "the quay wall stands along z 9")
+	var apron := region.get_node("Backdrop").find_children("Ground*", "MeshInstance3D", true, false).filter(func(g: MeshInstance3D) -> bool: return g.global_position.z > 5.0)
+	assert_true(apron.size() >= 6, "an apron of visual plates (%d)" % apron.size())
+	# None of it is walkable: no ground under it for the body's fill, none of it reached.
+	var walkable_south := 0
+	for cell: Vector2i in reached.keys():
+		var at := _middle(cell)
+		if at.y > 5.4 or (at.y > -19.6 and at.y < -10.0 and at.x > -30.0 and at.x < 22.5):
+			walkable_south += 1
+	assert_eq(walkable_south, 0, "no reached cell on the apron, the quay, the water or in the drying yard")
+	for cell: Vector2i in ground.keys():
+		var at := _middle(cell)
+		assert_false(at.y > 5.4 or (at.y > -19.6 and at.y < -10.0 and at.x > -30.0 and at.x < 22.5), "no walkable ground under %s" % at)
+	assert_true(dressing.size() > 0, "and it is dressed in Props")
+
+
+func test_every_piece_is_a_kenney_toon_piece_at_two_and_a_half_times() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var dresser := region.get_node("Kit") as KitDresser
+	var off_scale := PackedStringArray()
+	var not_toon := PackedStringArray()
+	var kit := _kit_instances(region)
+	assert_true(kit.size() > 300, "the stretch is built of kit pieces (%d)" % kit.size())
+	for k in kit:
+		if not (k.scale as Vector3).is_equal_approx(Vector3.ONE * 2.5):
+			off_scale.append("%s %s" % [k.piece, k.scale])
+	var seen := {}
+	for node: Node3D in region.find_children("*", "Node3D", true, false):
+		var materials: Array[Material] = []
+		if node is KitRun:
+			materials.append((node as KitRun).material_override)
+		elif node.scene_file_path.begins_with("res://assets/env/kenney_town/"):
+			for mesh: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
+				materials.append(mesh.material_override)
+		for material in materials:
+			var ok: bool = material is ShaderMaterial and (material as ShaderMaterial).shader.resource_path == TOON_WORLD and material == dresser.material
+			var tex := (material as ShaderMaterial).get_shader_parameter(&"albedo_tex") as Texture2D if ok else null
+			ok = ok and tex != null and tex.resource_path == "res://assets/env/textures/bilibara_colormap.png"
+			seen[region.get_path_to(node)] = true
+			if not ok:
+				not_toon.append(String(region.get_path_to(node)))
+	assert_eq(off_scale, PackedStringArray(), "pieces not at x2.5")
+	assert_eq(not_toon, PackedStringArray(), "pieces not in toon_world with the Bilibara colormap")
+	assert_true(seen.size() > 50, "and many were looked at (%d)" % seen.size())

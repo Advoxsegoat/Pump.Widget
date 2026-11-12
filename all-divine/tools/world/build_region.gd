@@ -16,6 +16,8 @@ extends SceneTree
 ##   ground X0 Z0 X1 Z1 STONE [visual]  a plate of ground 1 m thick with its top at y = 0, at most 12.5 m a side: solid and
 ##                                      walkable (world, ik_surface; under Walkable), or `visual`: only seen (under
 ##                                      Backdrop); two plates may not overlap
+##   row PIECE X0 Z0 X1 Z1 YAW [y=Y]   a kit piece every 2.5 m along a line (both ends included), turned YAW degrees, Y up
+##                                      (default 0): racks, hides, drifts of planks; a few runs under Props, with no collider
 ##   block X0 Z0 X1 Z1 STOREYS STYLE ROOF [solid]   a building over whole 2.5 m tiles (at most 60 m a side), 1 to 5
 ##                                      storeys: its south face and roof, drawn as a few MultiMeshes (STYLE: frontage,
 ##                                      tannery, shed, plain; ROOF: flat, slope, high), solid (one box, under Blocks) or
@@ -71,6 +73,9 @@ const MODELS := {
 	"tree": "trunk",
 	"tree-high-round": "trunk",
 	"planks": "none",
+	"poles": "none",
+	"poles-horizontal": "none",
+	"rock-large": "none",
 	"chimney": "none",
 	"pillar-wood": "post",
 }
@@ -236,6 +241,14 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				var n := _numbers(args.slice(0, 5), 5, 5)
 				if n.size() == 5:
 					_curb(_rect(n), n[4], STONES[options[0]] if options.size() == 1 else FLAGSTONE, moonlit, node_name, raise)
+			"row":
+				if args.size() < 6 or args.size() > 7:
+					problem("row needs PIECE X0 Z0 X1 Z1 YAW [y=Y]")
+					return
+				var y: Variant = _y_option(args)
+				var n := _numbers(PackedStringArray(Array(args.slice(1)).filter(func(a: String) -> bool: return not a.begins_with("y="))), 5, 5)
+				if n.size() == 5:
+					BLOCKS.row(self, args[0], Vector2(n[0], n[1]), Vector2(n[2], n[3]), deg_to_rad(n[4]), y if y != null else 0.0)
 			"lamps":
 				var world := args.size() == 5 and args[4] == "world"
 				if args.size() != 4 and not world:

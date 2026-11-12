@@ -682,3 +682,32 @@ func test_the_kit_dresser_dresses_after_the_region_leaves_the_tree_and_returns()
 	root.add_child(late)
 	for mesh: MeshInstance3D in late.find_children("*", "MeshInstance3D", true, false):
 		assert_eq(mesh.material_override, bilibara, "a piece added after the region came back is dressed")
+
+
+# `row PIECE X0 Z0 X1 Z1 YAW [y=Y]`: a piece every tile along a line, both ends included, drawn as a few runs (a rack of twelve
+# poles is one draw, not twelve), under Props, with no collider.
+func test_a_row_is_a_piece_every_tile_along_a_line_in_runs_with_no_collider() -> void:
+	var built := _build("row poles 0 0 30 0 90\nrow planks 5 5 5 12.5 0 y=1")
+	assert_eq(built.problems, PackedStringArray())
+	var root := built.root as Node
+	var poles := _placed(root, "poles")
+	assert_eq(poles.size(), 13, "13 poles: 0 to 30 m every 2.5 m")
+	var xs := poles.map(func(p: Dictionary) -> float: return snappedf(p.xf.origin.x, 0.001))
+	xs.sort()
+	assert_eq(xs[0], 0.0, "the first at the first point")
+	assert_eq(xs[12], 30.0, "the last at the second")
+	for piece: Dictionary in poles:
+		assert_vec_near(piece.xf.basis.get_scale(), Vector3.ONE * 2.5, 1e-4, "at x2.5")
+		assert_vec_near(piece.xf.basis.x.normalized(), Vector3(0, 0, -1), 1e-4, "turned 90 degrees about +Y")
+		assert_true(root.get_node("Props").is_ancestor_of(root.find_children("*", "KitRun", true, false)[0]), "under Props")
+	var planks := _placed(root, "planks")
+	assert_eq(planks.size(), 4, "4 planks along z")
+	for piece: Dictionary in planks:
+		assert_near(piece.xf.origin.y, 1.0, 1e-6, "raised 1 m")
+	var runs := root.find_children("*", "KitRun", true, false)
+	for node in runs:
+		assert_true((node as KitRun).bounds().size.x <= 12.5 + 1e-3 + 2.5, "%s is a short run" % node.name)
+	assert_true(runs.size() <= 5, "a few runs and not one to a piece (%d)" % runs.size())
+	assert_eq(root.find_children("*", "CollisionObject3D", true, false).size(), 0, "nothing to collide with")
+	for bad in ["row poles 0 0 30 3 90", "row poles 0 0 31 0 90", "row nothing 0 0 5 0 0", "row poles 0 0 5 0", "row poles 0 0 5 0 up"]:
+		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)

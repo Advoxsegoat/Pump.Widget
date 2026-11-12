@@ -7,6 +7,7 @@ extends RefCounted
 ##   block X0 Z0 X1 Z1 STOREYS STYLE ROOF [solid]
 ##   water X0 Z0 X1 Z1 Y [liquor]
 ##   vat X Z
+##   row PIECE X0 Z0 X1 Z1 YAW [y=Y]
 ##
 ## The camera looks north from the south, so a building is drawn as what it shows: a south face and a roof. East, west and
 ## north faces are edge-on or hidden and are not built. Everything here is flat on y = 0.
@@ -149,6 +150,28 @@ static func vat(b: NODES, at: Vector2) -> void:
 	top.position = Vector3(at.x, VAT_HEIGHT + LIQUOR_RISE, at.y)
 
 
+## PIECE every tile along the line from `a` to `b`, both ends included, turned `yaw` radians about +Y and `up` metres up, drawn as
+## a few runs (a rack of twelve poles is a few draws and not twelve) under Props, with no collider: what is seen and not stood
+## against (racks, hides, a drift of planks). The line runs along x or z, a whole number of tiles long.
+static func row(b: NODES, piece: String, a: Vector2, to: Vector2, yaw: float, up: float) -> void:
+	var along := to - a
+	var length := along.length()
+	var count := roundi(length / NODES.TILE)
+	if not (is_zero_approx(along.x) or is_zero_approx(along.y)) or not is_equal_approx(count * NODES.TILE, length):
+		b.problem("a row runs along x or z, a whole number of %.1f m tiles long" % NODES.TILE)
+		return
+	if b.local_box(piece).size == Vector3.ZERO:
+		return
+	var holder := Node3D.new()
+	holder.name = b.unique_name("Row", b.group_node("Props"))
+	b.group_node("Props").add_child(holder)
+	var laid: Array[Dictionary] = []
+	for k in count + 1:
+		var at := a + (along.normalized() * k * NODES.TILE if count > 0 else Vector2.ZERO)
+		laid.append({piece = piece, at = Vector3(at.x, up, at.y)})
+	_lay(b, holder, laid, Vector2(minf(a.x, to.x), minf(a.y, to.y)), true, yaw)
+
+
 # A mesh to be seen and nothing else: no collider and no shadow.
 static func _plate(parent: Node3D, node_name: String, mesh: Mesh, material: Material) -> MeshInstance3D:
 	var instance := MeshInstance3D.new()
@@ -166,7 +189,7 @@ static func _plate(parent: Node3D, node_name: String, mesh: Mesh, material: Mate
 # when `across_z`, a roof's): the lights of Compatibility reach a mesh as a whole, up to eight of them, and a row the
 # length of a street would take the first eight lanterns of it and leave the rest of it dark; short runs are each reached by
 # the lamps beside them. `origin` is the block's north-west corner, where the stretches start.
-static func _lay(b: NODES, parent: Node3D, laid: Array[Dictionary], origin: Vector2, across_z: bool) -> void:
+static func _lay(b: NODES, parent: Node3D, laid: Array[Dictionary], origin: Vector2, across_z: bool, yaw := SOUTH_YAW) -> void:
 	var kinds := {}  # piece -> chunk -> the places
 	for one in laid:
 		var chunk := Vector2i(floori((one.at.x - origin.x) / MAX_RUN), floori((one.at.z - origin.y) / MAX_RUN) if across_z else 0)
@@ -174,7 +197,7 @@ static func _lay(b: NODES, parent: Node3D, laid: Array[Dictionary], origin: Vect
 			kinds[one.piece] = {}
 		if not kinds[one.piece].has(chunk):
 			kinds[one.piece][chunk] = []
-		kinds[one.piece][chunk].append(Transform3D(Basis(Vector3.UP, SOUTH_YAW).scaled(Vector3.ONE * NODES.SCALE), one.at))
+		kinds[one.piece][chunk].append(Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * NODES.SCALE), one.at))
 	for piece: String in kinds:
 		var parts: Array = b.mesh_parts(piece)
 		if parts.is_empty():
