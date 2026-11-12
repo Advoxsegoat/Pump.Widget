@@ -1,10 +1,12 @@
 extends SceneTree
 ## Test entry point:
 ##   godot --headless --fixed-fps 60 -s res://tools/test/run.gd -- [--filter=<s>] [--files=<a.gd,b.gd>]
-##         [--render|--forward-plus] [--update-golden] [--expect-method=<rendering method>]
+##         [--render|--forward-plus] [--update-golden] [--expect-method=<rendering method>] [--shard=<i>/<n>]
 ## Prints PASS <id> or FAIL <id>: <message> per test, then "N passed, M failed".
 ## Exits 1 if anything failed or no test ran. tools/test.sh is the usual way to call it.
 ## --files runs exactly the listed test files (comma-separated res:// paths) instead of discovering them.
+## --shard=<i>/<n> runs every n-th of the files, from the i-th (i from 1): n runs with i from 1 to n cover the suite between
+## them (CI's render job is split this way; the software renderer makes the whole suite too long for one job).
 
 func _initialize() -> void:
 	# A script error inside _run makes it return the default for its type, which is false.
@@ -18,6 +20,7 @@ func _run(args: PackedStringArray) -> bool:
 	var files := PackedStringArray()
 	var include_render := false
 	var expect_method := ""
+	var shard := Vector2i(1, 1)
 	for arg in args:
 		if arg.begins_with("--filter="):
 			filter = arg.trim_prefix("--filter=")
@@ -27,6 +30,11 @@ func _run(args: PackedStringArray) -> bool:
 			expect_method = arg.trim_prefix("--expect-method=")
 		elif arg == "--render" or arg == "--forward-plus":
 			include_render = true
+		elif arg.begins_with("--shard="):
+			shard = TestRunner.shard_of(arg.trim_prefix("--shard="))
+			if shard == Vector2i.ZERO:
+				printerr("run.gd: '%s' is not a shard (--shard=<i>/<n>, i from 1 to n)" % arg)
+				return false
 		elif arg != "--update-golden":
 			printerr("run.gd: unknown argument '%s'" % arg)
 			return false
@@ -39,6 +47,7 @@ func _run(args: PackedStringArray) -> bool:
 
 	if files.is_empty():
 		files = TestRunner.discover("res://tests", include_render)
+	files = TestRunner.shard(files, shard.x, shard.y)
 	var runner := TestRunner.new()
 	var total := TestReport.new()
 	for path in files:

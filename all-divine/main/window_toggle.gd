@@ -4,19 +4,25 @@ extends RefCounted
 ##
 ## The game starts in borderless fullscreen (display/window/size/mode in project.godot), which shows the
 ## 640x360 picture at x3 on a 1080p screen, x4 at 1440p and x6 at 4K. A 1920x1080 window would not fit on
-## a 1080p screen above a taskbar, so the windowed size is 1280x720, the picture at x2. The web build
-## starts windowed in its page (mode.web): a browser grants fullscreen only from a key or a click.
+## a 1080p screen above a taskbar, so the windowed size is 1280x720, the picture at x2 (Settings.windowed_size, which
+## the player can change). The web build starts windowed in its page (mode.web): a browser grants fullscreen only from a key or a click.
 
-## The size of the window that the toggle leaves fullscreen for.
-const WINDOWED_SIZE := Vector2i(1280, 720)
+## The size of the window the toggle leaves fullscreen for on the web, where the page owns the window and Settings
+## has none to say (1280x720, the picture at x2).
+const WEB_WINDOWED_SIZE := Vector2i(1280, 720)
+## Passed for a screen target() is not told of: it asks the display.
+const SCREEN_UNKNOWN := Vector2i(-1, -1)
 
 
-## What the toggle does to a window in `mode`: {mode, size}. Fullscreen, either kind, goes to a
-## WINDOWED_SIZE window; any other mode goes to borderless fullscreen, which takes the screen's size, so
-## its size is Vector2i.ZERO (none to set).
-static func target(mode: Window.Mode) -> Dictionary:
+## What the toggle does to a window in `mode`: {mode, size}. Fullscreen, either kind, goes to a window of
+## Settings.windowed_size on `screen` (1280x720, the picture at x2, unless the player chose another); any other mode goes to borderless
+## fullscreen, which takes the screen's size, so its size is Vector2i.ZERO (none to set).
+static func target(mode: Window.Mode, screen := SCREEN_UNKNOWN) -> Dictionary:
 	if mode == Window.MODE_FULLSCREEN or mode == Window.MODE_EXCLUSIVE_FULLSCREEN:
-		return {"mode": Window.MODE_WINDOWED, "size": WINDOWED_SIZE}
+		var size := WEB_WINDOWED_SIZE
+		if not Settings.on_web:
+			size = Settings.windowed_size() if screen == SCREEN_UNKNOWN else Settings.windowed_size(screen)
+		return {"mode": Window.MODE_WINDOWED, "size": size}
 	return {"mode": Window.MODE_FULLSCREEN, "size": Vector2i.ZERO}
 
 

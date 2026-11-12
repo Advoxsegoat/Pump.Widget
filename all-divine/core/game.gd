@@ -19,6 +19,13 @@ const _MOVES := {
 }
 
 var state := State.BOOT
+## The physics frames played while the tree ran (Game is pausable, so a pause stops the count). The clocks that must give
+## the fight back after a pause (the HUD's blink and bars) count this, not Engine.get_physics_frames().
+var play_frames := 0
+
+
+func _physics_process(_delta: float) -> void:
+	play_frames += 1
 
 
 ## Moves to `to` if the game may go there from where it is. Any other move changes nothing,
@@ -40,4 +47,5 @@ func change(to: State) -> bool:
 ## Back to BOOT with the tree running, without a signal. For tests.
 func reset() -> void:
 	state = State.BOOT
+	play_frames = 0
 	get_tree().paused = false

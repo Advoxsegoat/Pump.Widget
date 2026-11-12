@@ -1,0 +1,174 @@
+[gd_resource type="Resource" script_class="SceneShots" load_steps=28 format=3]
+
+[ext_resource type="Script" path="res://story/scene_shots.gd" id="1_scene"]
+[ext_resource type="Script" path="res://story/shot.gd" id="2_shot"]
+[ext_resource type="Script" path="res://story/actor_beat.gd" id="3_beat"]
+[ext_resource type="Script" path="res://story/cue_event.gd" id="4_cue"]
+[ext_resource type="Script" path="res://story/dialogue_line.gd" id="5_line"]
+[ext_resource type="Script" path="res://story/scene_mark.gd" id="6_mark"]
+[ext_resource type="Script" path="res://story/cast_entry.gd" id="7_cast"]
+[ext_resource type="Resource" path="res://data/actors/knuckle_1.tres" id="8_def"]
+
+[sub_resource type="Resource" id="cast_1"]
+script = ExtResource("7_cast")
+actor = &"abarax"
+source = 0
+required = true
+after = 0
+speaker = &"abarax"
+
+[sub_resource type="Resource" id="cast_2"]
+script = ExtResource("7_cast")
+actor = &"knuckle"
+source = 2
+def = ExtResource("8_def")
+spawn_mark = &"foe_in"
+required = true
+after = 2
+speaker = &"fixture_knuckle"
+
+[sub_resource type="Resource" id="mark_3"]
+script = ExtResource("6_mark")
+name = &"foe_in"
+space = 1
+actor = &"abarax"
+position = Vector3(2.2, 0, 2.6)
+
+[sub_resource type="Resource" id="mark_4"]
+script = ExtResource("6_mark")
+name = &"foe_stop"
+space = 1
+actor = &"abarax"
+position = Vector3(1.2, 0, 2.6)
+
+[sub_resource type="Resource" id="mark_5"]
+script = ExtResource("6_mark")
+name = &"rehearsal.abarax"
+space = 0
+position = Vector3(0, 0, 5)
+yaw_deg = 180
+
+[sub_resource type="Resource" id="beat_6"]
+script = ExtResource("3_beat")
+actor = &"knuckle"
+at = 0
+move_to = &"foe_stop"
+
+[sub_resource type="Resource" id="beat_7"]
+script = ExtResource("3_beat")
+actor = &"abarax"
+at = 0
+face = &"foe_stop"
+
+[sub_resource type="Resource" id="shot_8"]
+script = ExtResource("2_shot")
+id = &"S1"
+start = 0
+length = 90
+framing = 0
+move = 1
+action = "The foe walks in"
+aim = &"abarax"
+aim_to = &"foe_stop"
+beats = Array[ExtResource("3_beat")]([SubResource("beat_6"), SubResource("beat_7")])
+
+[sub_resource type="Resource" id="cue_9"]
+script = ExtResource("4_cue")
+at = 0
+kind = 0
+id = &"cloth_move"
+at_ref = &"knuckle"
+
+[sub_resource type="Resource" id="beat_10"]
+script = ExtResource("3_beat")
+actor = &"knuckle"
+at = 0
+clip = &"knuckle_idle"
+loop = true
+
+[sub_resource type="Resource" id="beat_11"]
+script = ExtResource("3_beat")
+actor = &"abarax"
+at = 0
+clip = &"guard_raise"
+
+[sub_resource type="Resource" id="beat_12"]
+script = ExtResource("3_beat")
+actor = &"abarax"
+at = 14
+clip = &"guard_hold"
+loop = true
+
+[sub_resource type="Resource" id="shot_13"]
+script = ExtResource("2_shot")
+id = &"S2"
+start = 90
+length = 60
+framing = 1
+move = 2
+action = "He stops and folds his arms"
+aim = &"knuckle"
+focus = &"knuckle"
+zoom = 2
+zoom_to = 3
+beats = Array[ExtResource("3_beat")]([SubResource("beat_10"), SubResource("beat_11"), SubResource("beat_12")])
+cues = Array[ExtResource("4_cue")]([SubResource("cue_9")])
+
+[sub_resource type="Resource" id="cue_14"]
+script = ExtResource("4_cue")
+at = 0
+kind = 1
+id = &"fixture_sting"
+
+[sub_resource type="Resource" id="line_15"]
+script = ExtResource("5_line")
+speaker = &"fixture_knuckle"
+text = "Fixture line one."
+at = 0
+hold = 54
+
+[sub_resource type="Resource" id="shot_16"]
+script = ExtResource("2_shot")
+id = &"S3"
+start = 150
+length = 60
+framing = 2
+move = 0
+action = "A line"
+aim = &"abarax"
+focus = &"abarax"
+aim_height = 1.5
+lines = Array[ExtResource("5_line")]([SubResource("line_15")])
+cues = Array[ExtResource("4_cue")]([SubResource("cue_14")])
+
+[sub_resource type="Resource" id="line_17"]
+script = ExtResource("5_line")
+speaker = &"abarax"
+text = "Fixture line two."
+at = 0
+hold = 54
+
+[sub_resource type="Resource" id="shot_18"]
+script = ExtResource("2_shot")
+id = &"S4"
+start = 210
+length = 60
+framing = 3
+move = 0
+action = "The answer"
+aim = &"abarax"
+over_shoulder = &"knuckle"
+lines = Array[ExtResource("5_line")]([SubResource("line_17")])
+
+[resource]
+script = ExtResource("1_scene")
+id = &"fixture_yard_entrance"
+kind = 1
+status = 0
+revision = 1
+letterbox = false
+lead_in = 30
+lead_out = 30
+cast = Array[ExtResource("7_cast")]([SubResource("cast_1"), SubResource("cast_2")])
+marks = Array[ExtResource("6_mark")]([SubResource("mark_3"), SubResource("mark_4"), SubResource("mark_5")])
+shots = Array[ExtResource("2_shot")]([SubResource("shot_8"), SubResource("shot_13"), SubResource("shot_16"), SubResource("shot_18")])
