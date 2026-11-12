@@ -76,6 +76,11 @@ const SNAPSHOT_LENGTH := 0.01
 ## The tree's parameters.
 const LOCO_SPEED := &"parameters/loco/blend_position"
 const LOCO_SCALE := &"parameters/loco_scale/scale"
+
+## How much larger than its model the body is (set_model_scale), and the rate its locomotion clips play at (LocomotionTuning.cadence).
+var model_scale := 1.0
+var cadence := 1.0
+
 const MOVE_AB := &"parameters/move_ab/blend_amount"
 const MOVE_BLEND := &"parameters/move_blend/blend_amount"
 const SLOT_NODES: Array[StringName] = [&"move_a", &"move_b"]
@@ -265,6 +270,7 @@ func hide_parts(parts: PackedStringArray) -> PackedStringArray:
 ## ride its bones and the travel of its clips' root (the move runner reads it through the skeleton's transform), so a
 ## larger body strides further and its planted feet do not skate; and the Hurtbox. 1 is the model as built.
 func set_model_scale(s: float) -> void:
+	model_scale = s
 	($Model as Node3D).scale = Vector3.ONE * s
 	hurtbox.scale = Vector3.ONE * s
 
@@ -393,11 +399,26 @@ static func stepped_time(t: float, fps: int) -> float:
 	return maxf(floorf(t * fps + 1e-4), 1.0) / fps
 
 
+## Has the locomotion blend play `clips` (base clip name -> clip name: &"idle" -> &"blade_idle") in place of the clips it names, from
+## the next tick on. Every rig has its own copy of the scene's blend tree (_ready makes it), so this changes only this rig's:
+## no other body of the scene changes. A clip the rig lacks is an error and is left as it was.
+func set_locomotion_clips(clips: Dictionary) -> void:
+	var loco := (tree.tree_root as AnimationNodeBlendTree).get_node(&"loco") as AnimationNodeBlendSpace1D
+	for i in loco.get_blend_point_count():
+		var node := loco.get_blend_point_node(i) as AnimationNodeAnimation
+		var armed := StringName(str(clips.get(node.animation, node.animation)))
+		if not tree.has_animation(armed):
+			push_error("Rig: '%s' has no locomotion clip '%s'" % [name, armed])
+			continue
+		node.animation = armed
+
+
 ## Sets the locomotion blend: `speed` in m/s picks between idle, walk, jog and sprint (the blend points
 ## sit at those clips' ground speeds), and `backward` plays the cycle in reverse.
 func set_locomotion(speed: float, backward: bool) -> void:
-	tree.set(LOCO_SPEED, speed)
-	tree.set(LOCO_SCALE, -1.0 if backward else 1.0)
+	var stride := model_scale * cadence if not is_equal_approx(cadence, 1.0) else 1.0
+	tree.set(LOCO_SPEED, speed / stride)
+	tree.set(LOCO_SCALE, (-1.0 if backward else 1.0) * cadence)
 
 
 ## Sets how far the way the actor moves is from the way it faces: `angle` in radians about up (positive

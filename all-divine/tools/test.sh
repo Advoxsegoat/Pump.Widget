@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Runs the GDScript test suite. Exits 0 only when every test passes.
-#   tools/test.sh [--render|--forward-plus] [--filter=<substring of a test id>] [--update-golden]
+#   tools/test.sh [--render|--forward-plus] [--filter=<substring of a test id>] [--update-golden] [--shard=<i>/<n>]
 # A test id looks like res://tests/area/test_x.gd::test_y.
 #   --render        also runs tests/**/render/, under xvfb with gl_compatibility
 #   --forward-plus  the same, but requires the forward_plus renderer (needs Vulkan)
+#   --shard=<i>/<n> runs every n-th test file from the i-th: the n shards cover the suite between them
 # The run is stopped after $TEST_TIMEOUT seconds (default 900).
 set -euo pipefail
 
@@ -22,7 +23,7 @@ for arg in "$@"; do
 				--forward-plus) runner_args+=("--expect-method=forward_plus") ;;
 			esac
 			;;
-		--filter=*|--update-golden) runner_args+=("$arg") ;;
+		--filter=*|--update-golden|--shard=*) runner_args+=("$arg") ;;
 		*) echo "test.sh: unknown argument '$arg'" >&2; exit 2 ;;
 	esac
 done

@@ -61,6 +61,26 @@ func test_the_builds_are_uploaded_before_the_linux_build_runs() -> void:
 	assert_true(uploads.max() < checks.min(), "every upload (steps %s) comes before the run checks (steps %s)" % [uploads, checks])
 
 
+func test_the_render_job_runs_the_whole_suite_in_shards() -> void:
+	# A software renderer draws every frame of every test, so the suite is split over parallel jobs: the matrix
+	# must name every shard from 1 to n, and the run line must pass each one of the same n.
+	var job := _block(_lines(), "  render:", 2)
+	assert_false(job.is_empty(), "there is a render job")
+	var shards := PackedStringArray()
+	var count := ""
+	for line in job:
+		var body := line.strip_edges()
+		if body.begins_with("shard: ["):
+			shards = body.trim_prefix("shard: [").trim_suffix("]").replace(" ", "").split(",")
+		if body.begins_with("run: tools/test.sh --render --shard=${{ matrix.shard }}/"):
+			count = body.get_slice("/", body.get_slice_count("/") - 1)
+	assert_true(shards.size() >= 2, "the matrix lists the shards (%s)" % [shards])
+	assert_eq(count, str(shards.size()), "the run line splits the suite into as many shards as the matrix lists")
+	for i in shards.size():
+		assert_eq(shards[i], str(i + 1), "the shards are 1 to %d, each once" % shards.size())
+	assert_true(job.has("      fail-fast: false"), "one shard failing does not stop the others")
+
+
 func _lines() -> PackedStringArray:
 	var path := ProjectSettings.globalize_path("res://").path_join(WORKFLOW).simplify_path()
 	assert_true(FileAccess.file_exists(path), "%s is there" % path)

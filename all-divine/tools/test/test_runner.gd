@@ -25,6 +25,31 @@ static func discover(root := "res://tests", include_render := false) -> PackedSt
 	return found
 
 
+## The files of `files` that shard `index` of `count` runs (index from 1): every count-th file, so that a folder's
+## files, which sort together and are often slow together, are spread over the shards. The shards hold every file
+## between them and none twice. A shard that does not exist (index outside 1..count, count under 1) holds nothing.
+static func shard(files: PackedStringArray, index: int, count: int) -> PackedStringArray:
+	var part := PackedStringArray()
+	if count < 1 or index < 1 or index > count:
+		return part
+	for i in files.size():
+		if i % count == index - 1:
+			part.append(files[i])
+	return part
+
+
+## "2/3" as Vector2i(2, 3): shard 2 of 3. Vector2i.ZERO for anything that is not a shard that exists.
+static func shard_of(text: String) -> Vector2i:
+	var parts := text.split("/")
+	if parts.size() != 2 or not parts[0].is_valid_int() or not parts[1].is_valid_int():
+		return Vector2i.ZERO
+	var index := parts[0].to_int()
+	var count := parts[1].to_int()
+	if count < 1 or index < 1 or index > count:
+		return Vector2i.ZERO
+	return Vector2i(index, count)
+
+
 static func _collect(dir: String, include_render: bool, found: PackedStringArray) -> void:
 	for sub in DirAccess.get_directories_at(dir):
 		if sub == "fixtures" or (sub == "render" and not include_render):

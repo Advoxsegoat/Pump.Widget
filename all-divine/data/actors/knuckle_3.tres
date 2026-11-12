@@ -14,7 +14,7 @@ id = &"knuckle_3"
 team = 1
 rig_scene = ExtResource("2_rig")
 palette = ExtResource("4_palette")
-hidden_parts = PackedStringArray()
+hidden_parts = PackedStringArray("Knuckle_Blade")
 model_scale = 1.04
 moveset = {
 &"dodge": &"knuckle_feint",
