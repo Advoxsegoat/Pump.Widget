@@ -7,5 +7,6 @@
 script = ExtResource("1_cue")
 id = &"voice_blip"
 streams = Array[AudioStream]([ExtResource("2_a")])
+volume_db = -6.0
 pitch_jitter = 0.03
 bus = &"Voice"
