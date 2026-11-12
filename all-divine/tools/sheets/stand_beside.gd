@@ -6,7 +6,7 @@ extends SceneTree
 ##   tools/godot.sh --render -s res://tools/sheets/stand_beside.gd -- --out out/shots/heavy/x.png \
 ##       --actors abarax,knuckle_1:knuckle_jab@12,knuckle_heavy:heavy_haymaker@30+0.03 [--floors dark,lit] [--zoom 2] [--turn 0]
 ##
-## Each actor is `<def>[:<clip>[@<frame>]][+<inflate>]`: the def's id (data/actors/<id>.tres), the clip it holds (idle by default) at the
+## Each actor is `<def>[:<clip>[@<frame>]][+<inflate>][~rim:<hex>|~flash]` (a rim held at full in that colour, or the white hit flash): the def's id (data/actors/<id>.tres), the clip it holds (idle by default) at the
 ## frame (0), and a body_inflate in metres that replaces the def's own (`+0` draws the model as built). A row per floor, each cell
 ## the whole group cut out of the picture and drawn ZOOM times larger, one to a column per `--frames a,b,c`: with several frames the
 ## clips are shown at each of them in turn (a wind-up from its glint to its blow), the frame numbers counting from each clip's own
@@ -104,8 +104,11 @@ func _picture(specs: PackedStringArray, floor_colour: Color, offset: int, turn: 
 	var rigs: Array[Rig] = []
 	var clips: Array[StringName] = []
 	var starts: Array[int] = []
+	var effects: Array[String] = []
 	for n in specs.size():
 		var spec := specs[n]
+		effects.append(spec.get_slice("~", 1) if "~" in spec else "")
+		spec = spec.get_slice("~", 0)
 		var inflate := NAN
 		if "+" in spec:
 			inflate = float(spec.get_slice("+", 1))
@@ -125,6 +128,10 @@ func _picture(specs: PackedStringArray, floor_colour: Color, offset: int, turn: 
 		rig.hide_parts(def.hidden_parts)
 		rig.set_model_scale(def.model_scale)
 		rig.set_body_inflate(def.body_inflate if is_nan(inflate) else inflate)
+		if effects[n].begins_with("rim:"):
+			rig.aura(Color(effects[n].trim_prefix("rim:")), 1000.0, 1.0)  # a rim held at full, as a tell's is at its peak
+		elif effects[n] == "flash":
+			rig.flash(Color.WHITE, 1000.0)  # the white hit flash, all of it
 		rigs.append(rig)
 		clips.append(clip)
 		starts.append(at)
