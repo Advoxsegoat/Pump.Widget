@@ -1018,3 +1018,247 @@ func test_every_solid_mass_has_a_front_of_its_style_and_a_roof() -> void:
 				top = maxf(top, run.bounds().end.y)
 			assert_near(top, 7.83, 0.02, "%s: a flat roof's top is the sight line's 7.83 m" % block.name)
 	assert_eq(matched.size(), MASSES.size(), "every mass was found")
+
+
+# --- The dressed places (Task 3) ---
+
+# Every kit piece of the region with its box in world space: {piece, box, node}. A scene instance's box is its meshes' merged; a run's
+# places are each a piece of the run's mesh (a piece of two meshes is two entries of one place: merged by position).
+func _kit_boxes(region: Region) -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	for node: Node3D in region.find_children("*", "Node3D", true, false):
+		if node is KitRun:
+			var run := node as KitRun
+			for place in run.places:
+				found.append({piece = String(run.piece), box = run.global_transform * place * run.local * run.part.get_aabb(), node = node})
+		elif node.scene_file_path.begins_with("res://assets/env/kenney_town/"):
+			var box := AABB()
+			var first := true
+			for mesh: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
+				var b: AABB = mesh.global_transform * mesh.get_aabb()
+				box = b if first else box.merge(b)
+				first = false
+			found.append({piece = node.scene_file_path.get_file().get_basename(), box = box, node = node})
+	return found
+
+
+func _centre(box: AABB) -> Vector2:
+	return Vector2(box.get_center().x, box.get_center().z)
+
+
+func _pieces(region: Region, piece: String) -> Array[Dictionary]:
+	return _kit_boxes(region).filter(func(k: Dictionary) -> bool: return k.piece == piece)
+
+
+func _poi_at(region: Region, poi_name: String) -> Vector2:
+	var poi := region.find_child(poi_name, true, false) as Marker3D
+	return Vector2(poi.global_position.x, poi.global_position.z)
+
+
+func test_the_places_are_dressed() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var lazymans := _poi_at(region, "Lazymans")
+	var door_near := _pieces(region, "wall-door").any(func(k: Dictionary) -> bool: return _centre(k.box).distance_to(lazymans) < 4.0)
+	assert_true(door_near, "a wall-door within 4 m of Lazymans (the Lazyman's back door)")
+	# Site A: a pillar-stone plinth on the shrine's point, the court's slate under it.
+	var plinth_a := _poi_at(region, "ShrinePlinth_A")
+	assert_true(_pieces(region, "pillar-stone").any(func(k: Dictionary) -> bool: return _centre(k.box).distance_to(plinth_a) < 0.3), "a pillar-stone within 0.3 m of ShrinePlinth_A")
+	# Site B: a bench, a stool and a plinth.
+	var plinth_b := _poi_at(region, "ShrinePlinth_B")
+	assert_true(_pieces(region, "pillar-stone").any(func(k: Dictionary) -> bool: return _centre(k.box).distance_to(plinth_b) < 0.3), "a pillar-stone within 0.3 m of ShrinePlinth_B")
+	var alcove := Rect2(30, -37.5, 7.5, 7.5)
+	assert_true(_pieces(region, "stall-bench").any(func(k: Dictionary) -> bool: return alcove.has_point(_centre(k.box))), "a stall-bench in alcove B")
+	assert_true(_pieces(region, "stall-stool").any(func(k: Dictionary) -> bool: return alcove.has_point(_centre(k.box))), "a stall-stool in alcove B")
+	# The street: two stalls, a cart, and banners on the fronts of the street and the yard.
+	assert_true(_pieces(region, "stall-red").size() >= 2, "at least 2 stall-red (%d)" % _pieces(region, "stall-red").size())
+	assert_true(_pieces(region, "cart").size() >= 1, "a cart")
+	var banners := _pieces(region, "banner-red") + _pieces(region, "banner-green")
+	assert_true(banners.filter(func(k: Dictionary) -> bool: return k.box.get_center().z > -6.0 and k.box.get_center().z < 0.0).size() >= 3, "at least 3 banners on the street's fronts")
+	assert_true(banners.filter(func(k: Dictionary) -> bool: return k.box.get_center().z < -70.0).size() >= 3, "and 3 in the yard")
+	assert_eq(_pieces(region, "banner-green").size(), 1, "one banner-green (the hat shop's)")
+	# The street's props stand at its north margin, off its clear line, flush with the fronts or a body's width from them.
+	var in_street := PackedStringArray()
+	for piece in ["stall-red", "stall-bench", "stall-stool", "cart"]:
+		for k in _pieces(region, piece).filter(func(p: Dictionary) -> bool: return p.box.get_center().z < 0.0 and p.box.get_center().x < 30.0):
+			var box: AABB = k.box
+			if box.position.z < -5.0 - 1e-3 or box.end.z > -2.4 or (box.position.z > -5.0 + 0.05 and box.position.z < -5.0 + 0.7):
+				in_street.append("%s at %s" % [piece, box])
+	assert_eq(in_street, PackedStringArray(), "the street's props stand at its north margin, flush with the fronts (or a body's width off)")
+	# The sites' plinths are decoration the shrine will stand on: seen, and not in the body's way (a body spawns on the site).
+	for plinth in [plinth_a, plinth_b]:
+		var pillar := _pieces(region, "pillar-stone").filter(func(k: Dictionary) -> bool: return _centre(k.box).distance_to(plinth) < 0.3)
+		assert_eq(pillar.size(), 1, "one plinth at %s" % plinth)
+		if pillar.size() == 1:
+			assert_true((pillar[0].node as Node).get_node_or_null("Body") == null, "the plinth at %s has no collider" % plinth)
+
+
+func test_the_gate_is_a_closed_low_shortcut_gate() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var gates := _pieces(region, "fence-gate")
+	assert_eq(gates.size(), 2, "two fence-gate pieces")
+	var xs := gates.map(func(k: Dictionary) -> float: return _centre(k.box).x)
+	xs.sort()
+	if xs.size() == 2:
+		assert_true(xs[0] > -35.0 and xs[0] < -32.5 and xs[1] > -32.5 and xs[1] < -30.0, "one in each half of x -35..-30 (%s)" % [xs])
+	for k in gates:
+		assert_true(absf(k.box.get_center().z - (-5.0)) < 0.3, "%s across the gate at z -5" % [k.box])
+	var board := region.get_node("Gate") as StaticBody3D
+	var shape := board.get_node("Shape") as CollisionShape3D
+	var size := (shape.shape as BoxShape3D).size
+	assert_true(size.x >= 5.0 - 1e-6 and size.y >= 0.55 and size.y <= 0.65, "a solid body 5 m wide and 0.55 to 0.65 m high (%s)" % size)
+	var posts := _pieces(region, "pillar-stone").filter(func(k: Dictionary) -> bool: return absf(k.box.get_center().z - (-5.1)) < 0.3 and k.box.get_center().x < -29.0 and k.box.get_center().x > -36.0)
+	assert_eq(posts.size(), 2, "two pillar-stone posts")
+	for post in posts:
+		# Each stands wholly in the slot between the Lazyman's back (x -35) and the street's row (x -30), or wholly in the wall.
+		var box: AABB = post.box
+		var in_slot: bool = box.position.x >= -35.0 - 1e-3 and box.end.x <= -30.0 + 1e-3
+		assert_true(in_slot, "a post stands wholly in the slot (x %.3f to %.3f)" % [box.position.x, box.end.x])
+		assert_true(box.size.x < 0.8, "and is a post, narrower than 0.8 m")
+	var near := region.get_node("GateNear") as Marker3D
+	var far := region.get_node("GateFar") as Marker3D
+	assert_near(near.global_position.z, -3.5, 1e-3, "GateNear 1.5 m south of the gate")
+	assert_near(far.global_position.z, -6.5, 1e-3, "GateFar 1.5 m north (3 m apart)")
+	# Nothing taller than 1.3 m within 3 m north of it (z -8 to -5.5, x -35 to -30) except the posts: in a collider or a mesh.
+	var tall := PackedStringArray()
+	var zone := Rect2(-35.0, -8.0, 5.0, 2.5)
+	for body: StaticBody3D in region.find_children("*", "StaticBody3D", true, false):
+		if body.get_parent().name == &"Walkable":
+			continue
+		for s: CollisionShape3D in body.find_children("*", "CollisionShape3D", true, false):
+			var b := (s.shape as BoxShape3D).size
+			var rect := Rect2(s.global_position.x - b.x / 2.0, s.global_position.z - b.z / 2.0, b.x, b.z)
+			if rect.intersection(zone).get_area() > 1e-4 and s.global_position.y + b.y / 2.0 > 1.3 and not (b.x < 0.8 and b.z < 0.8):
+				tall.append("%s" % body.get_path())
+	for k in _kit_boxes(region):
+		var rect := Rect2(k.box.position.x, k.box.position.z, k.box.size.x, k.box.size.z)
+		if rect.intersection(zone).get_area() > 1e-4 and k.box.end.y > 1.3 and k.box.size.x >= 0.8:
+			tall.append("%s at %s" % [k.piece, k.box])
+	assert_eq(tall, PackedStringArray(), "nothing taller than 1.3 m within 3 m north of the gate bar the posts")
+
+
+func test_the_yard_has_three_barred_doors_two_vats_and_a_mouth() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var doors := _pieces(region, "wall-door").filter(func(k: Dictionary) -> bool: return k.box.get_center().z < -70.0)
+	assert_eq(doors.size(), 3, "three wall-door pieces on the yard's north wall")
+	for n in [1, 2, 3]:
+		var hand := region.get_node("HandDoor_%d" % n) as Marker3D
+		var near := doors.filter(func(k: Dictionary) -> bool: return absf(k.box.get_center().x - hand.global_position.x) < 0.6)
+		assert_eq(near.size(), 1, "a wall-door within 0.6 m of HandDoor_%d's x" % n)
+		for k in near:
+			assert_true(absf((k.box as AABB).end.z - (-75.0)) < 0.1, "on the wall's face (its slab's south side at z %.2f)" % (k.box as AABB).end.z)
+	# Barred: the wall is one solid box over the doors (no opening).
+	var wall := region.get_node("Blocks").get_children().filter(func(b: Node) -> bool: return absf((b.get_node("Body/Shape") as Node3D).global_position.z - (-77.5)) < 0.1)
+	assert_eq(wall.size(), 1, "the north wall is one solid mass")
+	for spot in ["VatWest", "VatEast"]:
+		var at := _poi_at(region, spot)
+		var vats := region.find_children("Vat*", "StaticBody3D", true, false).filter(func(v: Node3D) -> bool: return Vector2((v.get_node("Shape") as Node3D).global_position.x, (v.get_node("Shape") as Node3D).global_position.z).distance_to(at) < 0.3)
+		assert_eq(vats.size(), 1, "a vat at %s" % spot)
+		for v in vats:
+			var size := ((v.get_node("Shape") as CollisionShape3D).shape as BoxShape3D).size
+			assert_near(size.y, 1.0, 1e-6, "%s is solid and 1.0 m high" % spot)
+	var posts := _pieces(region, "pillar-stone").filter(func(k: Dictionary) -> bool: return absf(k.box.get_center().z - (-55.1)) < 0.3)
+	assert_eq(posts.size(), 2, "two pillar posts at the mouth")
+	if posts.size() == 2:
+		assert_near(absf(posts[0].box.get_center().x - posts[1].box.get_center().x), 5.25, 1e-3, "5.25 m apart")
+	var spawn := region.get_node("KnuckleSpawn") as Marker3D
+	assert_true(Rect2(15, -75, 25, 20).has_point(Vector2(spawn.global_position.x, spawn.global_position.z)), "KnuckleSpawn is inside the yard's walls")
+	assert_vec_near(spawn.global_basis.z, Vector3(0, 0, 1), 1e-3, "facing south")
+	# The yard's floor is in pieces: a centre where fights happen, and margins, each named, so that one line changes the centre.
+	var centre := region.get_node("Walkable").get_node_or_null("YardPlateCentre") as StaticBody3D
+	assert_true(centre != null, "a plate called YardPlateCentre")
+	if centre != null:
+		var s := (centre.get_node("Shape") as CollisionShape3D)
+		assert_true(Rect2(s.global_position.x - 6.25, s.global_position.z - 5.0, 12.5, 10.0).has_point(Vector2(27.5, -65.0)), "which holds the yard's centre")
+	assert_true(region.get_node("Walkable").find_children("YardPlate*", "StaticBody3D", false, false).size() >= 5, "among at least 5 plates of the yard")
+
+
+func test_the_low_walls_wear_a_coping_and_a_railing_and_the_drifts_lie_on_unwalkable_ground() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var copings := region.find_children("Coping*", "StaticBody3D", false, false)
+	assert_eq(copings.size(), 5, "a coping on each of the five low walls")
+	for wall in 5:
+		var low := region.get_node("LowWall%d" % (wall + 1)) as StaticBody3D
+		var wall_shape := low.get_node("Shape") as CollisionShape3D
+		var wall_size := (wall_shape.shape as BoxShape3D).size
+		var capped := copings.filter(func(c: Node3D) -> bool: return (c.get_node("Shape") as Node3D).global_position.distance_to(wall_shape.global_position + Vector3(0, wall_size.y / 2.0 + 0.025, 0)) < 1e-3)
+		assert_eq(capped.size(), 1, "LowWall%d has its coping on top, over its whole footprint" % (wall + 1))
+		for c in capped:
+			var size := ((c.get_node("Shape") as CollisionShape3D).shape as BoxShape3D).size
+			assert_true(is_equal_approx(size.x, wall_size.x) and is_equal_approx(size.z, wall_size.z) and size.y <= 0.05 + 1e-6, "the same footprint, 0.05 m thick (%s)" % size)
+			assert_true(wall_size.y + size.y <= 0.65 + 1e-6, "and wall and coping are no higher than 0.65 m")
+		# A railing of fence stands on the wall, seen through, behind its north end (a body at the end has none of it before him).
+		var rect := Rect2(wall_shape.global_position.x - wall_size.x / 2.0, wall_shape.global_position.z - wall_size.z / 2.0, wall_size.x, wall_size.z)
+		var rails := _pieces(region, "fence").filter(func(k: Dictionary) -> bool: return rect.grow(0.1).has_point(_centre(k.box)))
+		assert_true(rails.size() >= 2, "LowWall%d wears a railing of fence (%d pieces)" % [wall + 1, rails.size()])
+		for rail in rails:
+			assert_true(rail.box.position.y >= wall_size.y - 1e-3, "the fence stands on the wall")
+			assert_true(rail.box.position.z >= rect.position.y + 2.5 - 1e-3, "and at least 2.5 m back from its north end")
+	var plates := _plates(region)
+	var wrong := PackedStringArray()
+	for drift: StaticBody3D in region.find_children("Drift*", "StaticBody3D", true, false):
+		var s := drift.get_node("Shape") as CollisionShape3D
+		var size := (s.shape as BoxShape3D).size
+		assert_near(size.y, 0.25, 1e-6, "%s is 0.25 m high" % drift.name)
+		var rect := Rect2(s.global_position.x - size.x / 2.0, s.global_position.z - size.z / 2.0, size.x, size.z)
+		for plate in plates:
+			if rect.intersection(plate.rect).get_area() > 1e-6:
+				wrong.append("%s over a walkable plate" % drift.name)
+	assert_eq(wrong, PackedStringArray(), "no drift lies on walkable ground")
+	assert_true(region.find_children("Drift*", "StaticBody3D", true, false).size() >= 8, "and there are drifts (%d)" % region.find_children("Drift*", "StaticBody3D", true, false).size())
+
+
+# Every solid prop standing on walkable ground (the stalls, the cart, the bench and stools, the vats of the yard, the posts) is a thing to fight
+# round, and nothing is a step a body rides up or a pocket it is wedged in: a body shoved at it from each side that has open ground, for 40
+# frames at SHOVE, ends outside the prop's footprint (no more than 5 cm into the capsule's reach), on the ground, and walks off.
+func test_every_solid_prop_on_walkable_ground_is_fought_round_and_nothing_rides_up_it() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var fill := await _fill(region)
+	var reached: Dictionary = fill.reached
+	var props: Array[Dictionary] = []   # {name, rect}
+	for body: StaticBody3D in region.get_node("Props").find_children("*", "StaticBody3D", true, false):
+		for shape: CollisionShape3D in body.find_children("*", "CollisionShape3D", true, false):
+			var size := (shape.shape as BoxShape3D).size
+			var world_box: AABB = shape.global_transform * AABB(-size / 2.0, size)
+			var rect := Rect2(world_box.position.x, world_box.position.z, world_box.size.x, world_box.size.z)
+			var near := false
+			for cell: Vector2i in [_cell_of(rect.position - Vector2(0.9, 0.9)), _cell_of(rect.end + Vector2(0.9, 0.9)), _cell_of(Vector2(rect.get_center().x, rect.position.y - 0.9)),
+					_cell_of(Vector2(rect.get_center().x, rect.end.y + 0.9)), _cell_of(Vector2(rect.position.x - 0.9, rect.get_center().y)), _cell_of(Vector2(rect.end.x + 0.9, rect.get_center().y))]:
+				near = near or reached.has(cell)
+			if near:
+				props.append({name = String(body.get_path()), rect = rect, top = world_box.end.y})
+	assert_true(props.size() >= 12, "the walkable ground has solid props (%d)" % props.size())
+	var space := region.get_world_3d().direct_space_state
+	var problems := PackedStringArray()
+	for prop in props:
+		var rect: Rect2 = prop.rect
+		var sides: Array[Dictionary] = []
+		var mid := rect.get_center()
+		for way: Vector2 in [Vector2(0, 1), Vector2(0, -1), Vector2(1, 0), Vector2(-1, 0)]:
+			var start := mid + way * ((absf(way.x) * rect.size.x + absf(way.y) * rect.size.y) / 2.0 + 1.0)
+			if reached.has(_cell_of(start)) and not _blocked(space, start):
+				sides.append({start = start, way = -way})
+		for side in sides:
+			side.actor = _spawn(region, ABARAX, Vector3(side.start.x, 0.0, side.start.y))
+		await frames(2)
+		for i in 40:
+			for side in sides:
+				(side.actor as Actor).push(Vector3(side.way.x, 0.0, side.way.y) * SHOVE * DT * 10.0)
+			await frames(1)
+		for side in sides:
+			var at := (side.actor as Actor).global_position
+			var inside := rect.grow(BODY - 0.05).has_point(Vector2(at.x, at.z))
+			if inside or at.y > 0.1 or at.y < -0.2:
+				problems.append("%s from %s: ended at %s" % [prop.name, side.start, at])
+			side.actor.queue_free()
+		await frames(1)
+	assert_eq(problems, PackedStringArray(), "every solid prop is fought round and none is ridden up or entered")

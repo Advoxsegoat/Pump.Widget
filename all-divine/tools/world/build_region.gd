@@ -10,10 +10,10 @@ extends SceneTree
 ##   stairs X0 Z0 X1 Z1 N UP            N steps climbing toward UP (n, e, s, w), with a smooth walk ramp
 ##   ramp X0 Z0 X1 Z1 UP                a wedge up toward UP
 ##   edge PIECE X0 Z0 X1 Z1 FACING [solid]   a wall-like Kenney piece every 2.5 m along a line, its face toward FACING
-##   piece PIECE X Z [YAW] [y=Y]        a Kenney piece, colliding as MODELS says
+##   piece PIECE X Z [YAW] [y=Y] [ghost]   a Kenney piece, colliding as MODELS says (`ghost`: not at all)
 ##   curb X0 Z0 X1 Z1 H [STONE] [moonlit] [name=NAME] [y=RAISE]    a low solid box of STONE (flagstone, slate, cobble,
 ##                                      tan_earth, snow), named NAME (default Curb), its underside RAISE up (default 0)
-##   ground X0 Z0 X1 Z1 STONE [visual]  a plate of ground 1 m thick with its top at y = 0, at most 12.5 m a side: solid and
+##   ground X0 Z0 X1 Z1 STONE [visual] [name=NAME]  a plate of ground 1 m thick with its top at y = 0, at most 12.5 m a side: solid and
 ##                                      walkable (world, ik_surface; under Walkable), or `visual`: only seen (under
 ##                                      Backdrop); two plates may not overlap
 ##   row PIECE X0 Z0 X1 Z1 YAW [y=Y]   a kit piece every 2.5 m along a line (both ends included), turned YAW degrees, Y up
@@ -66,6 +66,7 @@ const KITS := {
 ## pole POST_RADIUS thick, its full height) or "trunk" (a tree's trunk, TRUNK_RADIUS by TRUNK_HEIGHT).
 const MODELS := {
 	"banner-red": "none",
+	"wall-door": "none",
 	"banner-green": "none",
 	"fountain-round": "cylinder",
 	"fountain-round-detail": "cylinder",
@@ -73,6 +74,8 @@ const MODELS := {
 	"tree": "trunk",
 	"tree-high-round": "trunk",
 	"planks": "none",
+	"fence": "none",
+	"fence-gate": "none",
 	"poles": "none",
 	"poles-horizontal": "none",
 	"rock-large": "none",
@@ -210,14 +213,17 @@ class Builder extends "res://tools/world/region_nodes.gd":
 					_edge(args[0], Vector2(n[0], n[1]), Vector2(n[2], n[3]), facing, args.size() > 6 and args[6] == "solid")
 			"piece":
 				if args.is_empty():
-					problem("piece needs PIECE X Z [YAW] [y=Y]")
+					problem("piece needs PIECE X Z [YAW] [y=Y] [ghost]")
 					return
 				var y: Variant = _y_option(args)
-				var n := _numbers(PackedStringArray(Array(args.slice(1)).filter(func(a: String) -> bool: return not a.begins_with("y="))), 2, 3)
-				if n.size() >= 2:
+				var ghosts := Array(args.slice(1)).filter(func(a: String) -> bool: return a == "ghost").size()
+				var n := _numbers(PackedStringArray(Array(args.slice(1)).filter(func(a: String) -> bool: return not a.begins_with("y=") and a != "ghost")), 2, 3)
+				if ghosts > 1:
+					problem("a piece is a ghost once")
+				elif n.size() >= 2:
 					var at := Vector3(n[0], 0.0, n[1])
 					at.y = y if y != null else _ground(Vector2(at.x, at.z))
-					_piece(group_node("Props"), args[0], at, n[2] if n.size() > 2 else 0.0)
+					_piece(group_node("Props"), args[0], at, n[2] if n.size() > 2 else 0.0, ghosts == 1)
 			"curb":
 				var options := Array(args.slice(5))
 				var moonlit := options.has("moonlit")
@@ -288,18 +294,27 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				if not light.is_empty():
 					_fill(light[0], light[1], light[2], light[3])
 			"ground":
-				var visual := args.size() == 6 and args[5] == "visual"
-				if args.size() < 5 or args.size() > 6 or (args.size() == 6 and not visual):
-					problem("ground needs X0 Z0 X1 Z1 STONE [visual]")
+				var plate_name := ""
+				var named := 0
+				var plate_args := PackedStringArray()
+				for word in args:
+					if word.begins_with("name="):
+						named += 1
+						plate_name = word.trim_prefix("name=")
+					else:
+						plate_args.append(word)
+				var visual := plate_args.size() == 6 and plate_args[5] == "visual"
+				if plate_args.size() < 5 or plate_args.size() > 6 or (plate_args.size() == 6 and not visual) or named > 1 or (named == 1 and plate_name.is_empty()):
+					problem("ground needs X0 Z0 X1 Z1 STONE [visual] [name=NAME]")
 					return
-				var n := _numbers(args.slice(0, 4), 4, 4)
+				var n := _numbers(plate_args.slice(0, 4), 4, 4)
 				if n.size() != 4:
 					return
-				if not STONES.has(args[4]):
+				if not STONES.has(plate_args[4]):
 					problem("ground needs X0 Z0 X1 Z1 STONE [visual], the stone one of %s" % ", ".join(STONES.keys()))
 				elif _clear_of(_grounds, _rect(n), "ground"):
 					_clear_of_solid_blocks(_rect(n), visual)
-					BLOCKS.ground(self, _rect(n), STONES[args[4]], visual)
+					BLOCKS.ground(self, _rect(n), STONES[plate_args[4]], visual, plate_name)
 			"block":
 				var solid := args.size() == 8 and args[7] == "solid"
 				if args.size() < 7 or args.size() > 8 or (args.size() == 8 and not solid):
@@ -479,7 +494,7 @@ class Builder extends "res://tools/world/region_nodes.gd":
 
 	# A Kenney piece standing at `at`, turned `yaw` degrees, colliding as MODELS says: a holder named after it
 	# (unscaled) with the piece's scene (Model, at SCALE) and its Body.
-	func _piece(parent: Node3D, piece: String, at: Vector3, yaw: float) -> Node3D:
+	func _piece(parent: Node3D, piece: String, at: Vector3, yaw: float, ghost := false) -> Node3D:
 		var box := local_box(piece)
 		if box.size == Vector3.ZERO:
 			return null
@@ -491,7 +506,7 @@ class Builder extends "res://tools/world/region_nodes.gd":
 		model.scale = Vector3.ONE * SCALE
 		var size := box.size * SCALE
 		var centre := box.get_center() * SCALE
-		match MODELS.get(piece, "box"):
+		match "none" if ghost else MODELS.get(piece, "box"):
 			"none":
 				pass
 			"cylinder":

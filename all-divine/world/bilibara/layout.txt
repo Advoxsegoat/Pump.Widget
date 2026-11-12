@@ -74,11 +74,14 @@ ground -35 -20 -30 -12.5 tan_earth
 ground -35 -12.5 -30 -5 tan_earth
 # W6 alcove B, "Lamp and a chair" (slate)
 ground 30 -37.5 37.5 -30 slate
-# W7 the Tanneries yard (tan earth): four plates
-ground 15 -75 27.5 -65 tan_earth
-ground 27.5 -75 40 -65 tan_earth
-ground 15 -65 27.5 -55 tan_earth
-ground 27.5 -65 40 -55 tan_earth
+# W7 the Tanneries yard (tan earth): a centre where the fights are (YardPlateCentre: one line changes its stone) and margins
+ground 21.25 -70 33.75 -60 tan_earth name=YardPlateCentre
+ground 15 -75 27.5 -70 tan_earth name=YardPlateNorth
+ground 27.5 -75 40 -70 tan_earth name=YardPlateNorth
+ground 15 -70 21.25 -60 tan_earth name=YardPlateWest
+ground 33.75 -70 40 -60 tan_earth name=YardPlateEast
+ground 15 -60 27.5 -55 tan_earth name=YardPlateSouth
+ground 27.5 -60 40 -55 tan_earth name=YardPlateSouth
 
 # --- The solid masses: three storeys under a flat roof (7.83 m) where they stand within 9 m south of walkable ground in their column
 # (T2, T3, T6, T7), under a sloping or a high roof where nothing walkable lies north of them in the line of sight; the yard's flanks two.
@@ -121,12 +124,59 @@ curb -35 -5.5 -30 -4.5 0.6 slate name=Gate
 curb -35.125 -5.15 -29.875 -5.05 0.12 slate name=GateRail y=2.4
 piece pillar-stone 24.875 -55.125
 piece pillar-stone 30.125 -55.125
-piece pillar-stone -35.125 -5.1
-piece pillar-stone -29.875 -5.1
+piece pillar-stone -34.8 -5.1
+piece pillar-stone -30.2 -5.1
+# Two fence-gate pieces across the slot (seen, no collider: the board is the barrier), so that it reads as a shut gate: a picket gate with
+# its round boss, 0.95 m high, standing in the board and showing 0.35 m above it.
+piece fence-gate -33.75 -3.85 90
+piece fence-gate -31.25 -3.85 90
 
 # --- The yard's vats, for cover ---
 vat 20 -66.25
 vat 35 -66.25
+
+# --- The low walls, dressed: a coping of flagstone 0.05 m thick over each (wall and coping 0.65 m, the most that stands on the south side
+# of walkable ground), and a railing of fence on top, seen through, from 2.5 m back of the wall's north end (nothing of it before a body
+# standing against that end) ---
+curb 22.5 -55 25 -45 0.05 flagstone name=Coping y=0.6
+curb 30 -55 32.5 -45 0.05 flagstone name=Coping y=0.6
+curb 30 -30 32.5 -20 0.05 flagstone name=Coping y=0.6
+curb 22.5 -20 25 -10 0.05 flagstone name=Coping y=0.6
+curb -30 -20 -27.5 -10 0.05 flagstone name=Coping y=0.6
+piece fence 23.75 -51.25 0 y=0.65
+piece fence 23.75 -48.75 0 y=0.65
+piece fence 31.25 -51.25 0 y=0.65
+piece fence 31.25 -48.75 0 y=0.65
+piece fence 31.25 -26.25 0 y=0.65
+piece fence 31.25 -23.75 0 y=0.65
+piece fence 23.75 -16.25 0 y=0.65
+piece fence 23.75 -13.75 0 y=0.65
+piece fence -28.75 -16.25 0 y=0.65
+piece fence -28.75 -13.75 0 y=0.65
+
+# --- The shrine sites as places: a pillar-stone plinth (decoration: the shrine will stand on it, and a body spawns on the site, so it
+# has no collider); alcove B with a bench, a stool and a plinth ---
+piece pillar-stone -35 0 ghost
+piece stall-bench 35 -35.5 90
+piece stall-stool 34 -33
+piece pillar-stone 36.25 -33.75 ghost
+
+# --- Street props at the street's north margin, flush with the fronts, off the clear line (the south margin is the camera's side: a 3 m
+# stall there would hide a fighter and stand in front of the sight line) ---
+piece stall-red -8.75 -3.75
+piece stall-red 8.75 -3.75
+piece cart -22.5 -3.88 90
+piece stall-bench 12.5 -4.675 90
+piece stall-stool 14.1 -4.675
+piece stall-stool 14.8 -4.675
+
+# --- The yard's doors, barred: wall-door pieces on the north wall's face (a hair proud of it), banners between them ---
+piece wall-door 20 -73.98 90
+piece wall-door 27.5 -73.98 90
+piece wall-door 35 -73.98 90
+piece banner-red 23.75 -73.925 90 y=0.8
+piece banner-red 31.25 -73.925 90 y=0.8
+piece banner-red 38.75 -73.925 90 y=0.8
 
 # --- Fronts: banners as the pink neon of the street (a banner hangs on the face, turned to the south) ---
 piece banner-red -37.5 -3.925 90 y=0.8
@@ -147,6 +197,8 @@ curb -36 6.5 -31 7.5 0.25 snow name=Drift
 curb -12 7 -6 8 0.25 snow name=Drift
 curb 4 6.2 9 7.2 0.25 snow name=Drift
 curb 20 7.2 26 8.2 0.25 snow name=Drift
+curb -22 8.7 -17 9.1 0.25 snow name=Drift y=1.25
+curb 8 8.7 14 9.1 0.25 snow name=Drift y=1.25
 
 # --- The drying yard, between the Rack Walk and the street's north row (unwalkable, under the line of sight): tan earth, three vats,
 # racks of poles three metres or more back from the Rack Walk's kerb, hides on the ground, two rocks, drifts ---

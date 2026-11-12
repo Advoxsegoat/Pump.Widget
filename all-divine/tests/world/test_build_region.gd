@@ -713,3 +713,22 @@ func test_a_row_is_a_piece_every_tile_along_a_line_in_runs_with_no_collider() ->
 	assert_eq(root.find_children("*", "CollisionObject3D", true, false).size(), 0, "nothing to collide with")
 	for bad in ["row poles 0 0 30 3 90", "row poles 0 0 31 0 90", "row nothing 0 0 5 0 0", "row poles 0 0 5 0", "row poles 0 0 5 0 up"]:
 		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)
+
+
+# `piece ... ghost` is a piece with no collider (a decoration a body walks through); without it a piece collides as MODELS says.
+# `ground ... name=NAME` names the plate (so that one place's floor can be told from the rest: the yard's centre).
+func test_a_piece_can_be_a_ghost_and_a_ground_plate_can_be_named() -> void:
+	var built := _build("piece pillar-stone 1 1\npiece pillar-stone 4 1 ghost\npiece stall-bench 7 1 90 ghost y=1\nground 0 5 10 10 slate name=YardCentre\nground 10 5 20 10 slate\nground 20 5 30 10 slate visual name=Apron")
+	assert_eq(built.problems, PackedStringArray())
+	var root := built.root as Node
+	var pillars := root.get_node("Props").find_children("PillarStone*", "Node3D", false, false)
+	assert_eq(pillars.size(), 2, "two pillars")
+	assert_true(pillars[0].get_node_or_null("Body") is StaticBody3D, "the first collides")
+	assert_true(pillars[1].get_node_or_null("Body") == null, "the ghost does not")
+	assert_true(pillars[1].find_child("Model", false, false) != null, "but is seen")
+	assert_true(root.get_node("Props").get_node("StallBench").get_node_or_null("Body") == null, "a ghost with a turn and a height is still a ghost")
+	assert_true(root.get_node("Walkable/YardCentre") is StaticBody3D, "a named plate is a body of that name")
+	assert_true(root.get_node("Walkable/Ground") is StaticBody3D, "and an unnamed one is Ground")
+	assert_true(root.get_node("Backdrop/Apron") is MeshInstance3D, "a named visual plate too")
+	for bad in ["piece pillar-stone 1 1 ghost ghost", "ground 0 0 5 5 slate name=", "ground 0 0 5 5 slate name=A name=B"]:
+		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)

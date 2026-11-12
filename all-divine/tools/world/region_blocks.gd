@@ -3,7 +3,7 @@ extends RefCounted
 ## (tools/world/build_region.gd reads the layout and calls these with the builder, a RegionNodes, to put nodes in; its header
 ## lists every command). They are static: this holds nothing between calls.
 ##
-##   ground X0 Z0 X1 Z1 STONE [visual]
+##   ground X0 Z0 X1 Z1 STONE [visual] [name=NAME]
 ##   block X0 Z0 X1 Z1 STOREYS STYLE ROOF [solid]
 ##   water X0 Z0 X1 Z1 Y [liquor]
 ##   vat X Z
@@ -59,18 +59,18 @@ const WATER := preload("res://world/materials/kenney_water.tres")
 ## A box of `stone` (a material) 1 m thick with its top at y = 0. Solid, it is on `world` and `ik_surface`, under Walkable.
 ## `visual`: only seen, no collider, under Backdrop, and it casts no shadow (it is the picture beyond the places a body can
 ## stand). A plate is at most MAX_PLATE on a side.
-static func ground(b: NODES, rect: Rect2, stone: Material, visual: bool) -> void:
+static func ground(b: NODES, rect: Rect2, stone: Material, visual: bool, plate_name := "") -> void:
 	if rect.size.x > MAX_PLATE + 1e-6 or rect.size.y > MAX_PLATE + 1e-6 or rect.size.x <= 0.0 or rect.size.y <= 0.0:
 		b.problem("a ground plate is at most %.1f m on a side (and not flat): this one is %.2f x %.2f" % [MAX_PLATE, rect.size.x, rect.size.y])
 		return
 	var size := Vector3(rect.size.x, PLATE_THICKNESS, rect.size.y)
 	var centre := Vector3(rect.get_center().x, -PLATE_THICKNESS / 2, rect.get_center().y)
 	if visual:
-		var mesh := _plate(b.group_node("Backdrop"), b.unique_name("Ground"), BoxMesh.new(), stone)
+		var mesh := _plate(b.group_node("Backdrop"), b.unique_name(plate_name if not plate_name.is_empty() else "Ground"), BoxMesh.new(), stone)
 		(mesh.mesh as BoxMesh).size = size
 		mesh.position = centre
 		return
-	var body := b.make_body(b.unique_name("Ground"), b.group_node("Walkable"), b.world_and_feet)
+	var body := b.make_body(b.unique_name(plate_name if not plate_name.is_empty() else "Ground"), b.group_node("Walkable"), b.world_and_feet)
 	b.add_box(body, size, Transform3D(Basis(), centre), stone)
 
 

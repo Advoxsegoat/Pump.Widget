@@ -1,6 +1,8 @@
 extends TestCase
 ## Nothing low hides a fighter (xvfb, gl_compatibility): Abarax stands against the north face of each low wall and of the gate of the
-## Bilibara stretch (at its middle and 0.5 m in from each end, bar the end a post stands at), seen from the game's camera. Two measures.
+## Bilibara stretch as dressed (with its coping, its railing and its fence-gate), and of the stool and the bench of alcove B, at its
+## middle and 0.5 m in from each end (bar the end a post stands at, and the gate's posts stand 0.4 m in the slot, so there 1 m in), seen
+## from the game's camera. Two measures.
 ## Rays from points on his body, from 0.4 m up to 1.8 m, toward the camera meet nothing on `world`: no part of him above his shins is
 ## behind anything. And the share of his pixels hidden, the way the review measured it: the picture with him against the picture
 ## without him, his own render layer as the mask (a third picture, of his layer alone, is his silhouette); a pixel of the silhouette
@@ -15,7 +17,10 @@ const MOST_OPEN := 0.15
 ## Where he stands: the node's name, the north face's z, the xs along it.
 const SPOTS := [
 	["LowWall1", -55.0, [23.0, 23.75]], ["LowWall2", -55.0, [31.25, 32.0]], ["LowWall3", -30.0, [30.5, 31.25, 32.0]],
-	["LowWall4", -20.0, [23.0, 23.75, 24.5]], ["LowWall5", -20.0, [-29.5, -28.75, -28.0]], ["Gate", -5.5, [-34.5, -32.5, -30.5]],
+	["LowWall4", -20.0, [23.0, 23.75, 24.5]], ["LowWall5", -20.0, [-29.5, -28.75, -28.0]], ["Gate", -5.5, [-34.0, -32.5, -31.0]],
+	# The props in alcove B a fighter can stand north of (the street's stalls, cart, bench and stools stand against the fronts, with no
+	# ground north of them): the north face of the stool, and of the bench (it stands 1.7 m off the alcove's north wall).
+	["Props/StallStool/Body", -33.325, [33.8, 34.0, 34.2]], ["Props/StallBench/Body", -35.825, [34.2, 35.0, 35.8]],
 ]
 
 var _main: Main
