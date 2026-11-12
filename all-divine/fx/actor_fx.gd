@@ -348,8 +348,9 @@ func show_fx(id: StringName, at: Variant = null, bone := &"") -> Node3D:
 		world.add_child(node)
 		node.global_position = at if at is Vector3 else _actor.global_position
 		node.reset_physics_interpolation()
-	# A signal drops its connection to a node that is freed first (a lambda would hold on to it).
-	get_tree().create_timer(def.lifetime, true, true).timeout.connect(holder.queue_free)
+	# A signal drops its connection to a node that is freed first (a lambda would hold on to it). The timer stops with the tree:
+	# an effect alive at a pause is still there behind the menu, and ends when it would have.
+	get_tree().create_timer(def.lifetime, false, true).timeout.connect(holder.queue_free)
 	shown.emit(id, node)
 	return node
 
