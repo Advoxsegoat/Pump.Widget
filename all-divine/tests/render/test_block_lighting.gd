@@ -22,7 +22,7 @@ func _layout() -> String:
 	var text := "sky #000000\nambient #303844 0.3\nkit bilibara\nground -5 0 7.5 10 cobble\n"
 	for i in 5:
 		text += "ground %s 0 %s 10 cobble\nground %s 10 %s 20 cobble\n" % [7.5 + i * 12.5, 20.0 + i * 12.5, 7.5 + i * 12.5, 20.0 + i * 12.5]
-	text += "block 0 -5 60 0 3 plain flat solid\nblock 0 -25 60 -10 2 tannery slope\nblock -10 -5 0 25 3 plain flat solid\nblock 60 -5 70 25 3 plain flat solid\n"
+	text += "block 0 -5 60 0 3 plain flat solid\nblock 0 -25 60 -10 2 tannery slope\nblock -10 -5 0 25 3 plain flat\nblock 60 -5 70 25 3 plain flat\n"
 	text += "lamps #ffc468 6 3.0 3.45 world\n"
 	for i in 15:
 		text += "lantern %s 1.5\n" % (2.0 + i * 4.0)
