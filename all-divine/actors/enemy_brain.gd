@@ -19,8 +19,10 @@ extends Brain
 ##               turns the other way.
 ##               Off its rest (attack_rest after its last attack), it chooses an attack: it takes one of the target's
 ##               attack tokens (AttackTokens; none needed by a squad that ignores them, or for an option that needs
-##               none), picks by weight among the options off cooldown that it may throw and that are on the menu at
-##               this range (it would back up no more than the option's back_up_margin: on_menu), and then closes or
+##               none; an option that holds more than one, AttackOption.tokens, is on the menu only while the tokens it
+##               holds are free, and takes them when it is chosen, so no other enemy begins an attack on the target while
+##               it is thrown, and it is thrown only while no other enemy holds one), picks by weight among the options
+##               off cooldown that it may throw and that are on the menu at this range (it would back up no more than the option's back_up_margin: on_menu), and then closes or
 ##               backs off into that option's range (where the move really lands: AttackOption) and throws it once it
 ##               is there, square enough to the target (max_angle_deg) and slowed to a walk (PRESS_SPEED), checking
 ##               all three again at the press. It jogs in, braking to a walk over the last of it, and backs up at a
@@ -350,6 +352,8 @@ func _choose(actor: Actor) -> void:
 	for option in def.attacks:
 		if _cooldowns.get(option, 0.0) > 0.0 or option.weight <= 0.0 or (option.needs_token and not token):
 			continue
+		if option.needs_token and not def.ignores_tokens and option.tokens != 1 and not _may_hold(actor, option):
+			continue  # a big attack waits until the tokens it needs are free
 		if not on_menu(option, distance):
 			continue
 		open.append(option)
@@ -366,6 +370,8 @@ func _choose(actor: Actor) -> void:
 			break
 	if not chosen.needs_token:
 		_give_back(actor)
+	elif chosen.tokens != 1 and not def.ignores_tokens:
+		AttackTokens.take_for(actor, target, chosen.tokens)  # it holds what it needs from now on: no other enemy begins an attack
 	_plan = chosen
 	_approach = 0.0
 	_backed_up = 0.0
@@ -435,7 +441,7 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 # Presses the attack: the feint first, if it feints, else the option's action (held for a delayed swing). Its token is
 # taken again (an attacker that holds one keeps it, for TIMEOUT more); with none to be had, the attack is off.
 func _fire(actor: Actor, intent: Intent) -> void:
-	if _plan.needs_token and not def.ignores_tokens and not AttackTokens.take_for(actor, target):
+	if _plan.needs_token and not def.ignores_tokens and not AttackTokens.take_for(actor, target, _plan.tokens):
 		_drop_plan(actor)
 		return
 	mode = Mode.ATTACKING
@@ -453,7 +459,7 @@ func _press(actor: Actor, intent: Intent, action: StringName) -> void:
 		intent.held.append(action)
 	_press_count += 1
 	if _press_count > 1 and _plan.needs_token and not def.ignores_tokens:
-		AttackTokens.take_for(actor, target)  # each blow keeps its token
+		AttackTokens.take_for(actor, target, _plan.tokens)  # each blow keeps its tokens
 
 
 # ATTACKING: the next press as its window opens; the attack is over when its moves are.
@@ -564,6 +570,12 @@ func _go_idle(actor: Actor) -> void:
 	_retreat_left = 0.0
 	_blocked = 0.0
 	_reset_spacing()
+
+
+# Whether the actor could hold the tokens `option` holds now (AttackOption.tokens), holding what it holds.
+func _may_hold(actor: Actor, option: AttackOption) -> bool:
+	var tokens := AttackTokens.of(actor)
+	return tokens == null or tokens.can_take(actor, target, option.tokens)
 
 
 func _give_back(actor: Actor) -> void:
