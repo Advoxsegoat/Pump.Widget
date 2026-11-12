@@ -88,6 +88,14 @@ var finished := false
 ## The rules it stopped in, if it did not.
 var stopped := ""
 
+# The mechanism that says a rule did not run to its end. A script error aborts a function without a word to its caller,
+# so every function (but the static ones, which are pure sums, and these two) enters by `_enter(&"name")` first and
+# leaves by `_leave(&"name", value)` on every way out. A function that errored never left: when its caller leaves, the
+# entries above the caller's are found still open and the first is `_broken`, the place the checker stopped.
+# tests/story/test_shot_checker_trace.gd reads this file and fails for a function outside the pattern.
+var _trace := PackedStringArray()
+var _broken := ""
+
 # actor def id -> {clip: true}; the rigs are built once per run.
 var _clips := {}
 var _problems := PackedStringArray()
@@ -100,6 +108,22 @@ var _bad := {}
 var _walks: Array[Dictionary] = []
 # The Rest intervals of the walks, for the bodies-apart rule: {actor, from, to, at (Vector3), mark}.
 var _rests: Array[Dictionary] = []
+
+
+func _enter(function: StringName) -> void:
+	_trace.append(String(function))
+
+
+func _leave(function: StringName, value: Variant = null) -> Variant:
+	var at := _trace.rfind(String(function))
+	if at < 0:
+		if _broken == "":
+			_broken = String(function)
+		return value
+	if at < _trace.size() - 1 and _broken == "":
+		_broken = _trace[_trace.size() - 1]
+	_trace.resize(at)
+	return value
 
 
 ## The seconds a body takes to cover `metres` from rest at `pace` and stop pushing, with `def`'s accel and decel: the
@@ -130,49 +154,58 @@ static func is_placeholder(line: String) -> bool:
 ## Every scene folder under `root`, checked as `check_folder` does. A folder with no readable shots.tres is a problem of
 ## its own.
 func check_all(root := "res://scenes/story") -> PackedStringArray:
+	_enter(&"check_all")
 	var out := PackedStringArray()
 	for folder in scene_folders(root):
 		out.append_array(check_folder(root.path_join(folder)))
-	return out
+	return _leave(&"check_all", out)
 
 
 ## The names of the scene folders under `root`, sorted.
 func scene_folders(root := "res://scenes/story") -> PackedStringArray:
+	_enter(&"scene_folders")
 	var found := PackedStringArray()
 	for entry in ResourceLoader.list_directory(root):
 		if entry.ends_with("/"):
 			found.append(entry.trim_suffix("/"))
 	found.sort()
-	return found
+	return _leave(&"scene_folders", found)
 
 
 ## One scene folder: its shots.tres read as text for keys the class lacks, loaded, and checked with the folder.
 func check_folder(folder: String) -> PackedStringArray:
+	_enter(&"check_folder")
 	var name := folder.trim_suffix("/").get_file()
 	var path := folder.path_join("shots.tres")
 	var loaded := _load(path, name)
 	if loaded.scene == null:
-		return loaded.problems
+		return _leave(&"check_folder", loaded.problems)
 	var out: PackedStringArray = loaded.problems
 	if not loaded.get("blocking", false):
 		out.append_array(check(loaded.scene, folder))
-	return out
+		if not finished and not _said_stopped(out):
+			out.append("%s/-: the checker stopped before it finished (a script error; see the engine's lines above)" % loaded.scene.id)
+	return _leave(&"check_folder", out)
 
 
 ## One shots.tres anywhere (a combat moment's, say), checked without a folder.
 func check_file(path: String) -> PackedStringArray:
+	_enter(&"check_file")
 	var loaded := _load(path, path.get_base_dir().get_file())
 	if loaded.scene == null:
-		return loaded.problems
+		return _leave(&"check_file", loaded.problems)
 	var out: PackedStringArray = loaded.problems
 	if not loaded.get("blocking", false):
 		out.append_array(check(loaded.scene))
-	return out
+		if not finished and not _said_stopped(out):
+			out.append("%s/-: the checker stopped before it finished (a script error; see the engine's lines above)" % loaded.scene.id)
+	return _leave(&"check_file", out)
 
 
 ## The problems of `scene`; with a `folder`, also those of its script.md, notes.md and id. `finished` says whether every
 ## rule ran to its end; if one did not, the last line says which.
 func check(scene: SceneShots, folder := "") -> PackedStringArray:
+	_enter(&"check")
 	_scene = scene
 	_folder = folder
 	_problems = PackedStringArray()
@@ -180,37 +213,60 @@ func check(scene: SceneShots, folder := "") -> PackedStringArray:
 	_bad = {}
 	_rests = []
 	_walks = []
+	_broken = ""
 	finished = false
 	stopped = ""
 	for stage in STAGES:
-		if not call(stage):
-			stopped = String(stage).trim_prefix("_check_")
-			_add("-", "the checker stopped before it finished: in the %s rules (a script error; see the engine's lines above)" % stopped)
-			return _problems
+		if not call(stage) and _broken == "":
+			_broken = String(stage)
+		if _broken != "":
+			break
+	if _broken != "":
+		stopped = _broken.trim_prefix("_check_")
+		_add("-", "the checker stopped before it finished: in %s (a script error; see the engine's lines above)" % _described(_broken))
+		return _leave(&"check", _problems)
 	if scene.status == SceneShots.Status.APPROVED and _placeholders > 0:
 		_add("-", "an approved scene has no placeholder, this one has %d" % _placeholders)
 	finished = true
-	return _problems
+	return _leave(&"check", _problems)
+
+
+# Whether `lines` already say the checker stopped.
+func _said_stopped(lines: PackedStringArray) -> bool:
+	_enter(&"_said_stopped")
+	for line in lines:
+		if line.contains("the checker stopped before it finished"):
+			return _leave(&"_said_stopped", true)
+	return _leave(&"_said_stopped", false)
+
+
+# Where the checker stopped, in a writer's words: a stage is "the marks rules", a helper "the helper _check_target".
+func _described(function: String) -> String:
+	_enter(&"_described")
+	if STAGES.has(StringName(function)):
+		return _leave(&"_described", "the %s rules" % function.trim_prefix("_check_"))
+	return _leave(&"_described", "the helper %s" % function)
 
 
 # --- the file ---
 
 # {scene: SceneShots or null, problems, blocking} for a shots.tres at `path`, `name` standing for it in a line.
 func _load(path: String, name: String) -> Dictionary:
+	_enter(&"_load")
 	if not FileAccess.file_exists(path):
-		return {scene = null, problems = PackedStringArray(["%s/-: %s is missing (%s)" % [name, path.get_file(), path]])}
+		return _leave(&"_load", {scene = null, problems = PackedStringArray(["%s/-: %s is missing (%s)" % [name, path.get_file(), path]])})
 	var resource := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
 	if resource == null:
 		# the text may say why: an element of the wrong class in a typed array fails some loads outright
 		var why: PackedStringArray = _file_problems(path, name).lines
 		if not why.is_empty():
-			return {scene = null, problems = why}
-		return {scene = null, problems = PackedStringArray(["%s/-: %s does not parse; see the engine's lines above (%s)" % [name, path.get_file(), path]])}
+			return _leave(&"_load", {scene = null, problems = why})
+		return _leave(&"_load", {scene = null, problems = PackedStringArray(["%s/-: %s does not parse; see the engine's lines above (%s)" % [name, path.get_file(), path]])})
 	var scene := resource as SceneShots
 	if scene == null:
-		return {scene = null, problems = PackedStringArray(["%s/-: %s is not a SceneShots (%s)" % [name, path.get_file(), path]])}
+		return _leave(&"_load", {scene = null, problems = PackedStringArray(["%s/-: %s is not a SceneShots (%s)" % [name, path.get_file(), path]])})
 	var file := _file_problems(path, String(scene.id) if scene.id != &"" else name)
-	return {scene = scene, problems = file.lines, blocking = file.blocking}
+	return _leave(&"_load", {scene = scene, problems = file.lines, blocking = file.blocking})
 
 
 # What the file's text says that the loaded scene would not show: a key its resource's class does not have (Godot ignores
@@ -218,6 +274,7 @@ func _load(path: String, name: String) -> Dictionary:
 # error and drops the whole array). Returns {lines, blocking}: blocking when an array lost elements, since the scene
 # that loaded is then not what was written and checking it would only list what the loss caused.
 func _file_problems(path: String, name: String) -> Dictionary:
+	_enter(&"_file_problems")
 	var scripts := {}   # ext_resource id -> script path
 	var blocks: Array[Dictionary] = []   # {id, script, keys: [[key, value]]}
 	var header := RegEx.create_from_string("^\\[ext_resource\\b(?=.*type=\"Script\")(?=.*path=\"([^\"]+)\")(?=.*\\bid=\"([^\"]+)\")")
@@ -260,14 +317,15 @@ func _file_problems(path: String, name: String) -> Dictionary:
 		if each.script != "":
 			dropped.append_array(_dropped_elements(each, scripts, by_id, name))
 	out.append_array(dropped)
-	return {lines = out, blocking = not dropped.is_empty()}
+	return _leave(&"_file_problems", {lines = out, blocking = not dropped.is_empty()})
 
 
 func _keys_unknown_to(script_path: String, keys: Array, name: String) -> PackedStringArray:
+	_enter(&"_keys_unknown_to")
 	var out := PackedStringArray()
 	var script := load(script_path) as GDScript
 	if script == null:
-		return out
+		return _leave(&"_keys_unknown_to", out)
 	var fields := PackedStringArray()
 	for info in script.get_script_property_list():
 		if info.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
@@ -287,20 +345,22 @@ func _keys_unknown_to(script_path: String, keys: Array, name: String) -> PackedS
 		var help := " (did you mean '%s'?)" % best if best != "" else " (its fields: %s)" % ", ".join(fields)
 		var where := _owner_label(script, pair, keys)
 		out.append("%s/-: shots.tres: '%s' is not a field of %s%s%s; Godot ignores it" % [name, key, class_title, help, "" if where == class_title else "; found in " + where])
-	return out
+	return _leave(&"_keys_unknown_to", out)
 
 
 # "SceneShots" for the file's own resource, "Shot 'S2'" for a sub-resource with an id of its own (a shot, a cast entry, a mark).
 func _owner_label(script: GDScript, _pair: Array, keys: Array) -> String:
+	_enter(&"_owner_label")
 	var title := script.get_global_name()
 	for each in keys:
 		if each[0] in ["id", "actor", "name"]:
-			return "%s '%s'" % [title, String(each[1]).trim_prefix("&").trim_prefix("\"").trim_suffix("\"")] if title != "SceneShots" else title
-	return title
+			return _leave(&"_owner_label", "%s '%s'" % [title, String(each[1]).trim_prefix("&").trim_prefix("\"").trim_suffix("\"")] if title != "SceneShots" else title)
+	return _leave(&"_owner_label", title)
 
 
 # The elements of a typed array in a block that the loader would drop: other than the array's own class, strings, null.
 func _dropped_elements(block: Dictionary, scripts: Dictionary, by_id: Dictionary, name: String) -> PackedStringArray:
+	_enter(&"_dropped_elements")
 	var out := PackedStringArray()
 	var script := load(block.script) as GDScript
 	var owner_text: String = _owner_label(script, [], block.keys) if script != null else String(block.script)
@@ -327,11 +387,12 @@ func _dropped_elements(block: Dictionary, scripts: Dictionary, by_id: Dictionary
 					name, owner_text, pair[0], wrong, "" if wrong == 1 else "s", "an" if title[0] in "AEIOU" else "a", title])
 		if empty > 0:
 			out.append("%s/-: shots.tres: %s: '%s' has %d empty (null) element%s" % [name, owner_text, pair[0], empty, "" if empty == 1 else "s"])
-	return out
+	return _leave(&"_dropped_elements", out)
 
 
 # The top-level elements of an array's text, which starts just inside its `[` and ends at the matching `]`.
 func _elements(text: String) -> PackedStringArray:
+	_enter(&"_elements")
 	var out := PackedStringArray()
 	var depth := 0
 	var quoted := false
@@ -360,12 +421,13 @@ func _elements(text: String) -> PackedStringArray:
 			current += c
 	if current.strip_edges() != "":
 		out.append(current.strip_edges())
-	return out
+	return _leave(&"_elements", out)
 
 
 # --- the enums ---
 
 func _check_enums() -> bool:
+	_enter(&"_check_enums")
 	_enum("-", "kind", _scene.kind, SceneShots.Kind, _scene)
 	_enum("-", "status", _scene.status, SceneShots.Status, _scene)
 	for entry in _scene.cast:
@@ -380,13 +442,15 @@ func _check_enums() -> bool:
 			_enum(String(shot.id), "beat at frame %d: pace" % beat.at, beat.pace, ActorBeat.Pace, beat)
 		for cue in shot.cues:
 			_enum(String(shot.id), "cue kind", cue.kind, CueEvent.Kind, cue)
-	return true
+	return _leave(&"_check_enums", true)
 
 
 # Notes a bad enum value `value` of `field` on `owner`: a line, and the owner is skipped by the rules that read it.
 # The field's own words come first ("framing 9 is not one of ..."), and a field label with a colon says whose it is.
 func _enum(where: String, field: String, value: int, kind: Dictionary, owner: Object) -> void:
+	_enter(&"_enum")
 	if kind.values().has(value):
+		_leave(&"_enum")
 		return
 	_bad[owner.get_instance_id()] = true
 	var names := PackedStringArray()
@@ -395,17 +459,20 @@ func _enum(where: String, field: String, value: int, kind: Dictionary, owner: Ob
 	var label := field.get_slice(": ", 1) if field.contains(": ") else field
 	var owner_text := field.get_slice(": ", 0) + ": " if field.contains(": ") else ""
 	_add(where, "%s%s %d is not one of %s" % [owner_text, label, value, ", ".join(names)])
+	_leave(&"_enum")
 
 
 func _ok(owner: Object) -> bool:
-	return not _bad.has(owner.get_instance_id())
+	_enter(&"_ok")
+	return _leave(&"_ok", not _bad.has(owner.get_instance_id()))
 
 
 # --- the folder ---
 
 func _check_folder() -> bool:
+	_enter(&"_check_folder")
 	if _folder == "":
-		return true
+		return _leave(&"_check_folder", true)
 	var name := _folder.trim_suffix("/").get_file()
 	if String(_scene.id) != name:
 		_add("-", "id '%s' is not the folder name '%s'" % [_scene.id, name])
@@ -417,23 +484,24 @@ func _check_folder() -> bool:
 	var notes := _folder.path_join("notes.md")
 	if not FileAccess.file_exists(notes):
 		_add("-", "notes.md is missing")
-		return true
+		return _leave(&"_check_folder", true)
 	var last := ""
 	for text in FileAccess.get_file_as_string(notes).split("\n"):
 		if text.strip_edges().to_lower().begins_with("status:"):
 			last = text.strip_edges()
 	if last == "":
 		_add("-", "notes.md has no 'Status:' line")
-		return true
+		return _leave(&"_check_folder", true)
 	var said := last.substr(last.find(":") + 1).strip_edges().to_lower()
 	if _ok(_scene) and said != STATUS_WORDS[_scene.status]:
 		_add("-", "notes.md ends with '%s' but the scene is %s" % [last, STATUS_WORDS[_scene.status]])
-	return true
+	return _leave(&"_check_folder", true)
 
 
 # --- the cast and the marks ---
 
 func _check_cast() -> bool:
+	_enter(&"_check_cast")
 	var seen := {}
 	for entry in _scene.cast:
 		var who := String(entry.actor)
@@ -458,10 +526,11 @@ func _check_cast() -> bool:
 				_add("-", "%s is the player's and cannot be left with ENEMY_BRAIN" % who)
 		if entry.speaker != &"" and not Registry.ids(&"speakers").has(String(entry.speaker)):
 			_add("-", "%s: speaker '%s' is not in the Registry" % [who, entry.speaker])
-	return true
+	return _leave(&"_check_cast", true)
 
 
 func _check_marks() -> bool:
+	_enter(&"_check_marks")
 	var seen := {}
 	for mark in _scene.marks:
 		var name := String(mark.name)
@@ -479,15 +548,16 @@ func _check_marks() -> bool:
 			_add("-", "rehearsal mark '%s' is for '%s', who is not in the cast" % [name, name.trim_prefix(REHEARSAL)])
 	if _scene.region != "" and not ResourceLoader.exists(_scene.region):
 		_add("-", "region '%s' does not exist" % _scene.region)
-	return true
+	return _leave(&"_check_marks", true)
 
 
 # --- the shot list ---
 
 func _check_layout() -> bool:
+	_enter(&"_check_layout")
 	if _scene.shots.is_empty():
 		_add("-", "the scene has no shots")
-		return true
+		return _leave(&"_check_layout", true)
 	var ids := {}
 	for i in _scene.shots.size():
 		var shot := _scene.shots[i]
@@ -505,17 +575,19 @@ func _check_layout() -> bool:
 			_add(_name(shot, i), "gap of %d frames between %s and %s %s" % [gap, _name(before, i - 1), _name(shot, i), ends])
 		elif gap < 0:
 			_add(_name(shot, i), "overlap of %d frames between %s and %s %s" % [-gap, _name(before, i - 1), _name(shot, i), ends])
-	return true
+	return _leave(&"_check_layout", true)
 
 
 func _check_shots() -> bool:
+	_enter(&"_check_shots")
 	var ok := true
 	for shot in _scene.shots:
 		ok = _check_shot(shot) and ok
-	return ok
+	return _leave(&"_check_shots", ok)
 
 
 func _check_shot(shot: Shot) -> bool:
+	_enter(&"_check_shot")
 	var where := String(shot.id)
 	var ok := true
 	if shot.length < MIN_SHOT_FRAMES:
@@ -528,7 +600,7 @@ func _check_shot(shot: Shot) -> bool:
 			["focus", shot.focus], ["focus_to", shot.focus_to]]:
 		_check_target(where, target[0], target[1])
 	if shot.length <= 0:
-		return ok   # one fault, one line: what depends on a length has none to depend on
+		return _leave(&"_check_shot", ok)   # one fault, one line: what depends on a length has none to depend on
 	if shot.blend_in > shot.length:
 		_add(where, "blend_in %d is longer than the shot (%d frames)" % [shot.blend_in, shot.length])
 	if shot.key_frame < -1 or shot.key_frame >= shot.length:
@@ -546,10 +618,11 @@ func _check_shot(shot: Shot) -> bool:
 	ok = _check_line_overlaps(shot) and ok
 	for cue in shot.cues:
 		ok = _check_cue(shot, cue) and ok
-	return ok
+	return _leave(&"_check_shot", ok)
 
 
 func _check_camera(shot: Shot) -> bool:
+	_enter(&"_check_camera")
 	var where := String(shot.id)
 	var move: String = Shot.CamMove.keys()[shot.move]
 	var framing: String = Shot.Framing.keys()[shot.framing]
@@ -591,10 +664,11 @@ func _check_camera(shot: Shot) -> bool:
 		_add(where, "OVER_SHOULDER has no over_shoulder actor")
 	if shot.framing != Shot.Framing.OVER_SHOULDER and shot.over_shoulder != &"":
 		_add(where, "over_shoulder is set but the framing is %s" % framing)
-	return true
+	return _leave(&"_check_camera", true)
 
 
 func _check_beat(shot: Shot, beat: ActorBeat) -> bool:
+	_enter(&"_check_beat")
 	var where := String(shot.id)
 	var what := "beat at frame %d" % beat.at
 	if beat.at < 0 or beat.at >= shot.length:
@@ -607,22 +681,23 @@ func _check_beat(shot: Shot, beat: ActorBeat) -> bool:
 	if beat.clip == &"" and beat.move_to == &"" and beat.face == &"" and beat.look == &"":
 		_add(where, "%s does nothing: it has no clip, move_to, face or look" % what)
 	if beat.clip == &"" or entry == null:
-		return true
+		return _leave(&"_check_beat", true)
 	var def := _def_of(entry)
 	if def == null:
 		if entry.source == CastEntry.Source.LIVE_NAMED:
 			_add(where, "%s plays the clip '%s' but has no def to look it up in" % [beat.actor, beat.clip])
-		return true
+		return _leave(&"_check_beat", true)
 	if not _clip_names(def).has(beat.clip):
 		if beat.placeholder:
 			_placeholders += 1
 			_add(where, "%s%s has no clip '%s'" % [PLACEHOLDER, beat.actor, beat.clip])
 		else:
 			_add(where, "%s has no clip '%s' in its rig (%s); fix the name, or set the beat's placeholder" % [beat.actor, beat.clip, def.id])
-	return true
+	return _leave(&"_check_beat", true)
 
 
 func _check_line(shot: Shot, line: DialogueLine) -> bool:
+	_enter(&"_check_line")
 	var where := String(shot.id)
 	var speaker: Speaker = null
 	if line.speaker == &"":
@@ -635,7 +710,7 @@ func _check_line(shot: Shot, line: DialogueLine) -> bool:
 		_add(where, "speaker '%s' has no '%s' portrait" % [line.speaker, line.expr])
 	if line.text.strip_edges() == "":
 		_add(where, "the line at frame %d has no text" % line.at)
-		return true
+		return _leave(&"_check_line", true)
 	if line.text.length() > MAX_LINE_CHARACTERS:
 		_add(where, "the line at frame %d is %d characters, at most %d" % [line.at, line.text.length(), MAX_LINE_CHARACTERS])
 	var rows := line.text.split("\n").size()
@@ -643,7 +718,7 @@ func _check_line(shot: Shot, line: DialogueLine) -> bool:
 		_add(where, "the line at frame %d has %d lines, the box holds %d" % [line.at, rows, MAX_LINE_ROWS])
 	if line.at < 0 or line.at >= shot.length:
 		_add(where, "line at frame %d is outside the shot (frames 0 to %d)" % [line.at, shot.length - 1])
-		return true
+		return _leave(&"_check_line", true)
 	var typing := typing_frames(line.text)
 	if line.hold > 0 and line.hold < typing + MIN_HOLD_EXTRA:
 		_add(where, "the line at frame %d: a hold of %d frames is under the %d it needs (typing %d plus %d)" % [
@@ -652,10 +727,11 @@ func _check_line(shot: Shot, line: DialogueLine) -> bool:
 	if end > shot.length:
 		_add(where, "the line at frame %d cannot finish: it needs frames %d to %d and the shot ends at %d" % [
 				line.at, line.at, end, shot.length])
-	return true
+	return _leave(&"_check_line", true)
 
 
 func _check_line_overlaps(shot: Shot) -> bool:
+	_enter(&"_check_line_overlaps")
 	var lines: Array[DialogueLine] = shot.lines.duplicate()
 	lines.sort_custom(func(a: DialogueLine, b: DialogueLine) -> bool: return a.at < b.at)
 	for i in range(1, lines.size()):
@@ -663,10 +739,11 @@ func _check_line_overlaps(shot: Shot) -> bool:
 		if lines[i].at < before.at + hold_of(before):
 			_add(String(shot.id), "the line at frame %d overlaps the line at frame %d, which is up until frame %d" % [
 					lines[i].at, before.at, before.at + hold_of(before)])
-	return true
+	return _leave(&"_check_line_overlaps", true)
 
 
 func _check_cue(shot: Shot, cue: CueEvent) -> bool:
+	_enter(&"_check_cue")
 	var where := String(shot.id)
 	if cue.at < 0 or cue.at >= shot.length:
 		_add(where, "cue at frame %d is outside the shot (frames 0 to %d)" % [cue.at, shot.length - 1])
@@ -675,18 +752,21 @@ func _check_cue(shot: Shot, cue: CueEvent) -> bool:
 	elif _ok(cue) and cue.kind == CueEvent.Kind.SOUND and not Registry.ids(&"sounds").has(String(cue.id)):
 		_add(where, "sound '%s' is not in the Registry" % cue.id)
 	_check_target(where, "at_ref", cue.at_ref, "cue at frame %d" % cue.at)
-	return true
+	return _leave(&"_check_cue", true)
 
 
 # A target field: empty is fine; otherwise an actor of the cast or a mark, `@start` allowed, never a rehearsal mark.
 # `@pair` is the middle of a paired move: only a MOMENT has one.
 func _check_target(where: String, field: String, target: StringName, what := "") -> void:
+	_enter(&"_check_target")
 	if target == &"":
+		_leave(&"_check_target")
 		return
 	var prefix := what + ": " if what != "" else ""
 	if String(target) == PAIR:
 		if _scene.kind != SceneShots.Kind.MOMENT:
 			_add(where, "%s%s '%s' is the middle of a paired move, which only a MOMENT has" % [prefix, field, target])
+		_leave(&"_check_target")
 		return
 	var name := String(target).trim_suffix(AT_START)
 	if name.begins_with(REHEARSAL):
@@ -701,11 +781,13 @@ func _check_target(where: String, field: String, target: StringName, what := "")
 				marks.append(String(mark.name))
 		_add(where, "%s%s '%s' is no actor or mark of the scene (actors: %s; marks: %s)" % [
 				prefix, field, target, ", ".join(actors), ", ".join(marks)])
+	_leave(&"_check_target")
 
 
 # --- the kinds ---
 
 func _check_kind() -> bool:
+	_enter(&"_check_kind")
 	var total := _scene.total_frames()
 	if _ok(_scene):
 		match _scene.kind:
@@ -729,7 +811,7 @@ func _check_kind() -> bool:
 	for field in [["lead_in", _scene.lead_in], ["lead_out", _scene.lead_out]]:
 		if field[1] < glide.x or field[1] > glide.y:
 			_add("-", "%s %d is not %d to %d" % [field[0], field[1], glide.x, glide.y])
-	return true
+	return _leave(&"_check_kind", true)
 
 
 # --- walking ---
@@ -739,6 +821,7 @@ func _check_kind() -> bool:
 # known from its spawn mark (a spawned actor) or its rehearsal mark (a live one) and from the mark of its last walk.
 # Then no two bodies are at rest nearer than two bodies.
 func _check_walks() -> bool:
+	_enter(&"_check_walks")
 	var end := 0
 	for shot in _scene.shots:
 		end = maxi(end, shot.start + shot.length)
@@ -799,19 +882,23 @@ func _check_walks() -> bool:
 			_rest(entry, to, mini(arrive, next), next)
 			known = to
 	_check_bodies_apart()
-	return true
+	return _leave(&"_check_walks", true)
 
 
 # Notes that `entry`'s body is at rest at `mark` from frame `from` up to frame `to`.
 func _rest(entry: CastEntry, mark: SceneMark, from: int, to: int) -> void:
+	_enter(&"_rest")
 	if mark == null or to <= from:
+		_leave(&"_rest")
 		return
 	var at: Variant = _scene.region_position(mark)
 	if at != null:
 		_rests.append({actor = entry.actor, from = from, to = to, at = at, mark = mark.name})
+	_leave(&"_rest")
 
 
 func _check_bodies_apart() -> void:
+	_enter(&"_check_bodies_apart")
 	var reported := {}
 	for i in _rests.size():
 		for j in range(i + 1, _rests.size()):
@@ -828,6 +915,7 @@ func _check_bodies_apart() -> void:
 				reported[key] = true
 				_add("-", "%s and %s stand %.1f m apart at rest from frame %d (marks '%s' and '%s'), under %.1f m: two bodies" % [
 						b.actor, a.actor, apart, from, b.mark, a.mark, BODIES_APART])
+	_leave(&"_check_bodies_apart")
 
 
 # --- the place ---
@@ -839,8 +927,26 @@ func _check_bodies_apart() -> void:
 ## the checker measured is clear for a body. Each failure is a line naming the mark or walk, where, and what is in the
 ## way. The tool loads the region; the other rules do not need it.
 func check_place(scene: SceneShots, space: PhysicsDirectSpaceState3D) -> PackedStringArray:
-	check(scene)   # its problems are the other check's business; it leaves the walks it measured
+	_enter(&"check_place")
+	var rule_lines := check(scene)   # it leaves the walks it measured; if it stopped, its lines say so and are the answer
+	if not finished:
+		return _leave(&"check_place", rule_lines)
 	_problems = PackedStringArray()
+	_broken = ""
+	_place_rules(scene, space)
+	var open := _first_open_above(&"check_place")
+	if _broken == "" and open != "":
+		_broken = open
+	if _broken != "":
+		finished = false
+		stopped = "place"
+		_add("-", "the place check stopped before it finished: in %s (a script error; see the engine's lines above)" % _described(_broken))
+	return _leave(&"check_place", _problems)
+
+
+# The marks and the walks, in the space.
+func _place_rules(scene: SceneShots, space: PhysicsDirectSpaceState3D) -> void:
+	_enter(&"_place_rules")
 	var failed := {}
 	for mark in scene.marks:
 		var at: Variant = scene.region_position(mark)
@@ -858,22 +964,31 @@ func check_place(scene: SceneShots, space: PhysicsDirectSpaceState3D) -> PackedS
 				_add(String(walk.shot), "walk of %s from '%s' to '%s' is blocked by %s at %s, %.1f m along its %.1f m" % [
 						walk.actor, walk.from_mark, walk.to_mark, ", ".join(hits), _where(at), length * float(step) / float(steps), length])
 				break
-	return _problems
+	_leave(&"_place_rules")
+
+
+# The first function entered after `function` that was never left: where a script error stopped, or "".
+func _first_open_above(function: StringName) -> String:
+	_enter(&"_first_open_above")
+	var at := _trace.rfind(String(function))
+	var found := _trace[at + 1] if at >= 0 and at < _trace.size() - 2 else ""   # the last entry is this function's own
+	return _leave(&"_first_open_above", found)
 
 
 # False, with a line, if a body cannot stand at `mark` (at `at` in the region).
 func _mark_in_place(space: PhysicsDirectSpaceState3D, mark: SceneMark, at: Vector3) -> bool:
+	_enter(&"_mark_in_place")
 	var here := "mark '%s' at %s" % [mark.name, _where(at)]
 	var floor_hit := _ray(space, at + Vector3(0, 0.5, 0), at + Vector3(0, -0.6, 0))
 	if floor_hit.is_empty() or absf(floor_hit.position.y - at.y) > FLOOR_TOLERANCE:
 		var found := "there is none under it" if floor_hit.is_empty() else "the floor there is %.2f m %s it, at %s" % [
 				absf(floor_hit.position.y - at.y), "below" if floor_hit.position.y < at.y else "above", _what(floor_hit.collider)]
 		_add("-", "%s: no walkable floor within %.1f m under it (%s)" % [here, FLOOR_TOLERANCE, found])
-		return false
+		return _leave(&"_mark_in_place", false)
 	var hits := _body_hits(space, at)
 	if not hits.is_empty():
 		_add("-", "%s: a body does not fit there, %s is in the way" % [here, ", ".join(hits)])
-		return false
+		return _leave(&"_mark_in_place", false)
 	var open := PackedStringArray()
 	for direction: String in OPEN_DIRECTIONS:
 		var from := at + Vector3(0, OPEN_HEIGHT, 0)
@@ -881,12 +996,13 @@ func _mark_in_place(space: PhysicsDirectSpaceState3D, mark: SceneMark, at: Vecto
 			open.append(direction)
 	if not open.is_empty():
 		_add("-", "%s: nothing stops a body to the %s, so it is outside the region's walls (or the region has none there)" % [here, " and ".join(open)])
-		return false
-	return true
+		return _leave(&"_mark_in_place", false)
+	return _leave(&"_mark_in_place", true)
 
 
 # The names of what the world has where an actor's capsule would stand at `at` (empty: room for a body).
 func _body_hits(space: PhysicsDirectSpaceState3D, at: Vector3) -> PackedStringArray:
+	_enter(&"_body_hits")
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = BODY_RADIUS
 	capsule.height = BODY_HEIGHT
@@ -899,46 +1015,54 @@ func _body_hits(space: PhysicsDirectSpaceState3D, at: Vector3) -> PackedStringAr
 		var name := _what(hit.collider)
 		if not names.has(name):
 			names.append(name)
-	return names
+	return _leave(&"_body_hits", names)
 
 
 func _ray(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3) -> Dictionary:
+	_enter(&"_ray")
 	var query := PhysicsRayQueryParameters3D.create(from, to, Layers.WORLD)
-	return space.intersect_ray(query)
+	return _leave(&"_ray", space.intersect_ray(query))
 
 
 # What a collider is called to a writer: a body named Body is its parent's.
 func _what(collider: Object) -> String:
+	_enter(&"_what")
 	var node := collider as Node
 	if node == null:
-		return "something"
+		return _leave(&"_what", "something")
 	if (node.name == &"Body" or node.name == &"StaticBody3D") and node.get_parent() != null:
-		return String(node.get_parent().name)
-	return String(node.name)
+		return _leave(&"_what", String(node.get_parent().name))
+	return _leave(&"_what", String(node.name))
 
 
 func _where(at: Vector3) -> String:
-	return "(%.2f, %.2f, %.2f)" % [at.x, at.y, at.z]
+	_enter(&"_where")
+	return _leave(&"_where", "(%.2f, %.2f, %.2f)" % [at.x, at.y, at.z])
 
 
 # --- helpers ---
 
 func _name(shot: Shot, index: int) -> String:
-	return String(shot.id) if shot.id != &"" else "shot %d" % (index + 1)
+	_enter(&"_name")
+	return _leave(&"_name", String(shot.id) if shot.id != &"" else "shot %d" % (index + 1))
 
 
 func _add(shot: String, problem: String) -> void:
+	_enter(&"_add")
 	_problems.append("%s/%s: %s" % [_scene.id, shot, problem])
+	_leave(&"_add")
 
 
 # The def an actor of the cast is made of: a spawn's own, the player's (abarax), else the def given to a named one.
 func _def_of(entry: CastEntry) -> ActorDef:
+	_enter(&"_def_of")
 	if entry.source == CastEntry.Source.LIVE_PLAYER:
-		return Registry.fetch(&"actors", &"abarax") as ActorDef if Registry.ids(&"actors").has("abarax") else null
-	return entry.def
+		return _leave(&"_def_of", Registry.fetch(&"actors", &"abarax") as ActorDef if Registry.ids(&"actors").has("abarax") else null)
+	return _leave(&"_def_of", entry.def)
 
 
 func _clip_names(def: ActorDef) -> PackedStringArray:
+	_enter(&"_clip_names")
 	var key := String(def.id)
 	if not _clips.has(key):
 		var names := PackedStringArray()
@@ -949,4 +1073,4 @@ func _clip_names(def: ActorDef) -> PackedStringArray:
 				names = tree.get_animation_list()
 			rig.free()
 		_clips[key] = names
-	return _clips[key]
+	return _leave(&"_clip_names", _clips[key])

@@ -91,3 +91,19 @@ func test_a_mark_that_is_an_actor_start_is_found_through_the_rehearsal_mark() ->
 	scene.mark(&"rehearsal.abarax").yaw_deg = 0.0
 	var lines := _place(scene)
 	assert_true(lines.size() >= 1 and lines[0].contains("foe_in"), "\n".join(lines))
+
+
+class ErrorInRay extends ShotChecker:
+	func _ray(_space: PhysicsDirectSpaceState3D, _from: Vector3, _to: Vector3) -> Dictionary:
+		_enter(&"_ray")
+		var nothing: Array = []
+		var index := 3
+		nothing[index] = 1
+		return _leave(&"_ray", {})
+
+
+func test_a_script_error_in_the_place_check_is_reported_as_stopped() -> void:
+	var checker := ErrorInRay.new()
+	var lines: PackedStringArray = quietly(func() -> PackedStringArray: return checker.check_place(_fixture(), _space))
+	assert_false(checker.finished)
+	assert_true("\n".join(lines).contains("the place check stopped before it finished: in the helper _ray"), "\n".join(lines))
