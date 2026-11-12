@@ -667,3 +667,111 @@ func test_nothing_tall_touches_walkable_ground_on_its_south_side() -> void:
 		assert_true(size.y <= 0.12 + 1e-6 and size.z <= 0.12 + 1e-6, "the rail is no thicker than 0.12 m (%s)" % size)
 		assert_true(shape.global_position.y - size.y / 2.0 >= 2.4 - 1e-6, "its underside is at 2.4 m or higher")
 		assert_true(shape.global_position.x - size.x / 2.0 <= -35.125 + 1e-3 and shape.global_position.x + size.x / 2.0 >= -29.875 - 1e-3, "across the tops of the two posts")
+
+
+# Each low wall (from the walkable side north of it) and the gate (from both sides), at two or three x positions: {label, x, face
+# (the z of the face stood against), way (+1 pushes south, -1 north)}.
+func _edges() -> Array[Dictionary]:
+	var list: Array[Dictionary] = []
+	for spot in [["LowWall1", -55.0, [23.0, 23.75]], ["LowWall2", -55.0, [31.25, 32.0]], ["LowWall3", -30.0, [30.5, 32.0]],
+			["LowWall4", -20.0, [23.0, 24.5]], ["LowWall5", -20.0, [-29.5, -28.0]]]:
+		for x: float in spot[2]:
+			list.append({label = "%s x %.2f" % [spot[0], x], x = x, face = spot[1], way = 1})
+	for x: float in [-34.5, -32.5, -30.5]:
+		list.append({label = "the gate from the north, x %.1f" % x, x = x, face = -5.5, way = 1})
+		list.append({label = "the gate from the south, x %.1f" % x, x = x, face = -4.5, way = -1})
+	return list
+
+
+# Runs `frames_to_run` frames with an actor of `def_path` standing `gap` m before each edge, calling `per_frame(actor, edge, i)`
+# on each frame, after `setup(actor, edge)`; returns the problems: a body whose centre came more than 0.1 m inside the face of the
+# wall, rose above 0.1 m, or ended anywhere but this side of it.
+func _try(region: Region, label: String, def_path: String, gap: float, frames_to_run: int, setup: Callable, per_frame: Callable) -> PackedStringArray:
+	var edges := _edges()
+	for e in edges:
+		var yaw := 0.0 if e.way == 1 else PI
+		e.actor = _spawn(region, def_path, Vector3(e.x, 0.0, e.face - e.way * gap))
+		(e.actor as Actor).place(Transform3D(Basis(Vector3.UP, yaw), Vector3(e.x, 0.0, e.face - e.way * gap)))
+		e.in = 0.0
+		e.up = 0.0
+	await frames(2)
+	for e in edges:
+		setup.call(e.actor, e)
+	for i in frames_to_run:
+		for e in edges:
+			per_frame.call(e.actor, e, i)
+		await frames(1)
+		for e in edges:
+			var at := (e.actor as Actor).global_position
+			e.in = maxf(e.in, (at.z - e.face) * e.way)
+			e.up = maxf(e.up, at.y)
+	var problems := PackedStringArray()
+	for e in edges:
+		var at := (e.actor as Actor).global_position
+		if e.in > 0.1 or e.up > 0.1 or (at.z - e.face) * e.way > -0.2:
+			problems.append("%s, %s: reached %.2f m past the face, rose to %.2f m, ended %.2f m from it" % [label, e.label, e.in, e.up, -(at.z - e.face) * e.way])
+		(e.actor as Actor).queue_free()
+	await frames(1)
+	return problems
+
+
+# Nothing crosses a 0.6 m wall or the gate: a sustained shove, a throw, three throws, a double dash-step, a sprint, each of the
+# attackers' lunges and the grab and the finisher across the gate. None gets over, none rests on top, none rises above 0.1 m.
+func test_nothing_gets_over_a_low_wall_or_the_gate() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var problems := PackedStringArray()
+	var none := func(_a: Actor, _e: Dictionary) -> void: pass
+	var way := func(e: Dictionary) -> Vector2: return Vector2(0, e.way)
+	problems.append_array(await _try(region, "a sustained shove", ABARAX, 1.0, 180, none,
+			func(a: Actor, e: Dictionary, _i: int) -> void: a.push(Vector3(0, 0, e.way * SHOVE * DT * 10.0))))
+	problems.append_array(await _try(region, "a 3 m throw", ABARAX, 1.0, 90, none,
+			func(a: Actor, e: Dictionary, i: int) -> void:
+				if i == 0: a.push(Vector3(0, 0, e.way * 30.0))))
+	problems.append_array(await _try(region, "three throws", ABARAX, 1.0, 90, none,
+			func(a: Actor, e: Dictionary, i: int) -> void:
+				if i < 3: a.push(Vector3(0, 0, e.way * 30.0))))
+	problems.append_array(await _try(region, "two dash-steps", ABARAX, 1.5, 130,
+			func(a: Actor, e: Dictionary) -> void:
+				a.set_brain(ScriptBrain.new([{frames = 2, move = way.call(e), press = [&"dodge"]}, {frames = 40, move = way.call(e)},
+						{frames = 2, move = way.call(e), press = [&"dodge"]}, {frames = 80, move = way.call(e)}])),
+			func(_a: Actor, _e: Dictionary, _i: int) -> void: pass))
+	problems.append_array(await _try(region, "a sprint", ABARAX, 3.0, 120,
+			func(a: Actor, e: Dictionary) -> void: a.set_brain(ScriptBrain.new([{frames = 120, move = way.call(e), hold = [&"dodge"]}])),
+			func(_a: Actor, _e: Dictionary, _i: int) -> void: pass))
+	for attack in [["res://data/actors/knuckle_1.tres", &"knuckle_sweep"], ["res://data/actors/knuckle_1.tres", &"knuckle_thrust"],
+			["res://data/actors/knuckle_1.tres", &"knuckle_hook"], ["res://data/actors/knuckle_heavy.tres", &"heavy_haymaker"],
+			["res://data/actors/knuckle_heavy.tres", &"heavy_slam"], ["res://data/actors/knuckle_blade.tres", &"blade_lunge"]]:
+		for gap: float in [0.8, 2.0]:
+			problems.append_array(await _try(region, "%s from %.1f m" % [attack[1], gap], attack[0], gap, 100,
+					func(a: Actor, _e: Dictionary) -> void: a.runner.start(Registry.fetch(&"moves", attack[1]) as MoveData),
+					func(_a: Actor, _e: Dictionary, _i: int) -> void: pass))
+	assert_eq(problems, PackedStringArray(), "nothing crosses or climbs a low wall or the gate")
+	# The grab and the finisher across the gate: the lead stands at the gate's face, the follower across it, each way round.
+	var crossed := PackedStringArray()
+	for gap: float in [0.5, 1.0]:
+		for lead_north in [true, false]:
+			for finisher in [false, true]:
+				var x := -32.5
+				var near := -5.5 - 0.36 if lead_north else -4.5 + 0.36
+				var far := -4.5 + gap if lead_north else -5.5 - gap
+				var lead := _spawn(region, ABARAX if finisher else KNUCKLE_1, Vector3(x, 0.0, near))
+				var follower := _spawn(region, KNUCKLE_1 if finisher else ABARAX, Vector3(x, 0.0, far))
+				await frames(2)
+				var began: bool = lead.start_paired(follower, lead.def.finisher if finisher else lead.def.grab_pair)
+				var worst := 0.0
+				for i in 120:
+					await frames(1)
+					for body: Actor in [lead, follower]:
+						var on_north: bool = body.global_position.z < -5.0
+						var started_north: bool = (body == lead) == lead_north
+						if on_north != started_north and body.global_position.y > -0.5:
+							worst = maxf(worst, 1.0)
+						worst = maxf(worst, body.global_position.y)
+				if worst >= 0.1:
+					crossed.append("%s, lead %s, gap %.1f: began %s, worst %.2f" % ["finisher" if finisher else "grab", "north" if lead_north else "south", gap, began, worst])
+				lead.queue_free()
+				follower.queue_free()
+				await frames(1)
+	assert_eq(crossed, PackedStringArray(), "no pairing carries a body across the gate or up on it")
