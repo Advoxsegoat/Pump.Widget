@@ -156,6 +156,15 @@ func test_a_live_actors_walk_is_checked_from_his_rehearsal_mark() -> void:
 	assert_true(_check(scene)[0].contains("to walk 45.0 m at JOG to 'far' and come to rest"), _check(scene)[0])
 
 
+func test_a_forty_five_metre_walk_in_seventy_frames_is_a_line_at_a_walk_too() -> void:
+	var scene := _fixture()
+	scene.marks.append(_mark(&"far", Vector3(0, 0, 50)))
+	scene.shots[0].beats.append(_beat(&"abarax", 20, {move_to = &"far"}))
+	var lines := _check(scene)
+	_only(lines, "S1", "abarax needs")
+	assert_true(lines[0].contains("to walk 45.0 m at WALK"), lines[0])
+
+
 func test_a_live_actor_that_walks_with_no_rehearsal_mark_is_a_problem() -> void:
 	var scene := _fixture()
 	scene.marks.append(_mark(&"near", Vector3(0, 0, 6)))

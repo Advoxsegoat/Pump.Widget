@@ -689,6 +689,9 @@ func _check_walks() -> bool:
 			var arrive: int = beats[i].frame
 			if metres >= 0.0 and def != null and def.locomotion != null:
 				var needed := StoryWalk.frames(def.locomotion, beat.pace, metres)
+				if needed < 0:
+					_add(String(shot.id), "%s: could not work out how long a walk of %.1f m takes (the locomotion numbers give no speed)" % [entry.actor, metres])
+					needed = 0
 				var limit: int = mini(next if i + 1 < beats.size() else end, shot.start + shot.length)
 				var left: int = limit - beats[i].frame
 				arrive += needed
