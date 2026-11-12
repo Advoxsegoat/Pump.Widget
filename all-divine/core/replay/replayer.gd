@@ -10,8 +10,13 @@ extends Node
 ## skips the frame it begins on, see InputRecorder) and the replayer, begun alike, count the same frames. When the last entry has
 ## been lived it lets the controls go and says so, at the end of that frame.
 
+## The fight is not the one recorded: after `at` frames its state hash was `got`, the recording's `recorded`. The replay stops there.
+signal diverged(at: int, recorded: int, got: int)
 ## Every entry has been played and the fight has lived the last one.
 signal finished
+
+## The arena whose state hash is compared with the recording's, as the replay goes; null for no comparing.
+var arena: Arena
 
 var _rec: InputRecording
 var _at := 0
@@ -35,6 +40,15 @@ func playing() -> bool:
 func _physics_process(_delta: float) -> void:
 	if _rec == null:
 		return
+	# The fight stands as it does after `_at` frames lived: where the recording says what it was.
+	if arena != null and is_instance_valid(arena) and _rec.hashes.has(_at):
+		var got := arena.state_hash()
+		if got != int(_rec.hashes[_at]):
+			var recorded := int(_rec.hashes[_at])
+			_rec = null
+			InputFeed.release()
+			diverged.emit(_at, recorded, got)
+			return
 	if _at >= _rec.frames.size():
 		_rec = null
 		InputFeed.release()

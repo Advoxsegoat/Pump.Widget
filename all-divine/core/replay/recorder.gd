@@ -10,18 +10,27 @@ extends Node
 ## entry is the next frame, which is the first a replayer begun alongside gives. It stops with the tree when the game is paused,
 ## as the fight does, so an entry is a frame of the fight.
 
+## The arena whose state hash is written into the recording (every hash_every frames, and at close); null for none.
+var arena: Arena
+## How many frames between hashes.
+var hash_every := 60
+
 var _rec := InputRecording.new()
 var _skipped := false  # the frame the recorder was first run on has gone by
 
 
 func _init() -> void:
 	process_physics_priority = -110
+	# A pause stops the fight and so the recording: the frames it holds still are not frames of the fight (the recorder would otherwise
+	# go on, as a child of Main, which runs through a pause to hear the menu button).
+	process_mode = Node.PROCESS_MODE_PAUSABLE
 
 
 ## Begins a recording of the fight in `region` (a scene file), whose dice were rolled from `seed`, `start_frame` being the arena's
 ## own frame count now (what Arena.state_hash holds). Whatever was recorded before is dropped.
-func begin(region: String, seed: int, start_frame := 0) -> void:
+func begin(region: String, seed: int, start_frame := 0, policy := "") -> void:
 	_rec = InputRecording.new()
+	_rec.policy = policy
 	_rec.region = region
 	_rec.seed = seed
 	_rec.start_frame = start_frame
@@ -33,8 +42,17 @@ func recording() -> InputRecording:
 	return _rec
 
 
+## Closes the recording: the header's frame count, and the state hash after its last frame. Call it where the fight stands after the
+## last recorded frame (the end of a frame, or between frames); save does.
+func close() -> void:
+	_rec.frame_count = _rec.frames.size()
+	if arena != null and is_instance_valid(arena) and arena.is_inside_tree():
+		_rec.hashes[_rec.frames.size()] = arena.state_hash()
+
+
 ## Writes the recording to `path` as a text .tres, making the folder if it is not there.
 func save(path: String) -> Error:
+	close()
 	var dir := path.get_base_dir()
 	if not DirAccess.dir_exists_absolute(dir):
 		DirAccess.make_dir_recursive_absolute(dir)
@@ -49,9 +67,20 @@ func _physics_process(_delta: float) -> void:
 	for action in Inputs.GAMEPLAY:
 		if Inputs.held(action):
 			held.append(action)
+	if arena != null and is_instance_valid(arena) and not _rec.frames.is_empty() and _rec.frames.size() % hash_every == 0:
+		_rec.hashes[_rec.frames.size()] = arena.state_hash()  # the fight after the frames recorded so far
+	# The pause button is not a control of the fight: a pause changes nothing in it, and a replay never pauses.
+	var pressed := PackedStringArray()
+	for action in Inputs.pressed_this_frame():
+		if action != &"menu":
+			pressed.append(action)
+	var kept := PackedStringArray()
+	for action in held:
+		if action != &"menu":
+			kept.append(action)
 	_rec.frames.append({
 		"move": Inputs.move_vector(),
-		"pressed": PackedStringArray(Inputs.pressed_this_frame()),
-		"held": held,
+		"pressed": pressed,
+		"held": kept,
 		"direction": Inputs.direction_pressed_this_frame(),
 	})

@@ -27,6 +27,9 @@ extends Node
 
 const DEFAULT_SETTINGS := preload("res://data/render/default_settings.tres")
 const SELFTEST_FRAMES := 600
+## What a game started with --replay exits with when the recording is refused, and when the fight does not go as recorded (0 when it does).
+const EXIT_REFUSED := 2
+const EXIT_DIVERGED := 3
 const YARD := "res://world/training_yard/training_yard.tscn"
 const COURTYARD := "res://world/courtyard/courtyard.tscn"
 ## How far Abarax walks toward the Knuckle in the self-test before he waits for it, and the stick's push.
@@ -80,7 +83,15 @@ func _ready() -> void:
 	overlay.actor = player
 	_apply_look()
 	var arguments := parse_arguments(OS.get_cmdline_user_args())
-	var replaying := _load_recording(arguments["replay"])
+	var replaying: InputRecording = null
+	if not arguments["replay"].is_empty():
+		var why := replay_refusal(arguments["replay"])
+		if not why.is_empty():
+			# no fight is begun, and none is played in its place
+			printerr("replay: " + why)
+			get_tree().quit(EXIT_REFUSED)
+			return
+		replaying = _load_recording(arguments["replay"])
 	_enter_region()
 	if SelfTest.active:
 		start_selftest()
@@ -91,10 +102,6 @@ func _ready() -> void:
 		start_recording(arguments["record"])
 
 
-func _exit_tree() -> void:
-	save_recording()
-
-
 func _unhandled_input(event: InputEvent) -> void:
 	if WindowToggle.is_toggle(event):
 		WindowToggle.apply(window)
@@ -102,6 +109,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var key := event as InputEventKey
 	if key != null and key.pressed and not key.echo:
+		if _recorder != null and key.keycode >= KEY_F5 and key.keycode <= KEY_F9:
+			_recorder.recording().debug_keys = true  # these change the fight and are not controls: the recording says so
 		match key.keycode:
 			KEY_F3:
 				overlay.visible = not overlay.visible
@@ -155,7 +164,12 @@ func start_recording(path: String) -> void:
 	_recorder = InputRecorder.new()
 	_recorder.name = &"Recorder"
 	add_child(_recorder)
+	_recorder.arena = arena()
 	_recorder.begin(region.scene_file_path, 0, 0)
+	# Saved as the game ends, while the arena is still in the tree to say what the fight came to (it is not by _exit_tree: the
+	# children have left by then).
+	if not tree_exiting.is_connected(save_recording):
+		tree_exiting.connect(save_recording)
 
 
 ## Saves the recording --record began, if there is one; OK if there is none to save.
@@ -175,8 +189,31 @@ func start_replay(rec: InputRecording) -> void:
 	_replayer = InputReplayer.new()
 	_replayer.name = &"Replayer"
 	add_child(_replayer)
-	_replayer.finished.connect(_on_replay_finished)
+	_replayer.arena = arena()
+	_replayer.finished.connect(_on_replay_finished.bind(not rec.hashes.is_empty()))
+	_replayer.diverged.connect(_on_replay_diverged)
 	_replayer.play(rec)
+
+
+## Why the recording at `path` cannot be played, in one line, or "" if it can: there is none, it cannot be read, or it is cut short, of a
+## format this game does not know or made with a debug key pressed (InputRecording.problem).
+static func replay_refusal(path: String) -> String:
+	if not FileAccess.file_exists(path):
+		return "no recording at %s" % path
+	var rec := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as InputRecording
+	if rec == null:
+		return "%s is not a recording this game can read" % path
+	return rec.problem()
+
+
+## The line a replay prints when its fight stands otherwise than recorded, at the checkpoint `frame`.
+static func diverged_line(frame: int, recorded: int, got: int) -> String:
+	return "replay: diverged at frame %d (recorded %d, got %d)" % [frame, recorded, got]
+
+
+## The line a replay prints at its end, with `agreed` when it had hashes to agree with.
+static func finished_line(hash_at_end: int, agreed: bool) -> String:
+	return "replay: finished, state hash %d%s" % [hash_at_end, ", as recorded" if agreed else ""]
 
 
 # The recording at `path`, with its seed's dice set for the first wave; null with no path or none that loads.
@@ -191,10 +228,16 @@ func _load_recording(path: String) -> InputRecording:
 	return rec
 
 
-func _on_replay_finished() -> void:
-	print("replay: finished, state hash %d" % (arena().state_hash() if arena() != null else 0))
+func _on_replay_finished(agreed: bool) -> void:
+	print(finished_line(arena().state_hash() if arena() != null else 0, agreed))
 	if _quit_after_replay and DisplayServer.get_name() == "headless":
 		get_tree().quit()
+
+
+func _on_replay_diverged(at: int, recorded: int, got: int) -> void:
+	print(diverged_line(at, recorded, got))
+	if _quit_after_replay:
+		get_tree().quit(EXIT_DIVERGED)
 
 
 ## The arena of the region, or null when it is not one (the courtyard).

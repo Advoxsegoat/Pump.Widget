@@ -145,7 +145,8 @@ func begin(player: Actor, arena: Arena, seed_value: int, how: Policy = Policy.MI
 	recorder = InputRecorder.new()
 	recorder.name = &"Recorder"
 	add_child(recorder)
-	recorder.begin(arena.scene_file_path if arena != null else "", rng_seed, 0)
+	recorder.arena = arena
+	recorder.begin(arena.scene_file_path if arena != null else "", rng_seed, 0, String(POLICIES.find_key(policy)))
 	if listen_for_errors:
 		TestLogger.shared().push_context(true)
 	player.hit_landed.connect(func(r: HitResult, e: HitEvent) -> void:

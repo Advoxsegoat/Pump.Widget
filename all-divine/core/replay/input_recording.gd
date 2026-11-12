@@ -12,6 +12,23 @@ extends Resource
 ##               (Inputs.direction_pressed_this_frame). A sway or a duck is guard with this, so a recording needs it as it
 ##               needs the stick: the stick alone says where he walks, not that a flick began.
 
+##
+## And a header, so that a recording says what it is and checks itself: the format's `version`, the `seed` and `policy` of the bot that
+## made it (a person's has none), `frame_count`, whether a `debug_keys` key (F5 to F9, which change the fight and are not controls) was
+## pressed, and `hashes`: the fight's state hash (Arena.state_hash) after every `hash_every` frames and after the last, which a replay
+## compares as it goes.
+
+## The format this game reads.
+const VERSION := 1
+
+## The header: the format's version, who made it, how many frames it has, and whether a debug key was pressed while it was made.
+@export var version := VERSION
+@export var policy := ""
+@export var frame_count := 0
+@export var debug_keys := false
+## Entries lived (a count of frames from the first) -> the arena's state hash after them.
+@export var hashes: Dictionary = {}
+
 ## One entry per physics frame, the first the first frame the recorder ran.
 @export var frames: Array = []
 ## The scene file of the region the fight was in.
@@ -26,3 +43,15 @@ extends Resource
 ## An entry for a frame with no control touched.
 static func idle() -> Dictionary:
 	return {"move": Vector2.ZERO, "pressed": PackedStringArray(), "held": PackedStringArray(), "direction": Vector2.ZERO}
+
+
+## Why this recording cannot be played, in one line, or "" if it can: from a format the game does not know, cut short (fewer frames
+## than its header says), or made with a debug key pressed.
+func problem() -> String:
+	if version != VERSION:
+		return "the recording is of format %d and this game reads format %d" % [version, VERSION]
+	if frames.size() != frame_count:
+		return "the recording is cut short: it has %d frames of the %d it says" % [frames.size(), frame_count]
+	if debug_keys:
+		return "a debug key (F5 to F9) was pressed while it was recorded, and that is not in the recording"
+	return ""
