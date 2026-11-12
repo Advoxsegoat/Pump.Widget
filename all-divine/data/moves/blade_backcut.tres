@@ -21,7 +21,7 @@ impact_sound = &"impact_palm"
 script = ExtResource("1_move")
 id = &"blade_backcut"
 clip = &"blade_backcut"
-strike_distance = 0.8
+strike_distance = 0.95
 hits = {
 &"backcut": SubResource("Resource_backcut")
 }

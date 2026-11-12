@@ -394,10 +394,9 @@ static func stepped_time(t: float, fps: int) -> float:
 
 
 ## Has the locomotion blend play `clips` (base clip name -> clip name: &"idle" -> &"blade_idle") in place of the clips it names, from
-## the next tick on. The blend tree is a resource the scene shares with every rig made from it, so this rig takes a copy of it
-## first and changes only the copy: no other body of the scene changes. A clip the rig lacks is an error and is left as it was.
+## the next tick on. Every rig has its own copy of the scene's blend tree (_ready makes it), so this changes only this rig's:
+## no other body of the scene changes. A clip the rig lacks is an error and is left as it was.
 func set_locomotion_clips(clips: Dictionary) -> void:
-	tree.tree_root = tree.tree_root.duplicate(true)
 	var loco := (tree.tree_root as AnimationNodeBlendTree).get_node(&"loco") as AnimationNodeBlendSpace1D
 	for i in loco.get_blend_point_count():
 		var node := loco.get_blend_point_node(i) as AnimationNodeAnimation

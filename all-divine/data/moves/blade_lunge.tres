@@ -21,7 +21,7 @@ impact_sound = &"impact_heavy"
 script = ExtResource("1_move")
 id = &"blade_lunge"
 clip = &"blade_lunge"
-root_motion_scale = 1.1
+root_motion_scale = 0.55
 hits = {
 &"lunge": SubResource("Resource_lunge")
 }
