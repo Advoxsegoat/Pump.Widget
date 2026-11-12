@@ -159,7 +159,7 @@ func test_selection_wraps_at_both_ends() -> void:
 	menu.show_page(&"root", page)
 	assert_eq(menu.index, 0)
 	menu.press(C.DOWN)
-	assert_eq(menu.rows()[menu.index].label, "Quit", "down skips the text row")
+	assert_eq(menu.rows()[menu.index].label, "Settings", "down skips the text row")
 	menu.press(C.UP)
 	assert_eq(menu.index, 0, "and so does up")
 	menu.press(C.UP)
@@ -171,7 +171,7 @@ func test_a_built_page_is_a_typed_page() -> void:
 	var page: Variant = MenuPages.build(&"root", menu)
 	assert_true(page is MenuPage, "MenuPages.build gives a MenuPage")
 	if page is MenuPage:
-		assert_eq([page.heading, page.rows.size(), page.back.is_valid(), page.start], ["Paused", 2, true, 0])
+		assert_eq([page.heading, page.rows.size(), page.back.is_valid(), page.start], ["Paused", 3, true, 0])
 
 
 func test_a_diagonal_flick_gives_one_command() -> void:
@@ -197,10 +197,10 @@ func test_a_disabled_row_is_passed_over_and_when_none_can_be_selected_nothing_is
 	menu.show_page(&"root", page)
 	assert_eq(menu.rows()[0].label, "Resume")
 	menu.press(C.DOWN)
-	assert_eq(menu.rows()[menu.index].label, "Quit", "Down passes over the disabled row")
+	assert_eq(menu.rows()[menu.index].label, "Settings", "Down passes over the disabled row")
 	menu.press(C.UP)
 	assert_eq(menu.rows()[menu.index].label, "Resume", "and so does Up")
-	assert_eq(menu.rows().map(func(r: Dictionary) -> bool: return r.selected), [true, false, false])
+	assert_eq(menu.rows().map(func(r: Dictionary) -> bool: return r.selected), [true, false, false, false])
 	for row in page.rows:
 		row.enabled = false
 	menu.show_page(&"root", page)
