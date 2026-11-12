@@ -460,3 +460,19 @@ func test_a_wave_the_player_dies_in_five_times_is_a_finding_not_a_problem_and_it
 	game.queue_free()
 	await frames(2)
 	InputFeed.release()
+
+
+func test_a_bot_walking_into_a_pillar_steers_round_it() -> void:
+	# A foe that has not noticed him, across the yard, and a pillar square in the way (seed 6 of the counter policy stood against a
+	# lantern for a thousand frames, pushing at it).
+	var run := Duel.make(self, [], [], 9.0, load(KNUCKLE) as ActorDef)
+	TestArena.wall(run["arena"], Vector3(0, 1, 3.5), Vector3(1.5, 2.0, 1.5))
+	var a: Actor = run["a"]
+	a.set_brain(PlayerBrain.new())
+	var bot := track(CombatBot.new()) as CombatBot
+	bot.reaction_frames = 0
+	bot.begin(a, null, 1, CombatBot.Policy.COUNTER)
+	run["bot"] = bot
+	await frames(420)
+	assert_true(a.global_position.z > 5.5, "he is past the pillar: z = %.1f" % a.global_position.z)
+	await _end(run)

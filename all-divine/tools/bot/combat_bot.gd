@@ -35,6 +35,11 @@ enum Answer { NONE, SWAY, DUCK, HOP, DASH, CATCH, GUARD }
 ## The policies by the name `--policy=` gives them.
 const POLICIES := {&"mixed": Policy.MIXED, &"aggress": Policy.AGGRESS, &"counter": Policy.COUNTER, &"mash": Policy.MASH}
 
+## A walk that gets him less than STUCK_REACH metres in STUCK_FRAMES is against something (a lantern, a wall): he steers aside, 75 degrees
+## either way, for STEER_FRAMES, as a player would.
+const STUCK_FRAMES := 24
+const STUCK_REACH := 0.15
+const STEER_FRAMES := 45
 ## How near it walks to a foe before it stands, and how near a foe's blow is one to answer (metres, centre to centre).
 const ENGAGE_RANGE := 1.5
 const THREAT_RANGE := 3.2
@@ -130,6 +135,10 @@ var _rest_until := 0  # no new combo before this frame
 var _backing_off := false
 var _last_attacker: Actor  # who last struck him
 var _history := {}  # foe id -> [[where it stood, whether it was open], ...], one per frame, the latest last
+var _marked_at := Vector3.INF  # where the player stood STUCK_FRAMES ago, to tell that a walk is going nowhere
+var _marked_frame := 0
+var _steer_until := 0  # a walk that went nowhere is turned aside until this frame, by _steer_turn
+var _steer_turn := 0.0
 var _heard := 0  # how many of the logger's lines have been taken in
 
 
@@ -711,6 +720,23 @@ func _move(foes: Array[Actor]) -> void:
 	var chained := _player.chain != null and _player.chain.count > 0
 	if _distance(foe) > ENGAGE_RANGE and not (chained and _distance(foe) < THREAT_RANGE + 1.0):
 		_walk = _toward(foe)
+	_steer()
+
+
+# Turns the walk aside when it has gone nowhere for STUCK_FRAMES, for STEER_FRAMES.
+func _steer() -> void:
+	if _walk.is_zero_approx():
+		_marked_at = Vector3.INF
+		return
+	var here := _player.global_position
+	if _marked_at == Vector3.INF or frame - _marked_frame >= STUCK_FRAMES:
+		if _marked_at != Vector3.INF and frame >= _steer_until and here.distance_to(_marked_at) < STUCK_REACH:
+			_steer_until = frame + STEER_FRAMES
+			_steer_turn = deg_to_rad(75.0) * (1.0 if _rng.randf() < 0.5 else -1.0)
+		_marked_at = here
+		_marked_frame = frame
+	if frame < _steer_until:
+		_walk = _walk.rotated(_steer_turn)
 
 
 # The unit direction on the ground (world x, z) from the player to `foe`.
