@@ -284,26 +284,26 @@ func test_the_same_seed_plays_the_same_fight_and_another_plays_another() -> void
 	assert_ne(runs[0][1], runs[2][1], "another seed does not")
 
 
-func test_the_numbers_are_kept_by_tier_of_the_wave() -> void:
+func test_the_numbers_are_kept_by_the_foes_def() -> void:
 	var game := BotWorld.make(self, 3)
 	var bot := track(CombatBot.new()) as CombatBot
 	bot.begin(game.player, game.arena(), 3, CombatBot.Policy.COUNTER)
 	await frames(1500)
 	bot.finish()
-	var tiers := bot.tiers()
-	assert_true(tiers.has(1), "the yard's first waves are tier I: %s" % [tiers.keys()])
+	var foes := bot.foes()
+	assert_false(foes.is_empty(), "there are rows")
 	var dealt := 0.0
 	var taken := 0.0
 	var cleared := 0
-	for tier: int in tiers:
-		dealt += tiers[tier]["dealt"]
-		taken += tiers[tier]["taken"]
-		cleared += tiers[tier]["cleared"]
-	assert_near(dealt, bot.damage_dealt, 0.01, "the tiers add up to the run's")
+	for id: StringName in foes:
+		dealt += foes[id]["dealt"]
+		taken += foes[id]["taken"]
+		cleared += foes[id]["cleared"]
+	assert_near(dealt, bot.damage_dealt, 0.01, "the rows add up to the run's")
 	assert_near(taken, bot.damage_taken, 0.01)
-	assert_eq(cleared, bot.waves_cleared)
-	assert_true(bot.damage_dealt > 0.0 and bot.tier_lines().size() == tiers.size(), "a line each: %s" % [bot.tier_lines()])
-	assert_true(bot.tier_lines()[0].contains("tier I:"), bot.tier_lines()[0])
+	assert_true(cleared >= bot.waves_cleared, "a wave cleared counts for each def in it")
+	assert_true(bot.damage_dealt > 0.0 and bot.foe_lines().size() == foes.size(), "a line each: %s" % [bot.foe_lines()])
+	assert_true(bot.foe_lines()[0].contains("foe %s:" % foes.keys()[0]), bot.foe_lines()[0])
 	bot.queue_free()
 	game.queue_free()
 	await frames(2)

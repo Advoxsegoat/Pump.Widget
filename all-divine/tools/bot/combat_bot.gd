@@ -81,8 +81,9 @@ var damage_taken := 0.0
 var highest_tempo := 0
 var waves_cleared := 0
 var deaths := 0
-## The same numbers wave by wave (the index of the wave that was on): {dealt, taken, tempo, cleared, deaths}.
-var by_wave := {}
+## The same numbers by the foe's def id: {dealt, taken, tempo, cleared, deaths}, HP taken off a foe of that def and off him by one,
+## the highest tempo reached with one the nearest, the waves cleared that held one (each def in a wave has it), his deaths to one.
+var by_foe := {}
 ## Where a failing run's recording is saved.
 var replay_dir := "res://out/replays"
 ## Whether engine errors and warnings count as problems (they are heard through TestLogger from begin to finish).
@@ -107,6 +108,7 @@ var _combo_left := 0  # palms of the combo begun that are still to press
 var _in_combo := false  # a combo is on (it ends when no move plays)
 var _rest_until := 0  # no new combo before this frame
 var _backing_off := false
+var _last_attacker: Actor  # who last struck him
 var _heard := 0  # how many of the logger's lines have been taken in
 
 
@@ -129,22 +131,27 @@ func begin(player: Actor, arena: Arena, seed_value: int, how: Policy = Policy.MI
 	recorder.begin(arena.scene_file_path if arena != null else "", rng_seed, 0)
 	if listen_for_errors:
 		TestLogger.shared().push_context(true)
-	player.hit_landed.connect(func(r: HitResult, _e: HitEvent) -> void:
+	player.hit_landed.connect(func(r: HitResult, e: HitEvent) -> void:
 		damage_dealt += r.hp_damage
-		_row()["dealt"] += r.hp_damage)
+		_row(e.target)["dealt"] += r.hp_damage)
 	player.got_hit.connect(_on_got_hit)
 	player.died.connect(func() -> void:
 		deaths += 1
-		_row()["deaths"] += 1)
+		_row(_last_attacker)["deaths"] += 1)
 	if player.chain != null:
 		player.chain.changed.connect(func(_count: int, tempo: DodgeChain.Tempo) -> void:
 			highest_tempo = maxi(highest_tempo, tempo)
-			_row()["tempo"] = maxi(_row()["tempo"], tempo))
+			var row := _row(_foes()[0] if not _foes().is_empty() else null)
+			row["tempo"] = maxi(row["tempo"], tempo))
 	if arena != null:
 		arena.wave_started.connect(func(_i: int) -> void: watch.note_progress(frame))
 		arena.wave_cleared.connect(func(i: int) -> void:
 			waves_cleared += 1
-			_row(i)["cleared"] += 1
+			var seen := {}
+			for def in _arena.waves[i].defs:
+				if not seen.has(def.id):
+					seen[def.id] = true
+					_row_for(def.id)["cleared"] += 1
 			watch.note_progress(frame))
 		watch.note_progress(0)
 
@@ -179,54 +186,33 @@ func summary() -> String:
 			DodgeChain.Tempo.keys()[highest_tempo].to_lower()]
 
 
-## The numbers of the run by the tier of the wave they came in, as {tier: {dealt, taken, tempo, cleared, deaths}}. A wave's tier is
-## the highest number a foe's def id ends in (knuckle_1, knuckle_2, knuckle_3: I, II, III), 0 for a wave of foes with none.
-func tiers() -> Dictionary:
-	var found := {}
-	for index: int in by_wave:
-		var tier := _tier_of(index)
-		if not found.has(tier):
-			found[tier] = {"dealt": 0.0, "taken": 0.0, "tempo": 0, "cleared": 0, "deaths": 0}
-		var row: Dictionary = found[tier]
-		var wave_row: Dictionary = by_wave[index]
-		for key in ["dealt", "taken", "cleared", "deaths"]:
-			row[key] += wave_row[key]
-		row["tempo"] = maxi(row["tempo"], wave_row["tempo"])
-	return found
+## The numbers of the run by the foe's def id (by_foe).
+func foes() -> Dictionary:
+	return by_foe
 
 
-## One line for each tier of tiers(), lowest first.
-func tier_lines() -> PackedStringArray:
+## One line for each def in by_foe, by id.
+func foe_lines() -> PackedStringArray:
 	var lines := PackedStringArray()
-	var found := tiers()
-	var keys := found.keys()
-	keys.sort()
-	for tier: int in keys:
-		var row: Dictionary = found[tier]
-		lines.append("bot seed %d tier %s: dealt %d, taken %d, highest tempo %s, waves cleared %d, deaths %d" % [
-				rng_seed, ["other", "I", "II", "III", "IV", "V"][clampi(tier, 0, 5)], roundi(row["dealt"]), roundi(row["taken"]),
-				DodgeChain.Tempo.keys()[row["tempo"]].to_lower(), row["cleared"], row["deaths"]])
+	var ids := by_foe.keys()
+	ids.sort()
+	for id: StringName in ids:
+		var row: Dictionary = by_foe[id]
+		lines.append("bot seed %d foe %s: dealt %d, taken %d, highest tempo %s, waves cleared %d, deaths %d" % [
+				rng_seed, id, roundi(row["dealt"]), roundi(row["taken"]), DodgeChain.Tempo.keys()[row["tempo"]].to_lower(),
+				row["cleared"], row["deaths"]])
 	return lines
 
 
-# The numbers of wave `index` (the wave that is on by default), made when first asked for.
-func _row(index := -2) -> Dictionary:
-	if index == -2:
-		index = _arena.wave if _arena != null else -1
-	if not by_wave.has(index):
-		by_wave[index] = {"dealt": 0.0, "taken": 0.0, "tempo": 0, "cleared": 0, "deaths": 0}
-	return by_wave[index]
+# The row of the def of `foe` (an Actor, or null for none: "none").
+func _row(foe: Variant) -> Dictionary:
+	return _row_for(foe.def.id if foe is Actor and is_instance_valid(foe) else &"none")
 
 
-func _tier_of(index: int) -> int:
-	if _arena == null or index < 0 or index >= _arena.waves.size():
-		return 0
-	var tier := 0
-	for def in _arena.waves[index].defs:
-		var digits := String(def.id).get_slice("_", String(def.id).get_slice_count("_") - 1)
-		if digits.is_valid_int():
-			tier = maxi(tier, int(digits))
-	return tier
+func _row_for(id: StringName) -> Dictionary:
+	if not by_foe.has(id):
+		by_foe[id] = {"dealt": 0.0, "taken": 0.0, "tempo": 0, "cleared": 0, "deaths": 0}
+	return by_foe[id]
 
 
 func _physics_process(_delta: float) -> void:
@@ -615,9 +601,10 @@ func _toward(foe: Actor) -> Vector2:
 
 
 # The player was struck at, or evaded: an evade may be followed by a counter or a clear-out.
-func _on_got_hit(result: HitResult, _event: HitEvent) -> void:
+func _on_got_hit(result: HitResult, event: HitEvent) -> void:
 	damage_taken += result.hp_damage
-	_row()["taken"] += result.hp_damage
+	_last_attacker = event.attacker
+	_row(event.attacker)["taken"] += result.hp_damage
 	if result.outcome != HitResult.Outcome.EVADED or policy == Policy.MASH:
 		return
 	_evaded_at = frame
