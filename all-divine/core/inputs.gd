@@ -53,6 +53,8 @@ var _direction := Vector2.ZERO
 var _sweep_px := 0.0
 var _sweep_began := 0.0
 var _quarantined: Dictionary = {}  # gameplay action -> true while it is held from before the quarantine
+var _was_down: Dictionary = {}  # gameplay action -> whether it was down at the latest physics frame
+var _paused_down: Dictionary = {}  # gameplay action -> true while it is down, having gone down while the game was paused
 var _quarantined_at := -QUARANTINE_FRAMES  # the physics frame quarantine() was called on
 
 
@@ -74,6 +76,7 @@ func _init() -> void:
 
 func _physics_process(_delta: float) -> void:
 	direction_pressed_this_frame()
+	_watch_pause()
 
 
 # The last device is that of the last event that is a press, or a move past the deadzone. An event that lets go
@@ -244,18 +247,31 @@ func held(action: StringName) -> bool:
 	return Input.is_action_pressed(action) and not _held_over(action)
 
 
-## Keeps what is down now out of the fight: the menu calls it as the game leaves the pause, so that the press that
-## closed it (Space, A and Enter are a dash-step, the left mouse button a palm, Esc and Start the menu button) is not also a
-## move on the first frame back. Every gameplay action down now is dead until it is let go (pressed_this_frame leaves it out,
-## held says false), and for QUARANTINE_FRAMES physics frames no press at all is reported (a press that came in with the
-## close, on a button the player let go of at once). Movement is not touched: a direction held through the close is a
-## hold, not a press, and move_vector and direction_pressed_this_frame go on as they were.
+## Keeps what went down while the game was paused out of the fight: the menu calls it as the game leaves the pause, so that the
+## press that closed it (Space, A and Enter are a dash-step, the left mouse button a palm, Esc and Start the menu button) is not also a
+## move on the first frame back. Every gameplay action that went down in the pause is dead until it is let go (pressed_this_frame
+## leaves it out, held says false), and for QUARANTINE_FRAMES physics frames no press at all is reported (a press that came in
+## with the close, on a button the player let go of at once). What was already held when the pause began is not touched: a charge
+## goes on, a guard stays up, as the fight is given back as it was; and what was held and let go in the pause is simply up.
+## Movement is not touched either: a direction held through the close is a hold, not a press.
 func quarantine() -> void:
 	_quarantined_at = Engine.get_physics_frames()
 	_quarantined.clear()
 	for action in GAMEPLAY:
-		if Input.is_action_pressed(action):
+		if Input.is_action_pressed(action) and (_paused_down.has(action) or not _was_down.get(action, false)):
 			_quarantined[action] = true
+
+
+# Notes, every physics frame, which gameplay actions are down and which of them went down while the game was paused.
+func _watch_pause() -> void:
+	var paused := get_tree().paused
+	for action in GAMEPLAY:
+		var down := Input.is_action_pressed(action)
+		if not down:
+			_paused_down.erase(action)
+		elif paused and not _was_down.get(action, false):
+			_paused_down[action] = true
+		_was_down[action] = down
 
 
 # Whether `action` is still held from before quarantine(); once it is let go, it is free again.

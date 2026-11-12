@@ -21,7 +21,8 @@ func after_each() -> void:
 	for button in [JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_START]:
 		_pad(button, false)
 	_mouse(false)
-	Input.action_release(&"palm")
+	for action in [&"palm", &"heavy", &"guard", &"dodge"]:
+		Input.action_release(action)
 	Inputs._device = Inputs.Device.KEYBOARD_MOUSE
 	Game.reset()
 	Settings.reset_all()
@@ -694,3 +695,71 @@ func test_pause_gives_back_an_afterimage_half_faded() -> void:
 	var seen := await _gives_back("an afterimage half faded", build, ready, 20)
 	assert_eq(seen.images.size(), 1, "one afterimage at the pause")
 	assert_eq(seen.images[0][0], 6, "with 6 of its 12 frames left")
+
+
+# --- a hold that was down before the pause is still down after it ---
+
+# Abarax in Main (his own PlayerBrain, on the real Input) holds `action` from the start; the game is paused for `held` frames once
+# he has lived `pause_at` frames (`during` is called in the pause, if given) and resumed the way the menu resumes it (Main
+# quarantines what the pause brought in); he goes on to `until`. With `jab`, the foe stands a pace off and throws its jab at him
+# on his frame 6. Returns what the fight saw.
+func _hold_run(action: StringName, pause_at: int, held: int, until: int, jab := false, during := Callable()) -> Dictionary:
+	Melee.slow(0, 1.0)
+	var main := await _main()
+	var a := main.player
+	var seen := {"charged": [], "started": [], "outcomes": [], "guarding": []}
+	if jab:
+		var foe := main.arena().enemies()[0]
+		var at := a.global_position + a.facing() * 0.9
+		foe.place(Transform3D(Basis(Vector3.UP, a.locomotion.facing_yaw + PI), at))
+	a.runner.charged.connect(func(_m: MoveData) -> void: seen["charged"].append(a.frame))
+	a.runner.move_started.connect(func(m: MoveData) -> void: seen["started"].append([m.id, a.frame]))
+	a.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void: seen["outcomes"].append([HitResult.Outcome.keys()[r.outcome], a.frame]))
+	var start := a.frame
+	Input.action_press(action)
+	while a.frame < start + pause_at:
+		if jab and a.frame == start + 6:
+			main.arena().enemies()[0].runner.start(Registry.fetch(&"moves", &"knuckle_jab") as MoveData)
+		await frames(1)
+	if held > 0:
+		Game.change(Game.State.PAUSE)
+		await frames(3)
+		if during.is_valid():
+			during.call()
+		await frames(held)
+		Game.change(Game.State.PLAY)
+		seen["held_at_resume"] = Inputs.held(action)
+		seen["charging_at_resume"] = a.runner.charging
+	while a.frame < start + until:
+		await frames(1)
+		seen["guarding"].append(a.guarding)
+	Input.action_release(action)
+	main.free()
+	Melee.slow(0, 1.0)
+	return seen
+
+
+func test_a_charge_held_through_the_pause_goes_on_from_where_it_was() -> void:
+	var control := await _hold_run(&"heavy", 30, 0, 80)
+	var paused := await _hold_run(&"heavy", 30, 200, 80)
+	assert_eq(paused["held_at_resume"], true, "the heavy button is still held at the resume")
+	assert_eq(paused["charging_at_resume"], true, "and the charge is going on")
+	assert_eq(control["charged"].size(), 1, "the control charged once: %s" % [control["charged"]])
+	assert_eq(paused["charged"], control["charged"], "the paused charge is full on the same play frame")
+	assert_eq(paused["started"], control["started"], "one heavy, no uncharged swing at the resume")
+
+
+func test_a_guard_held_through_the_pause_is_still_up_and_takes_the_blow() -> void:
+	# The foe's jab lands after the resume; the guard held from before is up for it, as in a control that never paused.
+	var control := await _hold_run(&"guard", 12, 0, 45, true)
+	var paused := await _hold_run(&"guard", 12, 200, 45, true)
+	assert_eq(paused["held_at_resume"], true, "guard is still held at the resume")
+	assert_eq(control["outcomes"].map(func(o: Array) -> String: return o[0]).slice(0, 1), ["GUARDED"], "the control guards the blow: %s" % [control["outcomes"]])
+	assert_eq(paused["outcomes"], control["outcomes"], "and so does the paused fight, on the same frame")
+	assert_eq(paused["guarding"], control["guarding"], "the stance is up and down on the same frames")
+
+
+func test_a_hold_let_go_during_the_pause_is_up_at_the_resume() -> void:
+	var seen := await _hold_run(&"guard", 15, 30, 30, false, func() -> void: Input.action_release(&"guard"))
+	assert_eq(seen["held_at_resume"], false, "guard let go in the pause is not held at the resume")
+	assert_eq(seen["guarding"].slice(-1), [false], "and the guard is down")
