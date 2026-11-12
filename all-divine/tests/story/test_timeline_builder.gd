@@ -267,3 +267,44 @@ func test_the_builder_refuses_what_the_checker_refuses() -> void:
 		assert_true(built == null, "%s: not built" % name)
 		var lines := ShotChecker.new().check(cases[name])
 		assert_true(lines.size() > 0 and TimelineBuilder.last_error == lines[0], "%s: the checker's first line is the error: '%s'" % [name, TimelineBuilder.last_error])
+
+
+# The most the picture turns in one frame while the camera glides from a pose at `yaw` back to the game's, over `frames`
+# frames of a linear weight (as the Director will ramp it), through CinePose.blend.
+func _worst_turn(yaw: float, frames: int) -> float:
+	var shown := CinePose.new()
+	shown.yaw_deg = yaw
+	var home := CinePose.new()
+	var worst := 0.0
+	var last := yaw
+	for i in range(1, frames + 1):
+		var now := CinePose.blend(shown, home, float(i) / frames).yaw_deg
+		worst = maxf(worst, absf(now - last))
+		last = now
+	return worst
+
+
+func test_the_glide_back_from_a_turned_shot_turns_at_most_three_degrees_a_frame_within_sixty_frames() -> void:
+	var scene := _fixture()
+	assert_eq(TimelineBuilder.return_frames(scene), scene.lead_out, "a shot at yaw 0 returns in the scene's own glide (%d)" % scene.lead_out)
+	assert_eq(TimelineBuilder.build(scene).length, scene.total_frames() / 60.0, "and the timeline is as long as before")
+	scene.shots[3].yaw_deg = 120.0
+	var frames := TimelineBuilder.return_frames(scene)
+	assert_true(frames >= 50 and frames <= 60, "120 degrees takes %d frames" % frames)
+	assert_true(_worst_turn(120.0, frames) <= 3.0 + 1e-6, "no frame turns more than 3 degrees: %.2f" % _worst_turn(120.0, frames))
+	assert_near(TimelineBuilder.build(scene).length, (scene.lead_in + scene.length() + frames) / 60.0, 1e-9, "the timeline's end holds the longer glide")
+	scene.shots[3].yaw_deg = 150.0
+	assert_eq(TimelineBuilder.return_frames(scene), 60, "and never more than 60")
+	scene.shots[3].yaw_deg = -150.0
+	assert_eq(TimelineBuilder.return_frames(scene), 60, "either way round")
+	scene.shots[3].yaw_deg = 150.0
+	scene.lead_out = 80
+	assert_eq(TimelineBuilder.return_frames(scene), 80, "a scene's own longer glide is kept")
+	var letterboxed := _fixture()
+	letterboxed.kind = SceneShots.Kind.CUTSCENE
+	letterboxed.letterbox = true
+	letterboxed.shots[3].yaw_deg = 120.0
+	var anim := TimelineBuilder.build(letterboxed)
+	var track := _track(anim, Animation.TYPE_VALUE, "CineCamera:letterbox")
+	var end := roundi(anim.length * 60.0)
+	assert_eq(_frames_of(anim, track), [0, 30, end - 30, end] as Array[int], "the bars still slide out over the last 30 frames")

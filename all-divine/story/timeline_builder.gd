@@ -33,6 +33,12 @@ const BARS_FRAMES := 30
 ## A shot's progress reaches 1 this many seconds before its end, so that the next shot's first key (0) is a cut and not
 ## a ramp over a frame; half a millisecond is far under the physics step.
 const PROGRESS_EDGE := 0.0005
+## The picture turns by a smoothstep, whose fastest swing is this many times the average one.
+const SWING_PEAK := 1.5
+## The most degrees a frame may turn the picture in the glide back, and the most frames that glide is lengthened to.
+const MAX_TURN_PER_FRAME := 3.0
+const MAX_RETURN_FRAMES := 60
+
 ## Why the last `build` gave null; empty after one that built.
 static var last_error := ""
 
@@ -47,13 +53,29 @@ static func build(scene: SceneShots) -> Animation:
 			last_error = line
 			return null
 	var anim := Animation.new()
-	anim.length = scene.total_frames() / 60.0
+	anim.length = (scene.lead_in + scene.length() + return_frames(scene)) / 60.0
 	anim.loop_mode = Animation.LOOP_NONE
 	_camera_tracks(anim, scene)
 	if scene.letterbox:
 		_letterbox_track(anim, scene)
 	_cue_tracks(anim, scene)
 	return anim
+
+
+## The frames the glide back to the game's camera takes after the last shot: the scene's `lead_out`, lengthened (to 60 at
+## most) when the last shot is turned far from the game's yaw, so that the picture's fastest swing is no more than
+## MAX_TURN_PER_FRAME degrees a frame. The Director's glide out and this timeline's end both use it. The turn is the last shot's
+## yaw (an orbit's end; an over-the-shoulder shot's from `world`, a Callable as CinePose.solve takes, when given).
+static func return_frames(scene: SceneShots, world := Callable()) -> int:
+	if scene.shots.is_empty():
+		return scene.lead_out
+	var last := scene.shots[scene.shots.size() - 1]
+	var yaw := last.yaw_to_deg if last.move == Shot.CamMove.ORBIT else last.yaw_deg
+	if world.is_valid():
+		yaw = CinePose.solve(last, 1.0, world).yaw_deg
+	var turn := absf(rad_to_deg(angle_difference(deg_to_rad(yaw), deg_to_rad(CameraRig.YAW_DEG))))
+	var needed := mini(MAX_RETURN_FRAMES, ceili(SWING_PEAK * turn / MAX_TURN_PER_FRAME))
+	return maxi(scene.lead_out, needed)
 
 
 ## The player for `scene`: the generated animation in a new AnimationPlayer, or, when `scene.timeline` is set, the
@@ -116,7 +138,7 @@ static func _letterbox_track(anim: Animation, scene: SceneShots) -> void:
 	anim.track_set_path(track, NodePath("%s:letterbox" % CAMERA))
 	anim.track_set_interpolation_type(track, Animation.INTERPOLATION_LINEAR)
 	anim.value_track_set_update_mode(track, Animation.UPDATE_CONTINUOUS)
-	var total := scene.total_frames()
+	var total := roundi(anim.length * 60.0)
 	anim.track_insert_key(track, 0.0, 0.0)
 	anim.track_insert_key(track, BARS_FRAMES / 60.0, 1.0)
 	anim.track_insert_key(track, (total - BARS_FRAMES) / 60.0, 1.0)
