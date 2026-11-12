@@ -307,8 +307,85 @@ func _load(path: String, name: String) -> Dictionary:
 	var scene := resource as SceneShots
 	if scene == null:
 		return _leave(&"_load", {scene = null, problems = PackedStringArray(["%s/-: %s is not a SceneShots (%s)" % [name, path.get_file(), path]])})
-	var file := _file_problems(path, String(scene.id) if scene.id != &"" else name)
-	return _leave(&"_load", {scene = scene, problems = file.lines, blocking = file.blocking})
+	var shown := String(scene.id) if scene.id != &"" else name
+	var file := _file_problems(path, shown)
+	var lines: PackedStringArray = file.lines
+	var blocking: bool = file.blocking
+	var held := {}
+	_loaded_counts(scene, held)
+	var lost: Array[String] = []   # the arrays the loaded scene holds fewer elements of than the text gives them
+	for title: String in file.counts:
+		if not file.blocking and held.get(title, 0) < file.counts[title]:
+			lost.append(title)
+	var top := lost.filter(_of_the_scene)   # an array of the scene itself that lost entries takes what is inside them along
+	for title: String in (top if not top.is_empty() else lost):
+		blocking = true
+		lines.append("%s/-: shots.tres: %d of %d '%s' entries of %s were not read (the loader dropped them; see the engine's lines above)" % [
+				shown, file.counts[title] - held.get(title, 0), file.counts[title], title.get_slice(".", 1), title.get_slice(".", 0)])
+	return _leave(&"_load", {scene = scene, problems = lines, blocking = blocking})
+
+
+func _of_the_scene(title: String) -> bool:
+	_enter(&"_of_the_scene")
+	return _leave(&"_of_the_scene", title.begins_with("SceneShots."))
+
+
+# Counts into `held` ("Class.field" -> elements) the array fields of `resource` and of every resource in them.
+func _loaded_counts(resource: Resource, held: Dictionary) -> void:
+	_enter(&"_loaded_counts")
+	var script := resource.get_script() as GDScript
+	if script != null:
+		for info in script.get_script_property_list():
+			var value: Variant = resource.get(info.name)
+			if info.usage & PROPERTY_USAGE_SCRIPT_VARIABLE and value is Array:
+				var title := "%s.%s" % [script.get_global_name(), info.name]
+				held[title] = held.get(title, 0) + (value as Array).size()
+				for element in value:
+					if element is Resource:
+						_loaded_counts(element, held)
+	_leave(&"_loaded_counts")
+
+
+# The brackets a value leaves open (0: it is whole), outside quotes.
+func _bracket_depth(text: String) -> int:
+	_enter(&"_bracket_depth")
+	var depth := 0
+	var quoted := false
+	for i in text.length():
+		var c := text[i]
+		if quoted:
+			if c == "\"" and text[i - 1] != "\\":
+				quoted = false
+		elif c == "\"":
+			quoted = true
+		elif c == "(" or c == "[" or c == "{":
+			depth += 1
+		elif c == ")" or c == "]" or c == "}":
+			depth -= 1
+	return _leave(&"_bracket_depth", depth)
+
+
+# Where the array literal of a value begins (the index of its `[`), typed or not; -1 if the value is no array.
+func _array_literal(value: String) -> int:
+	_enter(&"_array_literal")
+	if value.begins_with("Array["):
+		var at := value.find("](")
+		return _leave(&"_array_literal", at + 2 if at >= 0 and value.substr(at + 2).begins_with("[") else -1)
+	return _leave(&"_array_literal", 0 if value.begins_with("[") else -1)
+
+
+# The class (a script path) the elements of `field` of `script_path` must be, from the property's declared type.
+func _element_script(script_path: String, field: String) -> String:
+	_enter(&"_element_script")
+	var script := load(script_path) as GDScript
+	if script != null:
+		for info in script.get_script_property_list():
+			if info.name == field and info.type == TYPE_ARRAY and String(info.hint_string).contains(":"):
+				var title := String(info.hint_string).get_slice(":", 1)
+				for global in ProjectSettings.get_global_class_list():
+					if global["class"] == title:
+						return _leave(&"_element_script", String(global["path"]))
+	return _leave(&"_element_script", "")
 
 
 # What the file's text says that the loaded scene would not show: a key its resource's class does not have (Godot ignores
@@ -326,7 +403,10 @@ func _file_problems(path: String, name: String) -> Dictionary:
 	var block: Dictionary = {}
 	var lines := FileAccess.get_file_as_string(path).split("\n")
 	lines.append("[end]")
-	for text in lines:
+	var at := 0
+	while at < lines.size():
+		var text := lines[at]
+		at += 1
 		if text.begins_with("["):
 			if not block.is_empty():
 				blocks.append(block)
@@ -341,11 +421,15 @@ func _file_problems(path: String, name: String) -> Dictionary:
 			var match := key.search(text)
 			if match == null:
 				continue
+			var value := match.get_string(2)
+			while _bracket_depth(value) > 0 and at < lines.size():   # a value may run over several lines
+				value += "\n" + lines[at]
+				at += 1
 			if match.get_string(1) == "script":
-				var which := ext.search(match.get_string(2))
+				var which := ext.search(value)
 				block.script = scripts.get(which.get_string(1), "") if which != null else ""
 			else:
-				block.keys.append([match.get_string(1), match.get_string(2)])
+				block.keys.append([match.get_string(1), value])
 	var out := PackedStringArray()
 	var by_id := {}
 	for each in blocks:
@@ -359,7 +443,17 @@ func _file_problems(path: String, name: String) -> Dictionary:
 		if each.script != "":
 			dropped.append_array(_dropped_elements(each, scripts, by_id, name))
 	out.append_array(dropped)
-	return _leave(&"_file_problems", {lines = out, blocking = not dropped.is_empty()})
+	var counts := {}   # "Class.field" -> how many elements the text gives it
+	for each in blocks:
+		var script := load(each.script) as GDScript if each.script != "" else null
+		if script == null:
+			continue
+		for pair in each.keys:
+			var literal := _array_literal(pair[1])
+			if literal >= 0:
+				var title := "%s.%s" % [script.get_global_name(), pair[0]]
+				counts[title] = counts.get(title, 0) + _elements(pair[1].substr(literal + 1)).size()
+	return _leave(&"_file_problems", {lines = out, blocking = not dropped.is_empty(), counts = counts})
 
 
 func _keys_unknown_to(script_path: String, keys: Array, name: String) -> PackedStringArray:
@@ -400,33 +494,47 @@ func _owner_label(script: GDScript, _pair: Array, keys: Array) -> String:
 	return _leave(&"_owner_label", title)
 
 
-# The elements of a typed array in a block that the loader would drop: other than the array's own class, strings, null.
+# The elements of an array in a block that the loader would drop: other than the property's own class, strings, null; and
+# sub-resources the file does not hold.
 func _dropped_elements(block: Dictionary, scripts: Dictionary, by_id: Dictionary, name: String) -> PackedStringArray:
 	_enter(&"_dropped_elements")
 	var out := PackedStringArray()
 	var script := load(block.script) as GDScript
 	var owner_text: String = _owner_label(script, [], block.keys) if script != null else String(block.script)
-	var typed := RegEx.create_from_string("^Array\\[ExtResource\\(\"([^\"]+)\"\\)\\]\\(\\[")
 	var sub := RegEx.create_from_string("^SubResource\\(\"([^\"]+)\"\\)$")
+	var typed := RegEx.create_from_string("^Array\\[ExtResource\\(\"([^\"]+)\"\\)\\]")
 	for pair in block.keys:
 		var value: String = pair[1]
-		var found := typed.search(value)
-		if found == null:
+		var literal := _array_literal(value)
+		if literal < 0:
 			continue
-		var wanted: String = scripts.get(found.get_string(1), "")
+		var wanted := _element_script(block.script, pair[0])
+		if wanted == "":
+			var found := typed.search(value)
+			wanted = scripts.get(found.get_string(1), "") if found != null else ""
+		if wanted == "":
+			continue
 		var wanted_script := load(wanted) as GDScript
 		var title: String = wanted_script.get_global_name() if wanted_script != null else wanted.get_file()
 		var wrong := 0
 		var empty := 0
-		for element in _elements(value.substr(found.get_end())):
+		var missing := PackedStringArray()
+		for element in _elements(value.substr(literal + 1)):
 			var as_sub := sub.search(element)
 			if element == "null":
 				empty += 1
-			elif as_sub == null or not by_id.has(as_sub.get_string(1)) or by_id[as_sub.get_string(1)].script != wanted:
+			elif as_sub != null and not by_id.has(as_sub.get_string(1)):
+				missing.append(as_sub.get_string(1))
+			elif as_sub != null:
+				if by_id[as_sub.get_string(1)].script != wanted:
+					wrong += 1
+			elif not element.begins_with("ExtResource("):
 				wrong += 1
 		if wrong > 0:
 			out.append("%s/-: shots.tres: %s: '%s' has %d element%s that is not %s %s (the loader drops the whole array)" % [
 					name, owner_text, pair[0], wrong, "" if wrong == 1 else "s", "an" if title[0] in "AEIOU" else "a", title])
+		if not missing.is_empty():
+			out.append("%s/-: shots.tres: %s: '%s' names a sub-resource that is not in the file: %s" % [name, owner_text, pair[0], ", ".join(missing)])
 		if empty > 0:
 			out.append("%s/-: shots.tres: %s: '%s' has %d empty (null) element%s" % [name, owner_text, pair[0], empty, "" if empty == 1 else "s"])
 	return _leave(&"_dropped_elements", out)

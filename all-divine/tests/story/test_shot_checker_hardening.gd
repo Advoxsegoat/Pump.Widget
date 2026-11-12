@@ -173,6 +173,69 @@ func test_an_element_of_the_wrong_class_or_a_string_in_a_typed_array_is_one_line
 		_wipe(TEMP)
 
 
+const ARRAYS := {
+	"cast": ["SceneShots", "a CastEntry"], "marks": ["SceneShots", "a SceneMark"], "shots": ["SceneShots", "a Shot"],
+	"beats": ["Shot 'S1'", "an ActorBeat"], "cues": ["Shot 'S2'", "a CueEvent"], "lines": ["Shot 'S3'", "a DialogueLine"],
+}
+
+
+# `text` with the first `field = ` array written across several lines, `extra` (if any) as one more element.
+func _spread(text: String, field: String, extra: String) -> String:
+	var start := text.find("\n" + field + " = ") + 1
+	var end := text.find("\n", start)
+	var line := text.substr(start, end - start)
+	var typed := line.substr(0, line.find("([") + 2)
+	var inner := line.substr(typed.length(), line.length() - typed.length() - 2)
+	var rows := PackedStringArray()
+	for element in inner.split(", "):
+		rows.append("\t" + element)
+	if extra != "":
+		rows.append("\t" + extra)
+	return text.substr(0, start) + typed + "\n" + ",\n".join(rows) + "\n])" + text.substr(end)
+
+
+# `text` with the first `field = ` array written untyped, `extra` (if any) as one more element.
+func _untyped(text: String, field: String, extra: String) -> String:
+	var start := text.find("\n" + field + " = ") + 1
+	var end := text.find("\n", start)
+	var line := text.substr(start, end - start)
+	var inner := line.substr(line.find("([") + 2, line.length() - line.find("([") - 4)
+	return text.substr(0, start) + field + " = [" + inner + (", " + extra if extra != "" else "") + "]" + text.substr(end)
+
+
+func test_an_array_written_across_lines_or_untyped_with_a_wrong_element_is_a_line_in_every_array() -> void:
+	for field: String in ARRAYS:
+		for layout in ["spread", "untyped"]:
+			var dir := _folder_with(func(text: String) -> String:
+				return _spread(text, field, "\"oops\"") if layout == "spread" else _untyped(text, field, "\"oops\""))
+			var lines: PackedStringArray = quietly(func() -> PackedStringArray: return ShotChecker.new().check_folder(dir))
+			_only(lines, "-", "%s: '%s' has 1 element that is not %s" % [ARRAYS[field][0], field, ARRAYS[field][1]])
+			_wipe(TEMP)
+
+
+func test_the_legal_layouts_of_an_array_pass() -> void:
+	for field: String in ARRAYS:
+		for layout in ["spread", "untyped"]:
+			var dir := _folder_with(func(text: String) -> String:
+				return _spread(text, field, "") if layout == "spread" else _untyped(text, field, ""))
+			var lines := ShotChecker.new().check_folder(dir)
+			assert_eq(lines, PackedStringArray(), "%s written %s" % [field, layout])
+			_wipe(TEMP)
+
+
+func test_a_sub_resource_id_that_is_not_in_the_file_is_said_as_that() -> void:
+	var dir := _folder_with(func(text: String) -> String: return _append(text, "beats", "SubResource(\"beat_nowhere\")"))
+	var lines: PackedStringArray = quietly(func() -> PackedStringArray: return ShotChecker.new().check_folder(dir))
+	_only(lines, "-", "Shot 'S1': 'beats' names a sub-resource that is not in the file: beat_nowhere")
+
+
+func test_an_array_the_loader_cut_short_that_the_text_does_not_explain_is_still_a_line() -> void:
+	# an outside resource of the wrong class: the text scan does not open it, the loaded scene is where the loss shows
+	var dir := _folder_with(func(text: String) -> String: return _append(text, "shots", "ExtResource(\"8_def\")"))
+	var lines: PackedStringArray = quietly(func() -> PackedStringArray: return ShotChecker.new().check_folder(dir))
+	_only(lines, "-", "5 of 5 'shots' entries of SceneShots were not read")
+
+
 func test_an_empty_element_in_an_array_is_one_line_and_the_rest_is_not_read() -> void:
 	var dir := _folder_with(func(text: String) -> String: return _append(text, "marks", "null"))
 	var lines: PackedStringArray = quietly(func() -> PackedStringArray: return ShotChecker.new().check_folder(dir))
