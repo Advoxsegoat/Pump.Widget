@@ -763,3 +763,63 @@ func test_a_hold_let_go_during_the_pause_is_up_at_the_resume() -> void:
 	var seen := await _hold_run(&"guard", 15, 30, 30, false, func() -> void: Input.action_release(&"guard"))
 	assert_eq(seen["held_at_resume"], false, "guard let go in the pause is not held at the resume")
 	assert_eq(seen["guarding"].slice(-1), [false], "and the guard is down")
+
+
+# --- the quarantine's second half ---
+
+func test_a_tap_on_the_frame_of_the_close_does_not_act_and_the_same_tap_two_frames_later_does() -> void:
+	var main := await _main()
+	var started := _watch(main.player)
+	Game.change(Game.State.PAUSE)
+	Game.change(Game.State.PLAY)
+	Input.action_press(&"palm")
+	await frames(1)
+	Input.action_release(&"palm")
+	await frames(10)
+	assert_eq(started, [], "a palm tapped on the very frame of the close does nothing")
+	Game.change(Game.State.PAUSE)
+	Game.change(Game.State.PLAY)
+	await frames(2)
+	Input.action_press(&"palm")
+	await frames(1)
+	Input.action_release(&"palm")
+	await frames(3)
+	assert_eq(started.map(func(s: Array) -> StringName: return s[0]).slice(0, 1), [&"palm_jab"], "the same tap two frames after the close starts the jab")
+
+
+func test_a_button_held_across_the_close_acts_again_when_let_go_and_pressed() -> void:
+	var main := await _main()
+	var started := _watch(main.player)
+	Game.change(Game.State.PAUSE)
+	_key(KEY_SPACE)
+	assert_eq(Game.state, Game.State.PLAY, "Space on Resume closes the menu")
+	await frames(6)
+	assert_false(Inputs.held(&"dodge"), "held across the close, the dash-step button is dead")
+	_key(KEY_SPACE, false)
+	await frames(3)
+	assert_eq(started, [], "and nothing started")
+	_key(KEY_SPACE)
+	await frames(3)
+	assert_true(Inputs.held(&"dodge"), "pressed again, it is held")
+	assert_true(started.size() > 0, "and it acts: %s" % [started])
+
+
+func test_a_stick_already_pushed_when_the_menu_opens_moves_nothing_through_open() -> void:
+	var menu := track(Menu.new()) as Menu
+	var push := InputEventJoypadMotion.new()
+	push.axis = JOY_AXIS_LEFT_Y
+	push.axis_value = -0.9
+	Input.parse_input_event(push)
+	Input.flush_buffered_events()
+	menu.open()
+	assert_eq(menu.index, 0)
+	menu.handle(push)
+	assert_eq(menu.index, 0, "the stick held as the menu opened moves nothing")
+	var rest := InputEventJoypadMotion.new()
+	rest.axis = JOY_AXIS_LEFT_Y
+	rest.axis_value = 0.0
+	menu.handle(rest)
+	menu.handle(push)
+	assert_eq(menu.index, menu.rows().size() - 1, "let go and pushed again it moves (up from the first wraps to the last)")
+	Input.parse_input_event(rest)
+	Input.flush_buffered_events()
