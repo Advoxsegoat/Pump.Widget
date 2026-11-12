@@ -14,8 +14,18 @@ const THRESHOLD := 0.04
 ## The sword must show this many pixels outside his body, in at least SIX_OF_EIGHT of the eight directions he may face.
 const VISIBLE_PIXELS := 20
 const SIX_OF_EIGHT := 6
-## Clips and the frames (at 60 a second) the carry is measured at.
-const CARRY := {&"blade_idle": [0, 75], &"blade_walk": [0, 20, 40, 60], &"blade_jog": [0, 14, 28, 42]}
+## The sword must draw at least this many pixels long, in at least SIX_OF_EIGHT of the directions, on every sampled frame of his idle and
+## walk and on at least SEVEN of the eight frames of his jog (a stride turns the body through the jog; the drawn length is what a player
+## sees of a blade, its pixels outside his body counted in a direction where it is behind him or end-on to the camera being few
+## whatever is done).
+const DRAWN_LENGTH := 14.0
+## Clips and the frames (at 60 a second) the carry is measured at, and on how many of them it must hold.
+const CARRY := {&"blade_idle": [[0, 25, 50, 75, 100, 125], 6], &"blade_walk": [[0, 13, 27, 40, 53, 67], 6], &"blade_jog": [[0, 7, 14, 21, 28, 35, 42, 49], 7]}
+## The hit reactions that show his sword: the frames of each (fractions of its length) and the drawn length, on at least three of four.
+const REACTIONS := [&"blade_flinch", &"blade_stagger", &"blade_parried", &"blade_caught", &"blade_posture_broken"]
+const REACTION_FRAMES := [0.15, 0.4, 0.65, 0.9]
+## And in the view the contact sheet has (him facing the camera), where the shared clips hid the sword at his hip: this long on every one.
+const FACING_CAMERA := 11.0
 ## The blow frames the breadth is measured at, and how many pixels across the sword must be at least.
 const BLOWS := {&"blade_cut": 18, &"blade_chop": 22, &"blade_lunge": 40}
 const BREADTH := 2.0
@@ -99,6 +109,33 @@ func _sword(clip: StringName, frame: int, facing: int) -> Dictionary:
 	return found
 
 
+# How many pixels long a set of pixels is: its extent along its longest direction.
+static func _length(pixels: Dictionary) -> float:
+	if pixels.size() < 3:
+		return 0.0
+	var mean := Vector2.ZERO
+	for p: Vector2i in pixels:
+		mean += Vector2(p)
+	mean /= pixels.size()
+	var xx := 0.0
+	var xy := 0.0
+	var yy := 0.0
+	for p: Vector2i in pixels:
+		var d := Vector2(p) - mean
+		xx += d.x * d.x
+		xy += d.x * d.y
+		yy += d.y * d.y
+	var angle := 0.5 * atan2(2.0 * xy, xx - yy)
+	var axis := Vector2(cos(angle), sin(angle))
+	var lo := INF
+	var hi := -INF
+	for p: Vector2i in pixels:
+		var along := Vector2(p).dot(axis)
+		lo = minf(lo, along)
+		hi = maxf(hi, along)
+	return hi - lo + 1.0
+
+
 # How many pixels across a set of pixels is on average: its area over its length along its longest direction.
 static func _breadth(pixels: Dictionary) -> float:
 	if pixels.size() < 3:
@@ -126,22 +163,51 @@ static func _breadth(pixels: Dictionary) -> float:
 	return float(pixels.size()) / maxf(hi - lo + 1.0, 1.0)
 
 
+# In how many of the eight directions `clip` at `frame` draws the sword DRAWN_LENGTH pixels long or more.
+func _facings_long(clip: StringName, frame: int) -> Array:
+	var lengths := []
+	for facing in 8:
+		lengths.append(snappedf(_length(await _sword(clip, frame, facing)), 0.1))
+	return lengths
+
+
 func test_he_is_seen_to_be_armed_when_he_stands_walks_and_jogs() -> void:
-	# For each clip, the sword's pixels in each of the eight directions he may face, averaged over the frames of the clip given
-	# (a stride moves the arm, and the body turns through it): at least VISIBLE_PIXELS in at least SIX_OF_EIGHT of the directions.
 	var def := load(DEF) as ActorDef
 	for floor_colour: Color in [DARK, LAMPLIT]:
 		await _open(def, floor_colour)
 		for clip: StringName in CARRY:
-			var mean := []
-			for facing in 8:
-				var total := 0
-				for frame: int in CARRY[clip]:
-					total += (await _sword(clip, frame, facing)).size()
-				mean.append(snappedf(float(total) / (CARRY[clip] as Array).size(), 0.1))
-			var enough := mean.filter(func(n: float) -> bool: return n >= VISIBLE_PIXELS).size()
-			assert_true(enough >= SIX_OF_EIGHT, "%s on the %s floor: the sword shows %d pixels or more in %d of 8 directions (%s)" % [clip, "dark" if floor_colour == DARK else "lamplit", VISIBLE_PIXELS, enough, mean])
+			var good := 0
+			var worst := []
+			for frame: int in CARRY[clip][0]:
+				var lengths: Array = await _facings_long(clip, frame)
+				var enough := lengths.filter(func(n: float) -> bool: return n >= DRAWN_LENGTH).size()
+				if enough >= SIX_OF_EIGHT:
+					good += 1
+				elif worst.is_empty():
+					worst = [frame, lengths]
+			var need: int = CARRY[clip][1]
+			assert_true(good >= need, "%s on the %s floor: the sword draws %.0f px long or more in %d of 8 directions on %d of %d frames (at least %d); the first short one %s" % [
+					clip, "dark" if floor_colour == DARK else "lamplit", DRAWN_LENGTH, SIX_OF_EIGHT, good, (CARRY[clip][0] as Array).size(), need, worst])
 		await _close()
+
+
+func test_a_man_who_is_hit_shows_his_sword() -> void:
+	var def := load(DEF) as ActorDef
+	await _open(def, DARK)
+	for clip: StringName in REACTIONS:
+		var length := roundi(_rig.tree.get_animation(clip).length * Marks.RATE)
+		var good := 0
+		var seen := []
+		var toward := INF
+		for share: float in REACTION_FRAMES:
+			var lengths: Array = await _facings_long(clip, roundi(length * share))
+			seen.append(lengths)
+			toward = minf(toward, lengths[0])
+			if lengths.filter(func(n: float) -> bool: return n >= DRAWN_LENGTH).size() >= SIX_OF_EIGHT:
+				good += 1
+		assert_true(good >= 3, "%s: the sword draws %.0f px long or more in %d of 8 directions on %d of 4 frames (at least 3): %s" % [clip, DRAWN_LENGTH, SIX_OF_EIGHT, good, seen])
+		assert_true(toward >= FACING_CAMERA, "%s: facing the camera, as the contact sheet shows him, the sword draws %.1f px long on its worst frame (at least %.0f: the shared clips leave 5 to 10)" % [clip, toward, FACING_CAMERA])
+	await _close()
 
 
 func test_the_sword_is_the_brightest_thing_on_him_and_broad_in_a_blow() -> void:
