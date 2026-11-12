@@ -220,7 +220,7 @@ func test_the_drummer_is_a_knuckle_with_its_own_look_and_moves() -> void:
 	assert_eq(def.id, &"knuckle_drummer")
 	assert_eq(def.team, ActorDef.Team.ENEMY)
 	assert_eq(def.rig_scene, knuckle.rig_scene, "the Knuckle's rig")
-	assert_eq(Array(def.hidden_parts), ["Knuckle_Hood", "Knuckle_Pauldron"], "hood and pauldron hidden")
+	assert_eq(Array(def.hidden_parts), ["Knuckle_Hood", "Knuckle_Pauldron", "Knuckle_Blade"], "hood and pauldron hidden, and the blade Knuckle's sword")
 	assert_ne(def.palette, knuckle.palette, "its own palette")
 	assert_eq(def.palette.id, &"knuckle_drummer")
 	assert_eq([def.max_hp, def.max_posture, def.poise, def.model_scale], [60.0, 60.0, 9.0, 0.97])

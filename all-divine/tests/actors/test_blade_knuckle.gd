@@ -223,9 +223,12 @@ func test_the_blade_moves_and_the_blade_knuckle_have_their_numbers() -> void:
 
 func test_only_the_blade_knuckle_shows_a_blade() -> void:
 	var arena := TestArena.make(self)
+	# Every Knuckle shares the one model: each def but his own hides the sword (the tiers, the Drummer, the heavy, and any to come).
 	var defs: Array = [_def()]
-	for path: String in FISTS:
-		defs.append(load(path))
+	for file in DirAccess.get_files_at("res://data/actors"):
+		if file.begins_with("knuckle_") and file.ends_with(".tres") and file != "knuckle_blade.tres":
+			defs.append(load("res://data/actors/" + file))
+	assert_true(defs.size() >= 6, "the three tiers, the Drummer and the heavy are among them (%d defs)" % defs.size())
 	for i in defs.size():
 		var actor := TestArena.spawn(arena, defs[i] as ActorDef, Brain.new(), Vector3(i * 2.0, 0, 0), "K%d" % i)
 		var blade := actor.rig.get_node(^"Model").find_child(BLADE_PART, true, false) as MeshInstance3D

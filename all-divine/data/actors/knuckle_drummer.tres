@@ -13,7 +13,7 @@ id = &"knuckle_drummer"
 team = 1
 rig_scene = ExtResource("2_rig")
 palette = ExtResource("4_palette")
-hidden_parts = PackedStringArray("Knuckle_Hood", "Knuckle_Pauldron")
+hidden_parts = PackedStringArray("Knuckle_Hood", "Knuckle_Pauldron", "Knuckle_Blade")
 model_scale = 0.97
 moveset = {
 &"heavy": &"knuckle_jab",
