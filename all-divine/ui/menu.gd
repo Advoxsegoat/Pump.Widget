@@ -34,6 +34,8 @@ const BAR_TRACK := Color(0.81, 0.85, 0.94, 0.3)  # the empty part of the bar: Hu
 ## The widest percent, which every slider's bar is placed by so that the bars of a page line up.
 const WIDEST_PERCENT := "100%"
 ## The least time, in seconds of the menu's own clock (it counts while the game is paused), between two sound samples.
+## A row that is switched off is Hud.POSTURE at this strength: the cool white alone is too near the live rows' warm white to tell.
+const DIM_ALPHA := 0.55
 const SAMPLE_GAP := 0.15
 const ARROW_UP_CELLS := ["..X..", ".XXX.", "XXXXX"]
 const ARROW_DOWN_CELLS := ["XXXXX", ".XXX.", "..X.."]
@@ -369,8 +371,10 @@ func _draw() -> void:
 	draw_string(font, Vector2(map.heading_at), _heading, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, Hud.GOLD)
 	for shown: Dictionary in map.rows:
 		var colour := Hud.WHITE
-		if _rows[shown.index].kind == MenuRow.Kind.TEXT or not shown.enabled:
+		if _rows[shown.index].kind == MenuRow.Kind.TEXT:
 			colour = Hud.POSTURE
+		elif not shown.enabled:
+			colour = Color(Hud.POSTURE, DIM_ALPHA)
 		if shown.selected:
 			colour = Hud.ROSE
 		draw_string(font, Vector2(shown.text_at), shown.label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, colour)
@@ -391,7 +395,7 @@ func _draw_bar(outer: Rect2i, fill: int, enabled: bool) -> void:
 	var inside := Rect2i(outer.position + Vector2i(1, 1), outer.size - Vector2i(2, 2))
 	draw_rect(Rect2(inside), BAR_TRACK)
 	if fill > 0:
-		draw_rect(Rect2(inside.position, Vector2i(fill, inside.size.y)), Hud.GOLD if enabled else Hud.POSTURE)
+		draw_rect(Rect2(inside.position, Vector2i(fill, inside.size.y)), Hud.GOLD if enabled else Color(Hud.POSTURE, DIM_ALPHA))
 	for edge in [Rect2i(outer.position, Vector2i(outer.size.x, 1)), Rect2i(outer.position + Vector2i(0, outer.size.y - 1), Vector2i(outer.size.x, 1)),
 			Rect2i(outer.position, Vector2i(1, outer.size.y)), Rect2i(outer.position + Vector2i(outer.size.x - 1, 0), Vector2i(1, outer.size.y))]:
 		draw_rect(Rect2(edge), Hud.INK)
