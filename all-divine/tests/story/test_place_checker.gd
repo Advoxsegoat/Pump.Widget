@@ -116,7 +116,7 @@ func test_a_script_error_in_the_place_check_is_reported_as_stopped() -> void:
 	var checker := ErrorInRay.new()
 	var lines: PackedStringArray = quietly(func() -> PackedStringArray: return checker.check_place(_fixture(), _space, _spawn))
 	assert_false(checker.finished)
-	assert_true("\n".join(lines).contains("the place check stopped before it finished: in the helper _ray"), "\n".join(lines))
+	assert_true("\n".join(lines).contains("the checker stopped before it finished: in the helper _ray"), "\n".join(lines))
 
 
 func test_a_mark_in_a_corner_where_a_body_does_not_fit_is_reported() -> void:

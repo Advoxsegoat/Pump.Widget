@@ -78,6 +78,8 @@ const PAIR := "@pair"
 const FRAMING_ZOOM: Array[int] = [1, 2, 3, 2, 4]
 const STATUS_WORDS: PackedStringArray = ["draft", "in review", "approved"]
 ## The rules, in order. Each returns false if it did not run to its end.
+## The public entry points: none calls another, so a call to one starts a fresh trace.
+const ENTRY: Array[StringName] = [&"check_all", &"scene_folders", &"check_folder", &"check_file", &"check", &"check_place"]
 const STAGES: Array[StringName] = [&"_check_enums", &"_check_folder", &"_check_cast", &"_check_marks", &"_check_layout",
 		&"_check_shots", &"_check_kind", &"_check_walks"]
 ## Fields every resource has that a file may set.
@@ -90,13 +92,13 @@ var stopped := ""
 ## The scene the last check_folder or check_file loaded (null if it did not load), so a caller loads each file once.
 var loaded_scene: SceneShots
 
-# The mechanism that says a rule did not run to its end. A script error aborts a function without a word to its caller,
-# so every function (but the static ones, which are pure sums, and these two) enters by `_enter(&"name")` first and
-# leaves by `_leave(&"name", value)` on every way out. A function that errored never left: when its caller leaves, the
-# entries above the caller's are found still open and the first is `_broken`, the place the checker stopped.
-# tests/story/test_shot_checker_trace.gd reads this file and fails for a function outside the pattern.
-var _trace := PackedStringArray()
-var _broken := ""
+# The mechanism that says a rule did not run to its end (CheckTrace): every function on the checking path enters by
+# `_enter(&"name")` first and leaves by `_leave(&"name", value)` on every way out, so one that hit a script error is
+# found still open. The public entry points never call one another (check_all and the others go through the private
+# `_..._lines` and `_run_check`), so a fresh entry starts a fresh trace, and each judges before it returns.
+# tests/story/test_shot_checker_trace.gd reads this file, the job and the tool, and fails for a function outside the
+# pattern, a static function or a lambda.
+var _t := CheckTrace.new()
 
 # actor def id -> {clip: true}; the rigs are built once per run.
 var _clips := {}
@@ -115,105 +117,124 @@ var _rests: Array[Dictionary] = []
 
 
 func _enter(function: StringName) -> void:
-	_trace.append(String(function))
+	if ENTRY.has(function):
+		_t.reset()
+	_t.enter(function)
 
 
 func _leave(function: StringName, value: Variant = null) -> Variant:
-	var at := _trace.rfind(String(function))
-	if at < 0:
-		if _broken == "":
-			_broken = String(function)
-		return value
-	if at < _trace.size() - 1 and _broken == "":
-		_broken = _trace[_trace.size() - 1]
-	_trace.resize(at)
-	return value
+	return _t.leave(function, value)
 
 
 ## The seconds a body takes to cover `metres` from rest at `pace` and stop pushing, with `def`'s accel and decel: the
 ## formula of Main._leg (the frames a push takes to cover a distance) solved for the time. It is not the time to
 ## arrive: the body coasts after the push, which StoryWalk.frames counts and the checker uses.
-static func travel_seconds(def: ActorDef, pace: ActorBeat.Pace, metres: float) -> float:
+func travel_seconds(def: ActorDef, pace: ActorBeat.Pace, metres: float) -> float:
+	_enter(&"travel_seconds")
 	var v := Locomotion.new(def.locomotion).target_speed(StoryWalk.push_of(pace), false)
 	var tuning := def.locomotion
-	return (metres + v * v / (2.0 * tuning.accel) - v * v / (2.0 * tuning.decel)) / v
+	return _leave(&"travel_seconds", (metres + v * v / (2.0 * tuning.accel) - v * v / (2.0 * tuning.decel)) / v)
 
 
 ## The frames a line takes to type.
-static func typing_frames(text: String) -> int:
-	return text.length() * FRAMES_PER_CHARACTER
+func typing_frames(text: String) -> int:
+	_enter(&"typing_frames")
+	return _leave(&"typing_frames", text.length() * FRAMES_PER_CHARACTER)
 
 
 ## The frames a line stays up: its `hold`, or its typing time plus 45 when that is 0.
-static func hold_of(line: DialogueLine) -> int:
-	return line.hold if line.hold > 0 else typing_frames(line.text) + DEFAULT_HOLD_EXTRA
+func hold_of(line: DialogueLine) -> int:
+	_enter(&"hold_of")
+	return _leave(&"hold_of", line.hold if line.hold > 0 else typing_frames(line.text) + DEFAULT_HOLD_EXTRA)
 
 
 ## Whether a line from `check` is a listed placeholder and not an error.
-static func is_placeholder(line: String) -> bool:
+func is_placeholder(line: String) -> bool:
+	_enter(&"is_placeholder")
 	var colon := line.find(": ")
-	return colon >= 0 and line.substr(colon + 2).begins_with(PLACEHOLDER)
+	return _leave(&"is_placeholder", colon >= 0 and line.substr(colon + 2).begins_with(PLACEHOLDER))
 
 
 ## Every scene folder under `root`, checked as `check_folder` does. A folder with no readable shots.tres is a problem of
 ## its own.
 func check_all(root := "res://scenes/story") -> PackedStringArray:
 	_enter(&"check_all")
+	finished = false
+	stopped = ""
 	var out := PackedStringArray()
-	for folder in scene_folders(root):
-		out.append_array(check_folder(root.path_join(folder)))
-	return _leave(&"check_all", out)
+	for folder in _folder_names(root):
+		out.append_array(_folder_lines(root.path_join(folder)))
+	return _leave(&"check_all", _judged(&"check_all", out, "scenes"))
 
 
 ## The names of the scene folders under `root`, sorted.
 func scene_folders(root := "res://scenes/story") -> PackedStringArray:
 	_enter(&"scene_folders")
+	return _leave(&"scene_folders", _folder_names(root))
+
+
+func _folder_names(root: String) -> PackedStringArray:
+	_enter(&"_folder_names")
 	var found := PackedStringArray()
 	for entry in ResourceLoader.list_directory(root):
 		if entry.ends_with("/"):
 			found.append(entry.trim_suffix("/"))
 	found.sort()
-	return _leave(&"scene_folders", found)
+	return _leave(&"_folder_names", found)
 
 
 ## One scene folder: its shots.tres read as text for keys the class lacks, loaded, and checked with the folder.
 func check_folder(folder: String) -> PackedStringArray:
 	_enter(&"check_folder")
+	finished = false
+	stopped = ""
+	return _leave(&"check_folder", _judged(&"check_folder", _folder_lines(folder), folder.trim_suffix("/").get_file()))
+
+
+func _folder_lines(folder: String) -> PackedStringArray:
+	_enter(&"_folder_lines")
 	loaded_scene = null
-	var name := folder.trim_suffix("/").get_file()
-	var path := folder.path_join("shots.tres")
-	var loaded := _load(path, name)
-	loaded_scene = null if loaded.get("blocking", false) else loaded.scene
-	if loaded.scene == null:
-		return _leave(&"check_folder", loaded.problems)
-	var out: PackedStringArray = loaded.problems
-	if not loaded.get("blocking", false):
-		out.append_array(check(loaded.scene, folder))
-		if not finished and not _said_stopped(out):
-			out.append("%s/-: the checker stopped before it finished (a script error; see the engine's lines above)" % loaded.scene.id)
-	return _leave(&"check_folder", out)
+	var loaded := _load(folder.path_join("shots.tres"), folder.trim_suffix("/").get_file())
+	return _leave(&"_folder_lines", _loaded_lines(loaded, folder))
 
 
 ## One shots.tres anywhere (a combat moment's, say), checked without a folder.
 func check_file(path: String) -> PackedStringArray:
 	_enter(&"check_file")
+	finished = false
+	stopped = ""
+	return _leave(&"check_file", _judged(&"check_file", _file_lines(path), path.get_base_dir().get_file()))
+
+
+func _file_lines(path: String) -> PackedStringArray:
+	_enter(&"_file_lines")
 	loaded_scene = null
 	var loaded := _load(path, path.get_base_dir().get_file())
-	loaded_scene = null if loaded.get("blocking", false) else loaded.scene
-	if loaded.scene == null:
-		return _leave(&"check_file", loaded.problems)
+	return _leave(&"_file_lines", _loaded_lines(loaded, ""))
+
+
+# The lines of a loaded file: its own problems, and the scene's checked unless an array lost elements.
+func _loaded_lines(loaded: Dictionary, folder: String) -> PackedStringArray:
+	_enter(&"_loaded_lines")
+	var blocking: bool = loaded.get("blocking", false)
+	loaded_scene = null if blocking else loaded.scene
 	var out: PackedStringArray = loaded.problems
-	if not loaded.get("blocking", false):
-		out.append_array(check(loaded.scene))
-		if not finished and not _said_stopped(out):
-			out.append("%s/-: the checker stopped before it finished (a script error; see the engine's lines above)" % loaded.scene.id)
-	return _leave(&"check_file", out)
+	if loaded.scene == null or blocking:
+		finished = true   # nothing more could be read from it; the lines are the answer
+		return _leave(&"_loaded_lines", out)
+	out.append_array(_run_check(loaded.scene, folder))
+	return _leave(&"_loaded_lines", out)
 
 
 ## The problems of `scene`; with a `folder`, also those of its script.md, notes.md and id. `finished` says whether every
 ## rule ran to its end; if one did not, the last line says which.
 func check(scene: SceneShots, folder := "") -> PackedStringArray:
 	_enter(&"check")
+	return _leave(&"check", _judged(&"check", _run_check(scene, folder), String(scene.id)))
+
+
+func _run_check(scene: SceneShots, folder: String) -> PackedStringArray:
+	_enter(&"_run_check")
 	_scene = scene
 	_folder = folder
 	_problems = PackedStringArray()
@@ -221,22 +242,35 @@ func check(scene: SceneShots, folder := "") -> PackedStringArray:
 	_bad = {}
 	_rests = []
 	_walks = []
-	_broken = ""
 	finished = false
 	stopped = ""
 	for stage in STAGES:
-		if not call(stage) and _broken == "":
-			_broken = String(stage)
-		if _broken != "":
+		if not call(stage) and _t.broken == "":
+			_t.broken = String(stage)
+		if _t.broken != "":
 			break
-	if _broken != "":
-		stopped = _broken.trim_prefix("_check_")
-		_add("-", "the checker stopped before it finished: in %s (a script error; see the engine's lines above)" % _described(_broken))
-		return _leave(&"check", _problems)
+	if _t.broken != "":
+		stopped = _t.broken.trim_prefix("_check_")
+		_add("-", "the checker stopped before it finished: in %s (a script error; see the engine's lines above)" % _described(_t.broken))
+		return _leave(&"_run_check", _problems)
 	if scene.status == SceneShots.Status.APPROVED and _placeholders > 0:
 		_add("-", "an approved scene has no placeholder, this one has %d" % _placeholders)
 	finished = true
-	return _leave(&"check", _problems)
+	return _leave(&"_run_check", _problems)
+
+
+# What an entry point returns: `lines`, and if a function it ran was left open by a script error, a line that says where
+# (unless a line already does) and `finished` false. Asked before the entry leaves, from inside this function.
+func _judged(entry: StringName, lines: PackedStringArray, name: String) -> PackedStringArray:
+	_enter(&"_judged")
+	var where := _t.stopped_in(entry, 1)
+	if where == "":
+		return _leave(&"_judged", lines)
+	finished = false
+	stopped = where
+	if not _said_stopped(lines):
+		lines.append("%s/-: the checker stopped before it finished: in %s (a script error; see the engine's lines above)" % [name, _described(where)])
+	return _leave(&"_judged", lines)
 
 
 # Whether `lines` already say the checker stopped.
@@ -741,7 +775,7 @@ func _check_line(shot: Shot, line: DialogueLine) -> bool:
 func _check_line_overlaps(shot: Shot) -> bool:
 	_enter(&"_check_line_overlaps")
 	var lines: Array[DialogueLine] = shot.lines.duplicate()
-	lines.sort_custom(func(a: DialogueLine, b: DialogueLine) -> bool: return a.at < b.at)
+	lines.sort_custom(_earlier_line)
 	for i in range(1, lines.size()):
 		var before := lines[i - 1]
 		if lines[i].at < before.at + hold_of(before):
@@ -842,7 +876,7 @@ func _check_walks() -> bool:
 			for beat in shot.beats:
 				if beat.actor == entry.actor and beat.move_to != &"" and _ok(beat):
 					beats.append({frame = shot.start + beat.at, beat = beat, shot = shot})
-		beats.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.frame < b.frame)
+		beats.sort_custom(_earlier_frame)
 		var known: SceneMark = null
 		if entry.source == CastEntry.Source.SPAWN:
 			known = _scene.mark(entry.spawn_mark)
@@ -936,20 +970,14 @@ func _check_bodies_apart() -> void:
 ## way. The tool loads the region; the other rules do not need it.
 func check_place(scene: SceneShots, space: PhysicsDirectSpaceState3D, spawn: Variant = null) -> PackedStringArray:
 	_enter(&"check_place")
-	var rule_lines := check(scene)   # it leaves the walks it measured; if it stopped, its lines say so and are the answer
+	finished = false
+	stopped = ""
+	var rule_lines := _run_check(scene, "")   # it leaves the walks it measured; if it stopped, its lines say so and are the answer
 	if not finished:
-		return _leave(&"check_place", rule_lines)
+		return _leave(&"check_place", _judged(&"check_place", rule_lines, String(scene.id)))
 	_problems = PackedStringArray()
-	_broken = ""
 	_place_rules(scene, space, spawn)
-	var open := _first_open_above(&"check_place")
-	if _broken == "" and open != "":
-		_broken = open
-	if _broken != "":
-		finished = false
-		stopped = "place"
-		_add("-", "the place check stopped before it finished: in %s (a script error; see the engine's lines above)" % _described(_broken))
-	return _leave(&"check_place", _problems)
+	return _leave(&"check_place", _judged(&"check_place", _problems, String(scene.id)))
 
 
 # The marks and the walks, in the space.
@@ -980,14 +1008,6 @@ func _place_rules(scene: SceneShots, space: PhysicsDirectSpaceState3D, spawn: Va
 						walk.actor, walk.from_mark, walk.to_mark, ", ".join(hits), _where(at), length * float(step) / float(steps), length])
 				break
 	_leave(&"_place_rules")
-
-
-# The first function entered after `function` that was never left: where a script error stopped, or "".
-func _first_open_above(function: StringName) -> String:
-	_enter(&"_first_open_above")
-	var at := _trace.rfind(String(function))
-	var found := _trace[at + 1] if at >= 0 and at < _trace.size() - 2 else ""   # the last entry is this function's own
-	return _leave(&"_first_open_above", found)
 
 
 # False, with a line, if a body cannot stand at `mark` (at `at` in the region).
@@ -1135,6 +1155,16 @@ func _where(at: Vector3) -> String:
 
 
 # --- helpers ---
+
+func _earlier_frame(a: Dictionary, b: Dictionary) -> bool:
+	_enter(&"_earlier_frame")
+	return _leave(&"_earlier_frame", a.frame < b.frame)
+
+
+func _earlier_line(a: DialogueLine, b: DialogueLine) -> bool:
+	_enter(&"_earlier_line")
+	return _leave(&"_earlier_line", a.at < b.at)
+
 
 func _name(shot: Shot, index: int) -> String:
 	_enter(&"_name")

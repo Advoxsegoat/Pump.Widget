@@ -167,8 +167,8 @@ func test_an_unknown_clip_is_reported_like_a_move_and_a_placeholder_is_listed() 
 	scene.shots[1].beats[0].placeholder = true
 	var lines := _check(scene)
 	_only(lines, "S2", ShotChecker.PLACEHOLDER + "knuckle has no clip 'no_such_clip'")
-	assert_true(ShotChecker.is_placeholder(lines[0]))
-	assert_false(ShotChecker.is_placeholder("%s/S2: knuckle has no clip 'x'" % SCENE))
+	assert_true(ShotChecker.new().is_placeholder(lines[0]))
+	assert_false(ShotChecker.new().is_placeholder("%s/S2: knuckle has no clip 'x'" % SCENE))
 
 
 func test_an_unknown_actor_mark_speaker_sound_def_or_spawn_mark_is_reported() -> void:
@@ -295,11 +295,11 @@ func test_the_kinds_have_their_lengths_and_their_rules() -> void:
 
 func test_travel_seconds_is_the_formula_of_the_reel_solved_the_other_way() -> void:
 	var def := Registry.fetch(&"actors", &"knuckle_1") as ActorDef
-	assert_near(ShotChecker.travel_seconds(def, ActorBeat.Pace.WALK, 3.3), 3.6729, 0.001)
-	assert_near(ShotChecker.travel_seconds(def, ActorBeat.Pace.JOG, 5.0), 0.9473, 0.001)
+	assert_near(ShotChecker.new().travel_seconds(def, ActorBeat.Pace.WALK, 3.3), 3.6729, 0.001)
+	assert_near(ShotChecker.new().travel_seconds(def, ActorBeat.Pace.JOG, 5.0), 0.9473, 0.001)
 	for metres in [1.2, 3.3, 5.0]:
 		var leg := Main._leg(Vector2.RIGHT, 1.0, metres, def.locomotion)
-		assert_eq(leg.frames, roundi(ShotChecker.travel_seconds(def, ActorBeat.Pace.JOG, metres) * 60.0), "%s m" % metres)
+		assert_eq(leg.frames, roundi(ShotChecker.new().travel_seconds(def, ActorBeat.Pace.JOG, metres) * 60.0), "%s m" % metres)
 
 
 func test_a_walk_that_does_not_fit_before_the_next_beat_is_reported() -> void:
@@ -333,7 +333,7 @@ func test_an_approved_scene_with_a_placeholder_and_a_notes_status_that_disagrees
 	var listed := 0
 	var errors := 0
 	for line in lines:
-		if ShotChecker.is_placeholder(line):
+		if ShotChecker.new().is_placeholder(line):
 			listed += 1
 		else:
 			errors += 1
