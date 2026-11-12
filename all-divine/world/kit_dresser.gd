@@ -14,7 +14,13 @@ extends Node
 
 func _ready() -> void:
 	dress(get_parent(), material)
-	get_tree().node_added.connect(_on_node_added)
+
+
+# Listens from _enter_tree (which runs each time the region comes into the tree) and not from _ready (which runs once), so
+# that a region that leaves the tree and returns goes on dressing what is added to it.
+func _enter_tree() -> void:
+	if not get_tree().node_added.is_connected(_on_node_added):
+		get_tree().node_added.connect(_on_node_added)
 
 
 func _exit_tree() -> void:

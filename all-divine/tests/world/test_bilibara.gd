@@ -483,11 +483,23 @@ func test_nobody_leaves_at_a_corner_a_junction_a_kerb_or_a_post() -> void:
 
 
 func test_a_big_body_is_held_in_too() -> void:
-	# A tier III Knuckle is a little larger than Abarax: the same walls hold it. At the yard's four corners and the alcove's
-	# three, shoved for 60 frames, it is inside the walkable set: over one of the table's places, on the ground.
+	# Every actor shares one capsule (actor.tscn: radius 0.35, height 1.8); `model_scale` scales only the rig, so a tier III or the
+	# heavy Knuckle is held by the same walls as Abarax, not by more. This holds that fact (the day an actor's body grows, this
+	# fails and the walls must be tried again with it), and shoves a tier III at the yard's four corners and the alcove's three
+	# for 60 frames: it stays inside the walkable set, over one of the table's places, on the ground.
 	var region := _region()
 	if region == null:
 		return
+	var dir := DirAccess.open("res://data/actors")
+	for file in dir.get_files():
+		if not file.ends_with(".tres"):
+			continue
+		var shaped := (load("res://actors/actor.tscn") as PackedScene).instantiate() as Actor
+		shaped.def = load("res://data/actors/" + file) as ActorDef
+		region.add_child(shaped)
+		var capsule := (shaped.get_node("Body") as CollisionShape3D).shape as CapsuleShape3D
+		assert_true(capsule != null and is_equal_approx(capsule.radius, 0.35) and is_equal_approx(capsule.height, 1.8), "%s's body is the one capsule (radius 0.35, height 1.8)" % file)
+		shaped.queue_free()
 	var cases: Array[Dictionary] = []
 	for corner: Vector2 in [Vector2(1, 1), Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1)]:
 		cases.append({label = "yard corner %s" % corner, at = Vector2(27.5 + corner.x * 11.5, -65.0 + corner.y * 9.0), way = corner})

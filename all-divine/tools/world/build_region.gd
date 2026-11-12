@@ -11,7 +11,8 @@ extends SceneTree
 ##   ramp X0 Z0 X1 Z1 UP                a wedge up toward UP
 ##   edge PIECE X0 Z0 X1 Z1 FACING [solid]   a wall-like Kenney piece every 2.5 m along a line, its face toward FACING
 ##   piece PIECE X Z [YAW] [y=Y]        a Kenney piece, colliding as MODELS says
-##   curb X0 Z0 X1 Z1 H [STONE] [moonlit]    a low solid box of STONE (flagstone, slate, cobble, tan_earth, snow)
+##   curb X0 Z0 X1 Z1 H [STONE] [moonlit] [name=NAME] [y=RAISE]    a low solid box of STONE (flagstone, slate, cobble,
+##                                      tan_earth, snow), named NAME (default Curb), its underside RAISE up (default 0)
 ##   ground X0 Z0 X1 Z1 STONE [visual]  a plate of ground 1 m thick with its top at y = 0, at most 12.5 m a side: solid and
 ##                                      walkable (world, ik_surface; under Walkable), or `visual`: only seen (under
 ##                                      Backdrop); two plates may not overlap
@@ -216,12 +217,25 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				var options := Array(args.slice(5))
 				var moonlit := options.has("moonlit")
 				options.erase("moonlit")
-				if options.size() > 1 or (options.size() == 1 and not STONES.has(options[0])):
-					problem("curb needs X0 Z0 X1 Z1 H [STONE] [moonlit], the stone one of %s" % ", ".join(STONES.keys()))
+				var node_name := ""
+				var raise := 0.0
+				var bad := false
+				for option: String in options.duplicate():
+					if option.begins_with("name=") or option.begins_with("y="):
+						options.erase(option)
+						if option.begins_with("name="):
+							bad = bad or option.length() <= 5 or not node_name.is_empty()
+							node_name = option.trim_prefix("name=")
+						elif option.trim_prefix("y=").is_valid_float():
+							raise = option.trim_prefix("y=").to_float()
+						else:
+							bad = true
+				if bad or options.size() > 1 or (options.size() == 1 and not STONES.has(options[0])):
+					problem("curb needs X0 Z0 X1 Z1 H [STONE] [moonlit] [name=NAME] [y=RAISE], the stone one of %s" % ", ".join(STONES.keys()))
 					return
 				var n := _numbers(args.slice(0, 5), 5, 5)
 				if n.size() == 5:
-					_curb(_rect(n), n[4], STONES[options[0]] if options.size() == 1 else FLAGSTONE, moonlit)
+					_curb(_rect(n), n[4], STONES[options[0]] if options.size() == 1 else FLAGSTONE, moonlit, node_name, raise)
 			"lamps":
 				var world := args.size() == 5 and args[4] == "world"
 				if args.size() != 4 and not world:
@@ -344,10 +358,10 @@ class Builder extends "res://tools/world/region_nodes.gd":
 	# A low box of `stone` over `rect`, `height` high, solid as it is seen and no further: a curb. `moonlit`: it is drawn
 	# on the bodies' render layer as well as the world's, so that a region's moon lights it as it lights the fighters (a
 	# barrier has to show in the dark).
-	func _curb(rect: Rect2, height: float, stone: Material, moonlit: bool) -> void:
-		var body := make_body(unique_name("Curb"), _root, world_and_feet)
+	func _curb(rect: Rect2, height: float, stone: Material, moonlit: bool, node_name := "", raise := 0.0) -> void:
+		var body := make_body(unique_name(node_name if not node_name.is_empty() else "Curb"), _root, world_and_feet)
 		var centre := rect.get_center()
-		add_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, height / 2, centre.y)), stone)
+		add_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, raise + height / 2, centre.y)), stone)
 		if moonlit:
 			(body.get_node("Mesh") as MeshInstance3D).layers = LAYERS.RENDER_WORLD | LAYERS.RENDER_BODIES
 

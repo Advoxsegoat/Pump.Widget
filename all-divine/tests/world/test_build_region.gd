@@ -647,3 +647,38 @@ func test_overlapping_blocks_or_a_solid_block_over_walkable_ground_are_problems(
 	assert_eq(_build("ground 0 0 10 10 cobble\nblock 10 0 20 10 3 plain flat solid").problems, PackedStringArray(), "a block beside the ground is fine")
 	assert_eq(_build("ground 0 0 10 10 cobble visual\nblock 5 5 15 15 3 plain flat solid").problems, PackedStringArray(), "a block over seen-only ground is fine")
 	assert_eq(_build("ground 0 0 10 10 cobble\nblock 5 5 15 15 3 plain flat").problems, PackedStringArray(), "and a backdrop block over walkable ground is a picture, not a mass")
+
+
+# A curb can be named (so a test or a later layout finds the gate and the low walls by name) and raised off the ground (a rail
+# across the top of two posts).
+func test_a_curb_takes_a_name_and_a_raise() -> void:
+	var built := _build("curb 0 0 5 1 0.6 slate name=Gate\ncurb 0 3 5 4 0.6 name=LowWall2 moonlit\ncurb 0 6 5 7 0.3 slate\ncurb 0 9 5 10 0.12 slate name=Rail y=2.4")
+	assert_eq(built.problems, PackedStringArray())
+	var root := built.root as Node
+	var gate := root.get_node_or_null("Gate") as StaticBody3D
+	assert_true(gate != null and root.get_node_or_null("LowWall2") is StaticBody3D and root.get_node_or_null("Curb") is StaticBody3D, "named, and unnamed as before: Gate, LowWall2, Curb")
+	if gate != null:
+		assert_vec_near((gate.get_node("Shape") as CollisionShape3D).global_position, Vector3(2.5, 0.3, 0.5), 1e-6, "the gate stands on the ground")
+	var rail := root.get_node_or_null("Rail") as StaticBody3D
+	assert_true(rail != null, "a Rail")
+	if rail != null:
+		var shape := rail.get_node("Shape") as CollisionShape3D
+		assert_near(shape.global_position.y - (shape.shape as BoxShape3D).size.y / 2.0, 2.4, 1e-6, "its underside is at 2.4 m")
+		assert_near((shape.shape as BoxShape3D).size.y, 0.12, 1e-6, "0.12 m thick")
+	for bad in ["curb 0 0 5 1 0.6 name=", "curb 0 0 5 1 0.6 y=up", "curb 0 0 5 1 0.6 name=A name=B"]:
+		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)
+
+
+# A region that leaves the tree and comes back still dresses the pieces added after it returns (the dresser listens from
+# _enter_tree, which runs every time, and not from _ready, which runs once).
+func test_the_kit_dresser_dresses_after_the_region_leaves_the_tree_and_returns() -> void:
+	var built := _build("kit bilibara\npiece lantern 1 1\n")
+	var root := built.root as Node3D
+	var bilibara := (root.get_node("Kit") as KitDresser).material
+	var parent := root.get_parent()
+	parent.remove_child(root)
+	parent.add_child(root)
+	var late := (load(KENNEY % "wall") as PackedScene).instantiate() as Node3D
+	root.add_child(late)
+	for mesh: MeshInstance3D in late.find_children("*", "MeshInstance3D", true, false):
+		assert_eq(mesh.material_override, bilibara, "a piece added after the region came back is dressed")
