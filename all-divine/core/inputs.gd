@@ -247,7 +247,8 @@ func held(action: StringName) -> bool:
 	return Input.is_action_pressed(action) and not _held_over(action)
 
 
-## Keeps what went down while the game was paused out of the fight: the menu calls it as the game leaves the pause, so that the
+## Keeps what went down while the game was paused out of the fight (or went down during a scene: the Director calls it as it hands
+## the fight back, and what a player mashed through a scene is dead until it is let go): the menu calls it as the game leaves the pause, so that the
 ## press that closed it (Space, A and Enter are a dash-step, the left mouse button a palm, Esc and Start the menu button) is not also a
 ## move on the first frame back. Every gameplay action that went down in the pause is dead until it is let go (pressed_this_frame
 ## leaves it out, held says false), and for QUARANTINE_FRAMES physics frames no press at all is reported (a press that came in
@@ -262,9 +263,11 @@ func quarantine() -> void:
 			_quarantined[action] = true
 
 
-# Notes, every physics frame, which gameplay actions are down and which of them went down while the game was paused.
+# Notes, every physics frame, which gameplay actions are down and which of them went down while the game was paused, or while a
+# scene played (the player cannot act in either, and a button mashed through a scene is no more a press when he can than one
+# that closed the pause).
 func _watch_pause() -> void:
-	var paused := get_tree().paused
+	var paused := get_tree().paused or Game.state == Game.State.CUTSCENE
 	for action in GAMEPLAY:
 		var down := Input.is_action_pressed(action)
 		if not down:

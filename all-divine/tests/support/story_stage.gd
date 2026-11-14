@@ -39,7 +39,7 @@ static func knuckle(region: Node3D, at: Vector3, yaw := 0.0, foe_name := "Knuckl
 	return foe
 
 
-## Each bone of `rig` to its rotation relative to its parent, in the pose the last tick showed (modifiers included).
+## Each bone of `rig` to its rotation relative to its parent (the root's, to the rig), in the pose the last tick showed (modifiers included).
 static func pose_of(rig: Rig) -> Dictionary:
 	var out := {}
 	var skeleton := rig.skeleton
@@ -49,6 +49,8 @@ static func pose_of(rig: Rig) -> Dictionary:
 		var basis := rig.shown_pose(bone).basis
 		if parent >= 0:
 			basis = rig.shown_pose(skeleton.get_bone_name(parent)).basis.inverse() * basis
+		else:
+			basis = rig.global_basis.inverse() * basis  # the root's turn is the body's own, which is not the pose
 		out[bone] = basis.orthonormalized().get_rotation_quaternion()
 	return out
 

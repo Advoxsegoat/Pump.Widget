@@ -729,6 +729,8 @@ func _set_up_the_after() -> void:
 
 func _lead_out_frame() -> void:
 	var n := frame - _lead_out_at
+	if n == 1:
+		_raise_the_guards()
 	var t := clampf(float(n) / float(_lead_out_length), 0.0, 1.0)
 	_rig.cine_weight = _weight_from * (1.0 - t)
 	if _skipping:
@@ -736,6 +738,16 @@ func _lead_out_frame() -> void:
 	frame += 1
 	if n >= _lead_out_length:
 		_finish()
+
+
+# A guard held since before the scene is up again: the scene put the stance down (no brain held it), and the player never let go.
+# It is asked a frame after the hand-back, when the actor has thought once with the player's hands and knows guard is held.
+func _raise_the_guards() -> void:
+	if not Inputs.held(Actor.GUARD_ACTION):
+		return
+	for key: Variant in _was_guarding:
+		if _was_guarding[key] and is_instance_valid(key) and not (key as Actor).dead:
+			(key as Actor).hold_guard()
 
 
 func _finish() -> void:
