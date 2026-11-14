@@ -88,3 +88,20 @@ func draw(zoom := 1, pitch_deg := -40.0) -> Image:
 func shot(def: ActorDef, yaw_deg: float, zoom := 1, clip := &"", frame := 0, pitch_deg := -40.0) -> Image:
 	pose(def, yaw_deg, clip, frame)
 	return await draw(zoom, pitch_deg)
+
+
+## Holds `clip` at `frame` for one physics tick more (the pose is already set up by `pose` with the clip): what the rig does
+## as a game's tick does, so a spring bone swings as it would.
+func step(clip: StringName, frame: int) -> void:
+	rig.play_move(clip, 0.0)
+	rig.set_move_time(frame / 60.0)
+	rig.tick(1.0 / 60.0)
+
+
+## A `size` piece of `image` (a picture of this stage) centred on the head, as it was drawn, `scale` times larger by whole pixels.
+func head_crop(image: Image, size := Vector2i(80, 60), scale := 5, raise := 0.0) -> Image:
+	var head := camera.camera.unproject_position(rig.shown_pose(&"Head").origin + Vector3(0.0, raise, 0.0)) - Vector2.ONE
+	var rect := Rect2i(Vector2i(head.round()) - size / 2, size).intersection(Rect2i(Vector2i.ZERO, SIZE))
+	var piece := image.get_region(rect)
+	piece.resize(rect.size.x * scale, rect.size.y * scale, Image.INTERPOLATE_NEAREST)
+	return piece

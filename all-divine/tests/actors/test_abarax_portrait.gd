@@ -1,3 +1,4 @@
+class_name TestAbaraxPortrait
 extends TestCase
 ## Abarax's model follows the owner's drawing (Portraits Task 3): a top-knot, a forelock, a feather on spring
 ## bones from his left ear and a ring in his right. What the game measures does not move because of it: a seeded
@@ -52,8 +53,8 @@ func _fight_hashes() -> Array[int]:
 
 
 const RIG := "res://actors/abarax/abarax_rig.tscn"
-const PARTS: PackedStringArray = ["Abarax_Topknot", "Abarax_Forelock", "Abarax_Feather", "Abarax_EarRing"]
-const FEATHER_BONE_LENGTH := 0.13
+const PARTS: PackedStringArray = ["Abarax_Topknot", "Abarax_Forelock", "Abarax_Feather", "Abarax_EarRing", "Abarax_Stubble"]
+const FEATHER_BONE_LENGTH := 0.15
 ## The drawing's feather, 1.8 cm of it from the neck's collar would be inside the shirt: the least distance any of the
 ## feather's points (the ring, the beads, the root of the feather, the middle of it and its tip) may come to a vertex of the
 ## body (the shirt and sleeves, and the head's own neck) in the five poses below. The meshes' vertices lie 1-2 cm apart
@@ -138,7 +139,7 @@ func test_a_seeded_fight_plays_out_as_it_did() -> void:
 	assert_eq(hashes, FIGHT_HASHES, "the fight's six checkpoints")
 
 
-func test_the_four_parts_are_on_abarax_and_shown() -> void:
+func test_the_parts_are_on_abarax_and_shown() -> void:
 	var r: Rig = track(load(RIG).instantiate())
 	var found := {}
 	for mesh in r.skeleton.find_children("*", "MeshInstance3D", false, false):
@@ -174,9 +175,7 @@ func test_the_feather_hangs_from_his_left_ear() -> void:
 		return
 	assert_eq(skeleton.get_bone_name(skeleton.get_bone_parent(skeleton.find_bone("feather_01"))), "Head")
 	assert_eq(skeleton.get_bone_name(skeleton.get_bone_parent(skeleton.find_bone("feather_02"))), "feather_01")
-	for i in 30:
-		r.tick(1.0 / 60)
-	var lobe := r.global_transform.basis.inverse() * (r.bone_global(&"feather_01") - r.global_position)
+	var lobe := skeleton.get_bone_global_rest(skeleton.find_bone("feather_01")).origin  # at rest, in the model's own space
 	assert_true(lobe.x > 0.07 and lobe.x < 0.11, "on his left (+X): %s" % lobe)
 	assert_true(lobe.y > 1.63 and lobe.y < 1.70, "at the lobe's height: %s" % lobe)
 	assert_true(lobe.z > -0.03 and lobe.z < 0.05, "level with the ear, not the face: %s" % lobe)

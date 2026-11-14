@@ -287,11 +287,11 @@ class Retarget(unittest.TestCase):
 
     def test_unmapped_bones_keep_reference_pose(self):
         # A bone the BVH does not drive keeps the pose it has in the reference relative to its parent, in
-        # every frame: the fingers stay on the hand and the scarf on the neck, wherever the spine goes.
+        # every frame: the fingers stay on the hand, the scarf on the neck and the feather on the head, wherever the spine goes.
         names = gltf_inspect.joint_names(self.j)
         unmapped = [n for n in names if n not in self.mapped]
-        self.assertEqual(len(unmapped), 69 - len(self.mapped))
-        self.assertTrue({"root", "index_02_l", "thumb_01_r", "clavicle_l", "hand_r", "ball_leaf_l", "scarf_04"}
+        self.assertEqual(len(unmapped), 71 - len(self.mapped))  # 65 shared bones, the scarf's 4 and the feather's 2
+        self.assertTrue({"root", "index_02_l", "thumb_01_r", "clavicle_l", "hand_r", "ball_leaf_l", "scarf_04", "feather_02"}
                         <= set(unmapped))
         parents = gltf_inspect.joint_parents(self.j)
         for frame, matrices in (("first", self.first), ("last", self.last)):

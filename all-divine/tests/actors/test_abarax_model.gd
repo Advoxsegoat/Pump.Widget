@@ -27,7 +27,7 @@ func test_imports_with_one_skeleton_and_scarf_chain() -> void:
 func test_every_mesh_is_skinned_to_the_skeleton() -> void:
 	var s := _skeleton()
 	var meshes := _mesh_instances()
-	assert_eq(meshes.size(), 12)
+	assert_eq(meshes.size(), 13)
 	for mi in meshes:
 		assert_ne(mi.skin, null, mi.name)
 		assert_eq(mi.get_node_or_null(mi.skeleton), s, mi.name)

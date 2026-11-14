@@ -45,8 +45,9 @@ SLOTS_BY_MESH = {
     "Abarax_Brows": {1},
     "Abarax_Topknot": {1},
     "Abarax_Forelock": {1, 7},
-    "Abarax_Feather": {1, 3, 8},
+    "Abarax_Feather": {1, 8},
     "Abarax_EarRing": {8},
+    "Abarax_Stubble": {1},
     "Abarax_Eyes": {2},
     "Male_Peasant_Arms": {0, 3},
     "Male_Peasant_Body": {3, 4},
@@ -157,11 +158,20 @@ class BuildAbarax(unittest.TestCase):
         self.assertGreater(high[2], 0.085, "in front of the skull")
         self.assertLess(low[1], 1.745, "and falls toward the bridge of the nose")
 
+    def test_the_stubble_is_on_the_chin_and_jaw_and_the_mole_on_his_left_cheek(self):
+        low, high = self.bounds("Abarax_Stubble")
+        self.assertTrue(1.55 < low[1] and high[1] < 1.69, f"between the jaw and the cheekbone ({low[1]:.3f}-{high[1]:.3f})")
+        self.assertGreater(high[2], 0.07, "on the front of the face")
+        self.assertGreater(high[0], 0.03, "reaching his left cheek (the mole is at x 0.04)")
+        self.assertLess(low[0], -0.03, "and along his right jaw")
+
     def test_the_new_parts_stay_small(self):
         new = sum(self.triangles_of(m) for m in ("Abarax_Forelock", "Abarax_Feather", "Abarax_EarRing"))
         self.assertGreater(new, 0, "the made parts exist")
         self.assertLessEqual(new, 400, "the made parts (forelock, feather, ring)")
         self.assertLessEqual(self.triangles_of("Abarax_Topknot"), 450, "the bun and the cut hair")
+        self.assertGreater(self.triangles_of("Abarax_Stubble"), 0)
+        self.assertLessEqual(self.triangles_of("Abarax_Stubble"), 120, "the stubble and the mole")
 
     def test_scarf_chain_hangs_from_neck_down_the_back(self):
         parents = gltf_inspect.joint_parents(self.j)
