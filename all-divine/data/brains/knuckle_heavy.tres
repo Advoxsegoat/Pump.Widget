@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="BrainDef" format=3]
+
+[ext_resource type="Script" path="res://actors/attack_option.gd" id="1_opt"]
+[ext_resource type="Script" path="res://actors/brain_def.gd" id="2_brain"]
+
+[sub_resource type="Resource" id="Resource_haymaker"]
+script = ExtResource("1_opt")
+action = &"palm"
+min_range = 1.4
+max_range = 2.4
+tokens = 0
+combo = PackedStringArray()
+
+[sub_resource type="Resource" id="Resource_slam"]
+script = ExtResource("1_opt")
+action = &"gift"
+max_range = 1.8
+cooldown = 5.0
+weight = 0.7
+tokens = 0
+combo = PackedStringArray()
+
+[resource]
+script = ExtResource("2_brain")
+preferred_range = 2.0
+attacks = Array[ExtResource("1_opt")]([SubResource("Resource_haymaker"), SubResource("Resource_slam")])
+attack_rest = 1.4

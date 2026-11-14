@@ -70,7 +70,7 @@ func _init(actor: Actor) -> void:
 ## `evaded` stays false, and nothing is linked or given back); otherwise every EVADED, PARRIED and CAUGHT blow links it, and
 ## a perfect dodge gives its stamina back once, for the whole dodge (its cost and the chain's perfect_refund; a body with no chain gets nothing back). A GUARDED blow does nothing.
 ## A turned blow, and an evaded one that took posture from its attacker, reaches the attacker as posture damage; only the
-## turned blow also gives it a reaction.
+## turned blow also gives it a reaction (unless its move says a parry does not end it: MoveData.parry_ends).
 func take(events: Array[HitEvent], results: Array[HitResult], turned: Array[HitEvent] = [],
 		turned_results: Array[HitResult] = []) -> void:
 	if not _actor.dead:
@@ -103,6 +103,8 @@ func take(events: Array[HitEvent], results: Array[HitResult], turned: Array[HitE
 				broke = stats.damage_posture(r.attacker_posture_damage) or broke
 			if r.outcome == HitResult.Outcome.EVADED:
 				continue  # no reaction of its own: its blow found nothing, and only a broken posture reels
+			if not turned[i].move.parry_ends:
+				continue  # a blow of a string that goes on (MoveData.parry_ends): the posture was taken, the move plays on
 			strongest = maxi(strongest, REACTIONS.find(&"caught" if r.outcome == HitResult.Outcome.CAUGHT else &"parried"))
 		_feed_chain(landed, defended)
 		if broke:

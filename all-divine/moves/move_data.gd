@@ -31,6 +31,11 @@ enum Evade { NONE, SWAY, DUCK }
 @export var hits: Dictionary = {}
 ## Whether the body turns toward the intent's aim target during the wind-up (aim assist and lock-on).
 @export var aim := true
+## Whether a blow of this move that is parried (or caught) turns the move back: its attacker recoils into its parried reaction.
+## False for a blow of a string that goes on: the parry still links the defender's chain and still costs its attacker the
+## posture a parried blow costs, but the attacker plays no reaction, its move runs on and its cancel windows open as they would
+## for a blow that was evaded. Every other move leaves it true.
+@export var parry_ends := true
 ## Where the blow lands as it was made: how far (metres, root to root on the ground, for an actor of model_scale 1) the
 ## target stands when the move starts for its blow to meet it squarely. A move started with the intent's `warp` has its
 ## wind-up's root travel changed so the target stands there (MoveRunner). 0: the move is never warped.

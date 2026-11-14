@@ -77,6 +77,13 @@ var camera: Camera3D
 ## The full-screen quad that draws screen_post, in group `post_quad`.
 var post_quad: MeshInstance3D
 
+## The Director's cine layer (story/cine_pose.gd): the pose a scene's shot has the camera glide toward, and how far it
+## has glided, 0 to 1. At 0 the rig is exactly the game camera; above it the camera is the blend of gameplay_pose()
+## and `cine`. Only the Director sets them.
+var cine: CinePose = null
+var cine_weight := 0.0
+
+var _cine_shown: CinePose = null  # the pose the last _apply showed, while the cine layer is on
 var _lean := Vector3.ZERO
 var _lean_velocity := Vector3.ZERO
 var _follow := Vector3.ZERO
@@ -111,12 +118,16 @@ func _ready() -> void:
 ## The camera's turn about the vertical axis, in radians. Movement input is rotated by this to
 ## be relative to the screen.
 func yaw() -> float:
+	if cine_weight > 0.0:
+		return deg_to_rad(YAW_DEG)  # the sticks do not turn with a glide
 	return global_rotation.y
 
 
 ## How far in front of the camera its target is, along the view: the depth the screen look keeps in
 ## focus. DISTANCE when there is no target.
 func focus_distance() -> float:
+	if _cine_shown != null:
+		return (_cine_shown.focus - camera.global_position).dot(-camera.global_basis.z)
 	if target == null or not target.is_inside_tree():
 		return DISTANCE
 	var to_target := target.get_global_transform_interpolated().origin - camera.global_position
@@ -161,9 +172,9 @@ func shake(strength: float) -> void:
 
 
 ## How far the shake has the camera from where it would be, in metres along its right and up: shake_at for this
-## rig's trauma and moment.
+## rig's trauma and moment, times the player's Camera shake setting (Settings.shake_scale).
 func shake_offset() -> Vector2:
-	return shake_at(trauma, _shake_time)
+	return shake_at(trauma, _shake_time) * Settings.shake_scale()
 
 
 ## The shake of `trauma` at `seconds` into a shaking: up to trauma squared times MAX_SHAKE (in length) along smooth
@@ -200,6 +211,17 @@ func _process(delta: float) -> void:
 		_follow = goal
 		_has_follow = true
 	_apply()
+
+
+## The pose the game camera has now, as a CinePose: the follow point, the fixed pitch, no turn, zoom 1, the target in focus.
+func gameplay_pose() -> CinePose:
+	var pose := CinePose.new()
+	pose.aim = _follow
+	pose.yaw_deg = YAW_DEG
+	pose.pitch_deg = PITCH_DEG
+	pose.zoom = 1.0
+	pose.focus = target.get_global_transform_interpolated().origin if target != null and target.is_inside_tree() else _follow
+	return pose
 
 
 func _spring_factor(delta: float) -> float:
@@ -258,6 +280,11 @@ func on_screen(world: Vector3) -> bool:
 
 
 func _apply() -> void:
+	if cine_weight > 0.0 and cine != null:
+		_apply_cine()
+		return
+	if _cine_shown != null:
+		_leave_cine()
 	global_position = _follow
 	var b := global_basis
 	var shaken := shake_offset()
@@ -266,6 +293,34 @@ func _apply() -> void:
 	if is_instance_valid(stage):
 		stage.subpixel = PixelSnap.subpixel(wanted, b)
 	(post_quad.material_override as ShaderMaterial).set_shader_parameter(&"focus", focus_distance())
+
+
+# The cine layer's _apply: the camera at the blend of the gameplay pose and the cine pose, turned to its yaw and pitch, its
+# view `zoom` times smaller and snapped to the grid of that zoom (a picture pixel is TEXEL / zoom of a metre), with
+# what the snap took away handed to the stage as before.
+func _apply_cine() -> void:
+	var pose := CinePose.blend(gameplay_pose(), cine, cine_weight)
+	_cine_shown = pose
+	# A basis made from the angles, not `rotation`: that one keeps the scale the last basis had, an ulp off 1.
+	basis = Basis.from_euler(Vector3(deg_to_rad(pose.pitch_deg), deg_to_rad(pose.yaw_deg), 0.0))
+	global_position = pose.aim
+	camera.size = ORTHO_SIZE / pose.zoom
+	var grid := PixelSnap.TEXEL / pose.zoom
+	var b := global_basis
+	var shaken := shake_offset()
+	var wanted := pose.aim + b.z * DISTANCE + b.x * shaken.x + b.y * shaken.y
+	camera.global_position = PixelSnap.snap(wanted, b, grid)
+	if is_instance_valid(stage):
+		stage.subpixel = PixelSnap.subpixel(wanted, b, grid)
+	(post_quad.material_override as ShaderMaterial).set_shader_parameter(&"focus", focus_distance())
+
+
+# Back to the game camera: the rotation and size _ready and _init give it.
+func _leave_cine() -> void:
+	_cine_shown = null
+	basis = Basis.from_euler(Vector3(deg_to_rad(PITCH_DEG), deg_to_rad(YAW_DEG), 0.0))
+	camera.basis = Basis.IDENTITY  # placing it in a turned rig leaves rounding in its own turn
+	camera.size = ORTHO_SIZE
 
 
 # A 2x2 quad that screen_post's vertex shader stretches over the whole screen (its faces flipped, so that

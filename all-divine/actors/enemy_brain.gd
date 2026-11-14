@@ -19,8 +19,10 @@ extends Brain
 ##               turns the other way.
 ##               Off its rest (attack_rest after its last attack), it chooses an attack: it takes one of the target's
 ##               attack tokens (AttackTokens; none needed by a squad that ignores them, or for an option that needs
-##               none), picks by weight among the options off cooldown that it may throw and that are on the menu at
-##               this range (it would back up no more than the option's back_up_margin: on_menu), and then closes or
+##               none; an option that holds more than one, AttackOption.tokens, is on the menu only while the tokens it
+##               holds are free, and takes them when it is chosen, so no other enemy begins an attack on the target while
+##               it is thrown, and it is thrown only while no other enemy holds one), picks by weight among the options
+##               off cooldown that it may throw and that are on the menu at this range (it would back up no more than the option's back_up_margin: on_menu), and then closes or
 ##               backs off into that option's range (where the move really lands: AttackOption) and throws it once it
 ##               is there, square enough to the target (max_angle_deg) and slowed to a walk (PRESS_SPEED), checking
 ##               all three again at the press. It jogs in, braking to a walk over the last of it, and backs up at a
@@ -350,6 +352,8 @@ func _choose(actor: Actor) -> void:
 	for option in def.attacks:
 		if _cooldowns.get(option, 0.0) > 0.0 or option.weight <= 0.0 or (option.needs_token and not token):
 			continue
+		if option.needs_token and not def.ignores_tokens and option.tokens != 1 and not _may_hold(actor, option):
+			continue  # a big attack waits until the tokens it needs are free
 		if not on_menu(option, distance):
 			continue
 		open.append(option)
@@ -366,6 +370,8 @@ func _choose(actor: Actor) -> void:
 			break
 	if not chosen.needs_token:
 		_give_back(actor)
+	elif chosen.tokens != 1 and not def.ignores_tokens:
+		AttackTokens.take_for(actor, target, chosen.tokens)  # it holds what it needs from now on: no other enemy begins an attack
 	_plan = chosen
 	_approach = 0.0
 	_backed_up = 0.0
@@ -415,8 +421,12 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 		var push := WALK_PUSH if distance - hi <= braking + BRAKE_MARGIN else JOG_PUSH
 		intent.move = (to / distance).rotated(_swing) * push
 	else:
-		# A back-up within the option's margin, at a walk; one the target keeps following it through is given up once it
-		# has gone the margin, or taken that long at a walk and a second more.
+		# A back-up within the option's margin, at a walk. One chosen while still going faster than a walk (a jog in) brakes first,
+		# the stick at rest: a stick pushed the other way turns the body round at once at the speed it has (Locomotion), and it
+		# would glide backward at a jog, slowing as it went. One the target keeps following it through is given up once it has
+		# gone the margin, or taken that long at a walk and a second more.
+		if actor.locomotion.speed > PRESS_SPEED:
+			return
 		_backed_up += _speed * delta
 		_backing_up_for += delta
 		var walk := actor.locomotion.target_speed(WALK_PUSH, false)
@@ -431,7 +441,7 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 # Presses the attack: the feint first, if it feints, else the option's action (held for a delayed swing). Its token is
 # taken again (an attacker that holds one keeps it, for TIMEOUT more); with none to be had, the attack is off.
 func _fire(actor: Actor, intent: Intent) -> void:
-	if _plan.needs_token and not def.ignores_tokens and not AttackTokens.take_for(actor, target):
+	if _plan.needs_token and not def.ignores_tokens and not AttackTokens.take_for(actor, target, _plan.tokens):
 		_drop_plan(actor)
 		return
 	mode = Mode.ATTACKING
@@ -449,7 +459,7 @@ func _press(actor: Actor, intent: Intent, action: StringName) -> void:
 		intent.held.append(action)
 	_press_count += 1
 	if _press_count > 1 and _plan.needs_token and not def.ignores_tokens:
-		AttackTokens.take_for(actor, target)  # each blow keeps its token
+		AttackTokens.take_for(actor, target, _plan.tokens)  # each blow keeps its tokens
 
 
 # ATTACKING: the next press as its window opens; the attack is over when its moves are.
@@ -527,8 +537,10 @@ func _finish(actor: Actor) -> void:
 
 
 # The chosen attack is given up before it was thrown (no way into range, the target paired, no token): the token goes
-# back, and it rests a little before choosing again.
+# back, the option waits its cooldown as if it had been thrown, and it rests a little before choosing again.
 func _drop_plan(actor: Actor) -> void:
+	if _plan != null:
+		_cooldowns[_plan] = _plan.cooldown  # as one thrown: or the same attack is chosen again, and given up again, a rest later
 	_plan = null
 	_presses.clear()
 	_give_back(actor)
@@ -560,17 +572,25 @@ func _go_idle(actor: Actor) -> void:
 	_reset_spacing()
 
 
+# Whether the actor could hold the tokens `option` holds now (AttackOption.tokens), holding what it holds.
+func _may_hold(actor: Actor, option: AttackOption) -> bool:
+	var tokens := AttackTokens.of(actor)
+	return tokens == null or tokens.can_take(actor, target, option.tokens)
+
+
 func _give_back(actor: Actor) -> void:
 	if not def.ignores_tokens:
 		AttackTokens.give_back_for(actor)
 
 
-# Whether the window of the actor's feint (its moveset's FEINT_ACTION move) takes `action`.
+# Whether the window of the actor's feint (its moveset's FEINT_ACTION move) takes `action` into the move its moveset gives that
+# action: the feint stands for that attack, and an actor whose palm is a string of its own is not feinted into the Knuckle's jab.
 func _feint_takes(actor: Actor, action: StringName) -> bool:
 	if not _feint_window.has(action):
 		var takes := false
 		for m in _marks_of(actor, FEINT_ACTION):
-			if m["kind"] == &"cancel_open" and m["args"].get("into") is Dictionary and (m["args"]["into"] as Dictionary).has(action):
+			if m["kind"] == &"cancel_open" and m["args"].get("into") is Dictionary and (m["args"]["into"] as Dictionary).has(action) \
+					and StringName(str(m["args"]["into"][action])) == StringName(actor.def.moveset.get(action, &"")):
 				takes = true
 		_feint_window[action] = takes
 	return _feint_window[action]

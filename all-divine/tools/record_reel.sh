@@ -11,6 +11,8 @@
 # The Movie Maker records at the size the window has when the game starts, which a command-line --resolution does not
 # change under the project's fullscreen setting; so the run is given a temporary override.cfg (removed at the end)
 # that makes the window the 640x360 picture itself, and ffmpeg then scales that up 2x with nearest-neighbour.
+# The reel is not the player's game: it is run with --no-player-settings, so it is made on the default settings and
+# never reads the player's settings file.
 # REEL_FRAMES (default 780, about 26 s at 30 fps) is how long it records; REEL_STILLS is a space-separated list of
 # the seconds to save stills at.
 set -euo pipefail
@@ -31,7 +33,7 @@ trap 'rm -rf "$work"; rm -f "$ROOT/override.cfg"' EXIT
 mkdir -p "$OUT"
 printf '[display]\nwindow/size/viewport_width=640\nwindow/size/viewport_height=360\nwindow/size/mode=0\n' > "$ROOT/override.cfg"
 
-"$ROOT/tools/godot.sh" --render --write-movie "$work/frame.png" --fixed-fps 30 --quit-after "$FRAMES" res://demo/demo_reel.tscn
+"$ROOT/tools/godot.sh" --render --write-movie "$work/frame.png" --fixed-fps 30 --quit-after "$FRAMES" res://demo/demo_reel.tscn -- --no-player-settings
 
 ffmpeg -y -loglevel error -framerate 30 -i "$work/frame%08d.png" \
 	-vf "scale=1280:720:flags=neighbor,format=yuv420p" -c:v libx264 -crf 20 -preset slow -movflags +faststart \

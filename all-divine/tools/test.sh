@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Runs the GDScript test suite. Exits 0 only when every test passes.
-#   tools/test.sh [--render|--forward-plus] [--filter=<substring of a test id>] [--update-golden]
+#   tools/test.sh [--render|--forward-plus] [--filter=<substring of a test id>] [--update-golden] [--shard=<i>/<n>]
 # A test id looks like res://tests/area/test_x.gd::test_y.
 #   --render        also runs tests/**/render/, under xvfb with gl_compatibility
 #   --forward-plus  the same, but requires the forward_plus renderer (needs Vulkan)
+#   --shard=<i>/<n> runs every n-th test file from the i-th: the n shards cover the suite between them
 # The run is stopped after $TEST_TIMEOUT seconds (default 900).
 set -euo pipefail
 
@@ -22,7 +23,7 @@ for arg in "$@"; do
 				--forward-plus) runner_args+=("--expect-method=forward_plus") ;;
 			esac
 			;;
-		--filter=*|--update-golden) runner_args+=("$arg") ;;
+		--filter=*|--update-golden|--shard=*) runner_args+=("$arg") ;;
 		*) echo "test.sh: unknown argument '$arg'" >&2; exit 2 ;;
 	esac
 done
@@ -52,7 +53,11 @@ run_godot() {
 # A test that never finishes would hang the run for good, so the run is capped (TEST_TIMEOUT seconds).
 status=0
 if [ ${#mode[@]} -eq 0 ]; then
-	run_godot || status=$?
+	# user:// is one folder for every checkout on a machine, and seven test files keep user://settings_test.cfg in it: two runs at once
+	# (two lanes) would fail each other. A headless run gets a folder of its own (a render run keeps the shared one, with its shader cache).
+	user_data="$(mktemp -d)"
+	trap 'rm -f "$import_log"; rm -rf "$user_data"' EXIT
+	XDG_DATA_HOME="$user_data" run_godot || status=$?
 else
 	# Render modes run under xvfb-run, which folds Godot's stderr into stdout, so stdout is where the
 	# warning is. With pipefail the pipeline's status is Godot's (or timeout's), not the filter's.

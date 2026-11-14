@@ -126,13 +126,13 @@ class MakeSfx(unittest.TestCase):
         self.assertGreater(len(heavy), len(palm))
 
     def test_the_shipped_files_are_what_the_tool_makes(self):
-        # The WAVs under assets/audio/sfx/ are this tool's output: change the tool, run it again.
+        # The WAVs under assets/audio/sfx/ are this tool's output (voice_blip.wav is make_blips.py's): change the tool, run it again.
         for name, data in self.files.items():
             with self.subTest(name):
                 path = SHIPPED / (name + ".wav")
                 self.assertTrue(path.exists(), "%s is missing: run tools/audio/make_sfx.py" % path)
                 self.assertEqual(path.read_bytes(), data, "%s is out of date: run tools/audio/make_sfx.py" % path)
-        extra = sorted(p.name for p in SHIPPED.glob("*.wav") if p.stem not in self.files) if SHIPPED.exists() else []
+        extra = sorted(p.name for p in SHIPPED.glob("*.wav") if p.stem not in self.files and p.stem != "voice_blip") if SHIPPED.exists() else []
         self.assertEqual(extra, [], "WAVs the tool does not make")
 
     def test_the_evade_whoosh_is_soft_and_short(self):
@@ -171,7 +171,7 @@ class MakeSfx(unittest.TestCase):
     def test_the_knock_out_after_the_loudest_impact_does_not_clip(self):
         # A blow that knocks him out of a chain plays its own impact, and the knocked_out cue when the blow's hit-stop is over (ChainFx):
         # at the shortest hit-stop, 3 frames (0.05 s), later. At their bank volumes (data/sounds/*.tres volume_db) the mix on the SFX
-        # bus, which has no limiter, must stay under -1 dBFS; started on the same sample it would clip, which is why it waits.
+        # bus, which has no limiter, must stay under -1 dBFS; started on the same sample it would be louder, which is why it waits.
         sounds = SHIPPED.parents[2] / "data" / "sounds"
 
         def gain(cue):
@@ -192,7 +192,24 @@ class MakeSfx(unittest.TestCase):
                 worst = max(worst, max(abs(s) for s in late))
                 worst_same = max(worst_same, max(abs(s) for s in same))
         self.assertLess(20 * math.log10(worst), -1.0, "%.2f dBFS at the offset" % (20 * math.log10(worst)))
-        self.assertGreater(20 * math.log10(worst_same), 0.0, "(and on the same sample it would clip: %.2f dBFS)" % (20 * math.log10(worst_same)))
+        self.assertGreater(worst_same, worst, "(started on the same sample the mix would be louder: %.2f dBFS)" % (20 * math.log10(worst_same)))
+
+    def test_the_knock_out_has_a_crack_in_its_own_band_that_is_heard_over_an_impacts_tail(self):
+        # The impacts have almost nothing above 1.5 kHz after their first milliseconds, and the thump of the cue is lost under their low tails
+        # (a thrust's, a sweep's). So the cue starts with a short crack in 1.5 to 5 kHz: over its first 50 ms its energy in that band is at least
+        # 10 dB above that of every impact over the 50 ms it plays against (the cue starts 3 frames, 0.05 s, after the impact).
+        sounds = SHIPPED.parents[2] / "data" / "sounds"
+        window = int(0.05 * make_sfx.RATE)
+        offset = int(round(3 / 60.0 * make_sfx.RATE))
+
+        def band(samples):
+            return rms(make_sfx.lowpass(make_sfx.highpass(samples, 1500.0), 5000.0))
+
+        knock = band(read(self.files["knocked_out"])[3][:window])
+        for name in ("impact_palm_1", "impact_palm_2", "impact_palm_3", "impact_heavy_1", "impact_heavy_2"):
+            tail = band(read(self.files[name])[3][offset:offset + window])
+            ratio = 20 * math.log10(knock / max(tail, 1e-9))
+            self.assertGreaterEqual(ratio, 10.0, "%s: the cue's band is only %.1f dB over its tail" % (name, ratio))
 
     def test_the_command_line_writes_every_file_and_rejects_the_unknown(self):
         with tempfile.TemporaryDirectory() as out:

@@ -76,6 +76,13 @@ const SNAPSHOT_LENGTH := 0.01
 ## The tree's parameters.
 const LOCO_SPEED := &"parameters/loco/blend_position"
 const LOCO_SCALE := &"parameters/loco_scale/scale"
+
+## How much larger than its model the body is (set_model_scale), and the rate its locomotion clips play at (LocomotionTuning.cadence).
+var model_scale := 1.0
+## How much thicker the body is drawn than its model, in metres (set_body_inflate).
+var body_inflate := 0.0
+var cadence := 1.0
+
 const MOVE_AB := &"parameters/move_ab/blend_amount"
 const MOVE_BLEND := &"parameters/move_blend/blend_amount"
 const SLOT_NODES: Array[StringName] = [&"move_a", &"move_b"]
@@ -240,6 +247,7 @@ func apply_palette(p: Palette) -> void:
 	palette = p
 	_material = toon_material(p)
 	_flash_left = 0.0
+	_show_inflate()
 	for mesh in _body_meshes():
 		mesh.material_override = _material
 
@@ -265,8 +273,47 @@ func hide_parts(parts: PackedStringArray) -> PackedStringArray:
 ## ride its bones and the travel of its clips' root (the move runner reads it through the skeleton's transform), so a
 ## larger body strides further and its planted feet do not skate; and the Hurtbox. 1 is the model as built.
 func set_model_scale(s: float) -> void:
+	model_scale = s
 	($Model as Node3D).scale = Vector3.ONE * s
 	hurtbox.scale = Vector3.ONE * s
+	_show_inflate()
+
+
+## Draws the body `metres` thicker: the toon shader pushes every vertex out along its normal by that much, in the world's metres
+## whatever the body's scale (ActorDef.body_inflate). Only the picture grows: the skeleton, the hitboxes, the hurtbox, the feet and the
+## clips' travel are as they were. The rim's passes and an afterimage of the body grow with it. 0 draws the model as built.
+func set_body_inflate(metres: float) -> void:
+	body_inflate = metres
+	_show_inflate()
+
+
+## The inflate the shaders take: in the model's own units, which the Model's scale then multiplies back to `body_inflate` metres.
+func shader_inflate() -> float:
+	return body_inflate / maxf(model_scale, 0.001)
+
+
+# Hands the inflate to the body's material and to the rim's passes, if they exist. A body that is thicker is drawn by the shaders with
+# the inflating vertex function added (InflatedShader); one that is not by the shaders as they are.
+func _show_inflate() -> void:
+	var local := shader_inflate()
+	for material: ShaderMaterial in [_material, _rim, _rim_mark]:
+		if material != null:
+			material.set_shader_parameter(&"inflate", local)
+	if _material != null:
+		var wanted := InflatedShader.of(TOON_SHADER) if body_inflate > 0.0 else TOON_SHADER
+		if _material.shader != wanted:
+			_material.shader = wanted
+	if _rim_mark != null and _mark != 0:
+		var mark := _mark_shader()
+		if _rim_mark.shader != mark:
+			_rim_mark.shader = mark
+
+
+# The shader of the rim's mark pass for the mark this body holds: the one that writes the body's mark where the body is drawn, so it
+# is drawn the way the body is (thicker, or not).
+func _mark_shader() -> Shader:
+	var shader := RimMarks.mark_shader(_mark)
+	return InflatedShader.of(shader) if body_inflate > 0.0 else shader
 
 
 ## Flashes the body `color` for `seconds`: the toon shader mixes `color` over the palette tone, all of it as the
@@ -410,8 +457,9 @@ func set_locomotion_clips(clips: Dictionary) -> void:
 ## Sets the locomotion blend: `speed` in m/s picks between idle, walk, jog and sprint (the blend points
 ## sit at those clips' ground speeds), and `backward` plays the cycle in reverse.
 func set_locomotion(speed: float, backward: bool) -> void:
-	tree.set(LOCO_SPEED, speed)
-	tree.set(LOCO_SCALE, -1.0 if backward else 1.0)
+	var stride := model_scale * cadence if not is_equal_approx(cadence, 1.0) else 1.0
+	tree.set(LOCO_SPEED, speed / stride)
+	tree.set(LOCO_SCALE, (-1.0 if backward else 1.0) * cadence)
 
 
 ## Sets how far the way the actor moves is from the way it faces: `angle` in radians about up (positive
@@ -828,6 +876,7 @@ func _show_rim() -> void:
 		_aura_on = true
 		_end_warming(false)
 		_set_rim_passes(true)
+	_rim.set_shader_parameter(&"inflate", shader_inflate())
 	_rim.set_shader_parameter(&"rim_color", _aura_color)
 	_rim.set_shader_parameter(&"rim_width", rim_width_px)
 	_rim.set_shader_parameter(&"rim_strength", aura_level())
@@ -838,8 +887,9 @@ func _show_rim() -> void:
 func _set_rim_passes(on: bool) -> void:
 	if on:
 		_mark = RimMarks.take()
-		_rim_mark.shader = RimMarks.mark_shader(_mark)
+		_rim_mark.shader = _mark_shader()
 		_rim.shader = RimMarks.hull_shader(_mark)
+		_show_inflate()
 	else:
 		RimMarks.give_back(_mark)
 		_mark = 0
