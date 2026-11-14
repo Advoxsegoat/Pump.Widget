@@ -95,6 +95,14 @@ func test_shots_for_a_person() -> void:                                    # out
 
 ### Task 2: Expressions, and the cast's stand-ins
 
+> **Withdrawn, Nov 14 (the owner's decision).** The owner was shown a try at redrawing Abarax from our end, a
+> face drawn from nothing (Mother Kesra) and two expressions made by moving strokes, and decided: "I'll just draw
+> them." The cast's portraits are the owner's own drawings, cleaned and lightly tinted; nothing of ours draws a
+> face. This task (expressions as warps of the owner's strokes; generated stand-ins for the cast) is not built.
+> In its place, Task 1's fix round makes the owner's next drawing quick to bring in (a first recipe written by
+> the tool, a short "Adding a drawing" page in `docs/art/owner/README.md`). A speaker with no drawing shows the
+> plain card and is flagged a stand-in, as Task 1 built. The text below is kept as the record of what was planned.
+
 **Files:**
 - Create: `all-divine/tools/portraits/pencil_stand_in.py`, `all-divine/tools/portraits/tests/test_pencil_stand_in.py`, `docs/art/stand-ins/<speaker>.recipe.json`
 - Modify: `all-divine/tools/portraits/sketch_to_portrait.py` (expressions), `docs/art/owner/abarax-portrait-sketch-2026-11-14.recipe.json`, `all-divine/assets/portraits/*/*.png`, `all-divine/data/speakers/*.tres`, `all-divine/ASSETS.md`

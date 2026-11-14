@@ -1,7 +1,7 @@
 # Tests and builds The All-Divine (the Godot project in all-divine/) on GitHub's runners.
 #   test                the headless suite, the clip checker and the Python tools' tests
 #   render              the suite again with the tests that need a display (xvfb, Compatibility renderer),
-#                       split over three jobs side by side
+#                       split over five jobs side by side
 #   render-forward-plus the render tests whose shaders have a Forward+ branch, on a software Vulkan device
 #                       (lavapipe), so Forward+ is checked here and not only on the owner's PC
 #   export              the Linux, Windows and Web builds, uploaded as artifacts, then a self-test of the Linux one
@@ -63,6 +63,13 @@ jobs:
       - name: Clip checker
         run: tools/godot.sh -s res://tools/clip_check.gd
 
+      - name: Combat bot
+        run: tools/godot.sh -s res://tools/bot/run_bot.gd -- --seeds=1-2 --frames=3600 --policy=mixed
+
+      # The fights too long for the suite: the other policies over the Drummer's and the tier Knuckles' waves.
+      - name: Combat bot, the other policies
+        run: tools/godot.sh -s res://tools/bot/run_bot.gd -- --seeds=1-2 --frames=3600 --policy=counter
+
       - name: Python tools' tests
         run: |
           python3 -m pip install --quiet pillow==12.3.0 numpy==2.5.3
@@ -71,13 +78,13 @@ jobs:
           python3 -I -m unittest discover -s tools/portraits/tests
 
   render:
-    name: Tests (render, Compatibility, ${{ matrix.shard }} of 3)
+    name: Tests (render, Compatibility, ${{ matrix.shard }} of 5)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
 
@@ -98,11 +105,11 @@ jobs:
         run: bash tools/setup.sh
 
       # Here a software renderer draws every frame of every test, so the run takes about ten times the headless
-      # one. The suite is split over three jobs side by side (each takes every third test file, so a folder's
+      # one. The suite is split over five jobs side by side (each takes every third test file, so a folder's
       # slow files are spread); between them they run every test. test.sh's cap is a guard against a hung test,
       # not a budget: a shard that nears it means another shard is due (add it to the matrix and to this line).
       - name: Test suite with the render tests
-        run: tools/test.sh --render --shard=${{ matrix.shard }}/3
+        run: tools/test.sh --render --shard=${{ matrix.shard }}/5
         env:
           TEST_TIMEOUT: "1800"
 
