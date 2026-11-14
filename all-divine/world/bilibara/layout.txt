@@ -75,7 +75,11 @@ ground -35 -12.5 -30 -5 tan_earth
 # W6 alcove B, "Lamp and a chair" (slate)
 ground 30 -37.5 37.5 -30 slate
 # W7 the Tanneries yard (tan earth): a centre where the fights are (YardPlateCentre: one line changes its stone) and margins
-ground 21.25 -70 33.75 -60 tan_earth name=YardPlateCentre
+ground 22.25 -69 32.75 -61 flagstone name=YardPlateCentre
+ground 21.25 -70 33.75 -69 slate name=YardPlateBorderNorth
+ground 21.25 -61 33.75 -60 slate name=YardPlateBorderSouth
+ground 21.25 -69 22.25 -61 slate name=YardPlateBorderWest
+ground 32.75 -69 33.75 -61 slate name=YardPlateBorderEast
 ground 15 -75 27.5 -70 tan_earth name=YardPlateNorth
 ground 27.5 -75 40 -70 tan_earth name=YardPlateNorth
 ground 15 -70 21.25 -60 tan_earth name=YardPlateWest
@@ -98,7 +102,7 @@ block -10 -45 25 -25 3 tannery gable solid
 block 30 -45 40 -37.5 3 tannery gable solid
 block 37.5 -37.5 40 -30 3 tannery high solid
 # The yard's north wall and its two flanks
-block 12.5 -80 42.5 -75 3 tannery gable solid
+block 12.5 -80 42.5 -75 3 yardwall gable solid
 block 12.5 -75 15 -55 2 tannery high solid
 block 40 -75 42.5 -55 2 tannery high solid
 
@@ -386,6 +390,37 @@ drift 37.80 -50.21 2.60 3.00 y=2.81 seed=139
 drift 36.6 -15 3.4 1.6 y=8.90 seed=200
 drift 41.6 -15 3.4 1.6 y=8.90 seed=201
 drift 44.0 -15 3.4 1.6 y=8.90 seed=202
+
+# --- The yard's margins, out of the fighting square: stacked hides (planks, two high: 0.3 m), and a railing of fence against each side wall (seen
+# through, 0.95 m) ---
+row planks 16.25 -72.5 16.25 -70 0 y=0
+row planks 16.25 -72.5 16.25 -70 0 y=0.15
+row planks 16.25 -62.5 16.25 -60 0 y=0
+row planks 16.25 -62.5 16.25 -60 0 y=0.15
+row planks 38.75 -72.5 38.75 -70 0 y=0
+row planks 38.75 -72.5 38.75 -70 0 y=0.15
+row planks 38.75 -62.5 38.75 -60 0 y=0
+row planks 38.75 -62.5 38.75 -60 0 y=0.15
+row fence 14.2 -73.75 14.2 -56.25 0
+row fence 40.85 -73.75 40.85 -56.25 180
+
+# --- Kit pieces no style uses, where they fit (each against a front, north of the ground it overlooks, so none stands behind a fighter):
+# ghost lanterns on the street's fronts and the yard's wall (their lamps are Task 4's), a colonnade of wooden pillars under the works'
+# galleries along the Rack Walk, balconies on the street's row, small rocks in the drying yard. Left: wall-corner (a whole tile of its own),
+# wall-doorway-round (an open arch), stairs-stone and its handrail (2.5 m high: they would hide a fighter), fountain-round (a quarter of the spawn court). ---
+piece lantern -26.25 -4.72 0 ghost
+piece lantern -3.75 -4.72 0 ghost
+piece lantern 12.5 -4.72 0 ghost
+piece lantern 20 -4.72 0 ghost
+piece lantern 17.5 -74.72 0 ghost
+piece lantern 23.75 -74.72 0 ghost
+piece lantern 31.25 -74.72 0 ghost
+piece lantern 37.5 -74.72 0 ghost
+row pillar-wood -35 -24.8 20 -24.8 0
+row balcony-wall -16.25 -3.75 -11.25 -3.75 90 y=2.5
+row balcony-wall 6.25 -3.75 11.25 -3.75 90 y=2.5
+piece rock-small -26 -13.5
+piece rock-small 20 -13
 
 # --- Fronts: banners as the pink neon of the street (a banner hangs on the face, turned to the south) ---
 piece banner-red -37.5 -3.925 90 y=0.8

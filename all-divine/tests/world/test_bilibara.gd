@@ -29,6 +29,9 @@ const PLACES := {
 	"W6 alcove B": {rect = Rect2(30, -37.5, 7.5, 7.5), stone = "slate"},
 	"W7 the Tanneries yard": {rect = Rect2(15, -75, 25, 20), stone = "tan_earth"},
 }
+## The yard's fighting square is laid in its own stone with a border course of another round it: the margins stay tan earth.
+const YARD_CENTRE_STONE := "flagstone"
+const YARD_BORDER_STONE := "slate"
 const AREA := 1906.25
 ## Markers: name -> [x, z, yaw in degrees about +Y (0 faces south, 90 east, 180 north, 270 west)].
 const MARKERS := {
@@ -270,7 +273,12 @@ func test_every_ground_is_toon_world_at_32_texels_per_metre() -> void:
 				place = place_name
 		assert_ne(place, "", "%s is in one of the places" % body.name)
 		if place != "":
-			assert_eq(material.resource_path, STONE % PLACES[place].stone, "%s (%s) is %s" % [body.name, place, PLACES[place].stone])
+			var stone: String = PLACES[place].stone
+			if String(body.name).begins_with("YardPlateCentre"):
+				stone = YARD_CENTRE_STONE
+			elif String(body.name).begins_with("YardPlateBorder"):
+				stone = YARD_BORDER_STONE
+			assert_eq(material.resource_path, STONE % stone, "%s (%s) is %s" % [body.name, place, stone])
 		assert_near(mesh.global_position.y + (mesh.mesh as BoxMesh).size.y / 2.0, 0.0, 1e-6, "%s: its top is at y = 0" % body.name)
 		assert_true(body.collision_layer & Layers.WORLD != 0 and body.collision_layer & Layers.IK_SURFACE != 0, "%s: world and ik_surface" % body.name)
 
@@ -909,7 +917,7 @@ func test_the_drying_yard_and_the_harbor_are_dressed_and_unwalkable() -> void:
 	for k in kit:
 		if k.at.z > -19.6 and k.at.z < -10.0 and k.at.x > -30.0 and k.at.x < 22.5 and k.piece not in ["planks"]:
 			var most: float = 1.7 + 0.71 * (k.at.z + 19.6 - 1.3)
-			var height: float = {"poles": 2.5, "poles-horizontal": 2.5, "rock-large": 2.91}.get(k.piece, 1.0)
+			var height: float = {"poles": 2.5, "poles-horizontal": 2.5, "rock-large": 2.91, "rock-small": 2.55}.get(k.piece, 1.0)
 			if height > most:
 				tall_near.append("%s at %s is %.2f m, the line allows %.2f" % [k.piece, k.at, height, most])
 	assert_eq(tall_near, PackedStringArray(), "nothing in the drying yard stands above the line of sight")
@@ -978,7 +986,7 @@ const MASSES := [
 	{rect = Rect2(30, -20, 2.5, 15), style = "frontage", roof = "roof", gable = true}, {rect = Rect2(32.5, -5, 2.5, 10), style = "frontage", roof = "roof", gable = true},
 	{rect = Rect2(-42.5, -5, 2.5, 10), style = "frontage", roof = "roof", gable = true}, {rect = Rect2(-40, -45, 30, 20), style = "tannery", roof = "roof", gable = true},
 	{rect = Rect2(-10, -45, 35, 20), style = "tannery", roof = "roof", gable = true}, {rect = Rect2(30, -45, 10, 7.5), style = "tannery", roof = "roof", gable = true},
-	{rect = Rect2(37.5, -37.5, 2.5, 7.5), style = "tannery", roof = "roof-high"}, {rect = Rect2(12.5, -80, 30, 5), style = "tannery", roof = "roof", gable = true},
+	{rect = Rect2(37.5, -37.5, 2.5, 7.5), style = "tannery", roof = "roof-high"}, {rect = Rect2(12.5, -80, 30, 5), style = "yardwall", roof = "roof", gable = true},
 	{rect = Rect2(12.5, -75, 2.5, 20), style = "tannery", roof = "roof-high"}, {rect = Rect2(40, -75, 2.5, 20), style = "tannery", roof = "roof-high"},
 ]
 
@@ -1011,11 +1019,13 @@ func test_every_solid_mass_has_a_front_of_its_style_and_a_roof() -> void:
 		var want: Dictionary = found[0]
 		var front := block.get_node("Front").get_children().map(func(r: Node) -> String: return String((r as KitRun).piece))
 		var wood := front.filter(func(p: String) -> bool: return p.begins_with("wall-wood"))
-		assert_eq(wood.size() == front.size(), want.style == "tannery", "%s: a %s front (%s)" % [block.name, want.style, front])
+		assert_eq(wood.size() == front.size(), want.style != "frontage", "%s: a %s front (%s)" % [block.name, want.style, front])
 		assert_false(front.has("balcony-wall"), "%s: no balcony (its frame is a hole)" % block.name)
 		if rect.size.x >= 12.5:
 			if want.style == "frontage":
 				assert_true(front.has("wall-door") and front.has("wall-window-small") and front.has("wall-window-shutters"), "%s: a stone front with a door, windows and shutters" % block.name)
+			elif want.style == "yardwall":
+				assert_true(front.has("wall-wood-window-shutters") and not front.has("wall-wood-door"), "%s: planks with lofts and no door of its own" % block.name)
 			else:
 				assert_true(front.has("wall-wood-door") and front.has("wall-wood-window-small"), "%s: planks with a door and windows" % block.name)
 		var roofs := block.get_node("Roof").get_children().map(func(r: Node) -> String: return String((r as KitRun).piece))
@@ -1295,3 +1305,56 @@ func test_every_solid_prop_on_walkable_ground_is_fought_round_and_nothing_rides_
 			side.actor.queue_free()
 		await frames(1)
 	assert_eq(problems, PackedStringArray(), "every solid prop is fought round and none is ridden up or entered")
+
+
+# The yard's north wall carries one door at each hand door and no other: the tannery front's own wooden doors are not drawn under the
+# stone-framed ones (they were: the doors showed doubled).
+func test_each_hand_door_is_one_door() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var boxes := _kit_boxes(region).filter(func(k: Dictionary) -> bool: return String(k.piece).contains("door") and k.box.end.z < -74.0 and k.box.position.z > -75.4 and k.box.get_center().x > 15.0 and k.box.get_center().x < 40.0)
+	for n in [1, 2, 3]:
+		var hand := region.get_node("HandDoor_%d" % n) as Marker3D
+		var near := boxes.filter(func(k: Dictionary) -> bool: return absf(k.box.get_center().x - hand.global_position.x) < 1.3)
+		assert_eq(near.size(), 1, "one door at HandDoor_%d (%s)" % [n, near.map(func(k: Dictionary) -> String: return "%s at %s" % [k.piece, k.box.get_center()])])
+	assert_eq(boxes.size(), 3, "three doors on the yard's north wall in all")
+
+
+# The yard says it is where the fights are: a fighting square in stone with a border course, and the margins dressed (hides, railings).
+func test_the_yard_floor_is_a_stone_square_with_a_border_and_dressed_margins() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var walkable := region.get_node("Walkable")
+	var centre := walkable.get_node_or_null("YardPlateCentre") as StaticBody3D
+	assert_true(centre != null, "a centre plate")
+	if centre != null:
+		assert_eq(((centre.get_node("Mesh") as MeshInstance3D).material_override as Material).resource_path, STONE % YARD_CENTRE_STONE, "in %s" % YARD_CENTRE_STONE)
+	var border := walkable.find_children("YardPlateBorder*", "StaticBody3D", false, false)
+	assert_true(border.size() >= 4, "a border course of at least four plates (%d)" % border.size())
+	for plate: StaticBody3D in border:
+		assert_eq(((plate.get_node("Mesh") as MeshInstance3D).material_override as Material).resource_path, STONE % YARD_BORDER_STONE, "%s in %s" % [plate.name, YARD_BORDER_STONE])
+	var margin_stuff := _kit_boxes(region).filter(func(k: Dictionary) -> bool: return k.piece in ["planks", "fence"] and k.box.get_center().z < -55.0 and k.box.get_center().z > -75.0 and k.box.get_center().x > 15.0 and k.box.get_center().x < 40.0)
+	assert_true(margin_stuff.size() >= 12, "stacked hides and railings in the yard's margins (%d pieces)" % margin_stuff.size())
+	var in_square := margin_stuff.filter(func(k: Dictionary) -> bool: return Rect2(21.25, -70, 12.5, 10).has_point(_centre(k.box)))
+	assert_eq(in_square.size(), 0, "none of it in the fighting square")
+	var too_high := margin_stuff.filter(func(k: Dictionary) -> bool: return k.piece == "planks" and k.box.end.y > 1.05)
+	assert_eq(too_high.size(), 0, "the stacks are under a fighter's hips")
+
+
+# The kit's pieces no style uses, where they fit: ghost lanterns on the street's fronts (the lamps are Task 4's), a colonnade of wooden
+# pillars under the works' galleries on the Rack Walk, balconies on the street's row, small rocks in the drying yard.
+func test_the_kit_pieces_that_fit_are_used_and_none_of_them_stands_behind_a_fighter() -> void:
+	var region := _region()
+	if region == null:
+		return
+	for piece in ["lantern", "pillar-wood", "balcony-wall", "rock-small"]:
+		assert_true(_pieces(region, piece).size() >= 2, "%s is used (%d)" % [piece, _pieces(region, piece).size()])
+	# Each stands north of the ground it overlooks (against a front, or beyond the unwalkable): no body is before it from the camera.
+	var fronts := {"lantern": -4.0, "pillar-wood": -24.0, "balcony-wall": -4.0}
+	for piece: String in fronts:
+		for k in _pieces(region, piece):
+			assert_true(k.box.end.z <= fronts[piece] + 1e-3, "%s at %s stands against a front" % [piece, k.box])
+	for k in _pieces(region, "lantern"):
+		assert_true((k.node as Node).get_node_or_null("Body") == null, "a lantern is drawn only (a lamp on a wall)")

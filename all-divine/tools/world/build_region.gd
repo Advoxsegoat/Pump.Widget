@@ -79,6 +79,7 @@ const MODELS := {
 	"planks": "none",
 	"fence": "none",
 	"fence-gate": "none",
+	"rock-small": "none",
 	"poles": "none",
 	"poles-horizontal": "none",
 	"rock-large": "none",

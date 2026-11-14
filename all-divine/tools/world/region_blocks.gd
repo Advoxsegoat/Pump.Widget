@@ -42,6 +42,8 @@ const STYLES := {
 		ground = ["wall-wood-door", "wall-wood-window-small", "wall-wood", "wall-wood-window-shutters", "wall-wood", "wall-wood-window-small"],
 		upper = ["wall-wood-window-shutters", "wall-wood", "wall-wood-window-small", "wall-wood"],
 	},
+	# The yard's north wall: plain planks below (the yard's own doors are set in it), the tannery's lofts above.
+	"yardwall": {ground = ["wall-wood"], upper = ["wall-wood-window-shutters", "wall-wood", "wall-wood-window-small", "wall-wood"]},
 	# A low wooden shed: planks, a door and a window.
 	"shed": {ground = ["wall-wood", "wall-wood-window-small", "wall-wood", "wall-wood-door"], upper = ["wall-wood", "wall-wood-window-small"]},
 	"plain": {ground = ["wall"], upper = ["wall"]},
