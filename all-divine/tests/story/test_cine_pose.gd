@@ -9,6 +9,12 @@ func _row(pose: CinePose, point: Vector3) -> float:
 	return PixelSnap.INTERNAL.y / 2.0 - (point - pose.aim).dot(up) * pose.zoom / PixelSnap.TEXEL
 
 
+# The column of the picture a world point is on, from a pose (the middle column is 320).
+func _column(pose: CinePose, point: Vector3) -> float:
+	var right := Basis.from_euler(Vector3(deg_to_rad(pose.pitch_deg), deg_to_rad(pose.yaw_deg), 0.0)).x
+	return PixelSnap.INTERNAL.x / 2.0 + (point - pose.aim).dot(right) * pose.zoom / PixelSnap.TEXEL
+
+
 # A world of three named places on the floor (an actor is its feet, a mark is where it is).
 func _world(places := {}) -> Callable:
 	var found: Dictionary = {&"a": Vector3(2, 0, 0), &"b": Vector3(6, 0, 4), &"fg": Vector3(0, 0, 0)}
@@ -184,8 +190,10 @@ func test_a_shot_with_a_line_puts_its_aim_in_the_middle_of_the_free_band_for_its
 		for progress in [0.0, 0.3, 1.0]:
 			var pose := CinePose.solve(_line_shot(), progress, world, null, bars)
 			assert_near(_row(pose, truth), (band.x + band.y) / 2.0, 1e-3, "the aim is mid-band at %s (bars %s)" % [progress, bars])
+			assert_near(_column(pose, truth), CineOverlay.free_rect(bars).get_center().x, 1e-3, "and in the middle of the columns right of the card at %s (bars %s)" % [progress, bars])
 	var plain := CinePose.solve(_shot(Shot.Framing.CLOSE), 0.0, world, null, true)
 	assert_vec_near(plain.aim, Vector3(2, 1.0, 0), 1e-6, "a shot with no line is framed in the middle of the picture as before")
+	assert_near(_column(plain, Vector3(2, 1.0, 0)), 320.0, 1e-3, "and in the middle of its columns")
 	var dolly := _line_shot(Shot.Framing.MEDIUM)
 	dolly.move = Shot.CamMove.DOLLY
 	dolly.zoom = 2
@@ -205,5 +213,6 @@ func test_an_over_the_shoulder_aim_is_a_third_of_the_way_down_the_free_band() ->
 	var band := CineOverlay.free_band(true)
 	var pose := CinePose.solve(shot, 0.0, _world(), null, true)
 	assert_near(_row(pose, Vector3(6, 1.0, 4)), band.x + (band.y - band.x) / 3.0, 1e-3)
+	assert_near(_column(pose, Vector3(6, 1.0, 4)), CineOverlay.free_rect(true).get_center().x, 1e-3, "and its column is the free area's middle")
 	var forward := Vector3(-sin(deg_to_rad(pose.yaw_deg)), 0, -cos(deg_to_rad(pose.yaw_deg)))
 	assert_vec_near(forward, Vector3(6, 0, 4).normalized(), 1e-5, "and the camera still looks from the foreground actor toward it")

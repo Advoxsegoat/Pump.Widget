@@ -65,11 +65,11 @@ static func blend(a: CinePose, b: CinePose, t: float) -> CinePose:
 ## the aim (the shot's own yaw is added to that, for nudging). Pitch is held within PITCH_MIN..PITCH_MAX and zoom
 ## within 1 to 4; at progress 0 and 1 the zoom is a whole number.
 ##
-## The dialogue box and the bars cover the picture's lower and upper edges, so the camera looks past where the person is:
-## `bars` says whether the scene is letterboxed, and for a shot that holds a line the aim is put on the middle row of the
-## free band (CineOverlay.free_band) for the whole shot, so that nothing jumps when the line appears; an OVER_SHOULDER
-## shot puts it a third of the way down the band, so that the foreground figure stays in view below. The focus stays on
-## the person.
+## The dialogue box and the bars cover the picture's lower and upper edges and the portrait card its lower left, so the camera
+## looks past where the person is: `bars` says whether the scene is letterboxed, and for a shot that holds a line the aim is put
+## on the middle of the free area (CineOverlay.free_rect: the rows of the free band, the columns right of the card) for the
+## whole shot, so that nothing jumps when the line appears; an OVER_SHOULDER shot puts it a third of the way down the area, so
+## that the foreground figure stays in view below. The focus stays on the person.
 static func solve(shot: Shot, progress: float, world: Callable, last: CinePose = null, bars := false) -> CinePose:
 	var t := clampf(progress, 0.0, 1.0)
 	var pose := CinePose.new()
@@ -108,20 +108,24 @@ static func solve(shot: Shot, progress: float, world: Callable, last: CinePose =
 	return pose
 
 
-# Moves the pose's aim along the camera's up so that the person it looked at is on the row of the free band the shot wants:
-# the middle for a shot with a line, a third of the way down for an over-the-shoulder shot, the picture's middle otherwise.
+# Moves the pose's aim along the camera's up and right so that the person it looked at is where the shot wants him: for a shot
+# with a line, in the middle of the free area (CineOverlay.free_rect: the free band's rows, the columns right of the portrait
+# card); for an over-the-shoulder shot, in the free area's middle column and a third of the way down its rows; otherwise in the
+# picture's middle, where he is.
 static func _place_in_band(shot: Shot, pose: CinePose, bars: bool) -> void:
-	var band := CineOverlay.free_band(bars)
+	var area := CineOverlay.free_rect(bars)
 	var row := -1.0
 	if shot.framing == Shot.Framing.OVER_SHOULDER:
-		row = band.x + (band.y - band.x) / 3.0
+		row = area.position.y + area.size.y / 3.0
 	elif not shot.lines.is_empty():
-		row = (band.x + band.y) / 2.0
+		row = area.position.y + area.size.y / 2.0
 	if row < 0.0:
 		return
-	var up := Basis.from_euler(Vector3(deg_to_rad(pose.pitch_deg), deg_to_rad(pose.yaw_deg), 0.0)).y
+	var basis := Basis.from_euler(Vector3(deg_to_rad(pose.pitch_deg), deg_to_rad(pose.yaw_deg), 0.0))
 	var pixels := PixelSnap.INTERNAL.y / 2.0 - row
-	pose.aim -= up * (pixels * PixelSnap.TEXEL / pose.zoom)
+	pose.aim -= basis.y * (pixels * PixelSnap.TEXEL / pose.zoom)
+	var across := area.get_center().x - PixelSnap.INTERNAL.x / 2.0
+	pose.aim -= basis.x * (across * PixelSnap.TEXEL / pose.zoom)
 
 
 # What is sharp: `focus` (a pull to `focus_to`), `aim` when the shot names none or the name is not there.

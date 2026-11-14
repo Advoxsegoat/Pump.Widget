@@ -7,8 +7,11 @@ extends Control
 ## The bars are BAR (44) px at full weight, top and bottom: a 2.35:1 picture of 640x272. They are the only shapes that
 ## cover the picture (88 of its 360 rows, 0.244). The dialogue box is BOX (620x64), MARGIN (10) px from the sides and its
 ## bottom BOTTOM (4) px above the picture's bottom, over the lower bar, with or without bars; the rows between the top
-## bar and the name tab's top edge are the free band (free_band), where a shot with a line frames its people; the speaker's portrait is drawn in it at 48x48,
-## MARGIN - 2 px in, with the line of text beside it and the speaker's name on a tab at its top left.
+## bar and the name tab's top edge are the free band (free_band), and the part of it right of the card is the free area
+## (free_rect), where a shot with a line frames its people. The speaker's portrait is a card (PortraitCard: 116x160 picture
+## pixels, drawn in the window at the picture's scale and not in this viewport) standing at the box's left and rising above
+## it; the line of text is beside it (GAP px right of the card) and the speaker's name is on a tab on the box's top edge, which
+## begins where the text does.
 ##
 ## A line is typed at CPS (30) characters a second, one character every two physics frames, with a voice blip
 ## (`voice_blip`, at the speaker's `blip_pitch`) on every BLIP_EVERY'th character, and goes after `hold_frames` frames.
@@ -17,7 +20,8 @@ extends Control
 ## off (tests, the storyboard tool).
 ##
 ## The queries (bar_rects, box_rect, portrait_rect, visible_text, ...) say what is drawn, in picture pixels, and the
-## drawing uses the same, so the tests read what a player would see.
+## drawing uses the same, so the tests read what a player would see. The card is made when a line is shown and freed when the
+## box closes or the overlay leaves the tree (`_card`), so a scene cut short at any frame leaves none.
 
 const BAR := 44
 const BOX := Vector2i(620, 64)
@@ -25,7 +29,6 @@ const MARGIN := 10
 ## The box's bottom edge is this many rows above the picture's bottom: it lies over the lower bar, which it leaves no more
 ## than the bar's own edge showing round it, so that the picture between the bars is the people's.
 const BOTTOM := 4
-const PORTRAIT := 48
 ## Characters typed a second, and a blip on every this many of them.
 const CPS := 30
 const BLIP_EVERY := 2
@@ -33,7 +36,7 @@ const MAX_LINES := 3
 ## The shown text's size and the outline round it, as the Hud's.
 const FONT_SIZE := 8
 const OUTLINE := 3
-## The portrait's and the text's distance from the box's edge, the portrait's gap to its text, the rows of text.
+## The text's distance from the box's edge, the gap between the card and the text (and the free area), the rows of text.
 const INSET := 8
 const GAP := 8
 const LINE_HEIGHT := 12
@@ -63,6 +66,8 @@ var _expr: StringName = &"neutral"
 var _hold := 0
 var _elapsed := 0  # physics frames since the line was shown
 var _showing := false
+# The card of the line up now, in the PixelStage (null when none is up or there is no stage).
+var _card: PortraitCard
 var _rows: Array[Vector2i] = []  # (start, length) of each row in _text
 
 
@@ -92,6 +97,7 @@ func show_line(speaker: Speaker, text: String, expr: StringName, hold_frames: in
 	_elapsed = 0
 	_showing = true
 	_rows = _wrap(text)
+	_show_card()
 	queue_redraw()
 
 
@@ -114,6 +120,7 @@ func advance(frames := 1) -> void:
 
 ## Takes the box away.
 func close() -> void:
+	_drop_card()
 	_showing = false
 	_speaker = null
 	_text = ""
@@ -144,41 +151,48 @@ func bar_height() -> int:
 
 ## The dialogue box, in picture pixels: its bottom BOTTOM px above the picture's bottom, whatever the bars.
 func box_rect() -> Rect2i:
-	return Rect2i(MARGIN, PICTURE.y - BOTTOM - BOX.y, BOX.x, BOX.y)
+	return _box()
 
 
 ## The rows of the picture that nothing covers while a line is up: from the top bar's lower edge (the top of the picture
-## with no bars) to the name tab's upper edge, as (first row, row after the last). The camera frames a shot with a line in
-## the middle of it (CinePose.solve).
+## with no bars) to the name tab's upper edge, as (first row, row after the last).
 static func free_band(bars: bool) -> Vector2i:
 	return Vector2i(BAR if bars else 0, PICTURE.y - BOTTOM - BOX.y - TAB_HEIGHT)
 
 
-## The speaker's name tab: sits on the box's top left.
+## What nothing covers while a line is up, in the picture: the free band's rows, right of the card (and GAP clear of it) to
+## the picture's right edge. The camera frames a shot with a line in the middle of it (CinePose.solve).
+static func free_rect(bars: bool) -> Rect2i:
+	var band := free_band(bars)
+	var left := _card_rect().end.x + GAP
+	return Rect2i(left, band.x, PICTURE.x - left, band.y - band.x)
+
+
+## The speaker's name tab: sits on the box's top edge, beginning where the text does (GAP px right of the card).
 func tab_rect() -> Rect2i:
 	var box := box_rect()
 	var width := ceili(text_width(_speaker.display_name)) + 2 * TAB_PAD if _speaker != null else 2 * TAB_PAD
-	return Rect2i(box.position.x, box.position.y - TAB_HEIGHT, width, TAB_HEIGHT)
+	return Rect2i(_card_rect().end.x + GAP, box.position.y - TAB_HEIGHT, width, TAB_HEIGHT)
 
 
-## Where the portrait is drawn: 48x48, INSET px inside the box's top left.
+## Where the card stands, in picture pixels: 116x160, at the box's left (6 px in) and rising above it (its bottom 2 px
+## above the box's). The card itself is drawn in the window (PortraitCard).
 func portrait_rect() -> Rect2i:
-	return Rect2i(box_rect().position + Vector2i(INSET, INSET), Vector2i(PORTRAIT, PORTRAIT))
+	return _card_rect()
 
 
-## Where the text goes: beside the portrait, MAX_LINES rows high.
+## Where the text goes: beside the card, MAX_LINES rows high.
 func text_rect() -> Rect2i:
 	var box := box_rect()
-	var left := INSET + PORTRAIT + GAP
-	return Rect2i(box.position + Vector2i(left, INSET), Vector2i(BOX.x - left - INSET, BOX.y - 2 * INSET))
+	var left := _card_rect().end.x + GAP
+	return Rect2i(left, box.position.y + INSET, box.end.x - INSET - left, BOX.y - 2 * INSET)
 
 
-## The portrait of the line up now (null when none is).
+## The card picture of the line up now (null when none is): the speaker's own, else the blank card.
 func portrait() -> Texture2D:
 	if _speaker == null:
 		return null
-	var picture := _speaker.portraits.get(_expr) as Texture2D
-	return picture if picture != null else _speaker.portraits.get(&"neutral") as Texture2D
+	return _speaker.card(_expr)
 
 
 ## The rows of the line up now as drawn, each as far as it is typed.
@@ -226,6 +240,56 @@ func box_fraction() -> float:
 	if not _showing:
 		return 0.0
 	return float(box_rect().get_area() + tab_rect().get_area()) / float(PICTURE.x * PICTURE.y)
+
+
+# The dialogue box, in picture pixels: its bottom BOTTOM px above the picture's bottom, whatever the bars.
+static func _box() -> Rect2i:
+	return Rect2i(MARGIN, PICTURE.y - BOTTOM - BOX.y, BOX.x, BOX.y)
+
+
+# The card's rectangle, in picture pixels.
+static func _card_rect() -> Rect2i:
+	return PortraitCard.rect_for(_box())
+
+
+# Shows the card of the line up now, in the PixelStage this overlay's viewport is the Hud of (there is none to show it in when
+# the overlay is on its own: its queries still say where the card would be).
+func _show_card() -> void:
+	var picture := portrait()
+	if picture == null:
+		_drop_card()
+		return
+	if _card == null or not is_instance_valid(_card):
+		var stage := _stage()
+		if stage == null:
+			return
+		_card = PortraitCard.new()
+		_card.box = _box()
+		if stage.is_node_ready():
+			stage.add_child(_card)
+		else:
+			stage.add_child.call_deferred(_card)
+	_card.show_card(picture)
+
+
+# Takes the card away with the line: hidden now, freed at the end of the frame.
+func _drop_card() -> void:
+	if _card != null and is_instance_valid(_card):
+		_card.hide_card()
+		_card.queue_free()
+	_card = null
+
+
+# The PixelStage whose Hud viewport this overlay is drawn in (null when it is not in one).
+func _stage() -> PixelStage:
+	if not is_inside_tree():
+		return null
+	var viewport := get_viewport()
+	return viewport.get_parent() as PixelStage if viewport is SubViewport else null
+
+
+func _exit_tree() -> void:
+	_drop_card()
 
 
 func _typed() -> int:
@@ -291,9 +355,6 @@ func _draw() -> void:
 	var name_at := Vector2(tab.position.x + TAB_PAD, tab.position.y + FONT_SIZE + 1)
 	draw_string_outline(font, name_at, _speaker.display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, OUTLINE, Hud.INK)
 	draw_string(font, name_at, _speaker.display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, Hud.WHITE)
-	var face := portrait()
-	if face != null:
-		draw_texture(face, Vector2(portrait_rect().position))
 	var typed := _typed()
 	var area := text_rect()
 	for i in mini(_rows.size(), MAX_LINES):
