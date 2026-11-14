@@ -145,10 +145,13 @@ func test_a_block_stacks_its_front_by_storeys_and_roofs_its_footprint() -> void:
 	for x in [1.25, 3.75, 6.25, 8.75]:
 		for z in [1.25, 3.75]:
 			assert_true(centres.has(Vector2(x, z)), "a roof tile at (%s, %s)" % [x, z])
-	# Their material is the kit's colormap.
-	for piece: Dictionary in front + roofs:
+	# The front's material is the kit's colormap; the roof's is its own (the style's roof, see test_a_blocks_roof_wears_the_roof_of_its_style).
+	for piece: Dictionary in front:
 		for m: Dictionary in piece.meshes:
 			assert_eq(m.material, _material("kenney_town"), "%s is in the kit's material" % piece.piece)
+	for piece: Dictionary in roofs:
+		for m: Dictionary in piece.meshes:
+			assert_eq((m.material as Material).resource_path, MATERIALS % "roof_slate", "%s is in the frontage's roof" % piece.piece)
 
 
 # A block's pieces are drawn a kind at a time: one MultiMesh to each mesh of each piece kind in the block, and no
@@ -390,6 +393,21 @@ func test_guard_is_an_unseen_wall() -> void:
 			assert_true((wrong.problems[0] as String).begins_with("T.txt:1:"), "%s names its line" % bad)
 
 
+# A block's roof is drawn in the roof of its style (slate-blue over the stone fronts, brown-red over the tannery's wood), its walls in the kit's.
+func test_a_blocks_roof_wears_the_roof_of_its_style() -> void:
+	for pair: Array in [["frontage", "roof_slate"], ["plain", "roof_slate"], ["tannery", "roof_tannery"], ["yardwall", "roof_tannery"], ["shed", "roof_tannery"]]:
+		var built := _build("block 0 0 10 5 1 %s gable solid\nblock 15 0 17.5 2.5 1 %s flat solid\nkit bilibara\n" % [pair[0], pair[0]])
+		assert_eq(built.problems, PackedStringArray(), "%s builds" % pair[0])
+		var roofs := (built.root as Node).find_children("*", "KitRun", true, false).filter(func(n: Node) -> bool: return n.get_parent().name == &"Roof")
+		var walls := (built.root as Node).find_children("*", "KitRun", true, false).filter(func(n: Node) -> bool: return n.get_parent().name == &"Front")
+		assert_true(roofs.size() >= 2 and walls.size() >= 2, "%s has roof and wall runs (%d, %d)" % [pair[0], roofs.size(), walls.size()])
+		for run: KitRun in roofs:
+			var material := run.material_override
+			assert_true(material != null and material.resource_path == "res://world/materials/%s.tres" % pair[1], "%s's roof run %s is drawn in %s (%s)" % [pair[0], run.name, pair[1], material.resource_path if material != null else "the kit's"])
+		for run: KitRun in walls:
+			assert_true(run.material_override == null or run.material_override.resource_path.contains("kenney_town"), "%s's wall run keeps the kit's material" % pair[0])
+
+
 # --- the older regions ---
 
 # What the builder makes of a node, and what a scene holds of it, as a line of text: its class, transform and the settings
@@ -501,8 +519,9 @@ func test_kit_bilibara_draws_every_piece_of_the_layout_in_its_colours() -> void:
 	var layout := "ground 0 5 10 15 cobble\nblock 0 0 10 5 2 frontage slope solid\nedge wall 0 7.5 5 7.5 s solid\npiece banner-red 7 7\nlamps #ffb98a 6 0.5 3.45 world\nlantern 8 8\nkit bilibara\n"
 	var built := _build(layout)
 	assert_eq(built.problems, PackedStringArray())
+	# (Every piece but the roofs, which are drawn in their style's own roof material.)
 	var materials := _kit_materials(built.root)
-	assert_eq(materials.keys(), [MATERIALS % "kenney_town_bilibara"], "every piece in the one material: %s" % [materials.keys()])
+	assert_eq(materials.keys(), [MATERIALS % "kenney_town_bilibara", MATERIALS % "roof_slate"], "every piece in the one material, the roofs in theirs: %s" % [materials.keys()])
 	assert_true(_placed(built.root).size() > 10, "and there are pieces")
 	# And so the saved scene draws them: a small scene, with the dresser in it, whose pieces take the material on entering
 	# the tree.
@@ -510,13 +529,13 @@ func test_kit_bilibara_draws_every_piece_of_the_layout_in_its_colours() -> void:
 	assert_eq(packed.pack(built.root as Node), OK)
 	var again := track(packed.instantiate()) as Node
 	assert_true(again.get_node_or_null("Kit") is KitDresser, "a KitDresser called Kit")
-	assert_eq(_kit_materials(again).keys(), [MATERIALS % "kenney_town_bilibara"], "the saved scene draws its pieces in the same material")
+	assert_eq(_kit_materials(again).keys(), [MATERIALS % "kenney_town_bilibara", MATERIALS % "roof_slate"], "the saved scene draws its pieces in the same materials")
 	# Wherever the line stands.
 	var first := _build("kit bilibara\npiece lantern 1 1\n")
 	assert_eq(_kit_materials(first.root).keys(), [MATERIALS % "kenney_town_bilibara"])
 	# Without the line, the kit's own.
 	var plain := _build(layout.replace("kit bilibara\n", ""))
-	assert_eq(_kit_materials(plain.root).keys(), [MATERIALS % "kenney_town"], "the kit's own material without the line")
+	assert_eq(_kit_materials(plain.root).keys(), [MATERIALS % "kenney_town", MATERIALS % "roof_slate"], "the kit's own material without the line (the roofs still wear theirs)")
 
 
 func test_a_bad_or_second_kit_line_is_a_problem() -> void:

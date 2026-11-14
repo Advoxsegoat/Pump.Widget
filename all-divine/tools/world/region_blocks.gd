@@ -48,6 +48,15 @@ const STYLES := {
 	"shed": {ground = ["wall-wood", "wall-wood-window-small", "wall-wood", "wall-wood-door"], upper = ["wall-wood", "wall-wood-window-small"]},
 	"plain": {ground = ["wall"], upper = ["wall"]},
 }
+## The material of a style's roof: slate-blue shingles over the stone fronts, brown-red over the tannery's wood (the shed and the yard's wall
+## are the works'), each with its snow along the ridge and a darker plane away from the camera (render/shaders/toon_roof.gdshader).
+const ROOF_MATERIALS := {
+	"frontage": preload("res://world/materials/roof_slate.tres"),
+	"plain": preload("res://world/materials/roof_slate.tres"),
+	"tannery": preload("res://world/materials/roof_tannery.tres"),
+	"yardwall": preload("res://world/materials/roof_tannery.tres"),
+	"shed": preload("res://world/materials/roof_tannery.tres"),
+}
 ## The roofs: one piece to a tile of the footprint.
 const ROOFS := {"flat": "roof-flat", "slope": "roof", "high": "roof-high", "gable": "roof"}
 ## The lumps of a drift, its highest point, and the angles its outline is made of (and the rings between its middle and its rim).
@@ -171,6 +180,8 @@ static func block(b: NODES, rect: Rect2, storeys: float, style: String, roof: St
 	_lay(b, cover, laid, rect.position, true, roof_yaw if roof != "gable" or ridge_along_x else other_yaw)
 	if not turned.is_empty():
 		_lay(b, cover, turned, rect.position, true, other_yaw if ridge_along_x else roof_yaw)
+	for run in cover.get_children():
+		(run as GeometryInstance3D).material_override = ROOF_MATERIALS[style]
 	if solid:
 		var body := b.make_body("Body", holder, b.world_and_feet)
 		var height := count * NODES.TILE

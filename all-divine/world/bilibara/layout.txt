@@ -347,8 +347,8 @@ block 35 0 50 5 2 tannery high
 row chimney 42.95 0.6 42.95 0.6 0 y=6.8 backdrop
 block 50 0 62.5 5 2 shed flat
 
-# --- Roofs that show: snow drifts break up the flat tops (T2, the lane's stub, the tanneries and sheds east of the lane, the sheds south of
-# the yard), so that no top shows more than about 6 x 6 m of one tone. The tops of T6 and the yard's
+# --- Roofs that show: their snow and shingles are on the roofs themselves (render/shaders/toon_roof.gdshader, the roof_* textures: a band
+# of snow along every ridge, rows of shingles, a dark eave), where the first version laid mounds on them. The tops of T6 and the yard's
 # and the alcove's walls are never in a picture from any walkable point (their roofs are 9 m higher up the picture than their feet). ---
 row chimney 39.0 -15.0 39.0 -15.0 0 y=8.1 backdrop
 row chimney 34.0 -15.0 34.0 -15.0 0 y=8.1 backdrop
@@ -364,40 +364,7 @@ row chimney 34.2 -41.2 34.2 -41.2 0 y=8.1 backdrop
 
 # Snow along the ridges of the gabled roofs (where it gathers), and on the flat decks and the sheds: one mound to about every 4 m, so that no
 # roof shows a tone of more than a few square metres (test_bilibara_view holds it at 6% of the frame).
-drift -37.50 -22.88 1.80 3.20 y=8.90 seed=101
-drift -37.50 -18.76 1.80 3.20 y=8.90 seed=102
-drift -37.50 -14.70 1.80 3.20 y=8.90 seed=103
-drift -37.50 -10.56 1.80 3.20 y=8.90 seed=104
-drift -37.50 -6.76 1.80 3.20 y=8.90 seed=105
-drift -27.00 -7.33 3.40 1.50 y=8.90 seed=106
-drift -17.80 -7.69 3.40 1.50 y=8.90 seed=107
-drift -13.20 -7.51 3.40 1.50 y=8.90 seed=108
-drift -4.00 -7.32 3.40 1.50 y=8.90 seed=109
-drift 0.60 -7.44 3.40 1.50 y=8.90 seed=110
-drift 5.20 -7.34 3.40 1.50 y=8.90 seed=111
-drift 14.40 -7.65 3.40 1.50 y=8.90 seed=112
-drift 22.90 -7.51 3.40 1.50 y=8.90 seed=113
-drift -8.00 -35.15 3.60 1.60 y=8.90 seed=114
-drift -2.80 -34.97 3.60 1.60 y=8.90 seed=115
-drift 2.40 -34.96 3.60 1.60 y=8.90 seed=116
-drift 7.60 -35.29 3.60 1.60 y=8.90 seed=117
-drift 12.80 -35.17 3.60 1.60 y=8.90 seed=118
-drift 18.00 -35.13 3.60 1.60 y=8.90 seed=119
-drift 22.80 -34.75 3.60 1.60 y=8.90 seed=120
-drift 35.00 -43.80 1.50 2.60 y=8.90 seed=121
-drift 35.00 -41.40 1.50 2.60 y=8.90 seed=122
-drift 35.00 -39.00 1.50 2.60 y=8.90 seed=123
-drift 35.00 -24.89 3.00 3.00 y=2.81 seed=133
-drift 38.70 -24.72 3.00 3.00 y=2.81 seed=134
-drift 42.40 -24.76 3.00 3.00 y=2.81 seed=135
-drift 17.60 -50.12 2.60 3.00 y=2.81 seed=136
-drift 20.80 -50.08 2.60 3.00 y=2.81 seed=137
-drift 34.60 -50.20 2.60 3.00 y=2.81 seed=138
-drift 37.80 -50.21 2.60 3.00 y=2.81 seed=139
 
-drift 36.6 -15 3.4 1.6 y=8.90 seed=200
-drift 41.6 -15 3.4 1.6 y=8.90 seed=201
-drift 44.0 -15 3.4 1.6 y=8.90 seed=202
 
 # --- The yard's margins, out of the fighting square: stacked hides (planks, two high: 0.3 m), and a railing of fence against each side wall (seen
 # through, 0.95 m) ---

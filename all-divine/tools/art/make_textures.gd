@@ -71,6 +71,7 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	for made: Array in [["flagstone.png", flagstone()], ["slate.png", slate()], ["cobble.png", cobble()],
 			["tan_earth.png", tan_earth()], ["snow.png", snow()], ["slate_cold.png", slate_cold()], ["flagstone_cold.png", flagstone_cold()],
+			["roof_slate.png", roof(ROOF_SLATE, ROOF_SLATE_SEED)], ["roof_tannery.png", roof(ROOF_TANNERY, ROOF_TANNERY_SEED)],
 			["bilibara_colormap.png", bilibara_colormap()]]:
 		var path := OUT_DIR.path_join(made[0])
 		var error := (made[1] as Image).save_png(ProjectSettings.globalize_path(path))
@@ -288,6 +289,79 @@ static func snow() -> Image:
 const SLATE_COLD := Vector3(0.52, 0.57, 0.66)
 ## The yard's stone square in the same way (flagstone() unchanged): about a fifth of the training yard's value.
 const FLAGSTONE_COLD := Vector3(0.23, 0.25, 0.30)
+
+
+## The roofs: one tile of a roof is 2.5 m across and 2.5 m up its piece, drawn from the ridge (the top of the picture) to the eave (the
+## bottom): ROOF_ROWS rows of shingles, each ROOF_ROW texels (about 0.6 m up the slope) deep and ROOF_SHINGLE texels wide, alternate rows
+## shifted half a shingle, each shingle one of two tones of the roof's colour. The lower ROOF_UNDER_TEXELS of a row are in the shadow of
+## the row above, the lowest row ends in a dark eave, and snow lies along the ridge as a band with a broken, dithered edge (the roof's tone
+## showing through), in a lit tone with shaded pockets under its edge and no blue in it. It tiles across (the snow's edge wraps).
+const ROOF_SIZE := 80
+const ROOF_ROWS := 5
+const ROOF_ROW := 16
+const ROOF_SHINGLE := 16
+const ROOF_UNDER_TEXELS := 3
+const ROOF_UNDER := 0.78
+const ROOF_EAVE_TEXELS := 5
+const ROOF_EAVE := 0.55
+## The slate-blue of the stone fronts' roofs and the brown-red of the tannery works': two tones each.
+const ROOF_SLATE: Array[Color] = [Color8(74, 88, 114), Color8(86, 101, 130)]
+const ROOF_TANNERY: Array[Color] = [Color8(104, 70, 64), Color8(118, 80, 72)]
+const ROOF_SLATE_SEED := 23
+const ROOF_TANNERY_SEED := 29
+## Snow on a roof: lit, and in the shade of its own edge; neutral, a hair cool, never blue.
+const ROOF_SNOW_LIT := Color8(224, 226, 228)
+const ROOF_SNOW_SHADE := Color8(178, 180, 184)
+
+
+static func roof(tones: Array[Color], seed_value: int) -> Image:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var size := ROOF_SIZE
+	var per_row := size / ROOF_SHINGLE
+	# Each shingle's tone, row by row (never the tone of the one before it in its row).
+	var picks: Array[PackedInt32Array] = []
+	for row in ROOF_ROWS:
+		var line := PackedInt32Array()
+		for k in per_row:
+			var pick := rng.randi_range(0, tones.size() - 1)
+			if k > 0 and per_row % 2 == 0 and pick == line[k - 1] and rng.randf() < 0.5:
+				pick = (pick + 1) % tones.size()
+			line.append(pick)
+		picks.append(line)
+	var colours: Array[Color] = []
+	colours.resize(size * size)
+	for row in ROOF_ROWS:
+		var shift := (row % 2) * (ROOF_SHINGLE / 2)
+		for dy in ROOF_ROW:
+			for x in size:
+				var k := ((x + size - shift) % size) / ROOF_SHINGLE
+				var pick: int = picks[row][k]
+				if rng.randf() < SPECKLE:
+					pick = (pick + 1) % tones.size()
+				var c := tones[pick]
+				if row == ROOF_ROWS - 1 and dy >= ROOF_ROW - ROOF_EAVE_TEXELS:
+					c = Color8(roundi(c.r8 * ROOF_EAVE), roundi(c.g8 * ROOF_EAVE), roundi(c.b8 * ROOF_EAVE))
+				elif dy >= ROOF_ROW - ROOF_UNDER_TEXELS:
+					c = Color8(roundi(c.r8 * ROOF_UNDER), roundi(c.g8 * ROOF_UNDER), roundi(c.b8 * ROOF_UNDER))
+				colours[(row * ROOF_ROW + dy) * size + x] = c
+	# The snow: a band along the ridge, its lower edge a wave that wraps (two sines of whole numbers of cycles, one more of the eight columns'
+	# worth of jitter), dithered over five texels so that the shingles show through, with shaded pockets just inside the edge.
+	var phase_a := rng.randf() * TAU
+	var phase_b := rng.randf() * TAU
+	for x in size:
+		var edge := 19.0 + 5.0 * sin(TAU * 2.0 * x / size + phase_a) + 2.5 * sin(TAU * 5.0 * x / size + phase_b) + rng.randf_range(-1.0, 1.0)
+		for y in 40:
+			var snowy := false
+			if y < edge - 3.0:
+				snowy = true
+			elif y < edge + 3.0:
+				snowy = rng.randf() < (edge + 3.0 - y) / 6.0
+			if snowy:
+				# Snow lies in rows over the shingles' rows: the lower texels of each row are in its shade, as the shingles' are.
+				var shaded := y % ROOF_ROW >= ROOF_ROW - ROOF_UNDER_TEXELS or (y >= edge - 6.0 and rng.randf() < 0.45)
+				colours[y * size + x] = ROOF_SNOW_SHADE if shaded else ROOF_SNOW_LIT
+	return _image(colours, size)
 
 
 static func slate_cold() -> Image:

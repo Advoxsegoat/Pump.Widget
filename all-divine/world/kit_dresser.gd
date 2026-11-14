@@ -49,7 +49,9 @@ static func dress_piece(node: Node, kit_material: Material) -> void:
 	if kit_material == null:
 		return
 	if node is MultiMeshInstance3D and node.is_in_group(&"kit_multimesh"):
-		(node as MultiMeshInstance3D).material_override = kit_material
+		# A run the builder gave a material of its own (a roof) keeps it.
+		if (node as MultiMeshInstance3D).material_override == null:
+			(node as MultiMeshInstance3D).material_override = kit_material
 	elif node is Node3D and node.scene_file_path.begins_with("res://assets/env/kenney_town/"):
 		for mesh: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
 			mesh.material_override = kit_material

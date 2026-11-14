@@ -156,9 +156,11 @@ func test_nine_views_are_saved_for_a_person_to_look_at() -> void:
 
 
 ## Where the tone test looks besides the nine views: the loop lane (a roof fills its left third), and the lane's north end.
-const EXTRA_VIEWS := {"LoopLane": Vector3(-32.5, 0.0, -12.5), "LaneNorth": Vector3(27.5, 0.0, -48.0), "StreetMid": Vector3(0.0, 0.0, 0.0)}
-## The most of the frame one flat tone of a roof may fill (the 4/255 a channel the tone may vary by, and the share).
-const FLAT_TOLERANCE := 4.0 / 255.0
+const EXTRA_VIEWS := {"LoopLane": Vector3(-32.5, 0.0, -12.5), "LaneNorth": Vector3(27.5, 0.0, -48.0), "StreetMid": Vector3(0.0, 0.0, 0.0), "RackColonnade": Vector3(-10.0, 0.0, -22.5)}
+## The most of the frame one flat tone of a roof may fill: the share of the 640 x 360 frame, and the 12/255 a channel the tone may vary by
+## to still be one tone to the eye. The picture is taken with the screen look off: its gradient bands cut a slab into regions of a few
+## tones and would let a slab through (the first version of this test held 4/255 with the look on and passed at 4.7% where the eye saw 24%).
+const FLAT_TOLERANCE := 12.0 / 255.0
 const MOST_FLAT := 0.06
 
 
@@ -217,6 +219,7 @@ func test_no_flat_tone_on_a_roof_fills_more_than_six_percent_of_the_frame() -> v
 	foe.set_brain(Brain.new())
 	region.add_child(foe)
 	main.player.set_brain(Brain.new())
+	main.camera_rig.post_quad.visible = false
 	var env := (region.get_node("WorldEnvironment") as WorldEnvironment).environment
 	var sky := env.background_color
 	var spots := {}
@@ -272,5 +275,5 @@ func test_no_flat_tone_on_a_roof_fills_more_than_six_percent_of_the_frame() -> v
 		if share > MOST_FLAT:
 			failed.append("%s: %.1f%% of the frame in one flat tone of a roof" % [view_name, share * 100.0])
 		roofs.save_png(ProjectSettings.globalize_path("res://").path_join(SHOTS + "roofs_" + view_name.to_snake_case() + ".png"))
-	print("flat roof tones, the largest region of one tone as a share of the frame: %s" % [report])
+	print("flat roof tones (look off, 12/255), the largest region of one tone as a share of the frame: %s" % [report])
 	assert_eq(failed, PackedStringArray(), "no roof shows more than %d%% of the frame in one flat tone" % [MOST_FLAT * 100])

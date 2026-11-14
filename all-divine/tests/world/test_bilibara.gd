@@ -996,6 +996,13 @@ func test_every_piece_is_a_kenney_toon_piece_at_two_and_a_half_times() -> void:
 			for mesh: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
 				materials.append(mesh.material_override)
 		for material in materials:
+			# A roof wears its style's roof material (the roof shader, the shingles picture); every other piece the Bilibara colormap.
+			if node.get_parent().name == &"Roof":
+				var roof_ok: bool = material is ShaderMaterial and (material as ShaderMaterial).shader.resource_path == "res://render/shaders/toon_roof.gdshader"
+				seen[region.get_path_to(node)] = true
+				if not roof_ok:
+					not_toon.append(String(region.get_path_to(node)))
+				continue
 			var ok: bool = material is ShaderMaterial and (material as ShaderMaterial).shader.resource_path == TOON_WORLD and material == dresser.material
 			var tex := (material as ShaderMaterial).get_shader_parameter(&"albedo_tex") as Texture2D if ok else null
 			ok = ok and tex != null and tex.resource_path == "res://assets/env/textures/bilibara_colormap.png"

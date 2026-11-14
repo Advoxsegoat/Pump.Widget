@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3]
+
+[ext_resource type="Shader" path="res://render/shaders/toon_roof.gdshader" id="1_roof"]
+[ext_resource type="Texture2D" path="res://assets/env/textures/roof_tannery.png" id="2_roof_tannery"]
+
+[resource]
+resource_name = "roof_tannery"
+shader = ExtResource("1_roof")
+shader_parameter/albedo_tex = ExtResource("2_roof_tannery")
+shader_parameter/dark = 0.72
+shader_parameter/toward = Vector2(0.3, 0.95)

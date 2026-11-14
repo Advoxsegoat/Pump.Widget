@@ -350,3 +350,132 @@ func test_the_cold_stones_are_the_yards_stones_drawn_darker_and_cooler() -> void
 			assert_true(absf(b.r8 - a.r8 * by.x) <= 1.0 and absf(b.g8 - a.g8 * by.y) <= 1.0 and absf(b.b8 - a.b8 * by.z) <= 1.0, "%s at %s is the yard's stone times %s" % [pair[0], at, by])
 		_same_as_committed(pair[1], pair[0])
 		_ground_material(pair[0])
+
+
+# --- The roofs: shingles in two tones, a dark eave, snow along the ridge ---
+
+const TOON_ROOF := "res://render/shaders/toon_roof.gdshader"
+
+
+func _is_snow(c: Color) -> bool:
+	return c.v >= 0.62 and c.s <= 0.06
+
+
+# Row `row`'s shingle part at `dy` down it (0 to 15), column x.
+func _at(img: Image, row: int, dy: int, x: int) -> Color:
+	return img.get_pixel(x, row * 16 + dy)
+
+
+func test_a_roof_tile_is_five_rows_of_shingles_in_two_tones() -> void:
+	for pair: Array in [[MAKE_TEXTURES.ROOF_SLATE, MAKE_TEXTURES.ROOF_SLATE_SEED], [MAKE_TEXTURES.ROOF_TANNERY, MAKE_TEXTURES.ROOF_TANNERY_SEED]]:
+		var tones: Array[Color] = []
+		tones.assign(pair[0])
+		var img := MAKE_TEXTURES.roof(tones, pair[1])
+		assert_eq(img.get_size(), Vector2i(80, 80), "80 x 80 texels: 2.5 m across, five rows of 16 texels")
+		# The two tones both show among the shingles' middle lines of the three lowest rows, and nothing else but their speckle does.
+		var seen := {}
+		for row in range(2, 5):
+			for x in 80:
+				seen[_at(img, row, 6, x).to_html(false)] = true
+		for tone in tones:
+			assert_true(seen.has(tone.to_html(false)), "tone %s is among the shingles" % tone.to_html(false))
+		assert_eq(seen.size(), 2, "and only the two (%s)" % [seen.keys()])
+		# The lower three texels of a row are in the shadow of the row above (0.78 of a tone); the lowest row ends in a dark eave (0.55).
+		var shaded := {}
+		var eaves := {}
+		for tone in tones:
+			shaded[Color8(roundi(tone.r8 * MAKE_TEXTURES.ROOF_UNDER), roundi(tone.g8 * MAKE_TEXTURES.ROOF_UNDER), roundi(tone.b8 * MAKE_TEXTURES.ROOF_UNDER)).to_html(false)] = true
+			eaves[Color8(roundi(tone.r8 * MAKE_TEXTURES.ROOF_EAVE), roundi(tone.g8 * MAKE_TEXTURES.ROOF_EAVE), roundi(tone.b8 * MAKE_TEXTURES.ROOF_EAVE)).to_html(false)] = true
+		for row in range(2, 4):
+			for x in [3, 20, 41, 60]:
+				assert_true(shaded.has(_at(img, row, 14, x).to_html(false)), "row %d x %d: its lower edge is a tone at 0.78 (%s)" % [row, x, _at(img, row, 14, x).to_html(false)])
+		for x in [3, 20, 41, 60]:
+			assert_true(eaves.has(_at(img, 4, 14, x).to_html(false)), "the eave at x %d is a tone at 0.55 (%s)" % [x, _at(img, 4, 14, x).to_html(false)])
+		# Alternate rows are shifted half a shingle: the joints (where the tone most of a column of a row shows changes) of rows 2 and 3 never
+		# fall in the same columns.
+		var edges := func(row: int) -> Array[int]:
+			var majority := PackedInt32Array()
+			for x in 80:
+				var first := 0
+				for dy in 13:
+					if _at(img, row, dy, x) == tones[0]:
+						first += 1
+				majority.append(1 if first >= 7 else 0)
+			var found: Array[int] = []
+			for x in 80:
+				if majority[x] != majority[(x + 79) % 80]:
+					found.append(x)
+			return found
+		var even: Array[int] = edges.call(2)
+		var odd: Array[int] = edges.call(3)
+		assert_true(even.size() >= 1 and odd.size() >= 1, "each row changes tone between shingles (%d, %d places)" % [even.size(), odd.size()])
+		for x in odd:
+			assert_false(even.has(x), "a joint of row 3 at x %d is not under a joint of row 2" % x)
+		# It tiles across: the seam between columns 79 and 0 is no busier than twice the tile's inside (the random speckle makes any one pair of
+		# columns differ in 6 to 18 texels).
+		var inner := 0
+		for i in 79:
+			inner += _column_changes(img, i, i + 1)
+		assert_true(_column_changes(img, 79, 0) <= 2.0 * inner / 79.0, "the seam has %d changes (average %.1f)" % [_column_changes(img, 79, 0), inner / 79.0])
+
+
+func test_snow_lies_along_the_ridge_as_a_band_with_a_broken_edge_and_no_blue() -> void:
+	var tones: Array[Color] = []
+	tones.assign(MAKE_TEXTURES.ROOF_SLATE)
+	var img := MAKE_TEXTURES.roof(tones, MAKE_TEXTURES.ROOF_SLATE_SEED)
+	var snow := 0
+	var lowest := PackedInt32Array()
+	var top_row_snow := 0
+	var below_snow := 0
+	for x in 80:
+		var bottom := -1
+		for y in 80:
+			var c := img.get_pixel(x, y)
+			if _is_snow(c):
+				snow += 1
+				bottom = y
+				assert_true(c.b - c.r <= 6.0 / 255.0, "snow at (%d, %d) has no blue cast (%s)" % [x, y, c.to_html(false)])
+				if y < 16:
+					top_row_snow += 1
+				if y >= 48:
+					below_snow += 1
+		lowest.append(bottom)
+	assert_true(snow >= 80 * 80 * 0.12 and snow <= 80 * 80 * 0.35, "snow covers %d of 6400 texels" % snow)
+	assert_true(top_row_snow >= 80 * 16 * 0.9, "the top row is snow (%d of 1280)" % top_row_snow)
+	assert_eq(below_snow, 0, "no snow on the lower rows")
+	var least := 99
+	var most := -1
+	for y in lowest:
+		least = mini(least, y)
+		most = maxi(most, y)
+	assert_true(most - least >= 8, "the band's edge is not straight: its lowest texel runs from row %d to %d" % [least, most])
+	# Dithered: in the edge zone there are snow texels with the roof's tone beside and under them, and roof texels in among the snow.
+	var strays := 0
+	for y in range(8, 40):
+		for x in range(1, 79):
+			if _is_snow(img.get_pixel(x, y)) and not _is_snow(img.get_pixel(x, y + 1)) and not _is_snow(img.get_pixel(x - 1, y)) and not _is_snow(img.get_pixel(x + 1, y)):
+				strays += 1
+	assert_true(strays >= 8, "the edge is broken into single texels (%d)" % strays)
+	# Two snow tones: lit and shaded.
+	var tones_seen := {}
+	for y in 40:
+		for x in 80:
+			if _is_snow(img.get_pixel(x, y)):
+				tones_seen[img.get_pixel(x, y).to_html(false)] = true
+	assert_true(tones_seen.has(MAKE_TEXTURES.ROOF_SNOW_LIT.to_html(false)) and tones_seen.has(MAKE_TEXTURES.ROOF_SNOW_SHADE.to_html(false)), "snow has a lit and a shaded tone (%s)" % [tones_seen.keys()])
+
+
+func test_roofs_are_slate_blue_and_brown_red_and_made_the_same_every_time_with_their_materials() -> void:
+	var slate: Color = MAKE_TEXTURES.ROOF_SLATE[0]
+	var tannery: Color = MAKE_TEXTURES.ROOF_TANNERY[0]
+	assert_true(slate.b - slate.r >= 25.0 / 255.0, "slate is blue (%s)" % slate.to_html(false))
+	assert_true(tannery.r - tannery.b >= 25.0 / 255.0 and tannery.r > tannery.g, "the tannery's roof is brown-red (%s)" % tannery.to_html(false))
+	for pair: Array in [["roof_slate", MAKE_TEXTURES.ROOF_SLATE, MAKE_TEXTURES.ROOF_SLATE_SEED], ["roof_tannery", MAKE_TEXTURES.ROOF_TANNERY, MAKE_TEXTURES.ROOF_TANNERY_SEED]]:
+		var tones: Array[Color] = []
+		tones.assign(pair[1])
+		_same_as_committed(func() -> Image: return MAKE_TEXTURES.roof(tones, pair[2]), pair[0])
+		var material := load(MATERIALS % pair[0]) as ShaderMaterial
+		assert_true(material != null, "world/materials/%s.tres" % pair[0])
+		if material != null:
+			assert_eq(material.shader.resource_path, TOON_ROOF, "%s is drawn by the roof shader" % pair[0])
+			assert_eq((material.get_shader_parameter(&"albedo_tex") as Texture2D).resource_path, TEXTURES % pair[0], "%s has its texture" % pair[0])
