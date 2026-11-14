@@ -48,8 +48,9 @@ const START_WAIT := 36
 const PAIR_WAIT := 90
 ## Frames the cast's clips fade back to locomotion before the last shot's end (the timeline's own number).
 const RETURN_BLEND := TimelineBuilder.RETURN_BLEND
-## Frames of the glide home when a scene is skipped.
-const SKIP_LEAD_OUT := 20
+## Frames of the glide home when a scene is skipped. The glide is eased already (CinePose.blend), so its fastest frame is 1.5 times
+## its mean: from a close shot (zoom 3) the picture crosses about 280 px, which at 20 frames moved his head 21 px in one frame.
+const SKIP_LEAD_OUT := 40
 ## The most degrees any bone of an actor may differ from idle at the hand-back.
 const POSE_MATCH_DEG := 4.0
 ## A body is at its mark within this many metres.

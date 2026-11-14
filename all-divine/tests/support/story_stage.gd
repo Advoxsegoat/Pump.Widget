@@ -55,11 +55,12 @@ static func pose_of(rig: Rig) -> Dictionary:
 	return out
 
 
-## The largest angle, in degrees, between the same bone in `a` and in `b` (two pose_of results).
-static func angle_between(a: Dictionary, b: Dictionary) -> float:
+## The largest angle, in degrees, between the same bone in `a` and in `b` (two pose_of results); a bone whose name starts with
+## `except` is left out (the scarf's are spring bones, which swing a long way on any stop).
+static func angle_between(a: Dictionary, b: Dictionary, except := "") -> float:
 	var worst := 0.0
 	for bone: Variant in a:
-		if not b.has(bone):
+		if not b.has(bone) or (not except.is_empty() and String(bone).begins_with(except)):
 			continue
 		worst = maxf(worst, rad_to_deg((a[bone] as Quaternion).angle_to(b[bone] as Quaternion)))
 	return worst

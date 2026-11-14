@@ -290,3 +290,43 @@ func test_the_tools_may_skip_a_first_viewing() -> void:
 	await frames(5)
 	assert_true(director.is_skippable(), "a tool can skip what no one has seen")
 	assert_true(director.skip())
+
+
+func test_a_skip_at_any_tenth_frame_never_moves_him_more_than_12_px_or_25_degrees_a_frame() -> void:
+	var worst_head := 0.0
+	var worst_at := -1
+	var worst_bone := 0.0
+	var bone_at := -1
+	for at in range(0, 300, 10):
+		var parts := StoryStage.make(self, Vector3(3, 0, 4), deg_to_rad(200.0))
+		await frames(3)
+		StoryLog.mark_seen(&"fixture_yard_entrance")
+		_finished = []
+		var director := _start(parts)
+		assert_true(director != null)
+		if director == null:
+			return
+		await _to_frame(director, at)
+		var player: Actor = parts.player
+		var head := StoryStage.screen_of(parts, player.head_point())
+		var pose := StoryStage.pose_of(player.rig)
+		assert_true(director.skip(), "frame %d: skipped" % at)
+		var n := 0
+		while _finished.is_empty() and n < 60:
+			await frames(1)
+			n += 1
+			var now := StoryStage.screen_of(parts, player.head_point())
+			if now.distance_to(head) > worst_head:
+				worst_head = now.distance_to(head)
+				worst_at = at
+			head = now
+			var posed := StoryStage.pose_of(player.rig)
+			var turned := StoryStage.angle_between(pose, posed, "scarf")
+			if turned > worst_bone:
+				worst_bone = turned
+				bone_at = at
+			pose = posed
+		parts.stage.free()
+		await frames(1)
+	assert_true(worst_head <= 12.0, "his head moves at most 12 px a frame through any skip, not %.1f (skipped from frame %d)" % [worst_head, worst_at])
+	assert_true(worst_bone <= 25.0, "no bone but the scarf's turns more than 25 degrees a frame, not %.1f (skipped from frame %d)" % [worst_bone, bone_at])
