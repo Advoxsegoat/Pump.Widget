@@ -180,16 +180,17 @@ func test_the_pictures_for_the_owner() -> void:
 	shots.pose(def, 0)
 	var face := await shots.draw(4, -25.0)
 	_save(shots.head_crop(face, Vector2i(80, 60), 6, 0.0), "new_face_z4.png")
-	# The feather through a dash-step, every two frames, facing us, so that his left ear is on the right.
-	var strip: Array[Image] = []
-	shots.pose(def, 0)
-	for f in range(0, 31, 2):
-		for i in 2:
-			shots.step(&"dash_step", f + i)
-		strip.append(shots.head_crop(await shots.draw(3, -25.0), Vector2i(80, 60), 2))
-	var sheet := Image.create(strip[0].get_width() * 8, strip[0].get_height() * 2, false, strip[0].get_format())
-	for i in strip.size():
-		sheet.blit_rect(strip[i], Rect2i(Vector2i.ZERO, strip[i].get_size()),
-				Vector2i((i % 8) * strip[i].get_width(), (i / 8) * strip[i].get_height()))
-	_save(sheet, "new_feather_dash_step.png")
-	assert_eq(strip.size(), 16)
+	# The feather through a dash-step and through the guard, every two frames, facing us, so that his left ear is on the right.
+	for clip in [&"dash_step", &"guard_hold"]:
+		var strip: Array[Image] = []
+		shots.pose(def, 0)
+		for f in range(0, 31, 2):
+			for i in 2:
+				shots.step(clip, f + i)
+			strip.append(shots.head_crop(await shots.draw(3, -25.0), Vector2i(80, 60), 2))
+		var sheet := Image.create(strip[0].get_width() * 8, strip[0].get_height() * 2, false, strip[0].get_format())
+		for i in strip.size():
+			sheet.blit_rect(strip[i], Rect2i(Vector2i.ZERO, strip[i].get_size()),
+					Vector2i((i % 8) * strip[i].get_width(), (i / 8) * strip[i].get_height()))
+		_save(sheet, "new_feather_%s.png" % clip)
+		assert_eq(strip.size(), 16)
