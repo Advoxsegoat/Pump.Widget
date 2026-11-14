@@ -18,7 +18,7 @@ func test_imports_with_one_skeleton_and_scarf_chain() -> void:
 	var skeletons := model.find_children("*", "Skeleton3D")
 	assert_eq(skeletons.size(), 1)
 	var s: Skeleton3D = skeletons[0]
-	assert_eq(s.get_bone_count(), 69)
+	assert_eq(s.get_bone_count(), 71)
 	assert_eq(s.get_bone_name(s.get_bone_parent(s.find_bone("scarf_01"))), "neck_01")
 	for i in range(1, SCARF.size()):
 		assert_eq(s.get_bone_name(s.get_bone_parent(s.find_bone(SCARF[i]))), SCARF[i - 1])
@@ -27,7 +27,7 @@ func test_imports_with_one_skeleton_and_scarf_chain() -> void:
 func test_every_mesh_is_skinned_to_the_skeleton() -> void:
 	var s := _skeleton()
 	var meshes := _mesh_instances()
-	assert_eq(meshes.size(), 9)
+	assert_eq(meshes.size(), 12)
 	for mi in meshes:
 		assert_ne(mi.skin, null, mi.name)
 		assert_eq(mi.get_node_or_null(mi.skeleton), s, mi.name)
@@ -59,7 +59,7 @@ func test_every_surface_carries_a_palette_slot_in_uv2() -> void:
 				else:
 					seen[slot] = true
 	assert_eq(off, 0, "UV2 values that are not a slot centre")
-	for slot in [0, 1, 3, 5, 6, 7]:
+	for slot in [0, 1, 3, 5, 6, 7, 8]:
 		assert_true(seen.has(slot), "slot %d is used" % slot)
 
 

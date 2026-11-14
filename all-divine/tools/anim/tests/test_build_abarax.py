@@ -3,6 +3,7 @@
 Needs bpy (run with tools/bpy_test.sh) and the ubc and outfits packs extracted by
 `python3 -I tools/assets/fetch.py fetch ubc` / `... fetch outfits`. Each build takes a few seconds.
 """
+import json
 import math
 import subprocess
 import sys
@@ -35,12 +36,17 @@ BASE = [
     "thigh_r", "calf_r", "foot_r", "ball_r", "ball_leaf_r",
 ]
 SCARF = ["scarf_01", "scarf_02", "scarf_03", "scarf_04"]
+FEATHER = ["feather_01", "feather_02"]
+REST_69 = Path(__file__).with_name("abarax_rest_69.json")  # the 69 bones of the model before the portraits: parent and world matrix
 
 # The slot table (tools/anim/build_abarax.py): which slots each mesh may carry.
 SLOTS_BY_MESH = {
     "Abarax_Head": {0},
     "Abarax_Brows": {1},
-    "Abarax_Hair": {1},
+    "Abarax_Topknot": {1},
+    "Abarax_Forelock": {1, 7},
+    "Abarax_Feather": {1, 3, 8},
+    "Abarax_EarRing": {8},
     "Abarax_Eyes": {2},
     "Male_Peasant_Arms": {0, 3},
     "Male_Peasant_Body": {3, 4},
@@ -81,11 +87,81 @@ class BuildAbarax(unittest.TestCase):
     def tearDownClass(cls):
         cls.tmp.cleanup()
 
-    def test_skeleton_is_base_plus_scarf(self):
+    def bounds(self, mesh):
+        """The min and max of the POSITION of every primitive of `mesh` (glTF's Y up, facing +Z, his left +X)."""
+        lows, highs = [], []
+        for m in self.j["meshes"]:
+            if m["name"] == mesh:
+                for prim in m["primitives"]:
+                    accessor = self.j["accessors"][prim["attributes"]["POSITION"]]
+                    lows.append(accessor["min"])
+                    highs.append(accessor["max"])
+        self.assertTrue(lows, f"no mesh {mesh}")
+        return [min(v[i] for v in lows) for i in range(3)], [max(v[i] for v in highs) for i in range(3)]
+
+    def triangles_of(self, mesh):
+        return sum(self.j["accessors"][prim["indices"]]["count"] // 3
+                   for m in self.j["meshes"] if m["name"] == mesh for prim in m["primitives"])
+
+    def test_skeleton_is_base_plus_scarf_plus_feather(self):
         names = gltf_inspect.joint_names(self.j)
-        self.assertEqual(set(names), set(BASE) | set(SCARF))
-        self.assertEqual(len(names), 69, "no joint is listed twice")
+        self.assertEqual(set(names), set(BASE) | set(SCARF) | set(FEATHER))
+        self.assertEqual(len(names), 71, "no joint is listed twice")
         self.assertEqual(len(self.j["skins"]), 1, "one skeleton")
+
+    def test_the_69_bones_of_before_are_where_they_were(self):
+        before = json.loads(REST_69.read_text())
+        parents = gltf_inspect.joint_parents(self.j)
+        now = gltf_inspect.joint_world_matrices(self.j)
+        self.assertEqual(len(before), 69)
+        for name, was in before.items():
+            self.assertEqual(parents[name], was["parent"], f"{name}'s parent")
+            flat = [x for row in now[name][:3] for x in row]
+            worst = max(abs(a - b) for a, b in zip(flat, was["world"]))
+            self.assertLess(worst, 2e-5, f"{name} moved by {worst}")
+
+    def test_the_old_bones_keep_their_order_and_the_only_new_ones_are_the_feather_s(self):
+        # The exporter lists joints depth-first, so the feather's two (under the Head) sit before the scarf's four, which
+        # move up by two places; no clip, def or test reads a bone by its place (they read names).
+        names = gltf_inspect.joint_names(self.j)
+        before = json.loads(REST_69.read_text())
+        self.assertEqual([n for n in names if n in before], list(before), "the 69 in the order they had")
+        self.assertEqual([n for n in names if n not in before], FEATHER)
+
+    def test_feather_bones_hang_from_the_left_ear(self):
+        parents = gltf_inspect.joint_parents(self.j)
+        self.assertTrue(all(n in parents for n in FEATHER), f"the feather's bones {FEATHER} are in the skeleton")
+        self.assertEqual([parents[n] for n in FEATHER], ["Head", "feather_01"])
+        at = gltf_inspect.joint_positions(self.j)
+        ear = at["feather_01"]
+        self.assertGreater(ear[0], 0.07, "feather_01 is on his left (+X)")
+        self.assertLess(ear[0], 0.10)
+        self.assertTrue(1.64 < ear[1] < 1.69, f"at the lobe's height ({ear[1]:.3f})")
+        self.assertLess(abs(ear[2] - (-0.015)), 0.02, "level with the ear, not the face")
+        self.assertLess(at["feather_02"][1], ear[1], "the feather hangs below the ring and beads")
+        self.assertGreater(at["feather_02"][0], ear[0] - 1e-6, "and leans out past the jaw, never in toward the neck")
+
+    def test_the_four_new_parts_are_where_the_drawing_has_them(self):
+        head_low, head_high = self.bounds("Abarax_Head")
+        low, high = self.bounds("Abarax_Topknot")
+        self.assertGreater(high[1], head_high[1] + 0.07, "the bun stands 7 cm or more above the skull")
+        self.assertLess(abs((low[0] + high[0]) / 2), 0.01, "on the crown, not to a side")
+        low, high = self.bounds("Abarax_Feather")
+        self.assertGreater(low[0], 0.05, "the feather is on his left")
+        self.assertGreater(high[0], 0.15, "and reaches out past the jaw")
+        low, high = self.bounds("Abarax_EarRing")
+        self.assertLess(high[0], -0.07, "the ring is on his right")
+        self.assertTrue(1.60 < low[1] and high[1] < 1.72, "at the lobe")
+        low, high = self.bounds("Abarax_Forelock")
+        self.assertLess(abs((low[0] + high[0]) / 2), 0.05, "the forelock is near the middle of the forehead")
+        self.assertGreater(high[2], 0.085, "in front of the skull")
+        self.assertLess(low[1], 1.745, "and falls toward the bridge of the nose")
+
+    def test_the_new_parts_stay_small(self):
+        new = sum(self.triangles_of(m) for m in ("Abarax_Forelock", "Abarax_Feather", "Abarax_EarRing"))
+        self.assertGreater(new, 0, "the made parts exist")
+        self.assertLessEqual(new, 400, "the made parts (forelock, feather, ring)")
+        self.assertLessEqual(self.triangles_of("Abarax_Topknot"), 450, "the bun and the cut hair")
 
     def test_scarf_chain_hangs_from_neck_down_the_back(self):
         parents = gltf_inspect.joint_parents(self.j)
