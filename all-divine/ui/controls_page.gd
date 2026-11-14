@@ -93,6 +93,11 @@ func footer() -> String:
 	return LEGEND_PAD if pad else LEGEND_KEYBOARD
 
 
+## Whether the footer says something now (a prompt or a note) rather than the legend: it is drawn in gold, to be unmistakable.
+func alert() -> bool:
+	return _capturing or _note_left > 0.0
+
+
 ## The texts the panel's width must hold besides its rows (the heading and legend of either device).
 func widest_texts() -> Array[String]:
 	return ["Controls: Gamepad", "Controls: Keyboard and mouse", LEGEND_PAD, LEGEND_KEYBOARD]

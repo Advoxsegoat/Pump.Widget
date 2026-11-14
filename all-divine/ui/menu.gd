@@ -484,7 +484,8 @@ func _draw() -> void:
 		if shown.selected:
 			_draw_chevron((shown.chevron as Rect2i).position)
 	for i in (map.footer_rows as Array).size():
-		draw_string(font, Vector2(map.footer_at) + Vector2(0, PITCH * i), map.footer_rows[i], HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, Hud.POSTURE)
+		draw_string(font, Vector2(map.footer_at) + Vector2(0, PITCH * i), map.footer_rows[i], HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE,
+				Hud.GOLD if _controls != null and _controls.alert() else Hud.POSTURE)
 	_draw_arrow((map.arrow_up as Rect2i).position, ARROW_UP_CELLS, map.arrow_up.size != Vector2i.ZERO)
 	_draw_arrow((map.arrow_down as Rect2i).position, ARROW_DOWN_CELLS, map.arrow_down.size != Vector2i.ZERO)
 
