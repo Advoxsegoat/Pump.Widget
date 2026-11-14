@@ -351,3 +351,30 @@ func test_f2_enters_the_stretch_and_f5_leaves_it_for_the_yard() -> void:
 	_press_key(KEY_F5)
 	assert_eq(_region(main).scene_file_path, YARD, "F5 from the stretch goes to the yard")
 	assert_eq(main.hud.arena, _region(main), "with its waves")
+
+
+# The join of the Bilibara stretch: F2 enters it from the yard, the pause menu opens and closes in it, and a fight's first 120 frames run (a
+# tier I Knuckle with its own brain, Abarax walking at it and jabbing) with no error line (the runner reports one as a failure).
+func test_f2_enters_the_stretch_the_menu_works_in_it_and_a_fight_runs_quietly() -> void:
+	var main := _main()
+	assert_eq(main.region.scene_file_path, YARD, "the game boots in the yard")
+	_press_key(KEY_F2)
+	await frames(3)
+	assert_eq(main.region.scene_file_path, BILIBARA, "F2 enters the stretch")
+	assert_eq(Game.state, Game.State.PLAY, "and it plays")
+	assert_vec_near(main.player.global_position, main.region.spawn().origin, 0.1, "Abarax stands at its spawn")
+	_press_action(&"menu")
+	assert_eq(Game.state, Game.State.PAUSE, "the menu button pauses in the stretch")
+	assert_true(main.menu.visible, "the menu is up")
+	_press_action(&"menu")
+	assert_eq(Game.state, Game.State.PLAY, "and closes")
+	assert_false(get_tree().paused, "the tree runs again")
+	var foe := (load("res://actors/actor.tscn") as PackedScene).instantiate() as Actor
+	foe.def = load("res://data/actors/knuckle_1.tres") as ActorDef
+	main.region.add_child(foe)
+	var at := main.player.global_position
+	foe.place(Transform3D(Basis(Vector3.UP, PI), at + Vector3(0.0, 0.0, 3.0)))
+	main.player.set_brain(ScriptBrain.new([{frames = 40, move = Vector2(0, 1)}, {frames = 1, press = [&"palm"]}, {frames = 30}, {frames = 1, press = [&"palm"]}, {frames = 60}]))
+	await frames(120)
+	assert_true(main.player.frame >= 100, "the fight ran its 120 frames (%d)" % main.player.frame)
+	assert_eq(main.region.scene_file_path, BILIBARA, "still in the stretch")
