@@ -130,8 +130,8 @@ func _observe(run: Dictionary) -> void:
 		if distance <= 4.0 and not holds and _is_ready(b, foe):
 			ready_waiter = true
 		angles.append(rad_to_deg(_flat(a.global_position, foe.global_position).angle()))
-		# spacing: a waiter (no token, not attacking) inside 1.5 m
-		if not holds and not is_attack and not foe.runner.busy() and b.mode == EnemyBrain.Mode.ENGAGED and distance < 1.5:
+		# spacing: a waiter (ready for his turn, no token, not attacking) inside 1.5 m
+		if not holds and not is_attack and not foe.runner.busy() and b.mode == EnemyBrain.Mode.ENGAGED and b._rest <= 0.0 and distance < 1.5:
 			run["near_run"][i] += 1
 			run["near_max"] = maxi(run["near_max"], run["near_run"][i])
 		else:

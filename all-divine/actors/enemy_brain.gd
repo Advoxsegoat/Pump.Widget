@@ -65,7 +65,10 @@ const PRESS_SPEED := 1.2
 ## one who waits (no token to be had) stands in the outer half of his band, a body's width clear of the attackers' ring.
 const SPREAD_DEG := 60.0
 ## How far round, degrees, a foe's way in is swung away from a neighbour that close, and how near the ring (metres to go) that starts.
-const SPREAD_SWING := 35.0
+const SPREAD_SWING := 25.0
+## A neighbour this close to a foe's own line to the target is in his way: only then is his way in swung round him.
+const LINE_DEG := 30.0
+const SPREAD_SWING_CLOSE := 50.0
 const SPREAD_REACH := 1.5
 ## How much further than an attack's back_up_margin (metres) a back-up may go before the attack is given up.
 const BACK_UP_SPARE := 0.1
@@ -379,14 +382,14 @@ func _circle_for(actor: Actor, bearing_sign: float) -> float:
 
 
 # 0, or the `_circle` that takes it away from its nearest neighbour when that one is within SPREAD_DEG.
-func _away_from_neighbour(actor: Actor) -> float:
+func _away_from_neighbour(actor: Actor, within := SPREAD_DEG) -> float:
 	var nearest := 360.0
 	var sign_of := 0.0
 	for angle in _neighbour_angles(actor):
 		if absf(angle) < nearest:
 			nearest = absf(angle)
 			sign_of = signf(angle)
-	if nearest >= SPREAD_DEG or sign_of == 0.0:
+	if nearest >= within or sign_of == 0.0:
 		return 0.0
 	return _circle_for(actor, -sign_of)
 
@@ -396,7 +399,13 @@ func _away_from_neighbour(actor: Actor) -> float:
 func _spread_swing(actor: Actor, still_to_go: float) -> float:
 	if still_to_go > SPREAD_REACH:
 		return 0.0
-	return _away_from_neighbour(actor) * deg_to_rad(SPREAD_SWING)
+	var nearest := 360.0
+	for angle in _neighbour_angles(actor):
+		nearest = minf(nearest, absf(angle))
+	var away := _away_from_neighbour(actor)
+	if away == 0.0:
+		return 0.0
+	return away * deg_to_rad(SPREAD_SWING_CLOSE if nearest < LINE_DEG else SPREAD_SWING)
 
 
 # Whether it waits for its turn: no token for it to take (both are held by others).
