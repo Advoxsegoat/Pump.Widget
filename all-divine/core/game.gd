@@ -62,9 +62,11 @@ func end_cutscene() -> void:
 		_paused_from = State.PLAY
 
 
-## Back to BOOT with the tree running, without a signal. For tests.
+## Back to BOOT with the tree running and no slow-down left over from the game before (Melee outlives a game), without a signal. For
+## tests, and between the bot's games.
 func reset() -> void:
 	state = State.BOOT
 	_paused_from = State.PLAY
 	play_frames = 0
 	get_tree().paused = false
+	Melee.slow(0, 1.0)

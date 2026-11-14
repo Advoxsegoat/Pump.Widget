@@ -17,6 +17,10 @@ extends Node
 ## resumes. While it is open F5 to F9 do nothing and every other event goes to the menu. This node runs while the game
 ## is paused (to hear the menu button and give the menu its events); the stage, and so the world in it, stops.
 ##
+## With --record=<path> the controls are written down (core/replay/recorder.gd) and saved to the path when the game ends, and with
+## --replay=<path> that recording is played back into Abarax through the real input path (its seed's dice rolled first), the
+## arena's state hash printed when it is over, and, in a headless run, the game quits (core/replay/).
+##
 ## With --selftest (a user argument: godot -- --selftest) Abarax fights one tier I Knuckle in the yard through a
 ## scripted circuit instead (selftest_circuit: approach, jab, cross, hook, sway, duck, dash-step, guard, heavy) for SELFTEST_FRAMES
 ## physics frames, and the arena does nothing by itself but send that one Knuckle; the SelfTest autoload
@@ -24,6 +28,9 @@ extends Node
 
 const DEFAULT_SETTINGS := preload("res://data/render/default_settings.tres")
 const SELFTEST_FRAMES := 600
+## What a game started with --replay exits with when the recording is refused, and when the fight does not go as recorded (0 when it does).
+const EXIT_REFUSED := 2
+const EXIT_DIVERGED := 3
 const YARD := "res://world/training_yard/training_yard.tscn"
 const COURTYARD := "res://world/courtyard/courtyard.tscn"
 const BILIBARA := "res://world/bilibara/bilibara.tscn"
@@ -66,6 +73,12 @@ var window: Window = null
 ## What the menu's Quit does: ends the game. A test puts its own here.
 var quit_game: Callable = func() -> void: get_tree().quit()
 
+var _recorder: InputRecorder  # the InputRecorder of --record, or null
+var _record_path := ""
+var _replayer: InputReplayer  # the InputReplayer playing a recording, or null
+var _lent_settings := {}  # what the settings were before a --replay lent the defaults
+var _quit_after_replay := false  # --replay was given: a headless game ends with the recording
+
 
 func _ready() -> void:
 	if window == null:
@@ -86,10 +99,27 @@ func _ready() -> void:
 	menu.quit_requested.connect(func() -> void: quit_game.call())
 	window.min_size = Vector2i(PixelSnap.INTERNAL)
 	Game.state_changed.connect(_on_game_state_changed)
+	var arguments := parse_arguments(OS.get_cmdline_user_args())
+	var replaying: InputRecording = null
+	if arguments["replaying"]:
+		lend_replay_defaults()
+		var why := replay_refusal(arguments["replay"])
+		if not why.is_empty():
+			# no fight is begun, and none is played in its place
+			printerr("replay: " + why)
+			_give_back_settings()
+			get_tree().quit(EXIT_REFUSED)
+			return
+		replaying = _load_recording(arguments["replay"])
 	_apply_look()
 	_enter_region()
 	if SelfTest.active:
 		start_selftest()
+	elif replaying != null:
+		_quit_after_replay = true
+		start_replay(replaying)
+	elif not arguments["record"].is_empty():
+		start_recording(arguments["record"])
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -106,6 +136,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var key := event as InputEventKey
 	if key != null and key.pressed and not key.echo:
+		# (not while the pause menu is open: the game ignores them there, and a key that did nothing changed no fight)
+		if _recorder != null and Game.state != Game.State.PAUSE and key.keycode >= KEY_F5 and key.keycode <= KEY_F9:
+			_recorder.recording().debug_keys = true  # these change the fight and are not controls: the recording says so
 		match key.keycode:
 			KEY_F3:
 				overlay.visible = not overlay.visible
@@ -151,6 +184,139 @@ func _unhandled_input(event: InputEvent) -> void:
 		if Game.state == Game.State.PLAY or Game.state == Game.State.CUTSCENE:  # a scene can be paused as the fight is
 			Game.change(Game.State.PAUSE)
 		get_viewport().set_input_as_handled()
+
+
+## A replay is the recording's settings (the replayer lends those) and the defaults for the rest, whatever the player chose: the
+## player's file is neither read for it nor written, and the window is left as it is. This lends the defaults; the replay's end gives
+## them back (_give_back_settings).
+func lend_replay_defaults() -> void:
+	var defaults := {}
+	for key in Settings.keys():
+		if not key.begins_with("window/"):
+			defaults[key] = Settings.default_of(key)
+	_lent_settings = Settings.lend(defaults)
+
+
+## The paths --record= and --replay= give, in the user arguments (&"" for one not given): {record, replay}, and whether a replay was asked
+## for at all (`replaying`: --replay with no path, or no =, is asked for and has nothing to play, which is a refusal and not an ordinary fight).
+static func parse_arguments(args: PackedStringArray) -> Dictionary:
+	var found := {"record": "", "replay": "", "replaying": false}
+	for arg in args:
+		if arg == "--replay" or arg.begins_with("--replay="):
+			found["replaying"] = true
+		for key: String in ["record", "replay"]:
+			if arg.begins_with("--%s=" % key):
+				found[key] = arg.trim_prefix("--%s=" % key)
+	return found
+
+
+## Starts writing down the controls, to be saved to `path` by save_recording (the game's end does it). The recording is of the fight
+## from the arena's first wave: its seed is the round the dice began at (0, as the game starts) and its region this one's scene.
+func start_recording(path: String) -> void:
+	_record_path = path
+	_recorder = InputRecorder.new()
+	_recorder.name = &"Recorder"
+	add_child(_recorder)
+	_recorder.arena = arena()
+	_recorder.begin(region.scene_file_path, 0, 0)
+	# Saved as the game ends, while the arena is still in the tree to say what the fight came to (it is not by _exit_tree: the
+	# children have left by then).
+	if not tree_exiting.is_connected(save_recording):
+		tree_exiting.connect(save_recording)
+
+
+## Saves the recording --record began, if there is one; OK if there is none to save.
+func save_recording() -> Error:
+	if _recorder == null or _record_path.is_empty() or not is_instance_valid(_recorder):
+		return OK
+	var result: Error = _recorder.save(_record_path)
+	if result != OK:
+		push_error("Main: cannot save the recording to %s (%s)" % [_record_path, error_string(result)])
+	return result
+
+
+## Plays `rec` into Abarax from the next frame, through the real input path (core/replay/replayer.gd); when it is over the arena's
+## state hash is printed, and a headless game quits. The recording's dice are rolled before the first wave is sent (_ready), so a
+## replay started here, after it, is the recording's fight only if the game began with its seed.
+func start_replay(rec: InputRecording) -> void:
+	_replayer = InputReplayer.new()
+	_replayer.name = &"Replayer"
+	add_child(_replayer)
+	_replayer.arena = arena()
+	_replayer.finished.connect(_on_replay_finished.bind(end_is_compared(rec)))
+	_replayer.diverged.connect(_on_replay_diverged)
+	_replayer.play(rec)
+
+
+## Whether a replay of `rec` ends with a comparison against the fight's recorded state hash: only then can it say "as recorded".
+static func end_is_compared(rec: InputRecording) -> bool:
+	return rec.hashes.has(rec.frames.size())
+
+
+## Why the recording at `path` cannot be played, in one line, or "" if it can: there is none, it cannot be read, or it is cut short, of a
+## format this game does not know, made with a debug key pressed or with no hash at its end (InputRecording.problem).
+static func replay_refusal(path: String) -> String:
+	if path.is_empty():
+		return "no recording was named (--replay=<path>)"
+	if not FileAccess.file_exists(path):
+		return "no recording at %s" % path
+	# A file that does not parse is the engine's to complain of at length, three error blocks with backtraces: the one line is this
+	# function's (as Settings reads a damaged file).
+	var printing := Engine.print_error_messages
+	Engine.print_error_messages = false
+	var rec := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as InputRecording
+	Engine.print_error_messages = printing
+	if rec == null:
+		return "%s is not a recording this game can read" % path
+	return rec.problem()
+
+
+## The line a replay prints when its fight stands otherwise than recorded, at the checkpoint `frame`.
+static func diverged_line(frame: int, recorded: int, got: int) -> String:
+	return "replay: diverged at frame %d (recorded %d, got %d)" % [frame, recorded, got]
+
+
+## The line a replay prints at its end, with `agreed` when it had hashes to agree with.
+static func finished_line(hash_at_end: int, agreed: bool) -> String:
+	return "replay: finished, state hash %d%s" % [hash_at_end, ", as recorded" if agreed else ""]
+
+
+# The recording at `path`, with its seed's dice set for the first wave; null with no path or none that loads.
+func _load_recording(path: String) -> InputRecording:
+	if path.is_empty():
+		return null
+	var rec := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as InputRecording
+	if rec == null:
+		push_error("Main: cannot read the recording %s" % path)
+		return null
+	Arena.start_seed(rec.seed)
+	return rec
+
+
+# Puts the settings a replay lent back as the player had them (nothing was written meanwhile).
+func _give_back_settings() -> void:
+	if not _lent_settings.is_empty():
+		Settings.take_back(_lent_settings)
+		_lent_settings = {}
+
+
+# The game is quit in the middle of a replay: the player's own values are in force again from here, and are what the next start reads.
+func _exit_tree() -> void:
+	_give_back_settings()
+
+
+func _on_replay_finished(agreed: bool) -> void:
+	print(finished_line(arena().state_hash() if arena() != null else 0, agreed))
+	_give_back_settings()
+	if _quit_after_replay and DisplayServer.get_name() == "headless":
+		get_tree().quit()
+
+
+func _on_replay_diverged(at: int, recorded: int, got: int) -> void:
+	print(diverged_line(at, recorded, got))
+	_give_back_settings()
+	if _quit_after_replay:
+		get_tree().quit(EXIT_DIVERGED)
 
 
 ## The arena of the region, or null when it is not one (the courtyard).
