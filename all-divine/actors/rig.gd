@@ -82,6 +82,8 @@ var model_scale := 1.0
 ## How much thicker the body is drawn than its model, in metres (set_body_inflate).
 var body_inflate := 0.0
 var cadence := 1.0
+## Springs to start afresh at the next tick (reset_springs).
+var _springs_reset := false
 
 const MOVE_AB := &"parameters/move_ab/blend_amount"
 const MOVE_BLEND := &"parameters/move_blend/blend_amount"
@@ -723,11 +725,28 @@ func tick(delta: float) -> void:
 	_place_look_target()
 	_look_time += delta
 	_show_look()
+	if _springs_reset:
+		_springs_reset = false
+		for node in skeleton.find_children("*", "SpringBoneSimulator3D", false, false):
+			var spring := node as SpringBoneSimulator3D
+			for i in spring.get_setting_count():
+				var root := spring.get_root_bone_name(i)
+				spring.set_root_bone_name(i, "")
+				spring.set_root_bone_name(i, root)
 	# The skeleton would run its modifiers in an update deferred to the end of the frame. advance() gives
 	# them the delta, and the update is run here instead, so this tick's pose is done when tick returns.
 	# The deferred update then finds nothing left to do: running the update clears what it was asked for.
 	skeleton.advance(delta)
 	skeleton.notification(Skeleton3D.NOTIFICATION_UPDATE_SKELETON)
+
+
+## Makes every spring (the scarf's, the feather's) forget where it was and start again from the pose the skeleton has, from the next
+## tick on: for a body that was put somewhere else (Actor.place: a spawn, a region change, a revive), whose springs would otherwise
+## swing back across the jump from where they were, 180 degrees in a frame. (SpringBoneSimulator3D.reset() does not do it: it keeps the
+## world position the chain was at and swings it over. Naming the root bone again starts it afresh, at the rest pose
+## the model was built in, from which it falls into its hang within a frame or two (the scarf's hang is 36 degrees from its rest).)
+func reset_springs() -> void:
+	_springs_reset = true
 
 
 ## How much the move layer shows over locomotion: 0 is locomotion only, 1 is the move only.
