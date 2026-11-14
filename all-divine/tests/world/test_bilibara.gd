@@ -971,16 +971,25 @@ func test_every_piece_is_a_kenney_toon_piece_at_two_and_a_half_times() -> void:
 	assert_true(seen.size() > 50, "and many were looked at (%d)" % seen.size())
 
 
-## The solid masses and what each wears: its rectangle (x0 z0 x1 z1), the style of its front and the roof. The ones in a flat roof
-## stand within 9 m south of walkable ground in their column, so their top is the sight line's 7.83 m.
+## The solid masses and what each wears: its rectangle, the style of its front and the roof piece (`gable`: two planes meeting in a ridge,
+## the tiles of one half turned about; a roof of the `roof` piece under the sight line: its ridge is at most 9.1 m, and the tests hold it).
 const MASSES := [
-	{rect = Rect2(-40, -25, 5, 20), style = "frontage", roof = "roof"}, {rect = Rect2(-30, -10, 55, 5), style = "frontage", roof = "roof-flat"},
-	{rect = Rect2(30, -20, 2.5, 15), style = "frontage", roof = "roof-flat"}, {rect = Rect2(32.5, -5, 2.5, 10), style = "frontage", roof = "roof-high"},
-	{rect = Rect2(-42.5, -5, 2.5, 10), style = "frontage", roof = "roof-high"}, {rect = Rect2(-40, -45, 30, 20), style = "tannery", roof = "roof-flat"},
-	{rect = Rect2(-10, -45, 35, 20), style = "tannery", roof = "roof-flat"}, {rect = Rect2(30, -45, 10, 7.5), style = "tannery", roof = "roof"},
-	{rect = Rect2(37.5, -37.5, 2.5, 7.5), style = "tannery", roof = "roof-high"}, {rect = Rect2(12.5, -80, 30, 5), style = "tannery", roof = "roof"},
+	{rect = Rect2(-40, -25, 5, 20), style = "frontage", roof = "roof", gable = true}, {rect = Rect2(-30, -10, 55, 5), style = "frontage", roof = "roof", gable = true},
+	{rect = Rect2(30, -20, 2.5, 15), style = "frontage", roof = "roof", gable = true}, {rect = Rect2(32.5, -5, 2.5, 10), style = "frontage", roof = "roof", gable = true},
+	{rect = Rect2(-42.5, -5, 2.5, 10), style = "frontage", roof = "roof", gable = true}, {rect = Rect2(-40, -45, 30, 20), style = "tannery", roof = "roof", gable = true},
+	{rect = Rect2(-10, -45, 35, 20), style = "tannery", roof = "roof", gable = true}, {rect = Rect2(30, -45, 10, 7.5), style = "tannery", roof = "roof", gable = true},
+	{rect = Rect2(37.5, -37.5, 2.5, 7.5), style = "tannery", roof = "roof-high"}, {rect = Rect2(12.5, -80, 30, 5), style = "tannery", roof = "roof", gable = true},
 	{rect = Rect2(12.5, -75, 2.5, 20), style = "tannery", roof = "roof-high"}, {rect = Rect2(40, -75, 2.5, 20), style = "tannery", roof = "roof-high"},
 ]
+
+
+# Whether the roof tiles of `roof` face two ways (the ridge between them: the pieces' x axes point at opposite ways).
+func _two_ways(roof: Node) -> bool:
+	var ways := {}
+	for run: KitRun in roof.get_children():
+		for place in run.places:
+			ways[Vector2(snappedf(place.basis.x.normalized().x, 0.01), snappedf(place.basis.x.normalized().z, 0.01))] = true
+	return ways.size() >= 2
 
 
 func test_every_solid_mass_has_a_front_of_its_style_and_a_roof() -> void:
@@ -1012,6 +1021,12 @@ func test_every_solid_mass_has_a_front_of_its_style_and_a_roof() -> void:
 		var roofs := block.get_node("Roof").get_children().map(func(r: Node) -> String: return String((r as KitRun).piece))
 		assert_eq(roofs.filter(func(p: String) -> bool: return p != want.roof), [], "%s: roofed in %s" % [block.name, want.roof])
 		assert_true(roofs.size() > 0, "%s has a roof" % block.name)
+		if want.get("gable", false):
+			var yaws := {}
+			for run: KitRun in block.get_node("Roof").get_children():
+				for place in run.places:
+					yaws[snappedf(place.basis.x.normalized().x, 0.01)] = snappedf(place.basis.x.normalized().z, 0.01)
+			assert_true(yaws.size() >= 2 or (block.get_node("Roof").get_children().any(func(r: KitRun) -> bool: return r.places.size() > 0) and _two_ways(block.get_node("Roof"))), "%s: a gable has its two halves turned about" % block.name)
 		if want.roof == "roof-flat":
 			var top := 0.0
 			for run: KitRun in block.get_node("Roof").get_children():
@@ -1149,7 +1164,7 @@ func test_the_gate_is_a_closed_low_shortcut_gate() -> void:
 				tall.append("%s" % body.get_path())
 	for k in _kit_boxes(region):
 		var rect := Rect2(k.box.position.x, k.box.position.z, k.box.size.x, k.box.size.z)
-		if rect.intersection(zone).get_area() > 1e-4 and k.box.end.y > 1.3:
+		if rect.intersection(zone).get_area() > 1e-4 and k.box.end.y > 1.3 and k.box.position.y < 3.0:   # a roof's eaves overhead hide nobody (the sight-line test holds that)
 			tall.append("%s at %s" % [k.piece, k.box])
 	assert_eq(tall, PackedStringArray(), "nothing taller than 1.3 m within 3 m north of the gate bar the posts")
 
@@ -1220,16 +1235,16 @@ func test_the_low_walls_wear_a_coping_and_a_railing_and_the_drifts_lie_on_unwalk
 			assert_true(rail.box.position.z >= rect.position.y + 2.5 - 1e-3, "and at least 2.5 m back from its north end")
 	var plates := _plates(region)
 	var wrong := PackedStringArray()
-	for drift: StaticBody3D in region.find_children("Drift*", "StaticBody3D", true, false):
-		var s := drift.get_node("Shape") as CollisionShape3D
-		var size := (s.shape as BoxShape3D).size
-		assert_near(size.y, 0.25, 1e-6, "%s is 0.25 m high" % drift.name)
-		var rect := Rect2(s.global_position.x - size.x / 2.0, s.global_position.z - size.z / 2.0, size.x, size.z)
+	var drifts := region.get_node("Backdrop").find_children("Drift*", "MeshInstance3D", false, false)
+	for drift: MeshInstance3D in drifts:
+		var box := drift.global_transform * drift.get_aabb()
+		assert_true(box.size.y > 0.1 and box.size.y < 0.4, "%s is a low mound (%.2f m)" % [drift.name, box.size.y])
+		assert_eq(drift.get_parent().name, &"Backdrop", "%s is Backdrop: no collider, no shadow" % drift.name)
 		for plate in plates:
-			if rect.intersection(plate.rect).get_area() > 1e-6:
+			if Rect2(box.position.x, box.position.z, box.size.x, box.size.z).intersection(plate.rect).get_area() > 1e-6:
 				wrong.append("%s over a walkable plate" % drift.name)
 	assert_eq(wrong, PackedStringArray(), "no drift lies on walkable ground")
-	assert_true(region.find_children("Drift*", "StaticBody3D", true, false).size() >= 8, "and there are drifts (%d)" % region.find_children("Drift*", "StaticBody3D", true, false).size())
+	assert_true(drifts.size() >= 8, "and there are drifts (%d)" % drifts.size())
 
 
 # Every solid prop standing on walkable ground (the stalls, the cart, the bench and stools, the vats of the yard, the posts) is a thing to fight

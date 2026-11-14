@@ -783,3 +783,94 @@ func test_a_block_has_a_dark_interior_behind_its_windows() -> void:
 		assert_near(box.end.z, depth - 0.25, 1e-6, "%s: to the back of the front's slab" % block.name)
 		assert_near(box.size.z, depth - 0.25, 1e-6, "%s: to the block's north edge" % block.name)
 		assert_eq(block.find_children("*", "CollisionObject3D", true, false).size(), 1 if storeys == 2 else 0, "%s: no collider of its own" % block.name)
+
+
+# `gable`: a roof of two planes meeting in a ridge along the middle of the block's longer side (the ridge runs along x when the block is
+# wider than it is deep), the tiles of one half turned to slope the other way: from the camera the two planes are lit differently and
+# the block reads as a roof and not a slab. The tile count across the ridge must be even (else the other way, else a problem).
+func test_a_gable_roof_has_two_planes_and_a_ridge_along_the_longer_side() -> void:
+	var wide := _build("block 0 0 10 5 2 plain gable")
+	assert_eq(wide.problems, PackedStringArray())
+	var tiles := _placed(wide.root, "roof")
+	assert_eq(tiles.size(), 8, "four by two roof tiles")
+	for tile: Dictionary in tiles:
+		var z: float = tile.xf.origin.z
+		var toward_ridge := 1.0 if z < 2.5 else -1.0   # the north row's ridge is on its south edge, the south row's on its north edge
+		var at_ridge := _height_at(tile, tile.xf.origin.x, z + toward_ridge * 1.0)
+		var at_eave := _height_at(tile, tile.xf.origin.x, z - toward_ridge * 1.0)
+		assert_true(at_ridge >= at_eave + 0.3, "tile at z %.2f: higher toward the middle (%.2f against %.2f)" % [z, at_ridge, at_eave])
+	var deep := _build("block 0 0 5 20 2 plain gable")
+	assert_eq(deep.problems, PackedStringArray())
+	for tile: Dictionary in _placed(deep.root, "roof"):
+		var x: float = tile.xf.origin.x
+		var toward := 1.0 if x < 2.5 else -1.0
+		assert_true(_height_at(tile, x + toward * 1.0, tile.xf.origin.z) >= _height_at(tile, x - toward * 1.0, tile.xf.origin.z) + 0.3, "tile at x %.2f: higher toward the middle (ridge along z)" % x)
+	var odd := _build("block 0 0 10 7.5 1 plain gable")   # 4 by 3 tiles: the long side is even, the ridge runs along z
+	assert_eq(odd.problems, PackedStringArray())
+	assert_eq(_build("block 0 0 7.5 7.5 1 plain gable").problems.size(), 1, "3 by 3 tiles has no middle: one problem")
+	assert_eq(_build("block 0 0 2.5 5 1 plain gable").problems.size(), 0, "1 by 2: the rows split")
+
+
+# `drift X Z W D [y=Y] [seed=N]`: a low mound of snow of three to five overlapping rounded lumps with an outline of the seed's own (no
+# straight edge over a metre: a polygon of many short sides), highest near its middle and feathering to nothing at the rim, seen only
+# (Backdrop, no collider, no shadow), on the ground or raised Y.
+func test_a_drift_is_a_rounded_mound_that_feathers_to_nothing() -> void:
+	var built := _build("drift 5 5 4 3 y=1 seed=3\ndrift 5 5 4 3 y=1 seed=4")
+	assert_eq(built.problems, PackedStringArray())
+	var root := built.root as Node
+	var drifts := root.get_node("Backdrop").find_children("Drift*", "MeshInstance3D", false, false) as Array
+	assert_eq(drifts.size(), 2, "two drifts")
+	assert_eq(root.find_children("*", "CollisionObject3D", true, false).size(), 0, "no collider")
+	var shapes := []
+	for d: MeshInstance3D in drifts:
+		assert_eq(d.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "no shadow")
+		assert_eq(d.material_override, load("res://world/materials/snow.tres"), "in the snow's material")
+		var arrays := d.mesh.surface_get_arrays(0)
+		var verts := arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array
+		var peak := 0.0
+		var peak_at := Vector3.ZERO
+		var rim := 0.0
+		for v in verts:
+			if v.y > peak:
+				peak = v.y
+				peak_at = v
+		for v in verts:
+			if Vector2(v.x, v.z).length() > 1.2 and absf(v.y) < 1e-6:
+				rim += 1
+		var box := d.global_transform * d.get_aabb()
+		assert_near(box.position.y, 1.0, 1e-3, "%s lies on y = 1" % d.name)
+		assert_true(peak > 0.12 and peak < 0.4, "%s is %.2f m at the most" % [d.name, peak])
+		assert_true(Vector2(peak_at.x, peak_at.z).length() < 1.4, "%s peaks near its middle (%s)" % [d.name, peak_at])
+		assert_true(box.size.x < 5.2 and box.size.z < 4.0 and box.size.x > 1.5, "%s is about 4 x 3 m (%s)" % [d.name, box.size])
+		assert_true(rim > 5, "%s ends at zero height (%d rim vertices)" % [d.name, rim])
+		# Seen from above it is a front face: the normals of the lumps point up (a mound wound the wrong way is culled from above).
+		var normals := arrays[Mesh.ARRAY_NORMAL] as PackedVector3Array
+		var down := 0
+		for i in verts.size():
+			if verts[i].y > 0.05 and normals[i].y <= 0.0:
+				down += 1
+		assert_eq(down, 0, "%s: no normal on its back faces up" % d.name)
+		# The rim is the vertices of height zero that touch a triangle with height: it is a ring of short sides.
+		var tri_count := {}
+		var indices := arrays[Mesh.ARRAY_INDEX] as PackedInt32Array
+		var edges := {}
+		for i in range(0, indices.size(), 3):
+			for k in 3:
+				var a := indices[i + k]
+				var b := indices[i + (k + 1) % 3]
+				var key := Vector2i(mini(a, b), maxi(a, b))
+				edges[key] = edges.get(key, 0) + 1
+		var longest := 0.0
+		var count := 0
+		for key: Vector2i in edges:
+			if edges[key] == 1:
+				count += 1
+				longest = maxf(longest, (verts[key.x] - verts[key.y]).length())
+		assert_true(count >= 24 and longest < 1.0, "%s: an outline of %d sides, the longest %.2f m" % [d.name, count, longest])
+		shapes.append(verts)
+	assert_ne(shapes[0], shapes[1], "another seed, another outline")
+	var again := _build("drift 5 5 4 3 y=1 seed=3")
+	var first := (again.root as Node).get_node("Backdrop").find_children("Drift*", "MeshInstance3D", false, false)[0] as MeshInstance3D
+	assert_eq(first.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX], shapes[0], "the same seed, the same drift")
+	for bad in ["drift 5 5 4", "drift 5 5 0 3", "drift 5 5 4 3 seed=x", "drift 5 5 4 3 y=up", "drift 5 5 40 3"]:
+		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)

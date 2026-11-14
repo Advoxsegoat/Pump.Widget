@@ -153,3 +153,124 @@ func test_nine_views_are_saved_for_a_person_to_look_at() -> void:
 		worst = maxi(worst, draws)
 		print("bilibara view %s: %d draw calls" % [marker_name, draws])
 		assert_true(draws > 0 and draws <= MOST_DRAWS, "%s: %d draw calls (at most %d)" % [marker_name, draws, MOST_DRAWS])
+
+
+## Where the tone test looks besides the nine views: the loop lane (a roof fills its left third), and the lane's north end.
+const EXTRA_VIEWS := {"LoopLane": Vector3(-32.5, 0.0, -12.5), "LaneNorth": Vector3(27.5, 0.0, -48.0), "StreetMid": Vector3(0.0, 0.0, 0.0)}
+## The most of the frame one flat tone of a roof may fill (the 4/255 a channel the tone may vary by, and the share).
+const FLAT_TOLERANCE := 4.0 / 255.0
+const MOST_FLAT := 0.06
+
+
+func _green() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(0.0, 1.0, 0.0)
+	return material
+
+
+# The largest connected region (4-neighbours) of one flat tone (within FLAT_TOLERANCE a channel of its first pixel) among the pixels `mask`
+# marks, as a count.
+func _largest_flat(picture: Image, mask: PackedByteArray) -> int:
+	var w := picture.get_width()
+	var h := picture.get_height()
+	var seen := PackedByteArray()
+	seen.resize(w * h)
+	var largest := 0
+	for start in w * h:
+		if mask[start] == 0 or seen[start] == 1:
+			continue
+		var seed_colour := picture.get_pixel(start % w, start / w)
+		var stack := PackedInt32Array([start])
+		seen[start] = 1
+		var size := 0
+		while not stack.is_empty():
+			var at := stack[stack.size() - 1]
+			stack.resize(stack.size() - 1)
+			size += 1
+			var x := at % w
+			var y := at / w
+			for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var nx: int = x + step.x
+				var ny: int = y + step.y
+				if nx < 0 or ny < 0 or nx >= w or ny >= h:
+					continue
+				var next := ny * w + nx
+				if mask[next] == 0 or seen[next] == 1:
+					continue
+				var c := picture.get_pixel(nx, ny)
+				if absf(c.r - seed_colour.r) <= FLAT_TOLERANCE and absf(c.g - seed_colour.g) <= FLAT_TOLERANCE and absf(c.b - seed_colour.b) <= FLAT_TOLERANCE:
+					seen[next] = 1
+					stack.append(next)
+		largest = maxi(largest, size)
+	return largest
+
+
+func test_no_flat_tone_on_a_roof_fills_more_than_six_percent_of_the_frame() -> void:
+	Game.reset()
+	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
+	await frames(5)
+	main.enter_stretch()
+	var region := main.region
+	var foe := (load("res://actors/actor.tscn") as PackedScene).instantiate() as Actor
+	foe.def = load(FOE) as ActorDef
+	foe.set_brain(Brain.new())
+	region.add_child(foe)
+	main.player.set_brain(Brain.new())
+	var env := (region.get_node("WorldEnvironment") as WorldEnvironment).environment
+	var sky := env.background_color
+	var spots := {}
+	for marker_name in VIEWS:
+		spots[marker_name] = (region.find_child(marker_name, true, false) as Marker3D).global_transform
+	for view_name: String in EXTRA_VIEWS:
+		spots[view_name] = Transform3D(Basis(), EXTRA_VIEWS[view_name])
+	var report := PackedStringArray()
+	var failed := PackedStringArray()
+	for view_name: String in spots:
+		var at: Transform3D = spots[view_name]
+		main.player.place(at)
+		foe.place(Transform3D(Basis(Vector3.UP, -PI / 2), at.origin + Vector3(2.0, 0.0, 0.0)))
+		main.camera_rig.snap_now()
+		await frames(12)
+		for i in 4:
+			await RenderingServer.frame_post_draw
+		var real := main.stage.world.get_texture().get_image().get_region(Rect2i(PixelSnap.MARGIN, PixelSnap.MARGIN, 640, 360))
+		# The roofs among everything: every other thing in the region drawn in a flat unlit green (so that it hides what is behind it as it does
+		# in the picture), the fighters hidden, the sky magenta; a roof pixel is one that is neither green nor sky.
+		var greened: Array[Dictionary] = []
+		for mesh: GeometryInstance3D in region.find_children("*", "GeometryInstance3D", true, false):
+			var parent_name := String(mesh.get_parent().name)
+			var is_roof := parent_name == "Roof" or String(mesh.name).begins_with("Drift") or (mesh.get_parent().get_parent() != null and mesh.get_parent().get_parent().name == &"Backdrop" and parent_name.begins_with("Row"))
+			if not is_roof:
+				greened.append({mesh = mesh, was = mesh.material_override})
+				mesh.material_override = _green()
+		main.player.visible = false
+		foe.visible = false
+		env.background_color = Color("ff00ff")
+		for i in 4:
+			await RenderingServer.frame_post_draw
+		var roofs := main.stage.world.get_texture().get_image().get_region(Rect2i(PixelSnap.MARGIN, PixelSnap.MARGIN, 640, 360))
+		env.background_color = sky
+		main.player.visible = true
+		foe.visible = true
+		for entry in greened:
+			(entry.mesh as GeometryInstance3D).material_override = entry.was
+		var mask := PackedByteArray()
+		mask.resize(640 * 360)
+		var roof_pixels := 0
+		for y in 360:
+			for x in 640:
+				var r := roofs.get_pixel(x, y)
+				var green: bool = r.g > r.r + 0.25 and r.g > r.b + 0.25
+				var sky_pixel: bool = r.r > 0.7 and r.b > 0.7 and r.g < 0.5
+				if not green and not sky_pixel:
+					mask[y * 640 + x] = 1
+					roof_pixels += 1
+		var largest := _largest_flat(roofs, mask)
+		var share := float(largest) / (640.0 * 360.0)
+		report.append("%s %.1f%% (roof pixels %.0f%%)" % [view_name, share * 100.0, 100.0 * roof_pixels / (640.0 * 360.0)])
+		if share > MOST_FLAT:
+			failed.append("%s: %.1f%% of the frame in one flat tone of a roof" % [view_name, share * 100.0])
+		roofs.save_png(ProjectSettings.globalize_path("res://").path_join(SHOTS + "roofs_" + view_name.to_snake_case() + ".png"))
+	print("flat roof tones, the largest region of one tone as a share of the frame: %s" % [report])
+	assert_eq(failed, PackedStringArray(), "no roof shows more than %d%% of the frame in one flat tone" % [MOST_FLAT * 100])

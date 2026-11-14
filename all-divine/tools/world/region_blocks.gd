@@ -4,9 +4,10 @@ extends RefCounted
 ## lists every command). They are static: this holds nothing between calls.
 ##
 ##   ground X0 Z0 X1 Z1 STONE [visual] [name=NAME]
-##   block X0 Z0 X1 Z1 STOREYS STYLE ROOF [solid]
+##   block X0 Z0 X1 Z1 STOREYS STYLE ROOF [solid]   (ROOF flat, slope, high or gable: two planes meeting in a ridge)
 ##   water X0 Z0 X1 Z1 Y [liquor]
 ##   vat X Z
+##   drift X Z W D [y=Y] [seed=N]
 ##   row PIECE X0 Z0 X1 Z1 YAW [y=Y] [backdrop]
 ##
 ## The camera looks north from the south, so a building is drawn as what it shows: a south face and a roof. East, west and
@@ -46,7 +47,12 @@ const STYLES := {
 	"plain": {ground = ["wall"], upper = ["wall"]},
 }
 ## The roofs: one piece to a tile of the footprint.
-const ROOFS := {"flat": "roof-flat", "slope": "roof", "high": "roof-high"}
+const ROOFS := {"flat": "roof-flat", "slope": "roof", "high": "roof-high", "gable": "roof"}
+## The lumps of a drift, its highest point, and the angles its outline is made of (and the rings between its middle and its rim).
+const DRIFT_PEAK := 0.32
+const DRIFT_SIDES := 28
+const DRIFT_RINGS := 4
+const SNOW := preload("res://world/materials/snow.tres")
 ## A vat: a slate box this big and high, and the liquor in it, a little smaller and a centimetre above the rim.
 const VAT_SIZE := 2.5
 const VAT_HEIGHT := 1.0
@@ -133,11 +139,36 @@ static func block(b: NODES, rect: Rect2, storeys: float, style: String, roof: St
 	cover.name = "Roof"
 	holder.add_child(cover)
 	laid = []
+	# A gable's ridge runs along the longer side's middle (x when the block is wider than deep) when the tiles across it are even, else
+	# the other way; the tiles of the far half are turned about to slope the other way.
+	var ridge_along_x := columns >= rows
+	if roof == "gable":
+		if ridge_along_x and rows % 2 != 0:
+			ridge_along_x = false
+		elif not ridge_along_x and columns % 2 != 0:
+			ridge_along_x = true
+		if (ridge_along_x and rows % 2 != 0) or (not ridge_along_x and columns % 2 != 0):
+			b.problem("a gable needs an even number of tiles across one side: this block is %d by %d" % [columns, rows])
+			return
+	var turned: Array[Dictionary] = []
 	for i in columns:
 		for j in rows:
 			var centre := rect.position + Vector2((i + 0.5) * NODES.TILE, (j + 0.5) * NODES.TILE)
-			laid.append({piece = ROOFS[roof], at = Vector3(centre.x, count * NODES.TILE, centre.y)})
-	_lay(b, cover, laid, rect.position, true)
+			var one := {piece = ROOFS[roof], at = Vector3(centre.x, count * NODES.TILE, centre.y)}
+			if roof == "gable" and ((ridge_along_x and j < rows / 2) or (not ridge_along_x and i < columns / 2)):
+				turned.append(one)
+			else:
+				laid.append(one)
+	if roof == "gable" and not ridge_along_x:
+		# Along z: the west half's ridge is on its east edge (the piece unturned), the east half's on its west edge (turned about).
+		var west := turned
+		turned = laid
+		laid = west
+	var roof_yaw := SOUTH_YAW if (roof != "gable" or ridge_along_x) else PI
+	var other_yaw := -SOUTH_YAW if ridge_along_x else 0.0
+	_lay(b, cover, laid, rect.position, true, roof_yaw if roof != "gable" or ridge_along_x else other_yaw)
+	if not turned.is_empty():
+		_lay(b, cover, turned, rect.position, true, other_yaw if ridge_along_x else roof_yaw)
 	if solid:
 		var body := b.make_body("Body", holder, b.world_and_feet)
 		var height := count * NODES.TILE
@@ -152,6 +183,74 @@ static func water(b: NODES, rect: Rect2, y: float, liquor: bool) -> void:
 	var mesh := _plate(b.group_node("Backdrop"), b.unique_name("Water"), PlaneMesh.new(), LIQUOR if liquor else WATER)
 	(mesh.mesh as PlaneMesh).size = rect.size
 	mesh.position = Vector3(rect.get_center().x, y, rect.get_center().y)
+
+
+## A drift of snow at `at`, about `size` (x, z) across, `up` metres up: three to five overlapping rounded lumps of the seed's own, each an
+## ellipse that holds the middle point, so that the outline is one ring of short sides (DRIFT_SIDES of them: never a straight edge of a
+## metre), the highest lump at the middle and the height falling to nothing at the rim. Seen only (Backdrop, no collider, no shadow).
+static func drift(b: NODES, at: Vector2, size: Vector2, up: float, seed_value: int) -> void:
+	if size.x < 0.5 or size.y < 0.5 or size.x > 20.0 or size.y > 20.0:
+		b.problem("a drift is 0.5 to 20 m across, not %.2f x %.2f" % [size.x, size.y])
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var lumps: Array[Dictionary] = []
+	var count := 3 + rng.randi() % 3
+	for k in count:
+		var radii := Vector2(size.x * rng.randf_range(0.28, 0.5), size.y * rng.randf_range(0.28, 0.5))
+		var offset := Vector2.ZERO if k == 0 else Vector2(rng.randf_range(-0.55, 0.55) * radii.x, rng.randf_range(-0.55, 0.55) * radii.y)
+		lumps.append({centre = offset, radii = radii, peak = DRIFT_PEAK * (1.0 if k == 0 else rng.randf_range(0.45, 0.85))})
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var rings: Array[PackedVector3Array] = []
+	for ring in range(DRIFT_RINGS + 1):
+		var points := PackedVector3Array()
+		for side in DRIFT_SIDES:
+			var angle := TAU * side / DRIFT_SIDES
+			var direction := Vector2(cos(angle), sin(angle))
+			var reach := 0.0
+			for lump in lumps:
+				reach = maxf(reach, _reach(direction, lump.centre, lump.radii))
+			var point := direction * reach * float(ring) / DRIFT_RINGS
+			points.append(Vector3(point.x, _drift_height(point, lumps) if ring < DRIFT_RINGS else 0.0, point.y))
+		rings.append(points)
+	var middle := Vector3(0.0, _drift_height(Vector2.ZERO, lumps), 0.0)
+	for side in DRIFT_SIDES:
+		var next := (side + 1) % DRIFT_SIDES
+		# Clockwise seen from above (a front face): the angle grows clockwise there, x east and z south.
+		tool.add_vertex(middle)
+		tool.add_vertex(rings[1][side])
+		tool.add_vertex(rings[1][next])
+		for ring in range(1, DRIFT_RINGS):
+			tool.add_vertex(rings[ring][side])
+			tool.add_vertex(rings[ring + 1][side])
+			tool.add_vertex(rings[ring][next])
+			tool.add_vertex(rings[ring][next])
+			tool.add_vertex(rings[ring + 1][side])
+			tool.add_vertex(rings[ring + 1][next])
+	tool.generate_normals()
+	tool.index()
+	var instance := _plate(b.group_node("Backdrop"), b.unique_name("Drift"), tool.commit(), SNOW)
+	instance.position = Vector3(at.x, up, at.y)
+
+
+# How far from the origin the ellipse (centre, radii) is along `direction`, the origin being inside it.
+static func _reach(direction: Vector2, centre: Vector2, radii: Vector2) -> float:
+	var o := -centre
+	var a := pow(direction.x / radii.x, 2) + pow(direction.y / radii.y, 2)
+	var half_b := o.x * direction.x / (radii.x * radii.x) + o.y * direction.y / (radii.y * radii.y)
+	var c := pow(o.x / radii.x, 2) + pow(o.y / radii.y, 2) - 1.0
+	return (-half_b + sqrt(maxf(half_b * half_b - a * c, 0.0))) / a
+
+
+static func _drift_height(point: Vector2, lumps: Array[Dictionary]) -> float:
+	var best := 0.0
+	for lump in lumps:
+		var d: Vector2 = (point - (lump.centre as Vector2)) / (lump.radii as Vector2)
+		var r2: float = d.length_squared()
+		if r2 < 1.0:
+			best = maxf(best, (lump.peak as float) * pow(1.0 - r2, 1.5))
+	return best
 
 
 ## A vat at (x, z): a slate box VAT_SIZE square and VAT_HEIGHT high, solid as seen (under Props), with its liquor just

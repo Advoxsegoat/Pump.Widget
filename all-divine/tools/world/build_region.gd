@@ -21,9 +21,10 @@ extends SceneTree
 ##                                      (`backdrop`: under Backdrop, casting no shadow: a chimney of the ring)
 ##   block X0 Z0 X1 Z1 STOREYS STYLE ROOF [solid]   a building over whole 2.5 m tiles (at most 60 m a side), 1 to 5
 ##                                      storeys: its south face and roof, drawn as a few MultiMeshes (STYLE: frontage,
-##                                      tannery, shed, plain; ROOF: flat, slope, high), solid (one box, under Blocks) or
+##                                      tannery, shed, plain; ROOF: flat, slope, high, gable), solid (one box, under Blocks) or
 ##                                      backdrop (no collider, no shadow)
 ##   water X0 Z0 X1 Z1 Y [liquor]       a thin plane at height Y, seen only; two at one height may not overlap
+##   drift X Z W D [y=Y] [seed=N]       a mound of snow of rounded lumps (about W x D, at most 0.32 m high), seen only, on Y
 ##   vat X Z                            a 2.5 m slate box 1 m high, solid, with liquor in it
 ##   lantern X Z [shadow]               a lantern with its lamp (see lamps)
 ##   lamps COLOUR RANGE ENERGY UP [world]   every lantern's lamp; `world`: it lights the world and not the bodies
@@ -259,6 +260,25 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				var n := _numbers(PackedStringArray(row_args.slice(1).filter(func(a: String) -> bool: return not a.begins_with("y="))), 5, 5)
 				if n.size() == 5:
 					BLOCKS.row(self, row_args[0], Vector2(n[0], n[1]), Vector2(n[2], n[3]), deg_to_rad(n[4]), y if y != null else 0.0, backdrop)
+			"drift":
+				var seed_value := 1
+				var raise := 0.0
+				var rest := PackedStringArray()
+				var bad_word := false
+				for word in args:
+					if word.begins_with("seed="):
+						bad_word = bad_word or not word.trim_prefix("seed=").is_valid_int()
+						seed_value = word.trim_prefix("seed=").to_int()
+					elif word.begins_with("y="):
+						bad_word = bad_word or not word.trim_prefix("y=").is_valid_float()
+						raise = word.trim_prefix("y=").to_float()
+					else:
+						rest.append(word)
+				var n := _numbers(rest, 4, 4)
+				if bad_word:
+					problem("drift needs X Z W D [y=Y] [seed=N], with numbers")
+				elif n.size() == 4:
+					BLOCKS.drift(self, Vector2(n[0], n[1]), Vector2(n[2], n[3]), raise, seed_value)
 			"lamps":
 				var world := args.size() == 5 and args[4] == "world"
 				if args.size() != 4 and not world:

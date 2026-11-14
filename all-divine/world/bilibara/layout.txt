@@ -87,18 +87,18 @@ ground 27.5 -60 40 -55 tan_earth name=YardPlateSouth
 # (T2, T3, T6, T7), under a sloping or a high roof where nothing walkable lies north of them in the line of sight; the yard's flanks two.
 # frontage: stone fronts with shops and shutters (the street's north row, the court, the Lazyman's back); tannery: wooden works. ---
 # The Lazyman's back and the court's west cap, the street's north row (the lane mouth is x 25..30) and the lane's east flank
-block -40 -25 -35 -5 3 frontage slope solid
-block -30 -10 25 -5 3 frontage flat solid
-block 30 -20 32.5 -5 3 frontage flat solid
-block 32.5 -5 35 5 3 frontage high solid
-block -42.5 -5 -40 5 3 frontage high solid
+block -40 -25 -35 -5 3 frontage gable solid
+block -30 -10 25 -5 3 frontage gable solid
+block 30 -20 32.5 -5 3 frontage gable solid
+block 32.5 -5 35 5 3 frontage gable solid
+block -42.5 -5 -40 5 3 frontage gable solid
 # The works north of the Rack Walk, and the walls of the alcove
-block -40 -45 -10 -25 3 tannery flat solid
-block -10 -45 25 -25 3 tannery flat solid
-block 30 -45 40 -37.5 3 tannery slope solid
+block -40 -45 -10 -25 3 tannery gable solid
+block -10 -45 25 -25 3 tannery gable solid
+block 30 -45 40 -37.5 3 tannery gable solid
 block 37.5 -37.5 40 -30 3 tannery high solid
 # The yard's north wall and its two flanks
-block 12.5 -80 42.5 -75 3 tannery slope solid
+block 12.5 -80 42.5 -75 3 tannery gable solid
 block 12.5 -75 15 -55 2 tannery high solid
 block 40 -75 42.5 -55 2 tannery high solid
 
@@ -189,7 +189,7 @@ ground 32.5 -30 45 -20 snow visual
 block 15 -52.5 22.5 -47.5 1 shed flat
 block 32.5 -52.5 40 -47.5 1 shed flat
 block 32.5 -27.5 45 -22.5 1 shed flat
-block 32.5 -20 45 -10 3 tannery flat
+block 32.5 -20 45 -10 3 tannery gable
 
 # --- The ring: rows of blocks 5 m deep (2.5 m where a place leaves half a row) and up to 20 m long, filling x -60..62.5, z -95..5 outside
 # the places, the masses and the strips above, 2 storeys at the south edge and a storey more every 5 m north, to 4; styles, roofs and chimneys
@@ -338,63 +338,54 @@ block 50 0 62.5 5 2 shed flat
 # --- Roofs that show: snow drifts break up the flat tops (T2, the lane's stub, the tanneries and sheds east of the lane, the sheds south of
 # the yard), so that no top shows more than about 6 x 6 m of one tone. The tops of T6 and the yard's
 # and the alcove's walls are never in a picture from any walkable point (their roofs are 9 m higher up the picture than their feet). ---
-curb -29.28 -9.34 -26.28 -7.34 0.25 snow name=Drift y=7.83
-curb -23.76 -9.53 -20.76 -7.53 0.25 snow name=Drift y=7.83
-curb -18.94 -8.82 -15.94 -6.82 0.25 snow name=Drift y=7.83
-curb -14.71 -8.48 -11.71 -6.48 0.25 snow name=Drift y=7.83
-curb -9.74 -8.66 -6.74 -6.66 0.25 snow name=Drift y=7.83
-curb -4.69 -9.48 -1.69 -7.48 0.25 snow name=Drift y=7.83
-curb 0.88 -7.72 3.88 -5.72 0.25 snow name=Drift y=7.83
-curb 5.40 -9.16 8.40 -7.16 0.25 snow name=Drift y=7.83
-curb 11.20 -7.43 14.20 -5.43 0.25 snow name=Drift y=7.83
-curb 16.12 -8.75 19.12 -6.75 0.25 snow name=Drift y=7.83
-curb 21.76 -9.59 24.76 -7.59 0.25 snow name=Drift y=7.83
-curb 31.18 -19.00 32.18 -17.00 0.25 snow name=Drift y=7.83
-curb 30.32 -14.42 31.32 -12.42 0.25 snow name=Drift y=7.83
-curb 30.52 -7.74 31.52 -5.74 0.25 snow name=Drift y=7.83
-curb 33.29 -18.30 36.29 -16.30 0.25 snow name=Drift y=7.83
-curb 34.49 -13.81 37.49 -11.81 0.25 snow name=Drift y=7.83
-curb 40.50 -19.55 43.50 -17.55 0.25 snow name=Drift y=7.83
-curb 39.23 -14.21 42.23 -12.21 0.25 snow name=Drift y=7.83
-curb 34.59 -26.17 37.59 -24.17 0.25 snow name=Drift y=2.81
-curb 39.89 -25.79 42.89 -23.79 0.25 snow name=Drift y=2.81
-curb 15.69 -51.48 17.94 -49.48 0.25 snow name=Drift y=2.81
-curb 19.85 -50.52 22.10 -48.52 0.25 snow name=Drift y=2.81
-curb 32.94 -50.82 35.19 -48.82 0.25 snow name=Drift y=2.81
-curb 37.03 -50.10 39.28 -48.10 0.25 snow name=Drift y=2.81
-row chimney 38.7 -15.5 38.7 -15.5 0 y=7.83 backdrop
-row chimney 33.7 -17 33.7 -17 0 y=7.83 backdrop
+row chimney 39.0 -15.0 39.0 -15.0 0 y=8.1 backdrop
+row chimney 34.0 -15.0 34.0 -15.0 0 y=8.1 backdrop
 
-# T7's roof (seen from the yard, 10 m south of it) and T7b's: drifts and chimneys
-curb -9.08 -43.40 -6.08 -41.40 0.25 snow name=Drift y=7.83
-curb -8.32 -38.55 -5.32 -36.55 0.25 snow name=Drift y=7.83
-curb -8.99 -33.36 -5.99 -31.36 0.25 snow name=Drift y=7.83
-curb -9.50 -28.48 -6.50 -26.48 0.25 snow name=Drift y=7.83
-curb -3.79 -43.03 -0.79 -41.03 0.25 snow name=Drift y=7.83
-curb -4.65 -38.81 -1.65 -36.81 0.25 snow name=Drift y=7.83
-curb -4.65 -33.00 -1.65 -31.00 0.25 snow name=Drift y=7.83
-curb -3.69 -29.23 -0.69 -27.23 0.25 snow name=Drift y=7.83
-curb 1.77 -42.76 4.77 -40.76 0.25 snow name=Drift y=7.83
-curb 1.25 -38.32 4.25 -36.32 0.25 snow name=Drift y=7.83
-curb 0.45 -34.28 3.45 -32.28 0.25 snow name=Drift y=7.83
-curb 1.05 -29.20 4.05 -27.20 0.25 snow name=Drift y=7.83
-curb 5.50 -43.91 8.50 -41.91 0.25 snow name=Drift y=7.83
-curb 5.25 -38.56 8.25 -36.56 0.25 snow name=Drift y=7.83
-curb 5.90 -32.95 8.90 -30.95 0.25 snow name=Drift y=7.83
-curb 6.03 -28.28 9.03 -26.28 0.25 snow name=Drift y=7.83
-curb 11.00 -43.24 14.00 -41.24 0.25 snow name=Drift y=7.83
-curb 10.93 -38.85 13.93 -36.85 0.25 snow name=Drift y=7.83
-curb 11.80 -32.71 14.80 -30.71 0.25 snow name=Drift y=7.83
-curb 11.54 -28.17 14.54 -26.17 0.25 snow name=Drift y=7.83
-curb 15.70 -43.93 18.70 -41.93 0.25 snow name=Drift y=7.83
-curb 15.66 -39.19 18.66 -37.19 0.25 snow name=Drift y=7.83
-curb 16.43 -33.66 19.43 -31.66 0.25 snow name=Drift y=7.83
-curb 16.55 -28.68 19.55 -26.68 0.25 snow name=Drift y=7.83
-curb 21.73 -42.94 24.73 -40.94 0.25 snow name=Drift y=7.83
-curb 20.20 -38.96 23.20 -36.96 0.25 snow name=Drift y=7.83
-curb 21.66 -33.55 24.66 -31.55 0.25 snow name=Drift y=7.83
-curb 21.77 -28.66 24.77 -26.66 0.25 snow name=Drift y=7.83
-row chimney 12.7 -43.4 12.7 -43.4 0 y=8.15 backdrop
+# The gabled roofs' chimneys, at the ridges, 8.1 m up (their tops stay under the sight line: the test holds it)
+row chimney -22.3 -7.5 -22.3 -7.5 0 y=8.1 backdrop
+row chimney -7.3 -7.5 -7.3 -7.5 0 y=8.1 backdrop
+row chimney 7.7 -7.5 7.7 -7.5 0 y=8.1 backdrop
+row chimney 17.7 -7.5 17.7 -7.5 0 y=8.1 backdrop
+row chimney 0.7 -35 0.7 -35 0 y=8.1 backdrop
+row chimney 14.7 -35 14.7 -35 0 y=8.1 backdrop
+row chimney 34.2 -41.2 34.2 -41.2 0 y=8.1 backdrop
+
+# Snow along the ridges of the gabled roofs (where it gathers), and on the flat decks and the sheds: one mound to about every 4 m, so that no
+# roof shows a tone of more than a few square metres (test_bilibara_view holds it at 6% of the frame).
+drift -37.50 -22.88 1.80 3.20 y=8.90 seed=101
+drift -37.50 -18.76 1.80 3.20 y=8.90 seed=102
+drift -37.50 -14.70 1.80 3.20 y=8.90 seed=103
+drift -37.50 -10.56 1.80 3.20 y=8.90 seed=104
+drift -37.50 -6.76 1.80 3.20 y=8.90 seed=105
+drift -27.00 -7.33 3.40 1.50 y=8.90 seed=106
+drift -17.80 -7.69 3.40 1.50 y=8.90 seed=107
+drift -13.20 -7.51 3.40 1.50 y=8.90 seed=108
+drift -4.00 -7.32 3.40 1.50 y=8.90 seed=109
+drift 0.60 -7.44 3.40 1.50 y=8.90 seed=110
+drift 5.20 -7.34 3.40 1.50 y=8.90 seed=111
+drift 14.40 -7.65 3.40 1.50 y=8.90 seed=112
+drift 22.90 -7.51 3.40 1.50 y=8.90 seed=113
+drift -8.00 -35.15 3.60 1.60 y=8.90 seed=114
+drift -2.80 -34.97 3.60 1.60 y=8.90 seed=115
+drift 2.40 -34.96 3.60 1.60 y=8.90 seed=116
+drift 7.60 -35.29 3.60 1.60 y=8.90 seed=117
+drift 12.80 -35.17 3.60 1.60 y=8.90 seed=118
+drift 18.00 -35.13 3.60 1.60 y=8.90 seed=119
+drift 22.80 -34.75 3.60 1.60 y=8.90 seed=120
+drift 35.00 -43.80 1.50 2.60 y=8.90 seed=121
+drift 35.00 -41.40 1.50 2.60 y=8.90 seed=122
+drift 35.00 -39.00 1.50 2.60 y=8.90 seed=123
+drift 35.00 -24.89 3.00 3.00 y=2.81 seed=133
+drift 38.70 -24.72 3.00 3.00 y=2.81 seed=134
+drift 42.40 -24.76 3.00 3.00 y=2.81 seed=135
+drift 17.60 -50.12 2.60 3.00 y=2.81 seed=136
+drift 20.80 -50.08 2.60 3.00 y=2.81 seed=137
+drift 34.60 -50.20 2.60 3.00 y=2.81 seed=138
+drift 37.80 -50.21 2.60 3.00 y=2.81 seed=139
+
+drift 36.6 -15 3.4 1.6 y=8.90 seed=200
+drift 41.6 -15 3.4 1.6 y=8.90 seed=201
+drift 44.0 -15 3.4 1.6 y=8.90 seed=202
 
 # --- Fronts: banners as the pink neon of the street (a banner hangs on the face, turned to the south) ---
 piece banner-red -37.5 -3.925 90 y=0.8
@@ -416,12 +407,12 @@ ground 45 5 57.5 9 cobble visual
 ground 57.5 5 62.5 9 cobble visual
 row wall-half -61.25 8 61.25 8 -90
 water -70 9 75 32 -0.9
-curb -36 6.5 -31 7.5 0.25 snow name=Drift
-curb -12 7 -6 8 0.25 snow name=Drift
-curb 4 6.2 9 7.2 0.25 snow name=Drift
-curb 20 7.2 26 8.2 0.25 snow name=Drift
-curb -22 8.7 -17 9.1 0.25 snow name=Drift y=1.25
-curb 8 8.7 14 9.1 0.25 snow name=Drift y=1.25
+drift -33.5 7 5.75 1.56 seed=53
+drift -9 7.5 6.9 1.56 seed=54
+drift 6.5 6.7 5.75 1.56 seed=55
+drift 23 7.7 6.9 1.56 seed=56
+drift -19.5 8.9 5.75 1.56 y=1.25 seed=57
+drift 11 8.9 6.9 1.56 y=1.25 seed=58
 
 # --- The drying yard, between the Rack Walk and the street's north row (unwalkable, under the line of sight): tan earth, three vats,
 # racks of poles three metres or more back from the Rack Walk's kerb, hides on the ground, two rocks, drifts ---
@@ -441,11 +432,11 @@ row planks -26.25 -17.9 -21.25 -17.9 0
 row planks 2.5 -17.9 7.5 -17.9 0
 piece rock-large -12 -14.5
 piece rock-large 17 -16
-curb -29 -17 -26 -16 0.25 snow name=Drift
-curb -14 -18 -8 -17 0.25 snow name=Drift
-curb 0 -16.5 5 -15.5 0.25 snow name=Drift
-curb 13 -18 20 -17 0.25 snow name=Drift
-curb -2 -14 3 -13.2 0.25 snow name=Drift
+drift -27.5 -16.5 3.45 1.56 seed=59
+drift -11 -17.5 6.9 1.56 seed=60
+drift 2.5 -16 5.75 1.56 seed=61
+drift 16.5 -17.5 8.05 1.56 seed=62
+drift 0.5 -13.6 5.75 1.56 seed=63
 
 # --- Markers (yaw about +Y: 0 faces south, 90 east, 180 north, 270 west) ---
 marker Spawn -32.5 1.25 90
