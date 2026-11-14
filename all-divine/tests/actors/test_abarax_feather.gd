@@ -118,7 +118,13 @@ static func blade_vertices(feather: Dictionary) -> PackedInt32Array:
 func test_the_feather_passes_through_nothing_in_any_pose() -> void:
 	var table := {}
 	var frames_looked := 0
-	for clip in CLIPS:
+	var cases: Array = []
+	for warm in [40, 83]:  # each twice, after 40 and after 83 ticks of standing (the spring is in another state)
+		for clip in CLIPS:
+			cases.append([clip, warm])
+	for entry in cases:
+		var clip: StringName = entry[0]
+		var warm: int = entry[1]
 		var r: Rig = track(load(RIG).instantiate())
 		if not _has_feather(r):
 			return
@@ -126,15 +132,24 @@ func test_the_feather_passes_through_nothing_in_any_pose() -> void:
 		var blade := blade_vertices(feather)
 		assert_true(blade.size() > 20, "the blade's vertices were found (%d)" % blade.size())
 		var solids := _prepare(r, SOLIDS)
-		for i in 40:
+		for i in warm:
 			await frames(1)
 			r.tick(1.0 / 60)
 		var steps := 1
+		if clip == &"getup":
+			# He gets up from lying (the scarf's test says the same: played from idle the pose snaps and the scarf whips into it):
+			# lie him down first, as a death does, and let him lie a while.
+			r.play_move(&"death", 0.15)
+			for f in int(r.tree.get_animation(&"death").length * 60) + 20:
+				await frames(1)
+				r.set_move_time(minf(f / 60.0, r.tree.get_animation(&"death").length))
+				r.tick(1.0 / 60)
 		if clip != &"idle":
 			r.play_move(clip, 0.15)
 			steps = int(r.tree.get_animation(clip).length * 60) + 1
 		var through := {}
 		var bad := 0
+		var bad_frames := PackedInt32Array()
 		for f in steps:
 			await frames(1)
 			if clip != &"idle":
@@ -144,10 +159,11 @@ func test_the_feather_passes_through_nothing_in_any_pose() -> void:
 			var now := crossings(r, feather, blade, solids)
 			if not now.is_empty():
 				bad += 1
+				bad_frames.append(f)
 				for key in now:
 					through[key] = maxi(through.get(key, 0), now[key])
-		table[clip] = "%d of %d frames %s" % [bad, steps, through]
-		assert_eq(bad, 0, "%s: the feather's edges went through %s on %d of %d frames" % [clip, through, bad, steps])
+		table["%s after %d" % [clip, warm]] = "%d of %d frames %s" % [bad, steps, through]
+		assert_eq(bad, 0, "%s after %d ticks: the feather's edges went through %s on %d of %d frames (%s)" % [clip, warm, through, bad, steps, bad_frames])
 		r.free()
 	print("feather crossings by pose: ", table)
 	assert_true(frames_looked > 300, "the poses were played (%d frames)" % frames_looked)

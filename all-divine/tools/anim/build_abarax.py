@@ -32,8 +32,7 @@ neck_01; each bone is 0.175 m long and they hang down the back), plus feather_01
 hangs from the Head at his left lobe and carries the link, the ring, the beads and the cord; feather_02 hangs
 from it and carries the feather). The new bones come last, so the 69 before them keep their places.
 
-Made in code, like the scarf, and not decimated: Abarax_Forelock, Abarax_Feather, Abarax_EarRing, Abarax_Stubble
-(the chin's and jaw's stubble, a skin of the head's faces, and the mole), and the bun
+Made in code, like the scarf, and not decimated: Abarax_Forelock, Abarax_Feather, Abarax_EarRing, and the bun
 of Abarax_Topknot. The rest of Abarax_Topknot is the upper skull's faces of the decimated head, drawn a little
 outside it: 3-4 mm thick on the sides and the nape (cut close), 11 mm on top (the hair pulled back to the bun).
 
@@ -75,8 +74,7 @@ BASE_PARTS = {
 OUTFIT_PARTS = {name: (name, name) for name in
                 ("Male_Peasant_Arms", "Male_Peasant_Body", "Male_Peasant_Feet", "Male_Peasant_Legs")}
 SCARF_MESH = "Abarax_Scarf"
-TOPKNOT_MESH, FORELOCK_MESH, FEATHER_MESH, EARRING_MESH, STUBBLE_MESH = (
-    "Abarax_Topknot", "Abarax_Forelock", "Abarax_Feather", "Abarax_EarRing", "Abarax_Stubble")
+TOPKNOT_MESH, FORELOCK_MESH, FEATHER_MESH, EARRING_MESH = "Abarax_Topknot", "Abarax_Forelock", "Abarax_Feather", "Abarax_EarRing"
 ARMATURE = "Armature"
 
 # --- palette slots ---
@@ -338,17 +336,20 @@ def build_scarf(armature, neck, back):
 LOBE_LEFT = (0.082, 0.016, 1.666)
 LOBE_RIGHT = (-0.087, 0.016, 1.659)  # the ring's centre: it hangs round the lobe, a little below it
 FEATHER_BONES = ("feather_01", "feather_02")
-# feather_01 carries the link, ring, beads and cord and leans 12 degrees out from straight down; feather_02 carries the
-# feather and leans 66 degrees out: the collar (1.559 m at x 0.08, the sleeve 1.53 m out to x 0.2) is in the way of
-# anything that hangs further down, so the feather points out past the jaw as the drawing's does and the spring swings it.
-CHAIN_LENGTH, CHAIN_TILT = 0.07, 12.0
-FEATHER_LENGTH, FEATHER_TILT = 0.15, 66.0
-# The feather's blade: the distance along its bone of each cross-section, its half width there, and how far its right edge
-# lags (so the bars slant across it, as the drawing's do).
-FEATHER_ROWS = (0.004, 0.034, 0.064, 0.094, 0.124, 0.150)
-FEATHER_HALF_WIDTHS = (0.004, 0.021, 0.030, 0.029, 0.019, 0.003)
-FEATHER_SLANT = 0.012
-FEATHER_BULGE = 0.004  # the quill's ridge stands this far out of the vane, on both sides
+# feather_01 carries the link, ring, beads and cord: 4.5 cm leaning 15 degrees out from straight down, from the lobe. feather_02
+# carries the feather, as the drawing has it: it trails out to the side (and a little back), clear of the neck and the collar, 15 cm
+# long and, at its widest, 6.8 cm across (a longer, thinner blade read as a stick at the game's camera, where a pixel is 3 cm).
+CHAIN_LENGTH, CHAIN_TILT = 0.045, 15.0
+FEATHER_LENGTH = 0.15
+FEATHER_DIRECTION = (0.70, 0.35, 0.60)
+# The blade, as (distance along the bone, half width above the quill, half width below it): it widens from the quill's base, is cut
+# into three notches along its lower edge and narrows to the tip. The faces twist about the bone from facing front at its root to
+# FEATHER_TWIST degrees round at the tip, so that some of it is face on from every side. FEATHER_BULGE: the quill's ridge stands
+# this far out of the vane, on both sides.
+FEATHER_BLADE = ((0.005, 0.004, 0.004), (0.022, 0.016, 0.012), (0.044, 0.028, 0.022), (0.062, 0.034, 0.012), (0.076, 0.034, 0.026),
+                 (0.094, 0.033, 0.010), (0.106, 0.028, 0.022), (0.124, 0.022, 0.009), (0.138, 0.014, 0.012), (0.150, 0.003, 0.003))
+FEATHER_TWIST = 45.0
+FEATHER_BULGE = 0.004
 # The head's hairline, as the height z above which the hair grows at a given y (front -0.04 and forward: 1.768; the
 # temple, y 0: 1.742; the back of the head, from y 0.08: the nape at 1.65). The ear is kept clear. A face is hair only when
 # all its corners are above the line (the decimated head's faces are 2-3 cm wide).
@@ -366,18 +367,12 @@ BUN_SCALE = 0.72
 BUN_PROFILE = ((0.034, 0.0), (0.038, 0.026), (0.054, 0.045), (0.063, 0.070), (0.057, 0.100), (0.037, 0.125))
 BUN_END = 0.135
 BUN_SEGMENTS = 10
-# The forelock: a lock from the hairline toward the bridge of the nose: (x, z, half width) along it.
-FORELOCK_PATH = ((0.018, 1.778, 0.009), (0.024, 1.757, 0.0085), (0.020, 1.736, 0.007), (0.010, 1.718, 0.005),
-                 (0.003, 1.706, 0.0015))
-FORELOCK_RIDGE = 0.003
+# The forelock: a thin strand with one curve, from the hairline toward the bridge of the nose, lifted a little off the brow toward its
+# end: (x, z, half width) along it.
+FORELOCK_PATH = ((0.016, 1.778, 0.0045), (0.026, 1.760, 0.0045), (0.028, 1.742, 0.0040), (0.020, 1.724, 0.0030),
+                 (0.008, 1.708, 0.0015))
+FORELOCK_RIDGE = 0.002
 TIE_AT = (0.30, -0.035, 1.762)  # a ray from here along -X finds his left temple, where the tie sits
-# The stubble: the faces of the decimated head whose corners all lie in one of these boxes (z from, z to, |x| from, |x| to,
-# y from, y to: the chin's patch, then the jaw along both sides), laid 1.5 mm outside it; and the mole under his left eye:
-# a ray from MOLE_AT along +Y finds the cheek, and a hexagon of MOLE_RADIUS goes on it.
-STUBBLE_BOXES = ((1.575, 1.625, 0.0, 0.05, -0.2, -0.04), (1.575, 1.645, 0.03, 0.075, -0.07, 0.02))
-STUBBLE_THICKNESS = 0.0015
-MOLE_AT, MOLE_RADIUS = (0.04, -0.3, 1.673), 0.0055
-
 
 class Made:
     """The verts, faces, one palette slot per face and one bone weighting per vertex of a mesh drawn in code (the
@@ -454,12 +449,12 @@ def smoothstep(lo, hi, x):
 
 
 def feather_joints():
-    """The three joints of the feather's chain, from the left lobe: out of the lobe, to the end of feather_01 and to the
-    feather's tip. Each leans out (+X) by its tilt from straight down."""
+    """The three joints of the feather's chain, from the left lobe: out of the lobe, to the end of feather_01 (leaning
+    CHAIN_TILT degrees out from straight down) and to the feather's tip (along FEATHER_DIRECTION)."""
     start = Vector(LOBE_LEFT)
     down = lambda tilt: Vector((math.sin(math.radians(tilt)), 0.0, -math.cos(math.radians(tilt))))
     middle = start + down(CHAIN_TILT) * CHAIN_LENGTH
-    return [start, middle, middle + down(FEATHER_TILT) * FEATHER_LENGTH]
+    return [start, middle, middle + Vector(FEATHER_DIRECTION).normalized() * FEATHER_LENGTH]
 
 
 def add_feather_bones(armature, joints):
@@ -560,7 +555,7 @@ def forelock(head, armature):
         hit, normal, _, _ = tree.ray_cast(Vector((x, -0.3, z)), Vector((0.0, 1.0, 0.0)), 0.6)
         if hit is None:
             raise BuildError("found no forehead for the forelock")
-        lift = 0.006 + 0.004 * smoothstep(1.74, 1.775, z)  # clear of the hair's own thickness up at the hairline
+        lift = 0.006 + 0.004 * smoothstep(1.74, 1.775, z) + 0.006 * (1.0 - smoothstep(1.70, 1.74, z))  # clear of the hair up at the hairline, off the brow at its end
         centre = hit + normal * lift
         rows.append([made.vert(centre - Vector((half, 0.0, 0.0)), head_only),
                      made.vert(centre + normal * FORELOCK_RIDGE, head_only),
@@ -576,40 +571,6 @@ def forelock(head, armature):
     return made_object(FORELOCK_MESH, made, armature, ["Head"])
 
 
-def stubble(head, armature):
-    """The chin's patch and the jaw's stubble as a thin skin of the head's own faces, and the mole on his left cheek."""
-    made = Made()
-    head_only = {"Head": 1.0}
-    bm = bmesh.new()
-    bm.from_mesh(head.data)
-    bm.normal_update()
-    matrix = head.matrix_world
-
-    def inside(p, box):
-        z0, z1, x0, x1, y0, y1 = box
-        return z0 <= p.z <= z1 and x0 <= abs(p.x) <= x1 and y0 <= p.y <= y1
-
-    for f in bm.faces:
-        corners = [matrix @ v.co for v in f.verts]
-        if any(all(inside(p, box) for p in corners) for box in STUBBLE_BOXES):
-            ids = [made.vert(p + (matrix.to_3x3() @ v.normal).normalized() * STUBBLE_THICKNESS, head_only)
-                   for p, v in zip(corners, f.verts)]
-            made.faces.append(tuple(ids))  # the head's own winding faces outward already
-            made.slots.append(HAIR)
-    bm.free()
-    hit, normal, _, _ = surface_tree([head]).ray_cast(Vector(MOLE_AT), Vector((0.0, 1.0, 0.0)), 0.6)
-    if hit is None:
-        raise BuildError("found no cheek for the mole")
-    middle = made.vert(hit + normal * (STUBBLE_THICKNESS + 0.001), head_only)
-    ring = [made.vert(hit + normal * STUBBLE_THICKNESS + Vector((math.cos(a), 0.0, math.sin(a))) * MOLE_RADIUS, head_only)
-            for a in (2 * math.pi * k / 6 for k in range(6))]
-    for k in range(6):
-        made.face([middle, ring[k], ring[(k + 1) % 6]], HAIR, facing=Vector((0.0, -1.0, 0.0)))
-    if not made.faces:
-        raise BuildError("found no chin for the stubble")
-    return made_object(STUBBLE_MESH, made, armature, ["Head"])
-
-
 def earring(armature):
     made = Made()
     made.ring(LOBE_RIGHT, 0.014, 0.008, GOLD, {"Head": 1.0})
@@ -617,8 +578,8 @@ def earring(armature):
 
 
 def feather(armature, joints):
-    """From his left lobe: a link, a ring, two beads on a cord, then the barred feather (gold and the hair's brown: the bars are
-    those two, so the feather shows dark against the cream of the shirt behind it and gold against the ground beyond)."""
+    """From his left lobe: a link, a ring, two beads and a cord, then the barred feather (gold and the hair's brown: dark against the
+    cream of the shirt behind it and gold against the ground beyond): a quill and a notched blade that twists about the bone."""
     made = Made()
     first, second = {"feather_01": 1.0}, {"feather_02": 1.0}
     start, middle, tip = joints
@@ -626,26 +587,29 @@ def feather(armature, joints):
     out = (tip - middle).normalized()
     at = lambda s: start + along * s
     side = Vector((0.0, 1.0, 0.0)).cross(along).normalized()  # across the chain, in the plane of X and Z
-    made.box(at(0.007), along * 0.007, Vector((0.0, 0.002, 0.0)), side * 0.002, GOLD, first)
-    made.ring(at(0.026), 0.0125, 0.0075, GOLD, first)
-    made.bead(at(0.046), 0.0065, GOLD, first)
-    made.bead(at(0.058), 0.0065, HAIR, first)
-    made.box(at(0.066), along * 0.006, Vector((0.0, 0.0015, 0.0)), side * 0.0015, HAIR, first)
-    # the blade: its width runs across `out`, in the plane of X and Z, and it faces front and back
-    across = Vector((0.0, 1.0, 0.0)).cross(out)
-    for layer, facing, bulge in ((0, Vector((0.0, -1.0, 0.0)), -1), (1, Vector((0.0, 1.0, 0.0)), 1)):
+    made.box(at(0.005), along * 0.005, Vector((0.0, 0.0015, 0.0)), side * 0.0015, GOLD, first)
+    made.ring(at(0.0185), 0.0085, 0.005, GOLD, first)
+    made.bead(at(0.032), 0.0045, GOLD, first)
+    made.bead(at(0.040), 0.0045, HAIR, first)
+    made.box(at(0.0435), along * 0.0035, Vector((0.0, 0.001, 0.0)), side * 0.001, HAIR, first)
+    # the blade: faces front and back, twisting about the bone from facing front at the root
+    base = (Vector((0.0, 1.0, 0.0)) - out * out.dot(Vector((0.0, 1.0, 0.0)))).normalized()
+    quarter = out.cross(base)
+    for layer, facing_sign in ((0, -1), (1, 1)):
         rows = []
-        for i, (s, half) in enumerate(zip(FEATHER_ROWS, FEATHER_HALF_WIDTHS)):
+        for i, (s, upper, lower) in enumerate(FEATHER_BLADE):
+            angle = math.radians(FEATHER_TWIST) * s / FEATHER_LENGTH
+            normal = base * math.cos(angle) + quarter * math.sin(angle)
+            width = out.cross(normal)  # up the blade's upper edge
             weights = {"feather_01": 0.5, "feather_02": 0.5} if i == 0 else second
-            left = middle + out * s - across * half
-            right = middle + out * (s + FEATHER_SLANT * (half / max(FEATHER_HALF_WIDTHS))) + across * half
-            ridge = middle + out * s + Vector((0.0, bulge * FEATHER_BULGE, 0.0))
-            rows.append([made.vert(left + Vector((0.0, bulge * 0.001, 0.0)), weights), made.vert(ridge, weights),
-                         made.vert(right + Vector((0.0, bulge * 0.001, 0.0)), weights)])
-        for band, (a, b) in enumerate(zip(rows, rows[1:])):
+            centre = middle + out * s
+            rows.append(([made.vert(centre + width * upper + normal * (facing_sign * 0.001), weights),
+                          made.vert(centre + normal * (facing_sign * FEATHER_BULGE), weights),
+                          made.vert(centre - width * lower + normal * (facing_sign * 0.001), weights)], normal * facing_sign))
+        for band, ((a, normal_a), (b, normal_b)) in enumerate(zip(rows, rows[1:])):
             slot = GOLD if band % 2 == 0 else HAIR
             for k in range(2):
-                made.face([a[k], a[k + 1], b[k + 1], b[k]], slot, facing=facing)
+                made.face([a[k], a[k + 1], b[k + 1], b[k]], slot, facing=normal_a + normal_b)
     return made_object(FEATHER_MESH, made, armature, ["feather_01", "feather_02"])
 
 
@@ -778,7 +742,7 @@ def build(ubc, outfits, out):
     joints = feather_joints()
     add_feather_bones(keep, joints)
     made = [topknot(parts["Abarax_Head"], keep), forelock(parts["Abarax_Head"], keep), feather(keep, joints),
-            earring(keep), stubble(parts["Abarax_Head"], keep)]
+            earring(keep)]
     for obj in made:
         triangulate(obj)
         finish_mesh(obj)

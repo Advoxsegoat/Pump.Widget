@@ -176,7 +176,7 @@ settings/0/root_bone_name = "scarf_01"
 settings/0/end_bone_name = "scarf_04"
 settings/0/extend_end_bone = true
 settings/0/end_bone/direction = 2
-settings/0/end_bone/length = 0.175
+settings/0/end_bone/length = 0.155
 settings/0/radius/value = 0.02
 settings/0/stiffness/value = 0.5
 settings/0/drag/value = 0.4
@@ -202,15 +202,21 @@ settings/0/end_bone_name = "feather_02"
 settings/0/extend_end_bone = true
 settings/0/end_bone/direction = 2
 settings/0/end_bone/length = 0.15
-settings/0/radius/value = 0.012
-settings/0/stiffness/value = 6.0
-settings/0/drag/value = 0.4
-settings/0/gravity/value = 0.5
+settings/0/radius/value = 0.02
+settings/0/stiffness/value = 45
+settings/0/drag/value = 0.8
+settings/0/gravity/value = 0.3
 settings/0/gravity/direction = Vector3(0, -1, 0)
 
 [node name="Neck" type="SpringBoneCollisionCapsule3D" parent="Model/Armature/Skeleton3D/Feather"]
 bone_name = &"neck_01"
 radius = 0.06
+height = 0.2
+position_offset = Vector3(0, 0.04, 0)
+
+[node name="ScarfLoop" type="SpringBoneCollisionCapsule3D" parent="Model/Armature/Skeleton3D/Feather"]
+bone_name = &"neck_01"
+radius = 0.10
 height = 0.2
 position_offset = Vector3(0, 0.04, 0)
 
