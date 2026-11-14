@@ -7,7 +7,7 @@ extends RefCounted
 ##   block X0 Z0 X1 Z1 STOREYS STYLE ROOF [solid]
 ##   water X0 Z0 X1 Z1 Y [liquor]
 ##   vat X Z
-##   row PIECE X0 Z0 X1 Z1 YAW [y=Y]
+##   row PIECE X0 Z0 X1 Z1 YAW [y=Y] [backdrop]
 ##
 ## The camera looks north from the south, so a building is drawn as what it shows: a south face and a roof. East, west and
 ## north faces are edge-on or hidden and are not built. Everything here is flat on y = 0.
@@ -54,6 +54,13 @@ const LIQUOR_SIZE := 2.1
 const LIQUOR_RISE := 0.01
 const SLATE := preload("res://world/materials/slate.tres")
 const LIQUOR := preload("res://world/materials/liquor.tres")
+## What a window in a block's front shows: a dark box behind the front (a window of the kit is a hole through its wall, and a block has
+## no inside).
+const INTERIOR := preload("res://world/materials/interior.tres")
+## The kit's wall slab is this thick (behind its face), and the interior stops at its back.
+const SLAB := 0.25
+## The interior reaches this far below the ground, so that a gap at the foot of a window piece shows it and not the nothing under the ground.
+const INTERIOR_BELOW := 1.0
 const WATER := preload("res://world/materials/kenney_water.tres")
 
 ## A box of `stone` (a material) 1 m thick with its top at y = 0. Solid, it is on `world` and `ik_surface`, under Walkable.
@@ -118,6 +125,10 @@ static func block(b: NODES, rect: Rect2, storeys: float, style: String, roof: St
 			var on_line := Vector2(rect.position.x + (k + 0.5) * NODES.TILE, south)
 			laid.append({piece = piece, at = Vector3(on_line.x, storey * NODES.TILE, on_line.y + box.position.x * NODES.SCALE)})
 	_lay(b, front, laid, rect.position, false)
+	var inside := _plate(holder, "Interior", BoxMesh.new(), INTERIOR)
+	var box_size := Vector3(rect.size.x, count * NODES.TILE + INTERIOR_BELOW, rect.size.y - SLAB)
+	(inside.mesh as BoxMesh).size = box_size
+	inside.position = Vector3(rect.get_center().x, box_size.y / 2 - INTERIOR_BELOW, rect.position.y + box_size.z / 2)
 	var cover := Node3D.new()
 	cover.name = "Roof"
 	holder.add_child(cover)
@@ -156,8 +167,9 @@ static func vat(b: NODES, at: Vector2) -> void:
 
 ## PIECE every tile along the line from `a` to `b`, both ends included, turned `yaw` radians about +Y and `up` metres up, drawn as
 ## a few runs (a rack of twelve poles is a few draws and not twelve) under Props, with no collider: what is seen and not stood
-## against (racks, hides, a drift of planks). The line runs along x or z, a whole number of tiles long.
-static func row(b: NODES, piece: String, a: Vector2, to: Vector2, yaw: float, up: float) -> void:
+## against (racks, hides, a drift of planks). The line runs along x or z, a whole number of tiles long. `backdrop`: under Backdrop and
+## casting no shadow, like the masses of the ring (their chimneys).
+static func row(b: NODES, piece: String, a: Vector2, to: Vector2, yaw: float, up: float, backdrop := false) -> void:
 	var along := to - a
 	var length := along.length()
 	var count := roundi(length / NODES.TILE)
@@ -166,14 +178,18 @@ static func row(b: NODES, piece: String, a: Vector2, to: Vector2, yaw: float, up
 		return
 	if b.local_box(piece).size == Vector3.ZERO:
 		return
+	var group := b.group_node("Backdrop" if backdrop else "Props")
 	var holder := Node3D.new()
-	holder.name = b.unique_name("Row", b.group_node("Props"))
-	b.group_node("Props").add_child(holder)
+	holder.name = b.unique_name("Row", group)
+	group.add_child(holder)
 	var laid: Array[Dictionary] = []
 	for k in count + 1:
 		var at := a + (along.normalized() * k * NODES.TILE if count > 0 else Vector2.ZERO)
 		laid.append({piece = piece, at = Vector3(at.x, up, at.y)})
 	_lay(b, holder, laid, Vector2(minf(a.x, to.x), minf(a.y, to.y)), true, yaw)
+	if backdrop:
+		for mesh: GeometryInstance3D in holder.find_children("*", "GeometryInstance3D", true, false):
+			mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 # A mesh to be seen and nothing else: no collider and no shadow.

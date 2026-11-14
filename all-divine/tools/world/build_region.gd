@@ -16,8 +16,9 @@ extends SceneTree
 ##   ground X0 Z0 X1 Z1 STONE [visual] [name=NAME]  a plate of ground 1 m thick with its top at y = 0, at most 12.5 m a side: solid and
 ##                                      walkable (world, ik_surface; under Walkable), or `visual`: only seen (under
 ##                                      Backdrop); two plates may not overlap
-##   row PIECE X0 Z0 X1 Z1 YAW [y=Y]   a kit piece every 2.5 m along a line (both ends included), turned YAW degrees, Y up
+##   row PIECE X0 Z0 X1 Z1 YAW [y=Y] [backdrop]   a kit piece every 2.5 m along a line (both ends included), turned YAW degrees, Y up
 ##                                      (default 0): racks, hides, drifts of planks; a few runs under Props, with no collider
+##                                      (`backdrop`: under Backdrop, casting no shadow: a chimney of the ring)
 ##   block X0 Z0 X1 Z1 STOREYS STYLE ROOF [solid]   a building over whole 2.5 m tiles (at most 60 m a side), 1 to 5
 ##                                      storeys: its south face and roof, drawn as a few MultiMeshes (STYLE: frontage,
 ##                                      tannery, shed, plain; ROOF: flat, slope, high), solid (one box, under Blocks) or
@@ -27,7 +28,8 @@ extends SceneTree
 ##   lantern X Z [shadow]               a lantern with its lamp (see lamps)
 ##   lamps COLOUR RANGE ENERGY UP [world]   every lantern's lamp; `world`: it lights the world and not the bodies
 ##   marker NAME X Z [YAW]  /  poi NAME X Z UP    a Marker3D, and one to glance at
-##   sun PITCH YAW COLOUR ENERGY        the DirectionalLight3D, with shadows
+##   sun PITCH YAW COLOUR ENERGY [ortho]  the DirectionalLight3D, with shadows (`ortho`: one orthogonal shadow map, not four splits:
+##                                      each shadow-casting mesh is then drawn once into it, not up to four times)
 ##   moon PITCH YAW COLOUR ENERGY  /  fill PITCH YAW COLOUR ENERGY    a light for the bodies of actors only, no shadows
 ##                                      (a night's moon, a day's fill); the sun leaves the bodies to it; one in a region
 ##   sky COLOUR  /  ambient COLOUR ENERGY    the background and the ambient light
@@ -248,13 +250,15 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				if n.size() == 5:
 					_curb(_rect(n), n[4], STONES[options[0]] if options.size() == 1 else FLAGSTONE, moonlit, node_name, raise)
 			"row":
-				if args.size() < 6 or args.size() > 7:
-					problem("row needs PIECE X0 Z0 X1 Z1 YAW [y=Y]")
+				var backdrop := args.has("backdrop")
+				var row_args := Array(args).filter(func(a: String) -> bool: return a != "backdrop")
+				if row_args.size() < 6 or row_args.size() > 7 or args.count("backdrop") > 1:
+					problem("row needs PIECE X0 Z0 X1 Z1 YAW [y=Y] [backdrop]")
 					return
-				var y: Variant = _y_option(args)
-				var n := _numbers(PackedStringArray(Array(args.slice(1)).filter(func(a: String) -> bool: return not a.begins_with("y="))), 5, 5)
+				var y: Variant = _y_option(PackedStringArray(row_args))
+				var n := _numbers(PackedStringArray(row_args.slice(1).filter(func(a: String) -> bool: return not a.begins_with("y="))), 5, 5)
 				if n.size() == 5:
-					BLOCKS.row(self, args[0], Vector2(n[0], n[1]), Vector2(n[2], n[3]), deg_to_rad(n[4]), y if y != null else 0.0)
+					BLOCKS.row(self, row_args[0], Vector2(n[0], n[1]), Vector2(n[2], n[3]), deg_to_rad(n[4]), y if y != null else 0.0, backdrop)
 			"lamps":
 				var world := args.size() == 5 and args[4] == "world"
 				if args.size() != 4 and not world:
@@ -282,9 +286,10 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				if n.size() == 3:
 					_marker(args[0], Vector2(n[0], n[1]), n[2], 0.0, true)
 			"sun":
-				var light := _light_words(args, "sun")
+				var ortho := args.size() == 5 and args[4] == "ortho"
+				var light := _light_words(args.slice(0, 4) if ortho else args, "sun")
 				if not light.is_empty():
-					_sun(light[0], light[1], light[2], light[3])
+					_sun(light[0], light[1], light[2], light[3], ortho)
 			"moon":
 				var light := _light_words(args, "moon")
 				if not light.is_empty():
@@ -549,7 +554,7 @@ class Builder extends "res://tools/world/region_nodes.gd":
 		else:
 			_root.add_child(marker)
 
-	func _sun(pitch: float, yaw: float, colour: Color, energy: float) -> void:
+	func _sun(pitch: float, yaw: float, colour: Color, energy: float, ortho := false) -> void:
 		var sun := DirectionalLight3D.new()
 		sun.name = "Sun"
 		sun.rotation_degrees = Vector3(pitch, yaw, 0)
@@ -557,6 +562,8 @@ class Builder extends "res://tools/world/region_nodes.gd":
 		sun.light_energy = energy
 		sun.shadow_enabled = true
 		sun.directional_shadow_max_distance = SUN_SHADOW_DISTANCE
+		if ortho:
+			sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 		_root.add_child(sun)
 		_share_the_bodies()
 

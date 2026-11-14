@@ -157,7 +157,8 @@ func test_a_blocks_pieces_are_a_few_multimeshes_and_not_a_mesh_each() -> void:
 	var built := _build("block 0 0 10 5 3 frontage flat solid\nblock 12.5 0 22.5 5 3 frontage flat")
 	assert_eq(built.problems, PackedStringArray())
 	var root := built.root as Node
-	assert_eq(root.find_children("*", "MeshInstance3D", true, false).size(), 0, "no mesh to a tile")
+	var meshes := root.find_children("*", "MeshInstance3D", true, false)
+	assert_eq(meshes.map(func(m: Node) -> String: return m.name), ["Interior", "Interior"], "no mesh to a tile: one dark interior to a block")
 	var multimeshes := root.find_children("*", "MultiMeshInstance3D", true, false)
 	var instances := 0
 	for mm: MultiMeshInstance3D in multimeshes:
@@ -216,7 +217,8 @@ func test_a_solid_block_has_one_box_over_its_footprint_and_casts_shadows() -> vo
 	var drawn := root.find_children("*", "GeometryInstance3D", true, false)
 	assert_true(drawn.size() > 0)
 	for mesh: GeometryInstance3D in drawn:
-		assert_ne(mesh.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "%s casts shadows" % mesh.name)
+		if mesh.name != &"Interior":   # the walls and the roof cast the block's shadow; the dark box behind them adds nothing to it
+			assert_ne(mesh.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "%s casts shadows" % mesh.name)
 	var visual := _build("block 0 0 10 5 3 frontage flat")
 	var vroot := visual.root as Node
 	assert_true(vroot.get_node_or_null("Backdrop") != null and vroot.get_node_or_null("Blocks") == null, "under Backdrop")
@@ -711,8 +713,17 @@ func test_a_row_is_a_piece_every_tile_along_a_line_in_runs_with_no_collider() ->
 		assert_true((node as KitRun).bounds().size.x <= 12.5 + 1e-3 + 2.5, "%s is a short run" % node.name)
 	assert_true(runs.size() <= 5, "a few runs and not one to a piece (%d)" % runs.size())
 	assert_eq(root.find_children("*", "CollisionObject3D", true, false).size(), 0, "nothing to collide with")
-	for bad in ["row poles 0 0 30 3 90", "row poles 0 0 31 0 90", "row nothing 0 0 5 0 0", "row poles 0 0 5 0", "row poles 0 0 5 0 up"]:
+	for bad in ["row poles 0 0 30 3 90", "row poles 0 0 31 0 90", "row nothing 0 0 5 0 0", "row poles 0 0 5 0", "row poles 0 0 5 0 up", "row poles 0 0 5 0 0 backdrop backdrop"]:
 		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)
+	# `backdrop`: the same row under Backdrop, casting no shadow (a chimney of the ring).
+	var far := _build("row chimney 0 0 5 0 0 y=7.5 backdrop")
+	assert_eq(far.problems, PackedStringArray())
+	var far_runs := (far.root as Node).get_node("Backdrop").find_children("*", "KitRun", true, false)
+	assert_eq(far_runs.size(), 1, "one run under Backdrop")
+	assert_eq(((far.root as Node).get_node_or_null("Props")), null, "and none under Props")
+	for run: KitRun in far_runs:
+		assert_eq(run.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "casting no shadow")
+		assert_eq(run.places.size(), 3, "three chimneys")
 
 
 # `piece ... ghost` is a piece with no collider (a decoration a body walks through); without it a piece collides as MODELS says.
@@ -732,3 +743,43 @@ func test_a_piece_can_be_a_ghost_and_a_ground_plate_can_be_named() -> void:
 	assert_true(root.get_node("Backdrop/Apron") is MeshInstance3D, "a named visual plate too")
 	for bad in ["piece pillar-stone 1 1 ghost ghost", "ground 0 0 5 5 slate name=", "ground 0 0 5 5 slate name=A name=B"]:
 		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)
+
+
+# `sun ... ortho`: the sun's shadow is one orthogonal map and not four splits, which in this renderer draws every shadow-casting mesh once
+# and not up to four times (the stretch's views are drawn in a third fewer calls); without it the sun is as before.
+func test_a_sun_can_cast_one_orthogonal_shadow() -> void:
+	var plain := _build("sun -60 30 #f4f7ff 0.25")
+	var ortho := _build("sun -60 30 #f4f7ff 0.25 ortho")
+	assert_eq(plain.problems, PackedStringArray())
+	assert_eq(ortho.problems, PackedStringArray())
+	assert_eq(((plain.root as Node).get_node("Sun") as DirectionalLight3D).directional_shadow_mode, DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS, "four splits as before")
+	assert_eq(((ortho.root as Node).get_node("Sun") as DirectionalLight3D).directional_shadow_mode, DirectionalLight3D.SHADOW_ORTHOGONAL, "one orthogonal map")
+	for bad in ["sun -60 30 #f4f7ff 0.25 round", "sun -60 30 #f4f7ff ortho"]:
+		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)
+
+
+# A window in the kit's wall is a hole through it, and the builder's blocks have no inside: a ray through a window met nothing and
+# showed the background. Each block holds one dark box behind its front (the slab's back to the block's north edge, up to the roof), which
+# casts no shadow and is no collider, so that a window is dark glass.
+func test_a_block_has_a_dark_interior_behind_its_windows() -> void:
+	var built := _build("block 0 0 10 5 2 frontage flat solid\nblock 12.5 0 22.5 7.5 3 tannery slope")
+	assert_eq(built.problems, PackedStringArray())
+	var blocks := (built.root as Node).get_node("Blocks").get_children() + (built.root as Node).get_node("Backdrop").get_children()
+	assert_eq(blocks.size(), 2, "two blocks")
+	for block in blocks:
+		var interior := block.get_node_or_null("Interior") as MeshInstance3D
+		assert_true(interior != null, "%s has an Interior" % block.name)
+		if interior == null:
+			continue
+		var size := (interior.mesh as BoxMesh).size
+		var storeys := 2 if block.name == &"Block" else 3
+		assert_true(block.name == &"Block" or block.name == &"Block2", "%s" % block.name)
+		assert_near(size.y, storeys * TILE + 1.0, 1e-6, "%s: up to the roof and 1 m below the ground (%.2f)" % [block.name, size.y])
+		assert_eq(interior.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "%s: casting no shadow" % block.name)
+		assert_eq(interior.material_override, load("res://world/materials/interior.tres"), "%s: in the interior's material" % block.name)
+		var box := interior.global_transform * interior.get_aabb()
+		var depth := 5.0 if storeys == 2 else 7.5
+		assert_near(box.position.y, -1.0, 1e-6, "%s: from 1 m under the ground (a gap at the foot of a window piece shows it)" % block.name)
+		assert_near(box.end.z, depth - 0.25, 1e-6, "%s: to the back of the front's slab" % block.name)
+		assert_near(box.size.z, depth - 0.25, 1e-6, "%s: to the block's north edge" % block.name)
+		assert_eq(block.find_children("*", "CollisionObject3D", true, false).size(), 1 if storeys == 2 else 0, "%s: no collider of its own" % block.name)
