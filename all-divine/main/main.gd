@@ -97,7 +97,7 @@ func _ready() -> void:
 	Game.state_changed.connect(_on_game_state_changed)
 	var arguments := parse_arguments(OS.get_cmdline_user_args())
 	var replaying: InputRecording = null
-	if not arguments["replay"].is_empty():
+	if arguments["replaying"]:
 		lend_replay_defaults()
 		var why := replay_refusal(arguments["replay"])
 		if not why.is_empty():
@@ -186,11 +186,14 @@ func lend_replay_defaults() -> void:
 	_lent_settings = Settings.lend(defaults)
 
 
-## The paths --record= and --replay= give, in the user arguments (&"" for one not given): {record, replay}.
+## The paths --record= and --replay= give, in the user arguments (&"" for one not given): {record, replay}, and whether a replay was asked
+## for at all (`replaying`: --replay with no path, or no =, is asked for and has nothing to play, which is a refusal and not an ordinary fight).
 static func parse_arguments(args: PackedStringArray) -> Dictionary:
-	var found := {"record": "", "replay": ""}
+	var found := {"record": "", "replay": "", "replaying": false}
 	for arg in args:
-		for key: String in found:
+		if arg == "--replay" or arg.begins_with("--replay="):
+			found["replaying"] = true
+		for key: String in ["record", "replay"]:
 			if arg.begins_with("--%s=" % key):
 				found[key] = arg.trim_prefix("--%s=" % key)
 	return found
@@ -242,9 +245,16 @@ static func end_is_compared(rec: InputRecording) -> bool:
 ## Why the recording at `path` cannot be played, in one line, or "" if it can: there is none, it cannot be read, or it is cut short, of a
 ## format this game does not know, made with a debug key pressed or with no hash at its end (InputRecording.problem).
 static func replay_refusal(path: String) -> String:
+	if path.is_empty():
+		return "no recording was named (--replay=<path>)"
 	if not FileAccess.file_exists(path):
 		return "no recording at %s" % path
+	# A file that does not parse is the engine's to complain of at length, three error blocks with backtraces: the one line is this
+	# function's (as Settings reads a damaged file).
+	var printing := Engine.print_error_messages
+	Engine.print_error_messages = false
 	var rec := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as InputRecording
+	Engine.print_error_messages = printing
 	if rec == null:
 		return "%s is not a recording this game can read" % path
 	return rec.problem()

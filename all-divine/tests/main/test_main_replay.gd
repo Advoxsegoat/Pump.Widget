@@ -58,9 +58,11 @@ func _main() -> Main:
 
 
 func test_the_arguments_are_read() -> void:
-	assert_eq(Main.parse_arguments(PackedStringArray(["--record=a.tres"])), {"record": "a.tres", "replay": ""})
-	assert_eq(Main.parse_arguments(PackedStringArray(["--selftest", "--replay=b.tres"])), {"record": "", "replay": "b.tres"})
-	assert_eq(Main.parse_arguments(PackedStringArray()), {"record": "", "replay": ""})
+	assert_eq(Main.parse_arguments(PackedStringArray(["--record=a.tres"])), {"record": "a.tres", "replay": "", "replaying": false})
+	assert_eq(Main.parse_arguments(PackedStringArray(["--selftest", "--replay=b.tres"])), {"record": "", "replay": "b.tres", "replaying": true})
+	assert_eq(Main.parse_arguments(PackedStringArray()), {"record": "", "replay": "", "replaying": false})
+	assert_eq(Main.parse_arguments(PackedStringArray(["--replay="])), {"record": "", "replay": "", "replaying": true}, "given, with no path")
+	assert_eq(Main.parse_arguments(PackedStringArray(["--replay"])), {"record": "", "replay": "", "replaying": true}, "given, with no =")
 
 
 func test_a_recording_started_in_main_is_saved_with_what_the_player_did() -> void:
@@ -152,17 +154,52 @@ func test_the_lines_a_replay_ends_with() -> void:
 	assert_eq(Main.EXIT_DIVERGED, 3)
 
 
-func test_main_given_a_file_it_cannot_use_says_so_and_quits_with_2_without_a_fight() -> void:
-	var garbage := FileAccess.open(ProjectSettings.globalize_path("user://garbage_recording.tres"), FileAccess.WRITE)
-	garbage.store_string("not a recording")
-	garbage.close()
-	var argv := PackedStringArray(["-k", "5", "60", OS.get_executable_path(), "--headless", "--path", ProjectSettings.globalize_path("res://"),
-			"--fixed-fps", "60", "--", "--replay=" + ProjectSettings.globalize_path("user://garbage_recording.tres")])
+# Main started headless with the user argument `argument`, as the game is: [exit code, what it printed]. A fight that nothing ends is stopped
+# after twenty seconds (code 124).
+func _run_main(argument: String) -> Array:
+	var argv := PackedStringArray(["-k", "5", "20", OS.get_executable_path(), "--headless", "--path", ProjectSettings.globalize_path("res://"),
+			"--fixed-fps", "60", "--", argument])
 	var output := []
 	var code := OS.execute("timeout", argv, output, true)
-	DirAccess.remove_absolute("user://garbage_recording.tres")
-	assert_eq(code, 2, str(output))
-	assert_true(str(output[0]).contains("replay: "), "one line saying why: %s" % str(output))
+	return [code, "".join(PackedStringArray(output))]
+
+
+func _write_text(name: String, text: String) -> String:
+	var path := ProjectSettings.globalize_path("user://" + name)
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(text)
+	file.close()
+	return path
+
+
+func test_main_given_a_file_it_cannot_use_says_so_and_quits_with_2_without_a_fight() -> void:
+	var path := _write_text("garbage_recording.tres", "not a recording")
+	var ran := _run_main("--replay=" + path)
+	DirAccess.remove_absolute(path)
+	assert_eq(ran[0], 2, ran[1])
+	assert_true(ran[1].contains("replay: "), "one line saying why: %s" % ran[1])
+
+
+func test_a_file_that_does_not_parse_is_refused_with_one_line_and_no_engine_error() -> void:
+	var cases := {
+		"empty": "",
+		"garbage": "\u0001\u0002 not a recording at all {{{",
+		"cut mid-record": "[gd_resource type=\"Resource\" script_class=\"InputRecording\" load_steps=2 format=3]\n\n[ext_resource type=\"Script\" path=\"res://core/replay/input_recording.gd\" id=\"1\"]\n\n[resource]\nscript = ExtResource(\"1\")\nframes = [{\n\"move\": Vec",
+	}
+	for label: String in cases:
+		var path := _write_text("unparsed_recording.tres", cases[label])
+		var ran := _run_main("--replay=" + path)
+		DirAccess.remove_absolute(path)
+		assert_eq(ran[0], 2, "%s: %s" % [label, ran[1]])
+		assert_false(ran[1].contains("ERROR"), "%s: no engine error block: %s" % [label, ran[1]])
+		assert_eq(ran[1].count("replay: "), 1, "%s: one line of its own: %s" % [label, ran[1]])
+
+
+func test_a_replay_given_no_path_is_refused_and_never_starts_a_fight() -> void:
+	for argument in ["--replay=", "--replay"]:
+		var ran := _run_main(argument)
+		assert_eq(ran[0], 2, "%s: %s" % [argument, ran[1]])
+		assert_true(ran[1].contains("replay: "), "%s says why: %s" % [argument, ran[1]])
 
 
 func test_a_replay_never_writes_the_players_settings_and_gives_them_back_at_its_end() -> void:
