@@ -114,8 +114,12 @@ func _every(from: int, to: int, step: int) -> Array[int]:
 # --- the whole scene, as the owner will see it ---
 
 func test_the_scene_every_15_frames_standing_mid_jab_and_in_a_hop_as_a_mini_and_a_cutscene() -> void:
+	var only := OS.get_environment("DIRECTOR_STRIPS_ONLY")  # a comma list of sheet names, to shoot only those again
 	for start: String in ["standing", "mid_jab", "hop"]:
 		for kind: SceneShots.Kind in [SceneShots.Kind.MINI, SceneShots.Kind.CUTSCENE]:
+			var wanted := "%s_%s" % [start, "cutscene" if kind == SceneShots.Kind.CUTSCENE else "mini"]
+			if only != "" and not only.split(",").has(wanted):
+				continue
 			await _scene()
 			var scene := _fixture()
 			scene.kind = kind
