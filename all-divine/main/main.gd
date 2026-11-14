@@ -127,8 +127,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 				return
 			KEY_F6, KEY_F7, KEY_F8, KEY_F9:
-				if Game.state == Game.State.PAUSE:
-					return
+				if Game.state == Game.State.PAUSE or Game.state == Game.State.CUTSCENE:
+					return  # nor in a scene
 				# The arena lives in the stage's own viewport, which the window's keys never reach.
 				if arena() != null and arena().debug_key(key.keycode):
 					get_viewport().set_input_as_handled()
