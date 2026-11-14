@@ -108,6 +108,7 @@ var _bars_from := 0.0
 var _skipping := false
 var _frozen_world := {}  # name -> Vector3: where the targets were when the scene was skipped (the camera holds still)
 var _handed_back := false
+var _owns_state := false  # the scene moved the game to CUTSCENE, so it watches that nobody moves it elsewhere
 
 
 ## Plays the scene `scene_id` (res://scenes/story/<id>/shots.tres) in the game `host` (a Main): finds the camera rig (group
@@ -187,28 +188,10 @@ func skip() -> bool:
 
 
 ## Ends the scene at once, giving everything back (the fight's brains, the state, the Hud, the camera, the bars) and taking away
-## the actors it made: for a region change or a reset, where a scene cannot go on. A scene that is over, or one that has not begun,
-## has nothing to give back.
+## the actors it made: for a region change or a reset, where a scene cannot go on. A scene that is over has nothing to give back,
+## and one that has not begun has taken nothing.
 func abort() -> void:
-	if phase == Phase.DONE:
-		return
-	if phase == Phase.LEAD_IN or phase == Phase.PLAY or phase == Phase.LEAD_OUT:
-		if not _handed_back:
-			_give_back_control()
-		_hud.suppressed = false
-		_rig.cine_weight = 0.0
-		_camera.release()
-		if is_instance_valid(_overlay):
-			_overlay.queue_free()
-		for entry in scene.cast:
-			var actor := cast.get(entry.actor) as Actor
-			if actor != null and is_instance_valid(actor) and entry.source == CastEntry.Source.SPAWN and actor.get_parent() != null:
-				actor.get_parent().remove_child(actor)
-				actor.queue_free()
-	phase = Phase.DONE
-	if _current == self:
-		_current = null
-	_root.queue_free()
+	_tear_down(true, true)
 
 
 ## Whether skip() would do something now.
@@ -223,14 +206,16 @@ func total_frames() -> int:
 	return scene.lead_in + scene.length() + _return_frames if scene != null else 0
 
 
+# However the scene leaves the tree (this node freed, its root freed, the stage freed) the game is as if it had been aborted. A
+# scene that has handed back already (it is only gliding home) keeps what the fight now owns: the spawns' `after`.
 func _exit_tree() -> void:
-	if _current == self:
-		_current = null
-	if (phase == Phase.LEAD_IN or phase == Phase.PLAY) and not _handed_back:
-		_give_back_control()
+	_tear_down(not _handed_back, false)
 
 
 func _physics_process(_delta: float) -> void:
+	if _state_lost():
+		abort()
+		return
 	match phase:
 		Phase.WAITING:
 			_wait()
@@ -238,6 +223,62 @@ func _physics_process(_delta: float) -> void:
 			_play_frame()
 		Phase.LEAD_OUT:
 			_lead_out_frame()
+
+
+# Gives back all that a scene that has begun took and silences its timeline: the brains, the state, the Hud, the camera's weight,
+# the bars and the box; the spawns that the scene made go (all of them, or only those whose `after` is FREE: the rest are the
+# fight's now). `now` takes them out of the tree at once; a scene leaving the tree frees them at the frame's end (a parent that is
+# itself going cannot be asked to let a child go). Harmless to call twice.
+func _tear_down(all_spawns: bool, now: bool) -> void:
+	if _current == self:
+		_current = null
+	if phase == Phase.DONE:
+		return
+	if phase != Phase.WAITING:
+		if not _handed_back:
+			_give_back_control()
+		if is_instance_valid(_hud):
+			_hud.suppressed = false
+		if is_instance_valid(_rig):
+			_rig.cine_weight = 0.0
+		if is_instance_valid(_overlay):
+			_overlay.queue_free()
+		for entry in scene.cast:
+			var held: Variant = cast.get(entry.actor)
+			if entry.source != CastEntry.Source.SPAWN or not is_instance_valid(held):
+				continue
+			var actor := held as Actor
+			if all_spawns or entry.after == CastEntry.After.FREE:
+				_remove_spawn(actor, now)
+	phase = Phase.DONE
+	if is_instance_valid(_camera):
+		_camera.release()
+		_camera.scene = null  # nothing left for it to solve once this node is gone
+	if is_instance_valid(_player):
+		_player.pause()  # the timeline does not call a node that is going
+	if is_instance_valid(_root):
+		_root.queue_free()
+
+
+# A spawned actor leaves the scene: with no brain of the scene's, out of the tree now or at the frame's end.
+func _remove_spawn(actor: Actor, now: bool) -> void:
+	actor.set_brain(Brain.new())
+	if now and actor.get_parent() != null:
+		actor.get_parent().remove_child(actor)
+	actor.queue_free()
+
+
+# Whether the game's state has been moved from under the scene (a reset, or anything but the scene's own hand-back): the state it
+# made is CUTSCENE (or a pause over it), and PLAY once it has handed back (or a pause over that).
+func _state_lost() -> bool:
+	if not _owns_state:
+		return false
+	match phase:
+		Phase.LEAD_IN, Phase.PLAY:
+			return Game.state != Game.State.CUTSCENE and Game.state != Game.State.PAUSE
+		Phase.LEAD_OUT:
+			return Game.state != Game.State.PLAY and Game.state != Game.State.PAUSE
+	return false
 
 
 # --- refusing ---
@@ -491,6 +532,7 @@ func _start_scene() -> void:
 	_hud.suppressed = true
 	if Game.state == Game.State.PLAY:
 		Game.change(Game.State.CUTSCENE)
+		_owns_state = true
 	_return_frames = TimelineBuilder.return_frames(scene, _where)
 	frame = 0
 	phase = Phase.LEAD_IN
@@ -630,6 +672,8 @@ func _drive_the_clips(now: int) -> void:
 # --- the timeline's calls ---
 
 func _cue(kind: StringName, payload: Dictionary) -> void:
+	if phase == Phase.DONE:
+		return
 	match kind:
 		&"beat":
 			_beat(payload)
