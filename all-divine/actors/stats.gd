@@ -129,3 +129,21 @@ func tick(delta: float, guarding: bool) -> void:
 # How much of the last `delta` seconds was past `wait`, given `idle` seconds without a spend, this frame included.
 static func _regen_time(idle: float, wait: float, delta: float) -> float:
 	return clampf(idle - wait, 0.0, delta)
+
+
+## What the bars and the clocks are now, to be given back by restore: a scene is not fight time, so the actor's stamina and
+## posture are as they were when it begins (Director).
+func save() -> Dictionary:
+	return {hp = hp, stamina = stamina, posture = posture, exhausted = exhausted, posture_broken = posture_broken,
+			stamina_idle = _stamina_idle, posture_idle = _posture_idle}
+
+
+## Puts the bars and the clocks back as `saved` (from save) had them.
+func restore(saved: Dictionary) -> void:
+	hp = saved.hp
+	stamina = saved.stamina
+	posture = saved.posture
+	exhausted = saved.exhausted
+	posture_broken = saved.posture_broken
+	_stamina_idle = saved.stamina_idle
+	_posture_idle = saved.posture_idle
