@@ -22,6 +22,8 @@ extends Node
 ##             spawned ones their `after`, the game is in PLAY and the Hud is shown. Nothing that went down during the scene
 ##             is a press (Inputs.quarantine), no foe begins an attack for REST_FRAMES, and the cast's bars are as they were.
 ##   DONE
+## CALLERS OF play(): connect `refused`. A cast member still in a pair after PAIR_WAIT frames (`cast_busy:<actor>`) gives the scene up
+## through that signal, after play() has returned the Director (the end of a pair cannot be known in advance); `finished` never comes.
 ## A first viewing cannot be skipped; later ones can (skip): the cast is put where the scene leaves it and the glide home
 ## takes SKIP_LEAD_OUT frames from the picture the camera shows then.
 ##
