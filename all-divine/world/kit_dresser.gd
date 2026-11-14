@@ -10,10 +10,12 @@ extends Node
 
 ## The material every kit piece under the parent is drawn in.
 @export var material: Material
+## The material of the banner pieces (a piece whose file starts with `banner`), where a region has neon: they glow in colours of their own.
+@export var banner_material: Material
 
 
 func _ready() -> void:
-	dress(get_parent(), material)
+	dress(get_parent(), material, banner_material)
 
 
 # Listens from _enter_tree (which runs each time the region comes into the tree) and not from _ready (which runs once), so
@@ -32,20 +34,20 @@ func _exit_tree() -> void:
 func _on_node_added(node: Node) -> void:
 	var region := get_parent()
 	if region != null and node != self and region.is_ancestor_of(node):
-		dress_piece(node, material)
+		dress_piece(node, material, banner_material)
 
 
 ## Sets `material` on the meshes of every instanced piece of the kit (a scene from assets/env/kenney_town/) under `root`, and
 ## on every MultiMeshInstance3D of the group `kit_multimesh` (the builder's runs of one piece).
-static func dress(root: Node, kit_material: Material) -> void:
+static func dress(root: Node, kit_material: Material, banner: Material = null) -> void:
 	if kit_material == null or root == null:
 		return
 	for node in root.find_children("*", "Node3D", true, false):
-		dress_piece(node, kit_material)
+		dress_piece(node, kit_material, banner)
 
 
 ## Dresses `node` alone if it is a kit piece: a run of the group `kit_multimesh`, or the root of an instanced piece of the kit.
-static func dress_piece(node: Node, kit_material: Material) -> void:
+static func dress_piece(node: Node, kit_material: Material, banner: Material = null) -> void:
 	if kit_material == null:
 		return
 	if node is MultiMeshInstance3D and node.is_in_group(&"kit_multimesh"):
@@ -53,5 +55,6 @@ static func dress_piece(node: Node, kit_material: Material) -> void:
 		if (node as MultiMeshInstance3D).material_override == null:
 			(node as MultiMeshInstance3D).material_override = kit_material
 	elif node is Node3D and node.scene_file_path.begins_with("res://assets/env/kenney_town/"):
+		var wears := banner if banner != null and node.scene_file_path.get_file().begins_with("banner") else kit_material
 		for mesh: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
-			mesh.material_override = kit_material
+			mesh.material_override = wears

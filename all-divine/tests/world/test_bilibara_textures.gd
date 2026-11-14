@@ -479,3 +479,64 @@ func test_roofs_are_slate_blue_and_brown_red_and_made_the_same_every_time_with_t
 		if material != null:
 			assert_eq(material.shader.resource_path, TOON_ROOF, "%s is drawn by the roof shader" % pair[0])
 			assert_eq((material.get_shader_parameter(&"albedo_tex") as Texture2D).resource_path, TEXTURES % pair[0], "%s has its texture" % pair[0])
+
+
+# --- Brown wood, darker trim, and the pink neon of the banners ---
+
+const NEON_COLORMAP := "res://assets/env/textures/bilibara_neon_colormap.png"
+
+
+func test_wood_reads_brown_and_trim_and_doors_are_darker_than_the_plaster_they_sit_in() -> void:
+	var made := MAKE_TEXTURES.bilibara_colormap()
+	var kit := _kit_colormap()
+	var find := func(hex: String) -> Color:
+		for y in kit.get_height():
+			for x in kit.get_width():
+				if kit.get_pixel(x, y).to_html(false) == hex:
+					return made.get_pixel(x, y)
+		return Color.BLACK
+	var plaster: Color = find.call("adb5d9")
+	var shade: Color = find.call("8d93b1")
+	for hex: String in ["9c5e48", "85503e", "794939"]:
+		var wood: Color = find.call(hex)
+		assert_true(wood.h >= 0.04 and wood.h <= 0.11 and wood.s >= 0.30 and wood.r > wood.g and wood.g > wood.b, "%s is a brown (%s: hue %.2f, saturation %.2f), not a mauve plaster" % [hex, wood.to_html(false), wood.h, wood.s])
+		assert_true(wood.v <= 0.46 and wood.v < shade.v - 0.10, "%s is darker than the plaster's shade (%.2f against %.2f)" % [hex, wood.v, shade.v])
+	for hex: String in ["cc8665", "b87758", "c27f5f"]:
+		var trim: Color = find.call(hex)
+		assert_true(trim.v <= shade.v - 0.04 and trim.v >= 0.40, "%s (trim, shutters) is darker than the plaster's shade (%.2f against %.2f)" % [hex, trim.v, shade.v])
+	assert_true(plaster.v >= 0.50, "and the plaster is still pale")
+
+
+func test_the_banners_are_hot_pink_and_glow() -> void:
+	var neon := MAKE_TEXTURES.bilibara_neon_colormap()
+	var kit := _kit_colormap()
+	var plain := MAKE_TEXTURES.bilibara_colormap()
+	var seen_pink := 0
+	for hex: String in ["ee535a", "c74a5c", "df4f5b", "d74d5b"]:
+		for y in kit.get_height():
+			var found := false
+			for x in kit.get_width():
+				if kit.get_pixel(x, y).to_html(false) == hex:
+					var c := neon.get_pixel(x, y)
+					assert_true(c.h >= 0.88 and c.h <= 0.96 and c.s >= 0.55 and c.v >= 0.85, "banner red %s is hot pink (%s: hue %.2f, saturation %.2f, value %.2f)" % [hex, c.to_html(false), c.h, c.s, c.v])
+					seen_pink += 1
+					found = true
+					break
+			if found:
+				break
+	assert_eq(seen_pink, 4, "all four reds were found")
+	# Everything else the banner carries (its rose-gold trim) is as the town's colours are.
+	for y in kit.get_height():
+		for x in kit.get_width():
+			var from := kit.get_pixel(x, y)
+			if from.h > 0.02 and from.h < 0.12 and from.s > 0.3:
+				assert_eq(neon.get_pixel(x, y), plain.get_pixel(x, y), "%s keeps the town's trim colour" % from.to_html(false))
+	var material := _world_material("kenney_town_neon", false)
+	if material != null:
+		assert_eq((material.get_shader_parameter(&"albedo_tex") as Texture2D).resource_path, NEON_COLORMAP)
+		assert_true(float(material.get_shader_parameter(&"glow")) >= 0.5, "the neon glows (it adds its own colour to what the light gives)")
+	var committed := Image.load_from_file(ProjectSettings.globalize_path(NEON_COLORMAP))
+	assert_true(committed != null, "the committed neon colormap loads")
+	if committed != null:
+		committed.convert(neon.get_format())
+		assert_eq(committed.get_data(), neon.get_data(), "the committed neon colormap is what make_textures makes")

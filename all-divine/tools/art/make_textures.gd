@@ -72,7 +72,7 @@ func _initialize() -> void:
 	for made: Array in [["flagstone.png", flagstone()], ["slate.png", slate()], ["cobble.png", cobble()],
 			["tan_earth.png", tan_earth()], ["snow.png", snow()], ["slate_cold.png", slate_cold()], ["flagstone_cold.png", flagstone_cold()],
 			["roof_slate.png", roof(ROOF_SLATE, ROOF_SLATE_SEED)], ["roof_tannery.png", roof(ROOF_TANNERY, ROOF_TANNERY_SEED)],
-			["bilibara_colormap.png", bilibara_colormap()]]:
+			["bilibara_colormap.png", bilibara_colormap()], ["bilibara_neon_colormap.png", bilibara_neon_colormap()]]:
 		var path := OUT_DIR.path_join(made[0])
 		var error := (made[1] as Image).save_png(ProjectSettings.globalize_path(path))
 		if error != OK:
@@ -364,6 +364,34 @@ static func roof(tones: Array[Color], seed_value: int) -> Image:
 	return _image(colours, size)
 
 
+## The banners' own colormap (world/materials/kenney_town_neon.tres): the town's colours with the kit's reds drawn as hot pink and its teal as a
+## pale violet-pink: the neon, the one hot colour of the street. Only the banner pieces wear it (KitDresser.banner_material).
+static func bilibara_neon_colormap() -> Image:
+	var kit := Image.new()
+	kit.load_png_from_buffer(FileAccess.get_file_as_bytes(KIT_COLORMAP))
+	kit.convert(Image.FORMAT_RGB8)
+	var made := {}
+	var colours: Array[Color] = []
+	for y in kit.get_height():
+		for x in kit.get_width():
+			var from := kit.get_pixel(x, y)
+			var key := from.to_rgba32()
+			if not made.has(key):
+				made[key] = bilibara_neon_colour(from)
+			colours.append(made[key])
+	return _image(colours, kit.get_width())
+
+
+## What the kit's colour `c` becomes on a banner: the reds hot pink, the teals pale violet-pink, everything else as bilibara_colour.
+static func bilibara_neon_colour(c: Color) -> Color:
+	if c.v > 0.0 and c.s > 0.5:
+		if c.h >= 0.95 or c.h < 0.02:
+			return Color.from_hsv(0.92, 0.66, 0.84 + 0.15 * c.v)
+		if c.h >= 0.40 and c.h < 0.55:
+			return Color.from_hsv(0.85, 0.5, 0.80 + 0.15 * c.v)
+	return bilibara_colour(c)
+
+
 static func slate_cold() -> Image:
 	return _tinted(slate(), SLATE_COLD)
 
@@ -422,9 +450,10 @@ static func bilibara_colour(c: Color) -> Color:
 	if h >= 0.93 or h < 0.02:
 		return Color.from_hsv(0.77, 0.31, 0.10 + 0.17 * v)
 	if h < 0.12:
+		# Boards, doors and the tannery's walls: brown wood, dark. Trim and shutters: a dull rose-gold, darker than the plaster they sit in.
 		if v < 0.66:
-			return Color.from_hsv(0.99, 0.20, 0.20 + 0.40 * v)
-		return Color.from_hsv(0.04, 0.30, clampf(0.40 + 1.2 * (v - 0.70), 0.28, 0.68))
+			return Color.from_hsv(0.07, 0.38, 0.14 + 0.45 * v)
+		return Color.from_hsv(0.04, 0.30, clampf(0.40 + 0.5 * (v - 0.70), 0.38, 0.48))
 	if h < 0.445:
 		return Color.from_hsv(0.40, 0.25, 0.20 + 0.30 * v)
 	if h < 0.55 or s >= 0.35:

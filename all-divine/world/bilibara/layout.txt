@@ -129,9 +129,8 @@ curb 32.5 -55 40 -54.6 0.3 slate
 # --- The gate: the shortcut, shut. A 0.6 m board in the slot between the Lazyman's back and the street's row, on world and
 # ik_surface (a curb is both); Task 3 dresses it. A pillar post at each of its ends and at the yard's mouth. ---
 curb -35 -5.5 -30 -4.5 0.6 slate name=Gate
-# The rail across the tops of the posts: 0.1 m thick, its underside 2.4 m up, above any head (it hides nothing of a body). Task 3 dresses
-# the gate; the board and the rail are what a gate is until then.
-curb -35.125 -5.15 -29.875 -5.05 0.12 slate name=GateRail y=2.4
+# (No rail across the tops of the posts: at 2.4 m it crossed the heads of fighters standing north of the gate, seen from the camera. The gate is the
+# board, the two picket gates before it and the pilasters.)
 # Bollards (0.65 m, 0.4 square) at the low walls' north ends at the yard's mouth: nothing a fighter can stand behind.
 curb 24.675 -55.325 25.075 -54.925 0.65 slate name=Bollard
 curb 29.925 -55.325 30.325 -54.925 0.65 slate name=Bollard
@@ -188,6 +187,14 @@ piece stall-stool 14.8 -4.675
 piece wall-door 20 -73.98 90
 piece wall-door 27.5 -73.98 90
 piece wall-door 35 -73.98 90
+# The doors are barred: two fences across each (pickets and rails, 1.9 m of them, ghosts a hair in front of the door's face, behind where a body stands),
+# in the town's dark timber, so that a door reads as a dark door with bars and not as an arch of plaster.
+piece fence 20 -74.72 90 y=0
+piece fence 20 -74.72 90 y=0.95
+piece fence 27.5 -74.72 90 y=0
+piece fence 27.5 -74.72 90 y=0.95
+piece fence 35 -74.72 90 y=0
+piece fence 35 -74.72 90 y=0.95
 piece banner-red 23.75 -73.925 90 y=0.8
 piece banner-red 31.25 -73.925 90 y=0.8
 piece banner-red 38.75 -73.925 90 y=0.8

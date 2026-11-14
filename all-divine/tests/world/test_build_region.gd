@@ -521,7 +521,7 @@ func test_kit_bilibara_draws_every_piece_of_the_layout_in_its_colours() -> void:
 	assert_eq(built.problems, PackedStringArray())
 	# (Every piece but the roofs, which are drawn in their style's own roof material.)
 	var materials := _kit_materials(built.root)
-	assert_eq(materials.keys(), [MATERIALS % "kenney_town_bilibara", MATERIALS % "roof_slate"], "every piece in the one material, the roofs in theirs: %s" % [materials.keys()])
+	assert_eq(materials.keys(), [MATERIALS % "kenney_town_bilibara", MATERIALS % "roof_slate", MATERIALS % "kenney_town_neon"], "every piece in the one material, the roofs and the banner in theirs: %s" % [materials.keys()])
 	assert_true(_placed(built.root).size() > 10, "and there are pieces")
 	# And so the saved scene draws them: a small scene, with the dresser in it, whose pieces take the material on entering
 	# the tree.
@@ -529,7 +529,7 @@ func test_kit_bilibara_draws_every_piece_of_the_layout_in_its_colours() -> void:
 	assert_eq(packed.pack(built.root as Node), OK)
 	var again := track(packed.instantiate()) as Node
 	assert_true(again.get_node_or_null("Kit") is KitDresser, "a KitDresser called Kit")
-	assert_eq(_kit_materials(again).keys(), [MATERIALS % "kenney_town_bilibara", MATERIALS % "roof_slate"], "the saved scene draws its pieces in the same materials")
+	assert_eq(_kit_materials(again).keys(), [MATERIALS % "kenney_town_bilibara", MATERIALS % "roof_slate", MATERIALS % "kenney_town_neon"], "the saved scene draws its pieces in the same materials")
 	# Wherever the line stands.
 	var first := _build("kit bilibara\npiece lantern 1 1\n")
 	assert_eq(_kit_materials(first.root).keys(), [MATERIALS % "kenney_town_bilibara"])

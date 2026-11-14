@@ -675,14 +675,15 @@ func test_nothing_tall_touches_walkable_ground_on_its_south_side() -> void:
 	for wall in 5:
 		assert_true(region.get_node_or_null("LowWall%d" % (wall + 1)) is StaticBody3D, "LowWall%d" % (wall + 1))
 	assert_true(region.get_node_or_null("Gate") is StaticBody3D, "the Gate")
-	var rail := region.get_node_or_null("GateRail") as StaticBody3D
-	assert_true(rail != null, "the GateRail")
-	if rail != null:
-		var shape := rail.get_node("Shape") as CollisionShape3D
-		var size := (shape.shape as BoxShape3D).size
-		assert_true(size.y <= 0.12 + 1e-6 and size.z <= 0.12 + 1e-6, "the rail is no thicker than 0.12 m (%s)" % size)
-		assert_true(shape.global_position.y - size.y / 2.0 >= 2.4 - 1e-6, "its underside is at 2.4 m or higher")
-		assert_true(shape.global_position.x - size.x / 2.0 <= -35.125 + 1e-3 and shape.global_position.x + size.x / 2.0 >= -29.875 - 1e-3, "across the tops of the two posts")
+	# No rail across the posts' tops: it crossed the heads of the fighters standing north of the gate (see test_bilibara_hidden).
+	assert_true(region.get_node_or_null("GateRail") == null, "no rail across the tops of the gate's posts")
+	for body: StaticBody3D in region.find_children("*", "StaticBody3D", true, false):
+		if body.get_parent().name == &"Walkable" or body.get_parent().get_parent().name == &"Blocks":
+			continue
+		for shape: CollisionShape3D in body.find_children("*", "CollisionShape3D", true, false):
+			var size := _size_of(shape)
+			var inside_gate := Rect2(-35.2, -6.5, 5.4, 3.0).intersects(Rect2(shape.global_position.x - size.x / 2.0, shape.global_position.z - size.z / 2.0, size.x, size.z))
+			assert_false(inside_gate and shape.global_position.y + size.y / 2.0 > 1.0 and body.name != &"Lantern", "%s is no taller than 1 m over the gate" % body.get_path())
 
 
 # Each low wall (from the walkable side north of it) and the gate (from both sides), at two or three x positions: {label, x, face
@@ -1003,9 +1004,12 @@ func test_every_piece_is_a_kenney_toon_piece_at_two_and_a_half_times() -> void:
 				if not roof_ok:
 					not_toon.append(String(region.get_path_to(node)))
 				continue
-			var ok: bool = material is ShaderMaterial and (material as ShaderMaterial).shader.resource_path == TOON_WORLD and material == dresser.material
+			# A banner wears the neon colormap (the same shader with a glow of its own).
+			var neon: bool = node.scene_file_path.get_file().begins_with("banner")
+			var want := dresser.banner_material if neon else dresser.material
+			var ok: bool = material is ShaderMaterial and (material as ShaderMaterial).shader.resource_path == TOON_WORLD and material == want
 			var tex := (material as ShaderMaterial).get_shader_parameter(&"albedo_tex") as Texture2D if ok else null
-			ok = ok and tex != null and tex.resource_path == "res://assets/env/textures/bilibara_colormap.png"
+			ok = ok and tex != null and tex.resource_path == ("res://assets/env/textures/bilibara_neon_colormap.png" if neon else "res://assets/env/textures/bilibara_colormap.png")
 			seen[region.get_path_to(node)] = true
 			if not ok:
 				not_toon.append(String(region.get_path_to(node)))
@@ -1795,3 +1799,27 @@ func test_a_sprint_at_the_colonnade_stops_square_or_slides_along_it() -> void:
 	assert_true(guard != null, "a ColonnadeGuard")
 	assert_eq(problems, PackedStringArray(), "the colonnade holds a sprint and lets it slide")
 	assert_true(space != null)
+
+
+# At the gate's spots (where the camera's GateFar and GateNear markers stand, and along the slot) no mesh, seen or not, collider or not, crosses
+# the line from a fighter's head (the crown at 1.8 m, three points across him) to the camera: the gate's first dressing had a rail 2.4 m up that
+# crossed 13 of 115 head pixels at GateFar.
+func test_no_piece_crosses_a_head_at_the_gates_spots() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var pitch := deg_to_rad(-CameraRig.PITCH_DEG)
+	var to_camera := Vector3(0.0, CameraRig.DISTANCE * sin(pitch), CameraRig.DISTANCE * cos(pitch))
+	var occluders := _occluders(region)
+	var crossing := PackedStringArray()
+	for spot: Array in [[-34.65, -5.86], [-34.0, -5.86], [-32.5, -5.86], [-31.0, -5.86], [-30.35, -5.86], [-32.5, -6.5]]:
+		for dx: float in [-0.2, 0.0, 0.2]:
+			for h: float in [1.5, 1.65, 1.8]:
+				var head := Vector3(spot[0] + dx, h, spot[1])
+				for entry in occluders:
+					var box: AABB = entry.box
+					if box.end.y < 1.0 or String(entry.name).begins_with("Backdrop/Block") or String(entry.name).begins_with("Blocks/"):
+						continue
+					if box.intersects_segment(head, head + to_camera):
+						crossing.append("%s over (%.2f, %.2f) at %.2f m" % [entry.name, spot[0] + dx, spot[1], h])
+	assert_eq(crossing.slice(0, 6), PackedStringArray(), "nothing crosses a head at the gate (%d crossings)" % crossing.size())

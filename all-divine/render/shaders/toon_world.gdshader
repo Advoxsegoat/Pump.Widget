@@ -18,6 +18,8 @@ shader_type spatial;
 uniform sampler2D albedo_tex : source_color, filter_nearest, repeat_enable;
 uniform bool world_uv = false;
 uniform float texels_per_metre = 32.0;
+// A share of the texture's own colour added after the light (the banners' neon): 0 for everything else.
+uniform float glow : hint_range(0.0, 2.0) = 0.0;
 
 // Below this i a lamp gives nothing.
 const float LAMP_REACH = 0.05;
@@ -41,6 +43,7 @@ void fragment() {
 		uv = plane * texels_per_metre / vec2(textureSize(albedo_tex, 0));
 	}
 	ALBEDO = texture(albedo_tex, uv).rgb;
+	EMISSION = ALBEDO * glow;
 }
 
 void light() {

@@ -17,7 +17,7 @@ const MOST_OPEN := 0.15
 ## Where he stands: the node's name, the north face's z, the xs along it.
 const SPOTS := [
 	["LowWall1", -55.0, [23.0, 23.75]], ["LowWall2", -55.0, [31.25, 32.0]], ["LowWall3", -30.0, [30.5, 31.25, 32.0]],
-	["LowWall4", -20.0, [23.0, 23.75, 24.5]], ["LowWall5", -20.0, [-29.5, -28.75, -28.0]], ["Gate", -5.5, [-34.65, -34.0, -32.5, -31.0, -30.35]],
+	["LowWall4", -20.0, [23.0, 23.75, 24.5]], ["LowWall5", -20.0, [-29.5, -28.75, -28.0]], ["Gate", -5.5, [-34.65, -34.0, -32.5, -31.0, -30.35]], ["Gate", -5.5, [-32.5], 0.64],
 	# The props in alcove B a fighter can stand north of (the street's stalls, cart, bench and stools stand against the fronts, with no
 	# ground north of them): the north face of the stool, and of the bench (it stands 1.7 m off the alcove's north wall).
 	["Props/StallStool/Body", -33.325, [33.8, 34.0, 34.2]], ["Props/StallBench/Body", -35.825, [34.2, 35.0, 35.8]],
@@ -25,6 +25,11 @@ const SPOTS := [
 	# a wall's south face and the street's props against its north front: no ground north of them, so nobody stands behind them.
 	["Bollard", -55.325, [24.875]], ["Bollard2", -55.325, [30.125]], ["Bollard", -55.325, [24.875], 1.0], ["Bollard2", -55.325, [30.125], 1.0],
 ]
+
+## The default run keeps the twelve worst spots (the shares the full walk measured, the gate's among them: it is the one that holds the
+## head rule); the whole walk of 28 spots takes about 270 s alone, and runs with BILIBARA_FULL_WALK=1 in the environment.
+const WORST: Array[String] = ["LowWall3@30.50", "LowWall3@31.25", "Props/StallBench/Body@35.00", "LowWall5@-29.50", "Props/StallStool/Body@34.00", "Bollard2@30.12",
+		"LowWall4@23.00", "LowWall1@23.00", "Gate@-34.65", "Gate@-32.50", "Gate@-30.35", "Gate@-32.50 far"]
 
 var _main: Main
 
@@ -79,12 +84,28 @@ func _measure(x: float, z: float, push := true) -> Dictionary:
 	var background := alone.get_pixel(0, 0)
 	var silhouette := 0
 	var shown := 0
+	var top := 360
+	var bottom := 0
+	for y in 360:
+		for px in 640:
+			if _differs(alone.get_pixel(px, y), background):
+				top = mini(top, y)
+				bottom = maxi(bottom, y)
+	# His head: the top fifth of the rows his silhouette covers; `head_hidden` is how many of its pixels the world hides.
+	var head_rows := top + (bottom - top + 1) / 5
+	var head := 0
+	var head_hidden := 0
 	for y in 360:
 		for px in 640:
 			if _differs(alone.get_pixel(px, y), background):
 				silhouette += 1
-				if _differs(with_him.get_pixel(px, y), without.get_pixel(px, y)):
+				var is_shown := _differs(with_him.get_pixel(px, y), without.get_pixel(px, y))
+				if is_shown:
 					shown += 1
+				if y < head_rows:
+					head += 1
+					if not is_shown:
+						head_hidden += 1
 	var space := _main.region.get_world_3d().direct_space_state
 	var toward := camera.global_basis.z
 	var blocked: Array[float] = []
@@ -92,11 +113,9 @@ func _measure(x: float, z: float, push := true) -> Dictionary:
 		for dx in [-0.2, 0.0, 0.2]:
 			var p := at + Vector3(dx, h, 0.0)
 			var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(p, p + toward * 40.0, Layers.WORLD))
-			# (The gate's rail, 2.4 m up and a tenth thick, covers a hand's breadth of a head's crown seen from the camera over a
-			# body 0.7 m from it; it is a rail and not a wall, and the share below says how much of him it hides.)
-			if not hit.is_empty() and (hit["collider"] as Node).name != &"GateRail":
+			if not hit.is_empty():
 				blocked.append(h)
-	return {shot = with_him, hidden = 1.0 - float(shown) / maxf(1.0, silhouette), rays = blocked, at = at, silhouette = silhouette}
+	return {shot = with_him, hidden = 1.0 - float(shown) / maxf(1.0, silhouette), rays = blocked, at = at, silhouette = silhouette, head = head_hidden}
 
 
 func test_nothing_low_hides_a_fighter_against_it() -> void:
@@ -115,12 +134,22 @@ func test_nothing_low_hides_a_fighter_against_it() -> void:
 		assert_true(wall != null, "%s exists" % spot[0])
 		for x: float in spot[2]:
 			var back: float = spot[3] if spot.size() > 3 else 0.0
+			var key := "%s@%.2f%s" % [spot[0], x, " far" if (spot[0] == "Gate" and back > 0.5) else ""]
+			if OS.get_environment("BILIBARA_FULL_WALK") != "1" and not WORST.has(key):
+				continue
 			var got := await _measure(x, (spot[1] as float) - 0.36 - back, back == 0.0)
 			if (spot[0] == "LowWall4" and x == 23.75) or (spot[0] == "Gate" and x == -32.5) or (spot[0] == "LowWall1" and x == 23.0):
 				var path := ProjectSettings.globalize_path("res://").path_join("out/shots/bilibara/against_%s.png" % String(spot[0]).to_snake_case())
 				DirAccess.make_dir_recursive_absolute(path.get_base_dir())
 				(got.shot as Image).save_png(path)
-			print("hidden share at %s x %.2f: %.1f%% (rays blocked at %s)" % [spot[0], x, got.hidden * 100.0, got.rays])
+			print("hidden share at %s x %.2f: %.1f%%, head pixels hidden %d (rays blocked at %s)" % [spot[0], x, got.hidden * 100.0, got.head, got.rays])
 			assert_true(back > 0.0 or absf(got.at.z - ((spot[1] as float) - 0.35)) < 0.05, "%s x %.2f: he stands against it (z %.3f)" % [spot[0], x, got.at.z])
 			assert_eq(got.rays, [] as Array[float], "%s x %.2f: no ray from his body above 0.4 m is blocked" % [spot[0], x])
+			if spot[0] == "Gate":
+				# The gate's five spots (and the two the camera's marker stands at): no pixel of his head is hidden, bar the few that happen to
+				# match what is behind him (open ground reads a handful that way: the street, above).
+				# (The rail that crossed 13 of his 115 head pixels at the gate is gone; what reads now, a handful, is the same as open ground reads: his
+				# dark hair against the dark ground behind him. The rays above, from his head toward the camera, find nothing, and
+				# test_bilibara.test_no_piece_crosses_a_head_at_the_gates_spots holds it for every mesh, seen or not.)
+				assert_true(got.head <= 10, "%s x %.2f: %d pixels of his head are hidden (the open street reads %d)" % [spot[0], x, got.head, open.head])
 			assert_true(got.hidden <= MOST_HIDDEN, "%s x %.2f: %.1f%% of him hidden (at most %d%%)" % [spot[0], x, got.hidden * 100.0, MOST_HIDDEN * 100])
