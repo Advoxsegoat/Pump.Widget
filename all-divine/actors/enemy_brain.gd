@@ -61,6 +61,12 @@ const SETTLE_WITHIN := 0.15
 ## presses only at this speed (m/s) or slower: a move stops the body dead, so one started from a jog slides its feet.
 const BRAKE_MARGIN := 0.1
 const PRESS_SPEED := 1.2
+## Task 14f: foes spread round their target. A foe with another within SPREAD_DEG (seen from the target) circles away from it, and
+## one who waits (no token to be had) stands in the outer half of his band, a body's width clear of the attackers' ring.
+const SPREAD_DEG := 60.0
+## How far round, degrees, a foe's way in is swung away from a neighbour that close, and how near the ring (metres to go) that starts.
+const SPREAD_SWING := 35.0
+const SPREAD_REACH := 1.5
 ## How much further than an attack's back_up_margin (metres) a back-up may go before the attack is given up.
 const BACK_UP_SPARE := 0.1
 ## How far beyond a warped blow's strike_distance and MoveRunner.MAX_WARP the target may stand when it lands and the combo
@@ -122,6 +128,7 @@ var _retreat_left := 0.0
 var _retreated := false  # it retreated since its HP last went below retreat_below
 var _feint_window := {}  # action -> whether the feint's window takes it (read from its clip once)
 var _charge_holds := {}  # action -> whether its moveset move has a charge_hold on it (read from its clip once)
+var _self: Actor  # its own actor, kept for _reangle (which is called from where only the clock is known)
 var _wind_ups := {}  # move id -> seconds to its first hitbox_on (read from its clip once)
 
 
@@ -135,6 +142,7 @@ func think(actor: Actor, delta: float) -> Intent:
 	if _last_at != Vector3.INF and delta > 0.0:
 		_speed = _flat(actor, _last_at).length() / delta
 	_last_at = actor.global_position
+	_self = actor
 	for option: AttackOption in _cooldowns.keys():
 		_cooldowns[option] = maxf(_cooldowns[option] - delta, 0.0)
 	_find_target(actor)
@@ -279,7 +287,11 @@ func _space(actor: Actor, intent: Intent, delta: float) -> void:
 		_settling = false
 		_reset_spacing()
 		# Round it, easing toward the middle of its range as it goes (it settles at preferred_range, not at an edge).
-		var ease := clampf((distance - def.preferred_range) / def.range_tolerance, -1.0, 1.0) * DRIFT
+		var middle := def.preferred_range + (def.range_tolerance * 0.5 if _waiting(actor) else 0.0)
+		var ease := clampf((distance - middle) / def.range_tolerance, -1.0, 1.0) * DRIFT
+		var away := _away_from_neighbour(actor)
+		if away != 0.0:
+			_circle = away
 		intent.move = (toward.rotated(_circle * PI * 0.5) + toward * ease).normalized() * def.circle_speed
 		if _watch_blocked(actor, intent, delta):
 			_circle = -_circle
@@ -311,10 +323,88 @@ func _track_progress(error: float, delta: float) -> void:
 
 # Tries another angle: the circling turns the other way and the heading swings REANGLE_DEG that way.
 func _reangle() -> void:
-	_circle = -_circle
+	var open := _open_side(_self) if _self != null else 0.0
+	_circle = open if open != 0.0 else -_circle
 	_swing = _circle * deg_to_rad(REANGLE_DEG)
 	_failing = 0.0
 	_blocked = 0.0
+
+
+# The other foes of this target, with the signed angle (degrees, seen from the target) each stands at from `actor`.
+func _neighbour_angles(actor: Actor) -> Array[float]:
+	var angles: Array[float] = []
+	var from := -_flat(actor, target.global_position)
+	if from.length() < 1e-3:
+		return angles
+	for node in actor.get_tree().get_nodes_in_group(Actor.GROUP):
+		var other := node as Actor
+		if other == null or other == actor or other.dead or not (other.brain is EnemyBrain) or (other.brain as EnemyBrain).target != target:
+			continue
+		var mode_of_other := (other.brain as EnemyBrain).mode
+		if mode_of_other == Mode.IDLE or mode_of_other == Mode.NOTICING:
+			continue
+		var there := -_flat(other, target.global_position)
+		if there.length() < 1e-3:
+			continue
+		angles.append(rad_to_deg(from.angle_to(there)))
+	return angles
+
+
+# Which way round the target (the `_circle` that takes it there) is open: toward the side whose nearest neighbour is further, 0 with
+# no neighbour. Moving along `_circle` = 1 turns its bearing from the target by the sign of the cross product below.
+func _open_side(actor: Actor) -> float:
+	var angles := _neighbour_angles(actor)
+	if angles.is_empty():
+		return 0.0
+	var positive := 360.0  # the nearest neighbour on the side of increasing bearing
+	var negative := 360.0
+	for angle in angles:
+		if angle >= 0.0:
+			positive = minf(positive, angle)
+		else:
+			negative = minf(negative, -angle)
+	var toward_positive := positive >= negative  # more room that way
+	return _circle_for(actor, 1.0 if toward_positive else -1.0)
+
+
+# The `_circle` whose circling turns its bearing from the target the way `bearing_sign` says (the sign of from.angle_to).
+func _circle_for(actor: Actor, bearing_sign: float) -> float:
+	var to := _flat(actor, target.global_position)
+	if to.length() < 1e-3:
+		return _circle
+	var from := -to
+	var tangent := (to / to.length()).rotated(PI * 0.5)
+	var turns := signf(from.cross(tangent))
+	return bearing_sign * turns if turns != 0.0 else _circle
+
+
+# 0, or the `_circle` that takes it away from its nearest neighbour when that one is within SPREAD_DEG.
+func _away_from_neighbour(actor: Actor) -> float:
+	var nearest := 360.0
+	var sign_of := 0.0
+	for angle in _neighbour_angles(actor):
+		if absf(angle) < nearest:
+			nearest = absf(angle)
+			sign_of = signf(angle)
+	if nearest >= SPREAD_DEG or sign_of == 0.0:
+		return 0.0
+	return _circle_for(actor, -sign_of)
+
+
+# How far (radians) its way in is swung to keep off a neighbour who stands within SPREAD_DEG of its bearing: nothing far out, SPREAD_SWING
+# near the ring. It goes in beside him, not in a queue behind him.
+func _spread_swing(actor: Actor, still_to_go: float) -> float:
+	if still_to_go > SPREAD_REACH:
+		return 0.0
+	return _away_from_neighbour(actor) * deg_to_rad(SPREAD_SWING)
+
+
+# Whether it waits for its turn: no token for it to take (both are held by others).
+func _waiting(actor: Actor) -> bool:
+	if def.ignores_tokens:
+		return false
+	var tokens := AttackTokens.of(actor)
+	return tokens != null and not tokens.holds(actor) and not tokens.can_take(actor, target)
 
 
 func _reset_spacing() -> void:
@@ -419,7 +509,7 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 		var speed := actor.locomotion.speed
 		var braking := maxf(speed * speed - tuning.walk_speed * tuning.walk_speed, 0.0) / (2.0 * maxf(tuning.decel, 0.01))
 		var push := WALK_PUSH if distance - hi <= braking + BRAKE_MARGIN else JOG_PUSH
-		intent.move = (to / distance).rotated(_swing) * push
+		intent.move = (to / distance).rotated(_swing + _spread_swing(actor, distance - hi)) * push
 	else:
 		# A back-up within the option's margin, at a walk. One chosen while still going faster than a walk (a jog in) brakes first,
 		# the stick at rest: a stick pushed the other way turns the body round at once at the speed it has (Locomotion), and it
