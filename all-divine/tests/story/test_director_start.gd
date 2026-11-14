@@ -229,3 +229,42 @@ func test_the_wait_gives_up_after_start_wait_unless_paired() -> void:
 	assert_eq(player.frozen, 0 if waited <= Director.START_WAIT + 1 else player.frozen, "and he is free")
 	await frames(10)
 	assert_true(player.frame > 0)
+
+
+# The reactions: a scene that starts while the body is in one of them does not snap a limb. The worst start is a reaction that has
+# just cut another move short: the hit-stop holds the rig before its crossfade can finish, and the stop must fade the pose the body
+# was showing (Rig.stop_move), not play the crossfade out into the reaction's own clip.
+const REACTIONS := [&"flinch", &"stagger", &"posture_broken", &"guard_hit", &"guard_break", &"parried", &"caught"]
+
+
+func test_a_start_in_a_reaction_snaps_no_limb() -> void:
+	var worst := 0.0
+	var worst_of := ""
+	for reaction: StringName in REACTIONS:
+		for before: StringName in [&"", &"guard_raise", &"palm_jab", &"hop"]:
+			for into in [0, 3, 8]:
+				var parts := StoryStage.make(self, Vector3(3, 0, 4), deg_to_rad(200.0))
+				var player: Actor = parts.player
+				await frames(3)
+				if before != &"":
+					player.runner.start(Registry.fetch(&"moves", before) as MoveData, true)
+					await frames(7)
+				player.runner.start(Registry.fetch(&"moves", StringName(player.def.reactions[reaction])) as MoveData, true)
+				player.freeze(4)  # the blow's hit-stop
+				await frames(into)
+				var director := _start(parts)
+				assert_true(director != null, "%s: the scene is taken (%s)" % [reaction, Director.last_refusal])
+				if director == null:
+					return
+				var pose := StoryStage.pose_of(player.rig)
+				for i in 40:
+					await frames(1)
+					var posed := StoryStage.pose_of(player.rig)
+					var turned := StoryStage.angle_between(pose, posed, "scarf")
+					if turned > worst:
+						worst = turned
+						worst_of = "%s after %s, %d frames into the hit-stop, scene frame %d" % [reaction, before, into, i]
+					pose = posed
+				parts.stage.free()
+				await frames(1)
+	assert_true(worst <= 25.0, "no bone but the scarf's turns more than 25 degrees between two frames across the start, not %.1f (%s)" % [worst, worst_of])
