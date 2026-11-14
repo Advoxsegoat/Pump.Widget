@@ -53,6 +53,15 @@ func change(to: State) -> bool:
 	return true
 
 
+## A cutscene is over (the Director has handed the fight back): the game goes to PLAY; or, if it is paused over the cutscene (the
+## player skipped it from the menu), the pause will give back PLAY and not the cutscene.
+func end_cutscene() -> void:
+	if state == State.CUTSCENE:
+		change(State.PLAY)
+	elif state == State.PAUSE and _paused_from == State.CUTSCENE:
+		_paused_from = State.PLAY
+
+
 ## Back to BOOT with the tree running, without a signal. For tests.
 func reset() -> void:
 	state = State.BOOT

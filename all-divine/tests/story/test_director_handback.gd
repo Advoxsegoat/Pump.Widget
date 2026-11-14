@@ -313,3 +313,28 @@ func test_a_region_change_in_the_middle_of_a_scene_gives_everything_back() -> vo
 	assert_true(main.stage.hud.get_children().filter(func(c: Node) -> bool: return c is CineOverlay).is_empty(), "the overlay is gone")
 	await frames(30)
 	assert_eq(Game.state, Game.State.PLAY)
+
+
+func test_a_scene_skipped_from_the_pause_menu_ends_when_the_menu_resumes() -> void:
+	StoryLog.mark_seen(&"fixture_yard_entrance")
+	var main := await _main()
+	var director := Director.play(&"fixture_yard_entrance", main)
+	assert_true(director != null)
+	if director == null:
+		return
+	director.finished.connect(func(skipped: bool) -> void: _finished.append(skipped))
+	while director.frame < 100:
+		await frames(1)
+	Game.change(Game.State.PAUSE)
+	assert_true(Director.current() == director and director.is_skippable(), "the menu can ask: this scene is skippable")
+	assert_true(Director.current().skip(), "Skip scene")
+	assert_eq(Game.state, Game.State.PAUSE, "the game stays paused behind the menu")
+	main.menu.press(C.CHOOSE)  # Resume
+	assert_eq(Game.state, Game.State.PLAY, "Resume plays: the scene is over, the pause does not give it back")
+	var n := 0
+	while _finished.is_empty() and n < 80:
+		await frames(1)
+		n += 1
+	assert_eq(_finished, [true], "and the glide home runs out")
+	assert_eq(Game.state, Game.State.PLAY)
+	assert_false(main.hud.suppressed)

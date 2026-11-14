@@ -735,8 +735,7 @@ func _give_back_control() -> void:
 			actor.set_brain(_held_brains[key])
 			if actor.brain is EnemyBrain:
 				(actor.brain as EnemyBrain).rest_for(float(REST_FRAMES) / 60.0)
-	if Game.state == Game.State.CUTSCENE:
-		Game.change(Game.State.PLAY)
+	Game.end_cutscene()
 	Inputs.quarantine()
 
 

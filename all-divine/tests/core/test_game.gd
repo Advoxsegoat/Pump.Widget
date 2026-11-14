@@ -132,3 +132,18 @@ func test_play_frames_stand_still_in_a_cutscene() -> void:
 	Game.change(S.PLAY)
 	await frames(4)
 	assert_eq(Game.play_frames - at, 4, "and go on from there when the fight is back")
+
+
+func test_a_cutscene_that_ends_while_paused_is_not_given_back_by_the_pause() -> void:
+	Game.change(S.PLAY)
+	Game.change(S.CUTSCENE)
+	Game.end_cutscene()
+	assert_eq(Game.state, S.PLAY, "ending a cutscene that is the state plays")
+	Game.change(S.CUTSCENE)
+	Game.change(S.PAUSE)
+	Game.end_cutscene()
+	assert_eq(Game.state, S.PAUSE, "paused, the game stays paused")
+	Game.change(S.PLAY)
+	assert_eq(Game.state, S.PLAY, "and Resume plays: the cutscene is over")
+	Game.end_cutscene()
+	assert_eq(Game.state, S.PLAY, "ending one that is not on changes nothing")
