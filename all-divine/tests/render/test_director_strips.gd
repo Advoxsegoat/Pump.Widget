@@ -4,15 +4,15 @@ extends TestCase
 ## frames to a wide first shot, to a close one, and to a close one with a longer lead-in; the glide out from a last shot at yaw 90
 ## and at yaw 180 every 3 frames. Each is saved as a contact sheet in out/story/ (director_<name>.png, 320x180 a frame, five to a
 ## row, in order) for a person to look at, with the frames themselves at 640x360 in out/story/director_<name>/. What is checked
-## here is only what a machine can: no black frame. A run shoots three sheets (DEFAULT, to keep the render job short);
-## DIRECTOR_STRIPS_ONLY=<comma list of sheet names> shoots those, DIRECTOR_STRIPS_ONLY=all shoots all eleven (about nine minutes).
+## here is only what a machine can: no black frame. A run shoots five sheets (DEFAULT, to keep the render job short);
+## DIRECTOR_STRIPS_ONLY=<comma list of sheet names> shoots those, DIRECTOR_STRIPS_ONLY=all shoots all thirteen.
 
 const MAIN := "res://main/main.tscn"
 const FIXTURE := "res://scenes/story/fixture_yard_entrance/shots.tres"
 const OUT := "out/story"
 const TILE := Vector2i(320, 180)
 const COLUMNS := 5
-const DEFAULT := ["standing_cutscene", "glide_in_close_45", "glide_out_yaw_180"]
+const DEFAULT := ["standing_cutscene", "glide_in_close_45", "glide_out_yaw_180", "hud_in_cutscene", "skip_160"]
 
 var main: Main
 
@@ -197,3 +197,46 @@ func test_the_glide_out_from_a_shot_at_yaw_90_and_at_yaw_180() -> void:
 		assert_true(turn >= 30)
 		main.free()
 		await frames(2)
+
+
+
+# --- the Hud going with the bars, and a skip from a close shot ---
+
+# The Hud and the bars going over the first 33 frames of a CUTSCENE, every 3 frames: the controls, the bars and the pips fade as
+# the letterbox comes in.
+func test_the_hud_goes_with_the_bars_every_3_frames() -> void:
+	if not _wanted("hud_in_cutscene"):
+		return
+	await _scene()
+	var scene := _fixture()
+	scene.kind = SceneShots.Kind.CUTSCENE
+	scene.letterbox = true
+	var images := await _shoot(scene, _every(0, 33, 3))
+	_no_black_frames("hud_in_cutscene", images)
+	_save("hud_in_cutscene", images)
+	main.free()
+	await frames(2)
+
+
+# A scene skipped from scene frame 160 (a close shot at zoom 3, the longest way home), the first picture the frame it was skipped on,
+# then every 3 frames of the glide home.
+func test_a_skip_from_frame_160_every_3_frames() -> void:
+	if not _wanted("skip_160"):
+		return
+	await _scene()
+	StoryLog.mark_seen(&"fixture_yard_entrance")
+	var director := Director.new()
+	assert_true(director.begin(_fixture(), main.region, main.camera_rig, main.hud, main), "the scene is taken: %s" % Director.last_refusal)
+	while director.frame < 160:
+		await frames(1)
+	var images: Array[Image] = [await _grab()]
+	assert_true(director.skip(), "skipped at 160")
+	for i in 15:
+		await frames(3)
+		images.append(await _grab())
+	_no_black_frames("skip_160", images)
+	for i in range(1, images.size()):
+		print("skip from 160: step %d differs by %.3f" % [i, _difference(images[i - 1], images[i])])
+	_save("skip_160", images)
+	main.free()
+	await frames(2)
