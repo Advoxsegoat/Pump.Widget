@@ -1,0 +1,77 @@
+# The training yard, as tools/world/build_region.gd reads it:
+#   tools/godot.sh -s res://tools/world/build_region.gd -- res://world/training_yard/layout.txt res://world/training_yard/training_yard.tscn
+# writes world/training_yard/training_yard.tscn. That scene is the source from then on: change the scene in the editor,
+# not this file (building again would overwrite the scene and lose the changes). The commands are the courtyard's
+# (world/courtyard/layout.txt says what each does), and `script`.
+#
+# A walled yard at night for the fights: 25 x 25 m inside (the Kenney kit's tile is 2.5 m, so 24 m is not a whole
+# number of them; 25 is the nearest), the walls solid on every side, the south edge a low kerb so that the camera, which
+# looks north from the south, sees over it. The gate in its middle is two pillars and no way through. The player
+# starts at the south, facing north; the foes come at him from the arc of spawns in the north.
+#
+#   x=-12.5 +---------------------------------------+ x=12.5      z=-12.5
+#           | T        L(shadow)       L(shadow)   T |
+#           |                                         |
+#           |       1       2           3       4     |   EnemySpawn_1 .. 4
+#           | L   post                      post   L  |   z=0
+#           |                                         |
+#           |                                         |
+#           | L                @ Spawn              L |
+#           | T  =============[gate]==============  T |   z=12.5 (a low kerb)
+#           +---------------------------------------+
+
+script res://world/arena.gd
+floor 48 48
+sky #0b1020
+# The night's own light, on the ground and the walls, is dim, so that the lanterns' pools are what is lit. It is too dim
+# for the fighters: between the pools a body lit by it alone is a dark shape on a dark floor. So the bodies have a light
+# of their own, the moon: cool, from the camera's side and above (it lights the faces the player sees, and the far sides
+# stay in shade), and little past a body's own colours (white cloth keeps its tones).
+ambient #3a4c80 0.055
+sun -50 35 #5870b0 0.08
+moon -35 25 #e6edff 1.3
+grade res://data/render/grades/training_yard.tres
+
+# The walls, and a pillar at each corner and each side of the gate.
+edge wall -12.5 -12.5 12.5 -12.5 s solid
+edge wall 12.5 -12.5 12.5 12.5 w solid
+edge wall -12.5 -12.5 -12.5 12.5 e solid
+# The south edge is a kerb, not a wall: the camera looks from the south, and a wall, a fence or a rail there would hide
+# the fighters near it (legs, sweeps, the waves on the ground). It is slate, where the floor is flagstone, 0.3 m high and
+# moonlit, so that the yard's edge shows in the dark; and it is what stops a body: nothing unseen stands on it.
+curb -12.5 12.5 12.5 12.9 0.3 slate moonlit
+piece pillar-stone -12.625 -12.625
+piece pillar-stone 12.625 -12.625
+piece pillar-stone -12.625 12.625
+piece pillar-stone 12.625 12.625
+piece pillar-stone -1.25 12.625
+piece pillar-stone 1.25 12.625
+
+# Banners on the north wall.
+piece banner-red -5 -11.5 90
+piece banner-green 0 -11.5 90
+piece banner-red 5 -11.5 90
+
+# Two practice posts, off to the sides.
+piece pillar-stone -9 -1
+piece pillar-stone 9 -1
+
+# Six lanterns, the two in the north casting shadows.
+lamps #ffc468 6 3.0 3.45
+lantern -8 -8 shadow
+lantern 8 -8 shadow
+lantern -9.5 0
+lantern 9.5 0
+lantern -9.5 8
+lantern 9.5 8
+
+# Where the player starts, the foes' spawns in an arc across the north, and the things to glance at.
+marker Spawn 0 7 180
+marker EnemySpawn_1 -6.5 -1 0
+marker EnemySpawn_2 -2.5 -3.5 0
+marker EnemySpawn_3 2.5 -3.5 0
+marker EnemySpawn_4 6.5 -1 0
+poi PostWest -9 -1 1.4
+poi PostEast 9 -1 1.4
+poi GateWest -1.25 12.625 1.4
+poi GateEast 1.25 12.625 1.4

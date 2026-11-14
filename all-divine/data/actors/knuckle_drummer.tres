@@ -1,0 +1,43 @@
+[gd_resource type="Resource" script_class="ActorDef" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://actors/actor_def.gd" id="1_def"]
+[ext_resource type="PackedScene" path="res://actors/knuckle/knuckle_rig.tscn" id="2_rig"]
+[ext_resource type="Resource" path="res://data/tuning/knuckle_locomotion.tres" id="3_tuning"]
+[ext_resource type="Resource" path="res://data/palettes/knuckle_drummer.tres" id="4_palette"]
+[ext_resource type="Resource" path="res://data/tuning/combat_knuckle.tres" id="5_combat"]
+[ext_resource type="Resource" path="res://data/brains/knuckle_drummer.tres" id="7_brain"]
+
+[resource]
+script = ExtResource("1_def")
+id = &"knuckle_drummer"
+team = 1
+rig_scene = ExtResource("2_rig")
+palette = ExtResource("4_palette")
+hidden_parts = PackedStringArray("Knuckle_Hood", "Knuckle_Pauldron", "Knuckle_Blade")
+model_scale = 0.97
+moveset = {
+&"heavy": &"knuckle_jab",
+&"palm": &"drum_1"
+}
+locomotion = ExtResource("3_tuning")
+combat = ExtResource("5_combat")
+reactions = {
+&"catch": &"catch",
+&"caught": &"caught",
+&"death": &"death",
+&"flinch": &"flinch",
+&"getup": &"getup",
+&"guard_break": &"guard_break",
+&"guard_hit": &"guard_hit",
+&"parried": &"parried",
+&"parry": &"parry",
+&"posture_broken": &"posture_broken",
+&"stagger": &"stagger"
+}
+brain = ExtResource("7_brain")
+max_hp = 60.0
+max_stamina = 100.0
+max_posture = 60.0
+poise = 9.0
+look_height = 1.6
+required_clips = PackedStringArray("idle", "walk", "jog", "sprint")

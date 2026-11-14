@@ -1,0 +1,152 @@
+# The Bilibara stretch, as tools/world/build_region.gd reads it:
+#   tools/godot.sh -s res://tools/world/build_region.gd -- res://world/bilibara/layout.txt res://world/bilibara/bilibara.tscn
+# writes world/bilibara/bilibara.tscn. Unlike the older regions this scene is not hand-changed afterwards: the layout is the
+# source while the stretch is built (the plan's Tasks 2 to 5 add to it and build again), so change this file, not the scene.
+# The commands are the courtyard's (world/courtyard/layout.txt) and the stretch's (the builder's own header lists them all).
+#
+# One stretch of the city of Bilibara, cold snow-noon, flat (y = 0 throughout): a place Abarax can walk and cannot leave.
+# From the first shrine site in court A (behind the Lazyman's) east along the cobbled Rue Caillou, north up the Tanneries
+# lane, and into the 25 x 20 m Tanneries yard; and a loop (the lane, west along the Rack Walk, south down the loop lane) that
+# comes back to the street's west end at a low gate, shut: the shortcut. x runs east, z south (toward the camera, which looks
+# north); metres. This task lays the ground, the solid masses, the kerbs and low walls, the gate, the markers and a pale sky
+# and sun; the dressing (Task 3), the backdrop (Task 3) and the light (Task 4) come after, so it is bare.
+#
+# The camera looks north from the south, so a tall thing south of a body hides it: every edge that faces south is a kerb
+# (0.3 m, slate), a low wall (0.6 m) or the gate (a 0.6 m board in an open frame); the tall masses stand north of the ground they close, or at
+# least 9 m south of any other.
+#
+# One character is 5 m, the left column starts at x = -45 and a row is labelled with its north edge (the camera looks up the
+# page). A = court A (slate), s = Rue Caillou (cobble), l = the Tanneries lane, R = the Rack Walk, o = the loop lane (tan
+# earth), B = alcove B (slate), Y = the Tanneries yard (tan earth), # = a tall mass, w = a low wall (0.6 m), . = nothing to
+# walk on. The kerbs (south of the street, the Rack Walk, the alcove and the yard), the gate (south end of the loop lane,
+# between court A and the street's north row) and the pillar posts are too thin to show.
+#
+#   z=-80    . . . . . . . . . . . # # # # # # # 
+#   z=-75    . . . . . . . . . . . # Y Y Y Y Y # 
+#   z=-70    . . . . . . . . . . . # Y Y Y Y Y # 
+#   z=-65    . . . . . . . . . . . # Y Y Y Y Y # 
+#   z=-60    . . . . . . . . . . . # Y Y Y Y Y # 
+#   z=-55    . . . . . . . . . . . . . w l w . . 
+#   z=-50    . . . . . . . . . . . . . w l w . . 
+#   z=-45    . # # # # # # # # # # # # # l # # . 
+#   z=-40    . # # # # # # # # # # # # # l # # . 
+#   z=-35    . # # # # # # # # # # # # # l B # . 
+#   z=-30    . # # # # # # # # # # # # # l w . . 
+#   z=-25    . # R R R R R R R R R R R R l w . . 
+#   z=-20    . # o w . . . . . . . . . w l # . . 
+#   z=-15    . # o w . . . . . . . . . w l # . . 
+#   z=-10    . # o # # # # # # # # # # # l # . . 
+#   z=-5     # A A s s s s s s s s s s s s # . . 
+#   z=0      # A A s s s s s s s s s s s s # . . 
+#
+# Where the plan's table and the builder part (listed in the Task 2 report): T6 is two blocks (the builder's
+# longest block is 60 m, T6 is 65); T7b stops at the alcove (its north end is T7's, and two blocks may not overlap); the low
+# walls are 0.6 m boxes of slate (`curb`), which the builder gives a footprint as wide as the table's, where a row of
+# wall-half pieces would be 1 m deep.
+
+kit bilibara
+sky #aebbcc
+sun -60 30 #f4f7ff 0.25
+
+# --- The ground: the seven places, in plates of at most 12.5 m a side, exactly tiling each ---
+# W1 court A, "Behind the Lazyman's" (slate)
+ground -40 -5 -30 5 slate
+# W2 Rue Caillou (cobble): five plates of 10 m and the last 12.5
+ground -30 -5 -20 5 cobble
+ground -20 -5 -10 5 cobble
+ground -10 -5 0 5 cobble
+ground 0 -5 10 5 cobble
+ground 10 -5 20 5 cobble
+ground 20 -5 32.5 5 cobble
+# W3 the Tanneries lane (tan earth): four plates of 12.5
+ground 25 -55 30 -42.5 tan_earth
+ground 25 -42.5 30 -30 tan_earth
+ground 25 -30 30 -17.5 tan_earth
+ground 25 -17.5 30 -5 tan_earth
+# W4 the Rack Walk (tan earth)
+ground -35 -25 -22.5 -20 tan_earth
+ground -22.5 -25 -10 -20 tan_earth
+ground -10 -25 2.5 -20 tan_earth
+ground 2.5 -25 15 -20 tan_earth
+ground 15 -25 25 -20 tan_earth
+# W5 the loop lane (tan earth)
+ground -35 -20 -30 -12.5 tan_earth
+ground -35 -12.5 -30 -5 tan_earth
+# W6 alcove B, "Lamp and a chair" (slate)
+ground 30 -37.5 37.5 -30 slate
+# W7 the Tanneries yard (tan earth): four plates
+ground 15 -75 27.5 -65 tan_earth
+ground 27.5 -75 40 -65 tan_earth
+ground 15 -65 27.5 -55 tan_earth
+ground 27.5 -65 40 -55 tan_earth
+
+# --- The solid masses: three storeys of plain wall under a flat roof (7.83 m), the yard's flanks two ---
+# The Lazyman's back and the court's west cap, the street's north row (the lane mouth is x 25..30) and the lane's east flank
+block -40 -25 -35 -5 3 plain flat solid
+block -30 -10 25 -5 3 plain flat solid
+block 30 -20 32.5 -5 3 plain flat solid
+block 32.5 -5 35 5 3 plain flat solid
+block -42.5 -5 -40 5 3 plain flat solid
+# The works north of the Rack Walk, and the walls of the alcove
+block -40 -45 -10 -25 3 plain flat solid
+block -10 -45 25 -25 3 plain flat solid
+block 30 -45 40 -37.5 3 plain flat solid
+block 37.5 -37.5 40 -30 3 plain flat solid
+# The yard's north wall and its two flanks
+block 12.5 -80 42.5 -75 3 plain flat solid
+block 12.5 -75 15 -55 2 plain flat solid
+block 40 -75 42.5 -55 2 plain flat solid
+
+# --- The low walls (0.6 m: a body against one is hidden only below about 0.3 m), where a flank stands south of other ground ---
+curb 22.5 -55 25 -45 0.6 slate name=LowWall1
+curb 30 -55 32.5 -45 0.6 slate name=LowWall2
+curb 30 -30 32.5 -20 0.6 slate name=LowWall3
+curb 22.5 -20 25 -10 0.6 slate name=LowWall4
+curb -30 -20 -27.5 -10 0.6 slate name=LowWall5
+
+# --- The kerbs (0.3 m, slate, 0.4 m thick, south of the edge): the street and court, the Rack Walk, the alcove, the yard ---
+curb -40 5 32.5 5.4 0.3 slate
+curb -30 -20 22.5 -19.6 0.3 slate
+curb 32.5 -30 37.5 -29.6 0.3 slate
+curb 15 -55 22.5 -54.6 0.3 slate
+curb 32.5 -55 40 -54.6 0.3 slate
+
+# --- The gate: the shortcut, shut. A 0.6 m board in the slot between the Lazyman's back and the street's row, on world and
+# ik_surface (a curb is both); Task 3 dresses it. A pillar post at each of its ends and at the yard's mouth. ---
+curb -35 -5.5 -30 -4.5 0.6 slate name=Gate
+# The rail across the tops of the posts: 0.1 m thick, its underside 2.4 m up, above any head (it hides nothing of a body). Task 3 dresses
+# the gate; the board and the rail are what a gate is until then.
+curb -35.125 -5.15 -29.875 -5.05 0.12 slate name=GateRail y=2.4
+piece pillar-stone 24.875 -55.125
+piece pillar-stone 30.125 -55.125
+piece pillar-stone -35.125 -5.1
+piece pillar-stone -29.875 -5.1
+
+# --- The yard's vats, for cover ---
+vat 20 -66.25
+vat 35 -66.25
+
+# --- Markers (yaw about +Y: 0 faces south, 90 east, 180 north, 270 west) ---
+marker Spawn -32.5 1.25 90
+marker ShrineSite_A -35 0 90
+marker ShrineSite_B 35 -33.75 270
+marker StreetEast 27.5 0 0
+marker LaneMid 27.5 -30 0
+marker RackEast 27.5 -22.5 0
+marker RackWest -32.5 -22.5 0
+marker GateFar -32.5 -6.5 0
+marker GateNear -32.5 -3.5 180
+marker YardEntry 27.5 -57.5 180
+marker KnuckleSpawn 27.5 -68 0
+marker HandDoor_1 20 -73.8 0
+marker HandDoor_2 27.5 -73.8 0
+marker HandDoor_3 35 -73.8 0
+
+# --- Points of interest (UP metres above the ground) ---
+poi ShrinePlinth_A -35 0 1.0
+poi ShrinePlinth_B 36.25 -33.75 1.0
+poi ShortcutGate -32.5 -5 1.0
+poi YardGate 27.5 -55 1.4
+poi YardCentre 27.5 -65 1.0
+poi VatWest 20 -66.25 1.0
+poi VatEast 35 -66.25 1.0

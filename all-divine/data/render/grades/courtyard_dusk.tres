@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="GradeProfile" format=3]
+
+[ext_resource type="Script" path="res://render/grade_profile.gd" id="1_grade"]
+
+[resource]
+script = ExtResource("1_grade")
+lift = Color(0.039215688, 0.023529412, 0.07058824, 1)
+gamma = Color(1, 1, 1, 1)
+gain = Color(1, 0.9411765, 0.8784314, 1)
+saturation = 1.05
+tint = Color(1, 1, 1, 1)
+fog_color = Color(0.7882353, 0.6431373, 0.627451, 1)
+fog_density = 0.04
+fog_height = 1.5

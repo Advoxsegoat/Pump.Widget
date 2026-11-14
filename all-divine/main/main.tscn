@@ -1,0 +1,45 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://main/main.gd" id="1_main"]
+[ext_resource type="PackedScene" path="res://render/pixel_stage.tscn" id="2_stage"]
+[ext_resource type="PackedScene" path="res://world/training_yard/training_yard.tscn" id="3_courtyard"]
+[ext_resource type="PackedScene" path="res://actors/actor.tscn" id="4_actor"]
+[ext_resource type="Resource" path="res://data/actors/abarax.tres" id="5_abarax"]
+[ext_resource type="Script" path="res://render/camera_rig.gd" id="6_camera_rig"]
+[ext_resource type="Script" path="res://main/debug_overlay.gd" id="7_overlay"]
+[ext_resource type="Script" path="res://ui/menu.gd" id="8_menu"]
+[ext_resource type="PackedScene" path="res://hud/hud.tscn" id="9_hud"]
+
+[node name="Main" type="Node"]
+process_mode = 3
+script = ExtResource("1_main")
+
+[node name="PixelStage" parent="." instance=ExtResource("2_stage")]
+process_mode = 1
+
+[node name="Region" parent="PixelStage/World" instance=ExtResource("3_courtyard")]
+
+[node name="Hud" parent="PixelStage/Hud" instance=ExtResource("9_hud")]
+
+[node name="Menu" type="Control" parent="PixelStage/Hud"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("8_menu")
+
+[node name="Player" parent="PixelStage/World" instance=ExtResource("4_actor")]
+def = ExtResource("5_abarax")
+
+[node name="CameraRig" type="Node3D" parent="PixelStage/World"]
+script = ExtResource("6_camera_rig")
+
+[node name="DebugOverlay" type="CanvasLayer" parent="."]
+visible = false
+script = ExtResource("7_overlay")
+
+[editable path="PixelStage"]

@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3]
+
+[ext_resource type="Shader" path="res://render/shaders/toon_world.gdshader" id="1_toon"]
+[ext_resource type="Texture2D" path="res://assets/env/textures/flagstone.png" id="2_flagstone"]
+
+[resource]
+resource_name = "flagstone"
+shader = ExtResource("1_toon")
+shader_parameter/albedo_tex = ExtResource("2_flagstone")
+shader_parameter/world_uv = true
+shader_parameter/texels_per_metre = 32.0

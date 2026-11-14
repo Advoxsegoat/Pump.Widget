@@ -1,0 +1,969 @@
+class_name Rig
+extends Node3D
+## An actor's body: the model, the AnimationTree that poses it, the hitboxes on its hands and the
+## hurtbox around it. Everything that moves an actor's body goes through here; the actor, its moves
+## and cutscenes say what to show, and the rig shows it.
+##
+## The scene (actors/abarax/abarax_rig.tscn is Abarax's) has these children:
+##   Model          the character model, with its Skeleton3D somewhere inside
+##   AnimationTree  root_node "..", the actor's AnimationLibrary, callback MANUAL, and root_motion_track
+##                  on the root bone, so the root's travel stays out of the pose (the move runner samples
+##                  the clip's root track itself)
+##   Marks          a MarkSink, where the clips' mark keys land
+##   Hitboxes       one BoneAttachment3D per hitbox, named by its id, each holding an Area3D `zone` with a
+##                  CollisionShape3D `shape`. The zone does not monitor: it only holds the shape, which the
+##                  actor's HitScanner sweeps from tick to tick while the hitbox is on (hitbox_shape)
+##   Hurtbox        an Area3D around the body (`hurtbox`), where blows land
+##
+## The tree is an AnimationNodeBlendTree:
+##   loco (BlendSpace1D on speed) -> loco_scale (TimeScale) -> stance_blend.in
+##   stance -> stance_seek -> stance_blend.blend;  stance_blend -> move_blend.in
+##   move_a -> seek_a -> move_ab.in;  move_b -> seek_b -> move_ab.blend;  move_ab -> move_blend.blend
+##   move_blend -> output
+## Locomotion plays on its own clock. The stance (set_stance: the guard held while walking) is a looping clip laid
+## over the upper body only: stance_blend's filter passes it to UPPER_BODY (spine_01) and every bone under it, so
+## the hips and legs keep locomotion. It is placed with a seek every tick, on a clock the rig keeps, so it stands
+## still when the rig is not ticked (hit-stop) and always shows a known time.
+## A move plays in one of two slots, move_a or move_b; each new move takes the other slot and move_ab crossfades
+## to it, so one move can cancel into the next smoothly. move_blend lays the move layer over locomotion and the
+## stance. The slots are always placed with a seek, never left to run, so a move shows exactly the time the
+## gameplay says, stepped if its clip asks for that.
+## A move cancelled while the move before it is still fading out would have to take that move's slot, and
+## drop what is left of it from the pose. So the pose the tree showed goes into the cancelled move's slot, as
+## a clip of one key (SNAPSHOT_CLIP), and the new move fades in over that instead.
+##
+## Over the clips, skeleton modifiers (children of the Skeleton3D, run in their order) bring the body to
+## life. Abarax's are an OrientationWarp (eight-way locomotion from forward clips: set_strafe), Breathing
+## (set_exertion), a HitReact (hit_react), a FootPlanter with a TwoBoneIK3D on each leg (feet on uneven
+## ground: set_foot_ground), two LookAtModifier3Ds, the neck's and then the head's (look_at_point), and a
+## SpringBoneSimulator3D on the scarf. They run in tick, never on their own: the skeleton's modifier
+## callback is MANUAL, and tick advances it by the same delta as the tree and has it update at once.
+##
+## Beside Model, the scene has Marker3Ds the engine's modifiers aim at: IKTarget_l/_r and IKPole_l/_r,
+## which the FootPlanter places every tick, and LookTarget, the point the head looks at.
+##
+## Nothing animates until tick() is called: the actor calls it once per physics frame. The rig sets itself
+## up in _ready, so it must be in the scene tree before anything else is called (apply_palette aside).
+##
+## The model is drawn in its palette's colours once apply_palette is called (the actor does, with its
+## def's palette); until then it keeps the materials it was imported with. The actor also hides the parts its def goes
+## without (hide_parts) and scales the body by its def's model_scale (set_model_scale).
+
+## The shader every body is drawn with: the toon light ramp held to the palette.
+const TOON_SHADER := preload("res://render/shaders/toon_character.gdshader")
+## The mark pass of an aura is drawn at this render priority and its hull at the next (RimMarks says what they are): every
+## body's mark is written before any body's hull reads it, and both come after the screen look's quad, which is the first
+## of the transparent things, so the rim is drawn over the look and not blurred or outlined by it.
+const RIM_MARK_PRIORITY := -1
+## The warming passes (warm_rim) stay over the body for this many frames: drawn twice at least, wherever in a frame they
+## were put on.
+const WARM_FRAMES := 3
+## How many ticks a move that plants its feet (MoveData.plant_feet) holds them for: its blend in, and the frames the hold takes to let go.
+const FEET_HOLD_FRAMES := 6
+## A foot is on the ground for the hold while its ankle is within this of the height it stands at.
+const FEET_HOLD_GROUNDED := 0.05
+## An aura rises over this many seconds (or a third of its time, if that is shorter) and fades over the last of this many
+## (or two fifths of its time).
+const AURA_RISE := 0.05
+const AURA_FADE := 0.12
+
+## The clip a slot is loaded with to hold the pose the tree showed (see play_move). It is added to the rig's
+## own copy of the actor's library, and holds one key per bone the cancelled move's clip poses.
+const SNAPSHOT_CLIP := &"__snapshot"
+## The snapshot's length, in seconds: its one key sits at 0 and the slot can be seeked past the end.
+const SNAPSHOT_LENGTH := 0.01
+
+## The tree's parameters.
+const LOCO_SPEED := &"parameters/loco/blend_position"
+const LOCO_SCALE := &"parameters/loco_scale/scale"
+
+## How much larger than its model the body is (set_model_scale), and the rate its locomotion clips play at (LocomotionTuning.cadence).
+var model_scale := 1.0
+## How much thicker the body is drawn than its model, in metres (set_body_inflate).
+var body_inflate := 0.0
+var cadence := 1.0
+
+const MOVE_AB := &"parameters/move_ab/blend_amount"
+const MOVE_BLEND := &"parameters/move_blend/blend_amount"
+const SLOT_NODES: Array[StringName] = [&"move_a", &"move_b"]
+const SLOT_SEEKS: Array[StringName] = [&"parameters/seek_a/seek_request", &"parameters/seek_b/seek_request"]
+const STANCE_NODE := &"stance"
+const STANCE_SEEK := &"parameters/stance_seek/seek_request"
+const STANCE_BLEND := &"parameters/stance_blend/blend_amount"
+## Seconds the stance takes to fade in or out.
+const STANCE_FADE := 0.08
+## The bone the stance starts at: it and every bone under it (the chest, neck, head, arms and hands) take the
+## stance; the pelvis and legs do not.
+const UPPER_BODY := &"spine_01"
+## Clip metadata: the rate a clip is shown at, in steps per second; 0 (or none) means smooth.
+const STEP_FPS_META := &"step_fps"
+## Degrees either side of OrientationWarp.BACKWARD_FROM_DEG (110°) a strafe must pass to switch the cycle's
+## direction: forward turns backward past 115°, and backward turns forward inside 105°. In between, the
+## direction it had holds, so noise at the threshold cannot flip the legs tick by tick.
+const STRAFE_SWITCH_BAND_DEG := 5.0
+## How far the head turns from the body's facing to look at something: either side, and up or down. A
+## point further round is looked at as far as this goes. (Each LookAtModifier3D also has these limits,
+## about its own bone.)
+const LOOK_YAW_LIMIT_DEG := 70.0
+const LOOK_PITCH_LIMIT_DEG := 35.0
+## A point looked at this far (in metres) from the last is a new target: the head eases over to it (over
+## the modifiers' duration), rather than following it as it does a point that moves a little each tick.
+const LOOK_RETARGET_DISTANCE := 0.5
+## A point within this many degrees of straight behind is looked at over the shoulder it was on already,
+## so one that wavers behind the body does not swing the head from one side to the other.
+const LOOK_BEHIND_BAND_DEG := 20.0
+## The nearest the point the head looks at is put, in metres: nearer, the look would wobble.
+const LOOK_MIN_DISTANCE := 1.0
+const HEAD := &"Head"
+
+var skeleton: Skeleton3D
+var tree: AnimationTree
+## The liveliness modifiers under the skeleton, or null for any the rig does not have.
+var warp: OrientationWarp
+var breathing: Breathing
+var hit_reaction: HitReact
+var foot_planter: FootPlanter
+## The LookAtModifier3Ds, in the order they run (the neck's, then the head's). They always aim at
+## LookTarget: one with no target would turn its bone off the clip's pose. Looking at nothing is their
+## influence faded to 0 instead.
+var looks: Array[LookAtModifier3D] = []
+## True while a move carries the body through the air (the hop; MoveRunner sets it from the move's airborne marks): the
+## feet are not planted then.
+var airborne := false
+## How wide an aura's rim is, in pixels of the 640x360 picture: 1 to 2.
+var rim_width_px := 1.5
+## How fast a dead body's feet may ease back to the clip's pose, in metres a second (FootPlanter.max_rate): 0.3 m/s is 5 mm
+## a frame, under the centimetre a corpse is allowed to move in one.
+const LIFELESS_FOOT_RATE := 0.3
+## True while the body is lifeless (set_lifeless): it neither breathes, plants its feet nor looks.
+var lifeless := false
+## The Area3D around the body, on the `hurtbox` layer, that hitboxes find. Its actor marks it with the meta
+## `actor`, which is how a HitScanner knows whose body it reached.
+var hurtbox: Area3D
+## The palette the body is drawn in, or null before apply_palette.
+var palette: Palette
+
+var _hitboxes := {}  # id (StringName) -> the CollisionShape3D under its zone, in the order of Hitboxes' children
+var _active := {}  # the ids of the hitboxes that are on -> true
+var _slot := -1  # the slot of the current move: 0 is move_a, 1 is move_b, -1 before the first move
+var _slot_times := PackedFloat64Array([0.0, 0.0])  # each slot's gameplay time, in seconds
+var _slot_steps := PackedInt32Array([0, 0])  # each slot's clip's step_fps
+# Where move_ab and move_blend are, where they are going, and how long a full 0-to-1 change takes.
+var _ab := 0.0
+var _ab_goal := 0.0
+var _ab_time := 0.0
+var _layer := 0.0
+var _layer_goal := 0.0
+var _layer_time := 0.0
+var _stance := 0.0  # how much the stance shows over locomotion, 0 to 1, and where it is going
+var _stance_goal := 0.0
+var _stance_time := 0.0  # the stance clip's time, in seconds, on the rig's own clock
+var _backward := false  # the locomotion cycle's direction from the last set_strafe
+# Each bone's pose in the skeleton's space as last shown, modifiers included. The skeleton puts the clips'
+# pose back once it has drawn the modified one, so this is the only place the shown pose can be read.
+var _shown: Array[Transform3D] = []
+var _look_target: Marker3D  # LookTarget
+var _look_point: Variant = null  # the world point look_at_point was last given, or null
+var _look_side := 1.0  # which way the head turns for a point behind the body: 1 to the left, -1 to the right
+var _look_influence: Array[float] = []  # each look modifier's influence when fully looking (the scene's)
+var _look_weight := 0.0  # how much the look shows, 0 to 1 (each modifier's influence is its own times this)
+var _look_from := 0.0  # the weight when the look last started to fade in or out
+var _look_time := 0.0  # seconds since then
+var _material: ShaderMaterial  # the toon material of apply_palette, or null before it
+var _meshes: Array[MeshInstance3D] = []  # the body's meshes, found once (_body_meshes)
+var _meshes_found := false
+var _flash_seconds := 0.0  # how long the flash in progress was to last, and how long it has left
+var _flash_left := 0.0
+var _rim: ShaderMaterial  # the rim's hull pass, made the first time an aura is asked for
+var _rim_mark: ShaderMaterial  # the rim's mark pass, drawn before it: the material over each mesh while an aura is on
+var _mark := 0  # the stencil mark the two passes share while an aura is on (RimMarks), 0 with none
+var _warm: ShaderMaterial  # the passes warm_rim put over the body, while they are on: the first of the chain
+var _warm_left := 0  # the frames they have left
+var _aura_on := false
+var _aura_held := false  # the aura is set by hold_aura, not an envelope
+var _aura_held_level := 0.0
+var _aura_color := Color.WHITE
+var _aura_strength := 1.0  # the aura's strongest, 0 to 1
+var _aura_seconds := 0.0  # how long it lasts, and how far into that it is
+var _aura_time := 0.0
+var _aura_build := 0.0  # over its last this many seconds it climbs from _aura_start of its strength to all of it
+var _aura_start := 1.0
+
+
+func _ready() -> void:
+	tree = $AnimationTree
+	# The scene's tree resource is shared by every instance of the scene, and play_move changes which
+	# clip a slot plays, so each rig works on its own copy.
+	tree.tree_root = tree.tree_root.duplicate(true)
+	# So is the library, and the snapshot clip added to it is this rig's own. The clips in the copy are the
+	# library's: only the list is new.
+	var library := tree.get_animation_library(&"")
+	tree.remove_animation_library(&"")
+	tree.add_animation_library(&"", library.duplicate())
+	var found := $Model.find_children("*", "Skeleton3D", true, false)
+	skeleton = found[0] if not found.is_empty() else null
+	if skeleton != null:
+		_filter_upper_body()
+		skeleton.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_MANUAL
+		for child in skeleton.get_children():
+			if child is OrientationWarp:
+				warp = child
+			elif child is Breathing:
+				breathing = child
+			elif child is HitReact:
+				hit_reaction = child
+			elif child is FootPlanter:
+				foot_planter = child
+			elif child is LookAtModifier3D:
+				looks.append(child)
+		skeleton.skeleton_updated.connect(_keep_shown_pose)
+		_keep_shown_pose()
+	for attachment in $Hitboxes.get_children():
+		_hitboxes[StringName(attachment.name)] = attachment.get_node("zone/shape") as CollisionShape3D
+	hurtbox = $Hurtbox
+	_body_meshes()
+	set_process(false)  # only the warming passes count frames (warm_rim); the body is driven by tick
+	_look_target = get_node_or_null(^"LookTarget") as Marker3D
+	for look in looks:
+		_look_influence.append(look.influence)
+		if _look_target != null:
+			look.target_node = look.get_path_to(_look_target)
+	_show_look()
+
+
+## A material that draws a body in `p`'s colours: the toon shader, reading the palette's texture.
+static func toon_material(p: Palette) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = TOON_SHADER
+	material.set_shader_parameter(&"palette", p.to_texture())
+	material.set_shader_parameter(&"flash_color", Color.WHITE)
+	material.set_shader_parameter(&"flash_amount", 0.0)
+	return material
+
+
+## Draws the body in `p`'s colours: one toon material, shared, as the material_override of every
+## MeshInstance3D under Model. Calling it again (a dye, say) replaces it.
+func apply_palette(p: Palette) -> void:
+	palette = p
+	_material = toon_material(p)
+	_flash_left = 0.0
+	_show_inflate()
+	for mesh in _body_meshes():
+		mesh.material_override = _material
+
+
+## Hides the MeshInstance3Ds under Model named in `parts` (an actor's hidden_parts: a tier's hood, say) and shows every
+## other. Returns the names in `parts` the model has no mesh of, each once and each an error too (a typo in a def), which
+## change nothing; a name given twice is hidden as given once.
+func hide_parts(parts: PackedStringArray) -> PackedStringArray:
+	var meshes := PackedStringArray()
+	for mesh in _body_meshes():
+		mesh.visible = not parts.has(String(mesh.name))
+		meshes.append(String(mesh.name))
+	var unknown := PackedStringArray()
+	for part in parts:
+		if meshes.find(part) < 0 and unknown.find(part) < 0:
+			unknown.append(part)
+	for part in unknown:
+		push_error("Rig: '%s' has no part '%s' to hide" % [name, part])
+	return unknown
+
+
+## Makes the body `s` times its model's size, about the rig's origin (the feet): the Model, and with it the hitboxes that
+## ride its bones and the travel of its clips' root (the move runner reads it through the skeleton's transform), so a
+## larger body strides further and its planted feet do not skate; and the Hurtbox. 1 is the model as built.
+func set_model_scale(s: float) -> void:
+	model_scale = s
+	($Model as Node3D).scale = Vector3.ONE * s
+	hurtbox.scale = Vector3.ONE * s
+	_show_inflate()
+
+
+## Draws the body `metres` thicker: the toon shader pushes every vertex out along its normal by that much, in the world's metres
+## whatever the body's scale (ActorDef.body_inflate). Only the picture grows: the skeleton, the hitboxes, the hurtbox, the feet and the
+## clips' travel are as they were. The rim's passes and an afterimage of the body grow with it. 0 draws the model as built.
+func set_body_inflate(metres: float) -> void:
+	body_inflate = metres
+	_show_inflate()
+
+
+## The inflate the shaders take: in the model's own units, which the Model's scale then multiplies back to `body_inflate` metres.
+func shader_inflate() -> float:
+	return body_inflate / maxf(model_scale, 0.001)
+
+
+# Hands the inflate to the body's material and to the rim's passes, if they exist. A body that is thicker is drawn by the shaders with
+# the inflating vertex function added (InflatedShader); one that is not by the shaders as they are.
+func _show_inflate() -> void:
+	var local := shader_inflate()
+	for material: ShaderMaterial in [_material, _rim, _rim_mark]:
+		if material != null:
+			material.set_shader_parameter(&"inflate", local)
+	if _material != null:
+		var wanted := InflatedShader.of(TOON_SHADER) if body_inflate > 0.0 else TOON_SHADER
+		if _material.shader != wanted:
+			_material.shader = wanted
+	if _rim_mark != null and _mark != 0:
+		var mark := _mark_shader()
+		if _rim_mark.shader != mark:
+			_rim_mark.shader = mark
+
+
+# The shader of the rim's mark pass for the mark this body holds: the one that writes the body's mark where the body is drawn, so it
+# is drawn the way the body is (thicker, or not).
+func _mark_shader() -> Shader:
+	var shader := RimMarks.mark_shader(_mark)
+	return InflatedShader.of(shader) if body_inflate > 0.0 else shader
+
+
+## Flashes the body `color` for `seconds`: the toon shader mixes `color` over the palette tone, all of it as the
+## flash starts and less and less (linearly) until it is gone. A hit flashes white for 2 frames and a perilous
+## attack's tell flashes rose for 0.25 s. The fade runs in tick, so a rig that is not ticked (frozen by hit-stop)
+## holds the flash. A new flash replaces the one in progress. A body drawn in the materials it was imported with
+## (no palette yet) has nothing to flash.
+func flash(color: Color, seconds: float) -> void:
+	if _material == null or seconds <= 0.0:
+		return
+	_flash_seconds = seconds
+	_flash_left = seconds
+	_material.set_shader_parameter(&"flash_color", color)
+	_material.set_shader_parameter(&"flash_amount", 1.0)
+
+
+## Lights the silhouette's edge `color` for `seconds`: a rim light on the body's outline, `rim_width_px` wide (1 to 2 pixels
+## of the picture), never on its inside. It rises fast, holds and fades over its last AURA_FADE (or two fifths of its
+## time); `strength` (0 to 1) is how much of the colour shows at its strongest. With `build` above 0 it holds at `start` of
+## that strength until the last `build` seconds of the hold and climbs to all of it by the end of the hold (a blow about to
+## land). A tell asks for its time plus the fade and ends the aura itself at its end mark (clear_aura), so what shows
+## between is the hold, not the fade. A new aura replaces the one in progress. It is counted in the rig's own ticks, so a
+## body frozen by hit-stop holds it.
+## While it is on, the body is drawn twice more: a pass that marks the pixels the body shows on, then the body grown by the
+## rim's width and lit only off those pixels (RimMarks). So the rim cannot fall on the body's inside in any pose, and what
+## stands behind the body does not change it.
+func aura(color: Color, seconds: float, strength := 1.0, build := 0.0, start := 1.0) -> void:
+	if seconds <= 0.0:
+		return
+	_aura_held = false
+	_aura_color = color
+	_aura_strength = clampf(strength, 0.0, 1.0)
+	_aura_seconds = seconds
+	_aura_time = 0.0
+	_aura_build = build
+	_aura_start = clampf(start, 0.0, 1.0)
+	_show_rim()
+
+
+## Lights the rim at exactly `level` (0 to 1) until it is set again or cleared, with no envelope of its own: what a tell does,
+## driving it from the move's own clock (ActorFx) so that it peaks with the blow whatever the move waits for.
+func hold_aura(color: Color, level: float) -> void:
+	_aura_held = true
+	_aura_color = color
+	_aura_held_level = clampf(level, 0.0, 1.0)
+	_show_rim()
+
+
+## Ends the aura now: the rim's passes come off the body and its mark is free for another's.
+func clear_aura() -> void:
+	if _aura_on:
+		_set_rim_passes(false)
+	_aura_on = false
+	_aura_held = false
+	if _rim != null:
+		_rim.set_shader_parameter(&"rim_strength", 0.0)
+
+
+## Whether an aura is on.
+func aura_active() -> bool:
+	return _aura_on
+
+
+## Whether the aura on is one set by hold_aura (a tell's, or the chain's), not an envelope (the parry's burst).
+func aura_held() -> bool:
+	return _aura_on and _aura_held
+
+
+## How strong the aura is now, 0 to 1 (0 with none): its strength times how far it has risen, held and faded.
+func aura_level() -> float:
+	if not _aura_on:
+		return 0.0
+	if _aura_held:
+		return _aura_held_level
+	var rise := minf(AURA_RISE, _aura_seconds * 0.3)
+	var fade := minf(AURA_FADE, _aura_seconds * 0.4)
+	var up := clampf(_aura_time / rise, 0.0, 1.0) if rise > 0.0 else 1.0
+	var down := clampf((_aura_seconds - _aura_time) / fade, 0.0, 1.0) if fade > 0.0 else 1.0
+	var ramp := _aura_start
+	if _aura_build > 0.0:
+		var hold_ends := _aura_seconds - fade
+		ramp = lerpf(_aura_start, 1.0, clampf((_aura_time - (hold_ends - _aura_build)) / _aura_build, 0.0, 1.0))
+	return _aura_strength * minf(up, down) * ramp
+
+
+## The colour of the aura in progress.
+func aura_color() -> Color:
+	return _aura_color
+
+
+## The material of the rim's hull pass (null before the first aura): its uniforms are what the screen shows.
+func rim_material() -> ShaderMaterial:
+	return _rim
+
+
+## Has the renderer build the shaders of the rims a fight goes round, now and not on the frame a tell starts. Each mark
+## has its own two shaders (RimMarks), and a shader is built on the first frame something is drawn with it: the frame a
+## wind-up's rim came on in took half as long again, once for each mark. So the body wears the two passes of each of the
+## first RimMarks.WARM marks, one after another, for WARM_FRAMES frames, and they show nothing: a mark pass never does,
+## and a hull with no strength is clear. One body does it for all (a shader is built once, whatever is drawn with it):
+## Main asks Abarax, whom the camera is on, when a region loads, before anything there has a rim on. (While he wears
+## them his body carries those marks, and another body's rim would not show over him.)
+## With an aura on, the body's passes are the aura's, and this does nothing; an aura that comes on takes their place.
+func warm_rim() -> void:
+	if _aura_on:
+		return
+	if _warm == null:
+		for mark in range(RimMarks.FIRST + RimMarks.WARM - 1, RimMarks.FIRST - 1, -1):
+			var hull := _rim_pass(RimMarks.hull_shader(mark), RIM_MARK_PRIORITY + 1, _warm)
+			_warm = _rim_pass(RimMarks.mark_shader(mark), RIM_MARK_PRIORITY, hull)
+		for mesh in _body_meshes():
+			mesh.material_overlay = _warm
+	_warm_left = WARM_FRAMES
+	set_process(true)
+
+
+## Where the clip of a stepped move is shown at gameplay time `t`: on a grid of `fps` steps per second,
+## except that the first step shows as soon as the move starts (so a press answers at once), and the
+## rest land on the grid (so marks, which sit on it, line up with what is shown). Smooth clips
+## (`fps <= 0`) and the start itself (`t <= 0`) are shown as they are.
+static func stepped_time(t: float, fps: int) -> float:
+	if fps <= 0 or t <= 0.0:
+		return t
+	return maxf(floorf(t * fps + 1e-4), 1.0) / fps
+
+
+## Has the locomotion blend play `clips` (base clip name -> clip name: &"idle" -> &"blade_idle") in place of the clips it names, from
+## the next tick on. Every rig has its own copy of the scene's blend tree (_ready makes it), so this changes only this rig's:
+## no other body of the scene changes. A clip the rig lacks is an error and is left as it was.
+func set_locomotion_clips(clips: Dictionary) -> void:
+	var loco := (tree.tree_root as AnimationNodeBlendTree).get_node(&"loco") as AnimationNodeBlendSpace1D
+	for i in loco.get_blend_point_count():
+		var node := loco.get_blend_point_node(i) as AnimationNodeAnimation
+		var armed := StringName(str(clips.get(node.animation, node.animation)))
+		if not tree.has_animation(armed):
+			push_error("Rig: '%s' has no locomotion clip '%s'" % [name, armed])
+			continue
+		node.animation = armed
+
+
+## Sets the locomotion blend: `speed` in m/s picks between idle, walk, jog and sprint (the blend points
+## sit at those clips' ground speeds), and `backward` plays the cycle in reverse.
+func set_locomotion(speed: float, backward: bool) -> void:
+	var stride := model_scale * cadence if not is_equal_approx(cadence, 1.0) else 1.0
+	tree.set(LOCO_SPEED, speed / stride)
+	tree.set(LOCO_SCALE, (-1.0 if backward else 1.0) * cadence)
+
+
+## Sets how far the way the actor moves is from the way it faces: `angle` in radians about up (positive
+## turns +Z toward +X), 0 when it goes the way it faces. Returns whether locomotion should play backward,
+## for set_locomotion: past 110° (OrientationWarp.solve), but with STRAFE_SWITCH_BAND_DEG of hysteresis, so
+## it changes direction only past 115° or back inside 105°. The orientation warp turns the hips for that
+## direction: toward the path, or toward its opposite.
+func set_strafe(angle: float) -> bool:
+	var off := absf(wrapf(angle, -PI, PI))
+	if _backward:
+		_backward = off >= deg_to_rad(OrientationWarp.BACKWARD_FROM_DEG - STRAFE_SWITCH_BAND_DEG)
+	else:
+		_backward = off > deg_to_rad(OrientationWarp.BACKWARD_FROM_DEG + STRAFE_SWITCH_BAND_DEG)
+	if warp != null:
+		warp.angle = angle
+		warp.backward = _backward
+	return _backward
+
+
+## Lays the looping `clip` over the upper body when `on` (UPPER_BODY and every bone under it; the hips and legs keep
+## locomotion), fading it in over STANCE_FADE (0.08 s), or fades it out. A move is laid over it as over locomotion.
+## It plays from its start when it fades in from nothing, and carries on where it was when it comes back mid-fade.
+## A clip the rig does not have is an error, and changes nothing.
+func set_stance(clip: StringName, on: bool) -> void:
+	if on:
+		if not tree.has_animation(clip):
+			push_error("Rig: '%s' has no clip '%s'" % [name, clip])
+			return
+		(tree.tree_root.get_node(STANCE_NODE) as AnimationNodeAnimation).animation = clip
+		if is_zero_approx(_stance) and is_zero_approx(_stance_goal):
+			_stance_time = 0.0
+	_stance_goal = 1.0 if on else 0.0
+
+
+## Makes the body lifeless (or alive again): a corpse is still. Breathing stops, the feet are no longer planted on the
+## ground under them (the clip's pose is all there is) and the head looks at nothing, at once rather than over the
+## look's fade, so that a body held on its last pose (a death's) shows the same pose tick after tick. Actor.die does it
+## and Actor.revive undoes it.
+func set_lifeless(on: bool) -> void:
+	lifeless = on
+	if foot_planter != null:
+		foot_planter.max_rate = LIFELESS_FOOT_RATE if on else INF
+	if on:
+		clear_aura()
+	if breathing != null:
+		breathing.active = not on
+	if on:
+		_look_point = null
+		_look_weight = 0.0
+		_look_from = 0.0
+		_show_look()
+
+
+## Sets how out of breath the body is, 0 (at rest) to 1; it fades back to rest by itself over six seconds.
+## The actor sets 1 while it sprints.
+func set_exertion(exertion: float) -> void:
+	if breathing != null:
+		breathing.exertion = clampf(exertion, 0.0, 1.0)
+
+
+## Sets where the breath is, `phase` in radians (0 is mid-breath on the way in, PI / 2 the top): where it
+## starts, so that bodies standing together do not breathe in step. It carries on from there.
+func set_breath_phase(phase: float) -> void:
+	if breathing != null:
+		breathing.phase = fposmod(phase, TAU)
+
+
+## A blow travelling along `dir` (world space, from the striker through the body) with `strength` (1 is an
+## ordinary hit): the upper body is knocked away from it and springs back (HitReact).
+func hit_react(dir: Vector3, strength: float) -> void:
+	if hit_reaction != null:
+		hit_reaction.react(dir, strength)
+
+
+## What the actor's probe found under `foot` (foot_l or foot_r): {position: Vector3, normal: Vector3} in the
+## world, or null if nothing (the foot then goes back to the clip's). The FootPlanter stands the foot on it
+## from the next tick on.
+func set_foot_ground(foot: StringName, hit: Variant) -> void:
+	if foot_planter == null:
+		return
+	if not foot_planter.ground.has(foot):
+		push_error("Rig: '%s' has no foot '%s'" % [name, foot])
+		return
+	if hit != null and not (hit is Dictionary and hit.get("position") is Vector3 and hit.get("normal") is Vector3):
+		push_error("Rig: the ground under '%s' must be {position, normal} or null, not %s" % [foot, hit])
+		return
+	foot_planter.ground[foot] = hit
+
+
+## Holds each foot that stands on the ground where it is for the next `frames` ticks (FootPlanter.holds): a move that begins from a
+## planted stance (a counter, out of a sway) is blended in over a few frames, and a blend of two poses slides a planted foot unless the
+## foot is told to stay. A foot the clip lifts is let go at once.
+func hold_feet(frames: int) -> void:
+	if foot_planter == null or skeleton == null:
+		return
+	var to_skeleton := skeleton.global_transform.affine_inverse()
+	foot_planter.holds.clear()
+	for foot in FootPlanter.FEET:
+		var at := to_skeleton * shown_pose(foot).origin
+		if at.y <= foot_planter.ankle_height + FEET_HOLD_GROUNDED:
+			foot_planter.holds[foot] = at
+	foot_planter.hold_frames(frames)
+
+
+## Lets every held foot go at once: another move has started (a reaction too), or the body died or was paired.
+func release_feet() -> void:
+	if foot_planter != null:
+		foot_planter.holds.clear()
+		foot_planter.hold_frames(0)
+
+
+## Where `foot` was in the world in the last tick's pose before it was planted (the clips' pose with the
+## modifiers before the FootPlanter), placed where the body is now: where to probe for the ground under it.
+## Before the first tick, or without a planter, the clips' pose.
+func animated_foot(foot: StringName) -> Vector3:
+	if foot_planter != null and foot_planter.animated.has(foot):
+		return skeleton.global_transform * (foot_planter.animated[foot] as Vector3)
+	return animated_pose(foot).origin
+
+
+## `bone`'s transform in the world in the clips' pose of the last tick, without the modifiers, placed where
+## the body is now.
+func animated_pose(bone: StringName) -> Transform3D:
+	var index := skeleton.find_bone(bone)
+	if index < 0:
+		push_error("Rig: '%s' has no bone '%s'" % [name, bone])
+		return global_transform
+	return skeleton.global_transform * skeleton.get_bone_global_pose(index)
+
+
+## Turns the head (and some of the neck) toward `target`, a world point, from the next tick on; null looks
+## at nothing, and the head eases back to the clip's. The head turns no further than LOOK_YAW_LIMIT_DEG
+## either side of the body's facing and LOOK_PITCH_LIMIT_DEG up or down; a point beyond is looked at as
+## far as that goes. The look fades in and out over the modifiers' duration (0.3 s, with their transition
+## and ease), and the head eases over to a new target (one LOOK_RETARGET_DISTANCE from the last) the same
+## way; a point that moves less between calls is followed as it moves.
+func look_at_point(target: Variant) -> void:
+	if target != null and not target is Vector3:
+		push_error("Rig: look_at_point takes a Vector3 or null, not %s" % [target])
+		return
+	if looks.is_empty() or _look_target == null:
+		return
+	if target == null:
+		if _look_point != null:
+			_fade_look()
+		_look_point = null  # LookTarget stays where it was while the look fades out
+		return
+	var new_target: bool = _look_point == null or (target as Vector3).distance_to(_look_point) > LOOK_RETARGET_DISTANCE
+	if _look_point == null:
+		_fade_look()
+	if new_target and _look_weight > 0.0:
+		# The head is (still) turned toward something else. A change of target node starts a modifier's
+		# ease from the way its bone faces now, so setting it away and back eases the head over.
+		for look in looks:
+			look.target_node = NodePath()
+			look.target_node = look.get_path_to(_look_target)
+	_look_point = target
+
+
+## The world point the head is turned toward (as given to look_at_point), or null.
+func looking_at() -> Variant:
+	return _look_point
+
+
+## Starts `clip` as a move: it goes into the slot the current move is not in, at time 0, and over
+## `blend_in` seconds the tree crossfades to that slot and brings the move layer fully over locomotion.
+## A blend_in of 0 or less shows the move at once. A clip the rig does not have is an error, and
+## changes nothing.
+## If that slot is still showing the move before the current one (the current move is cancelled while it is
+## fading in), loading a clip into it would snap that part of the pose to the new clip's first frame. So the
+## pose the tree showed last tick goes into the current move's slot as a SNAPSHOT_CLIP, and the crossfade
+## starts from it, fully over locomotion (the snapshot has locomotion in it already).
+func play_move(clip: StringName, blend_in: float) -> void:
+	if not tree.has_animation(clip):
+		push_error("Rig: '%s' has no clip '%s'" % [name, clip])
+		return
+	var slot := 1 if _slot == 0 else 0
+	if blend_in > 0.0 and _slot >= 0 and _layer > 0.0 and _slot_weight(slot) > 0.0:
+		_hold_pose(_slot)
+		_ab = float(_slot)
+		_layer = 1.0
+	_slot = slot
+	(tree.tree_root.get_node(SLOT_NODES[slot]) as AnimationNodeAnimation).animation = clip
+	_slot_times[slot] = 0.0
+	_slot_steps[slot] = int(tree.get_animation(clip).get_meta(STEP_FPS_META, 0))
+	_ab_goal = float(slot)
+	_ab_time = blend_in
+	_layer_goal = 1.0
+	_layer_time = blend_in
+	if blend_in <= 0.0 or is_zero_approx(_layer):
+		# Nothing of the other slot is showing, so there is nothing to fade from.
+		_ab = _ab_goal
+	if blend_in <= 0.0:
+		_layer = _layer_goal
+
+
+## Sets the current move's gameplay time, in seconds from its start. What is shown is
+## stepped_time(t, step_fps of its clip).
+func set_move_time(t: float) -> void:
+	if _slot >= 0:
+		_slot_times[_slot] = t
+
+
+## Shows the last pose of `clip` at once, fully over locomotion, and keeps it there: a body left lying where its
+## move ended (a death, a finisher's victim), which the fade back to locomotion would stand up again. The next
+## play_move or stop_move lets it go.
+func hold_end_pose(clip: StringName) -> void:
+	play_move(clip, 0.0)
+	if tree.has_animation(clip):
+		set_move_time(tree.get_animation(clip).length)
+
+
+## Fades the move layer out over `blend_out` seconds, back to locomotion. 0 or less is at once.
+func stop_move(blend_out: float) -> void:
+	_layer_goal = 0.0
+	_layer_time = blend_out
+	if blend_out <= 0.0:
+		_layer = 0.0
+
+
+## Poses the body for this frame: places both move slots at their times, moves the blends on by
+## `delta`, then advances the tree by `delta`, which applies the pose to the skeleton straight away, and
+## runs the skeleton's modifiers over it with the same `delta`. The shown pose (shown_pose, bone_global, the
+## skin, the hitboxes) is this tick's, modifiers included, as soon as this returns.
+## Call it in the physics step, as the actor does. The engine's modifiers (the legs' IK, the look) aim at
+## the markers this places; with physics interpolation on, outside the physics step they read where the
+## markers were at the start of the frame, so the legs and head would aim a frame late.
+func tick(delta: float) -> void:
+	if _aura_on and not _aura_held:
+		_aura_time += delta
+		if _aura_time >= _aura_seconds:
+			clear_aura()
+		else:
+			_rim.set_shader_parameter(&"rim_strength", aura_level())
+	if _flash_left > 0.0:
+		_flash_left = maxf(_flash_left - delta, 0.0)
+		_material.set_shader_parameter(&"flash_amount", _flash_left / _flash_seconds if _flash_left > 1e-6 else 0.0)
+	for slot in 2:
+		# The slot that is fading out keeps playing on its own clock while it still shows.
+		if slot != _slot and _slot != -1 and _layer > 0.0 and _slot_weight(slot) > 0.0:
+			_slot_times[slot] += delta
+		tree.set(SLOT_SEEKS[slot], stepped_time(_slot_times[slot], _slot_steps[slot]))
+	if _stance > 0.0 or _stance_goal > 0.0:
+		_stance_time += delta
+		var length := tree.get_animation((tree.tree_root.get_node(STANCE_NODE) as AnimationNodeAnimation).animation).length
+		tree.set(STANCE_SEEK, fposmod(_stance_time, length) if length > 0.0 else 0.0)
+	_stance = _fade(_stance, _stance_goal, STANCE_FADE, delta)
+	_ab = _fade(_ab, _ab_goal, _ab_time, delta)
+	_layer = _fade(_layer, _layer_goal, _layer_time, delta)
+	tree.set(STANCE_BLEND, _stance)
+	tree.set(MOVE_AB, _ab)
+	tree.set(MOVE_BLEND, _layer)
+	tree.advance(delta)
+	if skeleton == null:
+		return
+	if warp != null:
+		# The warp is for locomotion: a move's clip poses the whole body.
+		warp.influence = 1.0 - _layer
+	if foot_planter != null:
+		foot_planter.planting = not airborne and not lifeless
+	_place_look_target()
+	_look_time += delta
+	_show_look()
+	# The skeleton would run its modifiers in an update deferred to the end of the frame. advance() gives
+	# them the delta, and the update is run here instead, so this tick's pose is done when tick returns.
+	# The deferred update then finds nothing left to do: running the update clears what it was asked for.
+	skeleton.advance(delta)
+	skeleton.notification(Skeleton3D.NOTIFICATION_UPDATE_SKELETON)
+
+
+## How much the move layer shows over locomotion: 0 is locomotion only, 1 is the move only.
+func move_weight() -> float:
+	return _layer
+
+
+## Where `bone` is in the world, in the pose the last tick showed: see shown_pose.
+func bone_global(bone: StringName) -> Vector3:
+	return shown_pose(bone).origin
+
+
+## `bone`'s transform in the world, in the pose the last tick showed: the clips' pose with the skeleton's
+## modifiers over it, as the skin draws it. (The skeleton's own get_bone_global_pose gives the clips' pose
+## without them.)
+func shown_pose(bone: StringName) -> Transform3D:
+	var index := skeleton.find_bone(bone)
+	if index < 0:
+		push_error("Rig: '%s' has no bone '%s'" % [name, bone])
+		return global_transform
+	return skeleton.global_transform * _shown[index]
+
+
+## Marks the hitbox `id` (a child of Hitboxes) on or off, as the move runner turns it on and off with its
+## marks. What looks for hurtboxes is the actor's HitScanner, which the runner tells too; this is what the rig
+## shows of it (active_hitboxes).
+func set_hitbox_active(id: StringName, on: bool) -> void:
+	if not _hitboxes.has(id):
+		push_error("Rig: '%s' has no hitbox '%s'" % [name, id])
+		return
+	if on:
+		_active[id] = true
+	else:
+		_active.erase(id)
+
+
+## The ids of the hitboxes that are on, in the order of Hitboxes' children.
+func active_hitboxes() -> Array[StringName]:
+	var on: Array[StringName] = []
+	for id: StringName in _hitboxes:
+		if _active.has(id):
+			on.append(id)
+	return on
+
+
+## The CollisionShape3D under the hitbox `id`'s zone: the shape a HitScanner sweeps, riding the hand bone. Null,
+## with an error, for an id the rig does not have.
+func hitbox_shape(id: StringName) -> CollisionShape3D:
+	var shape: CollisionShape3D = _hitboxes.get(id)
+	if shape == null:
+		push_error("Rig: '%s' has no hitbox '%s'" % [name, id])
+	return shape
+
+
+# Loads `slot` with a clip of one key that holds the pose the tree gave the skeleton last tick: a rotation key
+# for each bone the clip the slot plays poses, and a position key for those it moves (the pelvis, the root).
+# It is the pose before the skeleton's modifiers, which go over the crossfade from it as they went over the
+# pose it holds, so none is applied twice (the foot planter, which turns each foot back by what the leg's IK
+# did on the tick before, would turn them back twice). The bones come from the slot's clip and not from the
+# skeleton, so the ones no clip poses (the scarf's, which a simulation moves) are left to their modifier.
+func _hold_pose(slot: int) -> void:
+	var node := tree.tree_root.get_node(SLOT_NODES[slot]) as AnimationNodeAnimation
+	var posed := tree.get_animation(node.animation)
+	var snapshot := Animation.new()
+	snapshot.length = SNAPSHOT_LENGTH
+	for t in posed.get_track_count():
+		var type := posed.track_get_type(t)
+		var path := posed.track_get_path(t)
+		var bone := skeleton.find_bone(path.get_subname(0)) if path.get_subname_count() > 0 else -1
+		if bone < 0 or (type != Animation.TYPE_ROTATION_3D and type != Animation.TYPE_POSITION_3D):
+			continue
+		var track := snapshot.add_track(type)
+		snapshot.track_set_path(track, path)
+		if type == Animation.TYPE_ROTATION_3D:
+			snapshot.rotation_track_insert_key(track, 0.0, skeleton.get_bone_pose_rotation(bone))
+		else:
+			snapshot.position_track_insert_key(track, 0.0, skeleton.get_bone_pose_position(bone))
+	var library := tree.get_animation_library(&"")
+	if library.has_animation(SNAPSHOT_CLIP):
+		library.remove_animation(SNAPSHOT_CLIP)
+	library.add_animation(SNAPSHOT_CLIP, snapshot)
+	node.animation = SNAPSHOT_CLIP
+	_slot_times[slot] = 0.0
+	_slot_steps[slot] = 0
+
+
+# Filters stance_blend to the upper body: the track paths of UPPER_BODY and every bone under it.
+func _filter_upper_body() -> void:
+	var blend := (tree.tree_root as AnimationNodeBlendTree).get_node(&"stance_blend") as AnimationNodeBlend2
+	var skeleton_path := get_path_to(skeleton)
+	var under := [skeleton.find_bone(UPPER_BODY)] if skeleton.find_bone(UPPER_BODY) >= 0 else []
+	while not under.is_empty():
+		var bone: int = under.pop_back()
+		blend.set_filter_path(NodePath("%s:%s" % [skeleton_path, skeleton.get_bone_name(bone)]), true)
+		under.append_array(Array(skeleton.get_bone_children(bone)))
+	blend.filter_enabled = true
+
+
+# The body's meshes: every MeshInstance3D under Model as the rig was built, found the first time they are asked for and
+# kept (the palette, the hidden parts and the rim all go over them, the rim every frame of a tell). One that joins the
+# model later (an effect riding a bone) is no part of the body. Each is put on the render layer `bodies`, and on that
+# alone, so that a region can light the bodies apart from the world (a night's moon fills them, and its sun leaves them
+# to it: the training yard).
+func _body_meshes() -> Array[MeshInstance3D]:
+	if not _meshes_found:
+		_meshes_found = true
+		for node in $Model.find_children("*", "MeshInstance3D", true, false):
+			var mesh := node as MeshInstance3D
+			mesh.layers = Layers.RENDER_BODIES
+			_meshes.append(mesh)
+	return _meshes
+
+
+# Counts the warming passes' frames (warm_rim), and takes them off after the last.
+func _process(_delta: float) -> void:
+	_warm_left -= 1
+	if _warm_left <= 0:
+		_end_warming(true)
+
+
+# The warming passes are done with: taken off the body (`take_off`), or left for an aura's passes to replace.
+func _end_warming(take_off: bool) -> void:
+	if _warm != null and take_off:
+		for mesh in _body_meshes():
+			mesh.material_overlay = null
+	_warm = null
+	set_process(false)
+
+
+# One pass of a rim: `shader` at `priority`, with `next` drawn after it.
+static func _rim_pass(shader: Shader, priority: int, next: ShaderMaterial) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	material.render_priority = priority
+	material.next_pass = next
+	return material
+
+
+# Shows the aura as it now stands: its colour, width and strength go to the hull pass, and if the rim was off, its two
+# passes go over the body.
+func _show_rim() -> void:
+	if _rim == null:
+		_rim = _rim_pass(null, RIM_MARK_PRIORITY + 1, null)
+		_rim_mark = _rim_pass(null, RIM_MARK_PRIORITY, _rim)
+	if not _aura_on:
+		_aura_on = true
+		_end_warming(false)
+		_set_rim_passes(true)
+	_rim.set_shader_parameter(&"inflate", shader_inflate())
+	_rim.set_shader_parameter(&"rim_color", _aura_color)
+	_rim.set_shader_parameter(&"rim_width", rim_width_px)
+	_rim.set_shader_parameter(&"rim_strength", aura_level())
+
+
+# Puts the rim's passes over every mesh of the body (a material_overlay is drawn after the mesh's own material: here the
+# mark pass, and the hull as its next pass), with a mark taken for them; or takes them off and gives the mark back.
+func _set_rim_passes(on: bool) -> void:
+	if on:
+		_mark = RimMarks.take()
+		_rim_mark.shader = _mark_shader()
+		_rim.shader = RimMarks.hull_shader(_mark)
+		_show_inflate()
+	else:
+		RimMarks.give_back(_mark)
+		_mark = 0
+	for mesh in _body_meshes():
+		mesh.material_overlay = _rim_mark if on else null
+
+
+func _notification(what: int) -> void:
+	# A body freed with its rim on: the mark it holds is free again.
+	if what == NOTIFICATION_PREDELETE and _mark != 0:
+		RimMarks.give_back(_mark)
+		_mark = 0
+
+
+# Keeps each bone's pose as the skeleton shows it: called while it updates, with the modifiers applied.
+func _keep_shown_pose() -> void:
+	var count := skeleton.get_bone_count()
+	_shown.resize(count)
+	for i in count:
+		_shown[i] = skeleton.get_bone_global_pose(i)
+
+
+# Starts the look fading toward shown (a point to look at) or gone, from where it is now.
+func _fade_look() -> void:
+	_look_from = _look_weight
+	_look_time = 0.0
+
+
+# Sets the look modifiers' influence for the time the fade has run: from _look_from to 1 while there is a
+# point to look at, or to 0, over the modifiers' duration, eased as they ease.
+func _show_look() -> void:
+	if looks.is_empty():
+		return
+	var goal := 0.0 if _look_point == null or lifeless else 1.0
+	var ease_with := looks[0]
+	if ease_with.duration <= 0.0 or _look_time >= ease_with.duration:
+		_look_weight = goal
+	else:
+		_look_weight = Tween.interpolate_value(_look_from, goal - _look_from, _look_time, ease_with.duration,
+				ease_with.transition_type, ease_with.ease_type)
+	for i in looks.size():
+		looks[i].influence = _look_influence[i] * _look_weight
+
+
+# Puts LookTarget where the head should look: toward the point given to look_at_point, but no further round
+# from the body's facing than the look limits, and at least LOOK_MIN_DISTANCE away.
+func _place_look_target() -> void:
+	if _look_point == null or _look_target == null:
+		return
+	var head := bone_global(HEAD)
+	var facing := global_basis.orthonormalized()
+	var local := facing.inverse() * ((_look_point as Vector3) - head)
+	var yaw := atan2(local.x, local.z)
+	var pitch := atan2(local.y, Vector2(local.x, local.z).length())
+	var yaw_limit := deg_to_rad(LOOK_YAW_LIMIT_DEG)
+	if absf(yaw) > yaw_limit:
+		if absf(yaw) < PI - deg_to_rad(LOOK_BEHIND_BAND_DEG):
+			_look_side = signf(yaw)
+		yaw = _look_side * yaw_limit
+	elif not is_zero_approx(yaw):
+		_look_side = signf(yaw)
+	pitch = clampf(pitch, -deg_to_rad(LOOK_PITCH_LIMIT_DEG), deg_to_rad(LOOK_PITCH_LIMIT_DEG))
+	var along := Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch))
+	_look_target.global_position = head + facing * along * maxf(local.length(), LOOK_MIN_DISTANCE)
+
+
+# The weight the tree gives the move in `slot`, within the move layer.
+func _slot_weight(slot: int) -> float:
+	return _ab if slot == 1 else 1.0 - _ab
+
+
+# `value` moved toward `goal` by delta / full_time, where full_time is how long a whole 0-to-1 change
+# takes; at once when full_time is 0 or less.
+static func _fade(value: float, goal: float, full_time: float, delta: float) -> float:
+	if full_time <= 0.0:
+		return goal
+	return move_toward(value, goal, delta / full_time)
