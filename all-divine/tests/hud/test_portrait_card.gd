@@ -247,6 +247,26 @@ func _with(lines: PackedStringArray, part: String) -> PackedStringArray:
 	return found
 
 
+func test_twenty_lines_by_one_stand_in_are_one_placeholder_line() -> void:
+	var scene := (load(FIXTURE) as SceneShots).duplicate_deep()
+	var shot: Shot = scene.shots[3]
+	var first: DialogueLine = shot.lines[0]
+	for i in 19:
+		var more := first.duplicate() as DialogueLine
+		more.at = first.at + 1 + i
+		shot.lines.append(more)
+	for line: DialogueLine in shot.lines:
+		line.speaker = &"abarax"
+		line.expr = &"smile"
+	var checker := ShotChecker.new()
+	var lines := checker.check(scene)
+	var smiles := _with(lines, "abarax's portrait 'smile' is a stand-in")
+	assert_eq(smiles.size(), 1, "twenty lines by Abarax's smile are one line, not twenty: %s" % [smiles])
+	if smiles.size() == 1:
+		assert_true(smiles[0].contains("(%d lines, the first is line 1 of %s)" % [shot.lines.size(), shot.id]), smiles[0])
+	assert_true(checker.is_placeholder(smiles[0] if smiles.size() > 0 else ""), "and it is a placeholder")
+
+
 func test_final_refuses_a_stand_in_by_name() -> void:
 	var scene := (load(FIXTURE) as SceneShots).duplicate_deep()
 	var lines := ShotChecker.new().check(scene)
@@ -255,7 +275,8 @@ func test_final_refuses_a_stand_in_by_name() -> void:
 	for line in stand_ins:
 		assert_true(ShotChecker.new().is_placeholder(line), "listed as a placeholder: %s" % line)
 		assert_true(line.contains("fixture_knuckle's portrait 'neutral' is a stand-in"), "naming the speaker and the expression: %s" % line)
-		assert_true(line.contains("placeholder: line 1 of S3: "), "and the line and the shot: %s" % line)
+		assert_true(line.contains("placeholder: fixture_knuckle's portrait"), "as one `placeholder:` line for the speaker and expression: %s" % line)
+		assert_true(line.contains("(1 line, the first is line 1 of S3)"), "with how many lines say it: %s" % line)
 	assert_eq(_with(lines, "abarax's portrait 'neutral'").size(), 0, "Abarax's neutral is the owner's own drawing, no stand-in")
 	assert_eq(_with(lines, "has no '").size(), 0, "no line is an error: %s" % [lines])
 	# An approved scene refuses it (what story_check --final does with every placeholder).
