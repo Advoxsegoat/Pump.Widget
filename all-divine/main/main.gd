@@ -34,6 +34,10 @@ const EXIT_DIVERGED := 3
 const YARD := "res://world/training_yard/training_yard.tscn"
 const COURTYARD := "res://world/courtyard/courtyard.tscn"
 const BILIBARA := "res://world/bilibara/bilibara.tscn"
+## The keys Main reads itself (F1 to F9 and F11; Alt+Enter is WindowToggle's) and the pad button it reads (Select), which the controls
+## screen's capture refuses to bind: a key bound to a game action would be taken here first and never reach the fight.
+const OWN_KEYS: Array[Key] = [KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8, KEY_F9, KEY_F11]
+const OWN_BUTTONS: Array[JoyButton] = [JOY_BUTTON_BACK]
 ## How far Abarax walks toward the Knuckle in the self-test before he waits for it, and the stick's push.
 const SELFTEST_APPROACH := 2.0
 const SELFTEST_WALK_PUSH := 0.6
@@ -119,6 +123,12 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if Game.state == Game.State.PAUSE and menu.capturing():
+		# A binding waits for its button: the menu has the event first and nothing else is done with it, so that the game's own keys
+		# (which it refuses, saying so) do none of their own work meanwhile.
+		menu.handle(event)
+		get_viewport().set_input_as_handled()
+		return
 	if WindowToggle.is_toggle(event):
 		WindowToggle.apply(window)
 		Settings.note_window_mode(window.mode)
