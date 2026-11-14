@@ -53,7 +53,7 @@ func test_the_root_page_is_narrower_than_140_px_and_every_text_fits_inside_it() 
 			assert_true(w <= inner, "%s: a text ending at %d is inside the padding (%d)" % [id, w, inner])
 	menu.show_page(&"root")
 	var rows := menu.rows()
-	assert_eq([rows[0].rect.position.y, rows[1].rect.position.y, menu.panel().size.y], [28, 38, 60], "heights as before")
+	assert_eq([rows[0].rect.position.y, rows[1].rect.position.y, menu.panel().size.y], [28, 38, 70], "heights: three rows now (Resume, Settings, Quit)")
 
 
 func test_a_page_whose_row_would_pass_224_is_cut_there_and_the_width_stays_while_open() -> void:
@@ -122,3 +122,53 @@ func test_a_page_that_fits_has_no_arrows_and_shows_every_row() -> void:
 	assert_eq(menu.rows().size(), 14, "fourteen fit")
 	assert_true(menu.layout().arrow_up.size == Vector2i.ZERO and menu.layout().arrow_down.size == Vector2i.ZERO, "no arrows")
 	assert_true(menu.panel().end.y <= 190)
+
+
+func _text_end(menu: Menu, text: String, at: Vector2i) -> int:
+	return at.x + ceili(ThemeDB.fallback_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, Menu.FONT_SIZE).x)
+
+
+func test_a_page_whose_heading_is_its_widest_text_has_room_for_it() -> void:
+	var page := MenuPage.new()
+	page.heading = "A heading wider than the footer too"
+	page.back = func() -> void: pass
+	page.rows.append(MenuRow.action("Ok", func() -> void: pass))
+	var menu := _menu_with(page)
+	var map := menu.layout()
+	var inner: int = menu.panel().end.x - Menu.PADDING
+	assert_true(_text_end(menu, menu.heading(), map.heading_at) <= inner, "the heading ends inside the padding (panel %d)" % menu.panel().size.x)
+	assert_true(menu.panel().size.x > 140, "and the panel grew for it (%d)" % menu.panel().size.x)
+
+
+func test_the_footer_of_either_device_fits_a_page_of_short_rows() -> void:
+	var page := MenuPage.new()
+	page.heading = "Hi"
+	page.back = func() -> void: pass
+	page.rows.append(MenuRow.action("Ok", func() -> void: pass))
+	var menu := _menu_with(page)
+	menu.pad_present = func() -> bool: return true
+	for device in [Inputs.Device.KEYBOARD_MOUSE, Inputs.Device.GAMEPAD]:
+		Inputs._device = device
+		var map := menu.layout()
+		assert_true(_text_end(menu, menu.footer(), map.footer_at) <= menu.panel().end.x - Menu.PADDING, "%s: the footer '%s' fits" % [device, menu.footer()])
+	Inputs._device = Inputs.Device.KEYBOARD_MOUSE
+	# And the panel is not wider than the wider footer needs.
+	var wider := maxi(menu._text_width(Menu.FOOTER_KEYBOARD), menu._text_width(Menu.FOOTER_PAD))
+	assert_eq(menu.panel().size.x, wider + 2 * Menu.PADDING, "as wide as the wider footer and no more")
+
+
+func test_the_arrows_of_a_scrolling_page_are_inside_the_panel_and_clear_of_the_text() -> void:
+	var menu := _menu_with(_long_page(20))
+	for step in 20:
+		var map := menu.layout()
+		for arrow: Rect2i in [map.arrow_up, map.arrow_down]:
+			if arrow.size == Vector2i.ZERO:
+				continue
+			assert_true(arrow.end.x <= menu.panel().end.x - Menu.PADDING + 0, "step %d: the arrow ends inside the padding" % step)
+			assert_true(arrow.position.x >= _text_end(menu, menu.heading(), map.heading_at), "step %d: and is clear of the heading" % step)
+			assert_true(arrow.position.x >= _text_end(menu, menu.footer(), map.footer_at), "step %d: and of the footer" % step)
+			for r in menu.rows():
+				if (r.rect as Rect2i).intersects(Rect2i(arrow.position, arrow.size)):
+					var text_end: int = _text_end(menu, r.value, r.value_at) if not (r.value as String).is_empty() else _text_end(menu, r.label, r.text_at)
+					assert_true(arrow.position.x >= text_end, "step %d: nor over row %d's text" % [step, r.index])
+		menu.press(C.DOWN)

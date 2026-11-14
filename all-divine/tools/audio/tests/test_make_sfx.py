@@ -126,13 +126,13 @@ class MakeSfx(unittest.TestCase):
         self.assertGreater(len(heavy), len(palm))
 
     def test_the_shipped_files_are_what_the_tool_makes(self):
-        # The WAVs under assets/audio/sfx/ are this tool's output: change the tool, run it again.
+        # The WAVs under assets/audio/sfx/ are this tool's output (voice_blip.wav is make_blips.py's): change the tool, run it again.
         for name, data in self.files.items():
             with self.subTest(name):
                 path = SHIPPED / (name + ".wav")
                 self.assertTrue(path.exists(), "%s is missing: run tools/audio/make_sfx.py" % path)
                 self.assertEqual(path.read_bytes(), data, "%s is out of date: run tools/audio/make_sfx.py" % path)
-        extra = sorted(p.name for p in SHIPPED.glob("*.wav") if p.stem not in self.files) if SHIPPED.exists() else []
+        extra = sorted(p.name for p in SHIPPED.glob("*.wav") if p.stem not in self.files and p.stem != "voice_blip") if SHIPPED.exists() else []
         self.assertEqual(extra, [], "WAVs the tool does not make")
 
     def test_the_evade_whoosh_is_soft_and_short(self):
