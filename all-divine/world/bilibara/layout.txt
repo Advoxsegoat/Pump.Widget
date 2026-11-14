@@ -333,6 +333,69 @@ block 35 0 50 5 2 tannery high
 row chimney 42.95 0.6 42.95 0.6 0 y=6.8 backdrop
 block 50 0 62.5 5 2 shed flat
 
+# --- Roofs that show: snow drifts break up the flat tops (T2, the lane's stub, the tanneries and sheds east of the lane, the sheds south of
+# the yard), so that no top shows more than about 6 x 6 m of one tone. The tops of T6 and the yard's
+# and the alcove's walls are never in a picture from any walkable point (their roofs are 9 m higher up the picture than their feet). ---
+curb -29.28 -9.34 -26.28 -7.34 0.25 snow name=Drift y=7.83
+curb -23.76 -9.53 -20.76 -7.53 0.25 snow name=Drift y=7.83
+curb -18.94 -8.82 -15.94 -6.82 0.25 snow name=Drift y=7.83
+curb -14.71 -8.48 -11.71 -6.48 0.25 snow name=Drift y=7.83
+curb -9.74 -8.66 -6.74 -6.66 0.25 snow name=Drift y=7.83
+curb -4.69 -9.48 -1.69 -7.48 0.25 snow name=Drift y=7.83
+curb 0.88 -7.72 3.88 -5.72 0.25 snow name=Drift y=7.83
+curb 5.40 -9.16 8.40 -7.16 0.25 snow name=Drift y=7.83
+curb 11.20 -7.43 14.20 -5.43 0.25 snow name=Drift y=7.83
+curb 16.12 -8.75 19.12 -6.75 0.25 snow name=Drift y=7.83
+curb 21.76 -9.59 24.76 -7.59 0.25 snow name=Drift y=7.83
+curb 31.18 -19.00 32.18 -17.00 0.25 snow name=Drift y=7.83
+curb 30.32 -14.42 31.32 -12.42 0.25 snow name=Drift y=7.83
+curb 30.52 -7.74 31.52 -5.74 0.25 snow name=Drift y=7.83
+curb 33.29 -18.30 36.29 -16.30 0.25 snow name=Drift y=7.83
+curb 34.49 -13.81 37.49 -11.81 0.25 snow name=Drift y=7.83
+curb 40.50 -19.55 43.50 -17.55 0.25 snow name=Drift y=7.83
+curb 39.23 -14.21 42.23 -12.21 0.25 snow name=Drift y=7.83
+curb 34.59 -26.17 37.59 -24.17 0.25 snow name=Drift y=2.81
+curb 39.89 -25.79 42.89 -23.79 0.25 snow name=Drift y=2.81
+curb 15.69 -51.48 17.94 -49.48 0.25 snow name=Drift y=2.81
+curb 19.85 -50.52 22.10 -48.52 0.25 snow name=Drift y=2.81
+curb 32.94 -50.82 35.19 -48.82 0.25 snow name=Drift y=2.81
+curb 37.03 -50.10 39.28 -48.10 0.25 snow name=Drift y=2.81
+row chimney 38.7 -15.5 38.7 -15.5 0 y=7.83 backdrop
+row chimney 33.7 -17 33.7 -17 0 y=7.83 backdrop
+
+# T7's roof (seen from the yard, 10 m south of it) and T7b's: drifts and chimneys
+curb -9.08 -43.40 -6.08 -41.40 0.25 snow name=Drift y=7.83
+curb -8.32 -38.55 -5.32 -36.55 0.25 snow name=Drift y=7.83
+curb -8.99 -33.36 -5.99 -31.36 0.25 snow name=Drift y=7.83
+curb -9.50 -28.48 -6.50 -26.48 0.25 snow name=Drift y=7.83
+curb -3.79 -43.03 -0.79 -41.03 0.25 snow name=Drift y=7.83
+curb -4.65 -38.81 -1.65 -36.81 0.25 snow name=Drift y=7.83
+curb -4.65 -33.00 -1.65 -31.00 0.25 snow name=Drift y=7.83
+curb -3.69 -29.23 -0.69 -27.23 0.25 snow name=Drift y=7.83
+curb 1.77 -42.76 4.77 -40.76 0.25 snow name=Drift y=7.83
+curb 1.25 -38.32 4.25 -36.32 0.25 snow name=Drift y=7.83
+curb 0.45 -34.28 3.45 -32.28 0.25 snow name=Drift y=7.83
+curb 1.05 -29.20 4.05 -27.20 0.25 snow name=Drift y=7.83
+curb 5.50 -43.91 8.50 -41.91 0.25 snow name=Drift y=7.83
+curb 5.25 -38.56 8.25 -36.56 0.25 snow name=Drift y=7.83
+curb 5.90 -32.95 8.90 -30.95 0.25 snow name=Drift y=7.83
+curb 6.03 -28.28 9.03 -26.28 0.25 snow name=Drift y=7.83
+curb 11.00 -43.24 14.00 -41.24 0.25 snow name=Drift y=7.83
+curb 10.93 -38.85 13.93 -36.85 0.25 snow name=Drift y=7.83
+curb 11.80 -32.71 14.80 -30.71 0.25 snow name=Drift y=7.83
+curb 11.54 -28.17 14.54 -26.17 0.25 snow name=Drift y=7.83
+curb 15.70 -43.93 18.70 -41.93 0.25 snow name=Drift y=7.83
+curb 15.66 -39.19 18.66 -37.19 0.25 snow name=Drift y=7.83
+curb 16.43 -33.66 19.43 -31.66 0.25 snow name=Drift y=7.83
+curb 16.55 -28.68 19.55 -26.68 0.25 snow name=Drift y=7.83
+curb 21.73 -42.94 24.73 -40.94 0.25 snow name=Drift y=7.83
+curb 20.20 -38.96 23.20 -36.96 0.25 snow name=Drift y=7.83
+curb 21.66 -33.55 24.66 -31.55 0.25 snow name=Drift y=7.83
+curb 21.77 -28.66 24.77 -26.66 0.25 snow name=Drift y=7.83
+row chimney 31.7 -43.4 31.7 -43.4 0 y=8.4 backdrop
+row chimney 36.7 -43.4 36.7 -43.4 0 y=8.4 backdrop
+row chimney 12.7 -43.4 12.7 -43.4 0 y=8.15 backdrop
+
 # --- Fronts: banners as the pink neon of the street (a banner hangs on the face, turned to the south) ---
 piece banner-red -37.5 -3.925 90 y=0.8
 piece banner-red -22.5 -3.925 90 y=0.8
