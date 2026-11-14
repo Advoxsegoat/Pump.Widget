@@ -101,7 +101,7 @@ class PageClassesTest(unittest.TestCase):
         self.assertGreaterEqual(kept, 0.9, "%s: the tool made a portrait with strokes gone (only %.0f%% of the strokes are dark)" % (name, 100 * kept))
 
     def test_rule_spacings(self):
-        for spacing, must_work in ((20, False), (30, True), (40, True), (60, True), (120, True)):
+        for spacing, must_work in ((12, False), (15, False), (20, True), (30, True), (40, True), (60, True), (120, True)):
             self.check_page("spacing %d" % spacing, pages.make_page(spacing=spacing), must_work=must_work)
 
     def test_tilts_to_three_degrees(self):
@@ -151,13 +151,25 @@ class PageClassesTest(unittest.TestCase):
         self.assertNotIn("\n", message)
 
     def test_a_page_the_rules_cannot_account_for_is_refused(self):
-        # a rule's band cannot hold the face: the check on the ink taken out refuses it
-        page = pages.make_page(spacing=100)
-        stages = tool.clean_page(page["grey"], load(recipe_dict()))
-        gutted = np.zeros_like(stages["line"])
+        # for each rule, the share of its length that more than twice its own ink was taken out of: none on a rule alone (0 to 0.02
+        # on every page made here and on the owner's drawing), most of it where the drawing lies along the rule
+        tool.check_ink([0.0, 0.03, 0.1])
         with self.assertRaises(tool.PortraitError) as caught:
-            tool.check_ink(stages["line_before"], gutted, stages["band_mask"], stages["rules"])
+            tool.check_ink([0.0, 0.6, 0.0])
         self.assertIn("ink", str(caught.exception))
+        self.assertIn("rule 2 of 3", str(caught.exception))
+        self.assertNotIn("\n", str(caught.exception))
+
+    def test_a_drawing_laid_along_the_rules_is_refused_not_erased_in_silence(self):
+        page = pages.make_page(spacing=100)
+        grey = page["grey"].copy()
+        for row, slope in page["rule_lines"][2:9]:
+            for x in range(200, 700):
+                y = int(round(row + slope * (x - 450.0)))
+                grey[y - 2: y + 2, x] *= 0.4
+        with self.assertRaises(tool.PortraitError) as caught:
+            tool.clean_page(grey, load(recipe_dict()))
+        self.assertIn("the drawing was being erased", str(caught.exception))
         self.assertNotIn("\n", str(caught.exception))
 
     def test_refusals_leave_no_portrait_and_exit_two_with_one_line(self):

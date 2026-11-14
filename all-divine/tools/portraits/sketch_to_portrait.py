@@ -10,24 +10,32 @@ line alone) and `tint.png` (the soft washes alone on the paper).
 
 The stages, in the order they run:
 
+  page     the page is looked at first: a photograph under 600 pixels on its short side, one more than a third dark, or one
+           with less than three quarters of it paper once the light is evened is not a pencil drawing on paper, and is refused.
   flat     the page's own brightness (the brightest thing near each pixel, smoothed) is divided out, so the shadow down one
            side and the grey cast go and the paper is white, the pencil dark.
-  rules    (paper "ruled" only) every rule is found as a rule and not as "a horizontal dark thing": a rule is a thin dark
-           line with paper above and below it for most of the page's width. The pixels that have paper above and below
-           them are the evidence; a Hough vote over (tilt, height) finds each rule among them, and a fit that is bent
+  rules    (paper "ruled" only) the spacing of the rules is the page's own rhythm (the rows at which its strips repeat), and
+           the finder's distances follow it. Every rule is found as a rule and not as "a horizontal dark thing": a rule is a
+           thin dark line with paper above and below it for most of the page's width. The pixels that have paper above and
+           below them are the evidence; a Hough vote over (tilt, height) finds each rule among them, and a fit that is bent
            by nothing but those pixels (the drawing's own lines have pencil next to them and are never evidence) follows
            it across the page, curve and all. The page's rules are evenly spaced, so a rule that is missing between two
-           that were found is put in at the spacing. Nothing found is an error: "rules: none found".
+           that were found is put in at the spacing. Nothing found is an error: "rules: none found". A rule too faint to
+           survive the levels below is left alone (taking it out could only cost the strokes near it).
   clean    a narrow band along each rule is filled from the pencil above and below it, along every direction a stroke
            could cross it, so a stroke that crosses a rule is still one line; what is not on a rule is not touched. A
            rectangle of the recipe's `keep` is not touched at all (a stroke that lies along a rule); a rectangle of
            `erase` is wiped to paper (what is left over). The levels then make paper nothing and the pencil's darkest
-           full.
+           full. The tool then checks its own work, and refuses (exit 2, one line) when it took out more of a rule's length
+           than the rule holds ("the drawing was being erased") or when a rule remains ("rules remain at rows ...": the
+           paper's row profile is not flat, or a pencil-dark run is left along a rule on bare paper).
   crop     the recipe's `crop` of the page, padded with paper (never squashed) to the card's shape, 116 x 160, and
            made 464 x 640.
-  tint     soft washes under the line, then the line over them in the card's ink.
+  tint     soft washes under the line, then the line over them in the card's ink, the line's darkness raised to the
+           recipe's `line_gain`.
 
-The recipe (JSON), whose keys are exactly these (an unknown key is an error, "recipe: ..."):
+The recipe (JSON), whose keys are exactly these, every one written out (an unknown key and a missing key are each an error that
+names it, "recipe: ..."):
 
   paper        "ruled" or "plain"
   crop         [x0, y0, x1, y1], fractions of the page
@@ -35,6 +43,7 @@ The recipe (JSON), whose keys are exactly these (an unknown key is an error, "re
   tints        a list of {name, colour ("#rrggbb"), polygon [[x, y], ...]}: polygons in fractions of the card's picture
                (what `crop.png` shows). The colour is the wash at its full strength; its edge is feathered
   card         {paper, ink}: colours, "#rrggbb"
+  line_gain    the line's darkness is raised to this power under the ink: 1.0 is the line as drawn, 0.7 a heavier pencil
   expressions  {name: {}}; "neutral" is the drawing as it is
   notes        free text, ignored
 
@@ -63,16 +72,40 @@ CROP_LEAST = 0.1
 
 # The rule finder: how far above and below a pixel paper must lie for the pixel to be evidence of a rule, how dark a rule
 # is at the least above that paper, the tilts looked for (rise per column), and how much of the page's width a rule must
-# be seen across.
+# be seen across. The reach and the distances below are for rules 100 working pixels apart: they follow the spacing the
+# tool finds on the page (`RuleScale`), as a share of it.
 RULE_REACH = 9
 RULE_MIN_RIDGE = 0.03
 RULE_TILT = 0.07
 RULE_TILT_STEP = 0.005
 RULE_MIN_SPAN = 0.25
-# No two rules are nearer than this many rows.
-RULE_APART = 30.0
+# The rows between the rules, from the page's own rhythm: the page is read in this many strips, its rule spacing is where the
+# strips' row profiles repeat; under this strength of repeat the page has no rules to speak of.
+SPACING_STRIPS = 10
+SPACING_LEAST = 8
+SPACING_STRENGTH = 0.12
+# No two rules are nearer than this share of the spacing (a drawing's own line along a rule is not a second rule).
+RULE_APART_SHARE = 0.5
 # A rule missing between two found is put in at the spacing when the gap is this many spacings or more.
 RULE_GAP = 1.6
+# A page is at least this many pixels on its short side (a card is made of about 60% of it, to 464 x 640); not more than this
+# share of it is dark (a photograph with the desk across it, a lamp-less room); at least this share of the evened page is
+# paper (a drawing's page is 85% paper and more; a photograph of a thing is not).
+PAGE_LEAST = 600
+PAGE_DARK_MOST = 0.35
+PAGE_PAPER_LEAST = 0.75
+# After the rules are out, the lightest fifth of a row of the page's middle is darker than this (levelled, 0..1) only where a
+# rule is left; so is a run along a rule over bare paper darker than RESIDUE_RUN in more than RESIDUE_SHARE of its columns.
+RESIDUE_ROW = 0.03
+RESIDUE_RUN = 0.08
+RESIDUE_SHARE = 0.02
+# A column is bare paper when nothing but a rule is darker than RESIDUE_PENCIL in it (rows within RESIDUE_BAND of a rule's middle do not count).
+RESIDUE_PENCIL = 0.15
+RESIDUE_BAND = 4
+# The most ink that may be taken out along a rule (see `check_ink`): a column of a rule is "taken from" when more than INK_COLUMN
+# times the rule's own ink goes out of it; no more than INK_TAKEN_MOST of a rule's length may be.
+INK_COLUMN = 2.0
+INK_TAKEN_MOST = 0.15
 # Levelled darkness under this is not pencil.
 LEVEL_NOISE = 0.05
 # The most a rule's band is, in rows each side of its middle, and the least.
@@ -84,6 +117,8 @@ BAND_SHARE = 0.3
 CENTRE_REACHES = (10, 6, 5)
 # How far from a rule's middle its halo is taken off.
 HALO_REACH = 9
+# A rule fainter than this share (of the levels' noise cut, over it) is gone when the levels are made: it is left alone.
+FAINT_RULE = 1.5
 # A pixel darker than this many times the rule's halo there has pencil on it.
 HALO_COVER = 1.3
 # ... plus this much (the paper's grain).
@@ -156,29 +191,70 @@ def _smooth_columns(a, n):
     return ((csum[:, n:] - csum[:, :-n]) / n).astype(np.float32)
 
 
-def rule_evidence(dark):
+class RuleScale:
+    """The rule finder's distances for a page whose rules lie `spacing` working pixels apart: the same as the constants
+    above for rules 100 apart, closer in as the rules come closer."""
+
+    def __init__(self, spacing):
+        self.spacing = float(spacing)
+        s = self.spacing
+        self.reach = int(max(3, min(RULE_REACH, round(0.4 * s))))
+        self.apart = RULE_APART_SHARE * s
+        grow = min(1.0, s / 40.0)
+        self.tolerances = tuple(max(1.5, t * grow) for t in (6.0, 4.0, 3.0, 2.5))
+        self.gone = min(6.0, 0.3 * s)
+        near = max(3, int(0.45 * s))
+        self.centre_reaches = tuple(min(r, near) for r in CENTRE_REACHES)
+        self.halo_reach = min(HALO_REACH, near)
+
+
+def estimate_spacing(dark):
+    """(rows between the page's rules, how strongly the page repeats at that spacing 0..1). The page is read in strips
+    (a rule tilts a few rows across the page, hardly any across a strip) and each strip's row profile is compared with itself
+    shifted down; the shift at which they agree best, after the first where they disagree, is the spacing. Plain paper has no
+    such rhythm: the strength is small."""
+    h, w = dark.shape
+    total = np.zeros(h)
+    edges = np.linspace(0, w, SPACING_STRIPS + 1).astype(int)
+    trend = np.ones(61) / 61.0
+    for a, b in zip(edges[:-1], edges[1:]):
+        profile = dark[:, a:b].mean(axis=1).astype(np.float64)
+        profile = profile - profile.mean()
+        profile = profile - np.convolve(profile, trend, mode="same")
+        spectrum = np.fft.rfft(profile, 2 * h)
+        shifted = np.fft.irfft(spectrum * np.conj(spectrum))[:h]
+        total += shifted / (shifted[0] + 1e-9)
+    total /= SPACING_STRIPS
+    below = np.nonzero(total[SPACING_LEAST:] < 0.0)[0]
+    start = SPACING_LEAST + (int(below[0]) if len(below) else 0)
+    stop = max(h // 3, start + 2)
+    lag = start + int(np.argmax(total[start:stop]))
+    return float(lag), float(total[lag])
+
+
+def rule_evidence(dark, reach=RULE_REACH):
     """The pixels that look like part of a thin long line with paper above and below: (ys, xs, ridge)."""
     h, w = dark.shape
     c = _smooth_columns(dark, 9)
     above = np.empty_like(c)
     below = np.empty_like(c)
-    above[RULE_REACH:] = c[:-RULE_REACH]
-    above[:RULE_REACH] = c[:1]
-    below[:-RULE_REACH] = c[RULE_REACH:]
-    below[-RULE_REACH:] = c[-1:]
+    above[reach:] = c[:-reach]
+    above[:reach] = c[:1]
+    below[:-reach] = c[reach:]
+    below[-reach:] = c[-1:]
     ridge = c - np.maximum(above, below)
     ys, xs = np.nonzero(ridge > RULE_MIN_RIDGE)
     return ys, xs, ridge[ys, xs]
 
 
-def _fit_rule(ys, xs, weight, w, start):
+def _fit_rule(ys, xs, weight, w, start, tolerances=(6.0, 4.0, 3.0, 2.5)):
     """Follows one rule across the page from (slope, height at the middle) by fitting the middle of its evidence in each
     column, with a tolerance that closes in; the fit is a straight line first, then a curve (a cubic: a photographed
     page bends). Returns (cubic coefficients, columns seen)."""
     xc = xs.astype(np.float64) - w / 2.0
     coef = np.array([0.0, 0.0, start[0], start[1]])
     seen = 0
-    for degree, tol in ((1, 6.0), (2, 4.0), (3, 3.0), (3, 2.5)):
+    for degree, tol in zip((1, 2, 3, 3), tolerances):
         pred = np.polyval(coef, xc)
         near = np.abs(ys - pred) <= tol
         if near.sum() < 20:
@@ -198,11 +274,11 @@ def _fit_rule(ys, xs, weight, w, start):
     return coef, seen
 
 
-def find_rules(dark):
-    """Every rule of the page as polynomial coefficients (rows as a quadratic of the column minus the page's middle),
-    top to bottom. Empty when there is none."""
+def find_rules(dark, scale):
+    """Every rule of the page as polynomial coefficients (rows as a cubic of the column minus the page's middle),
+    top to bottom. Empty when there is none. `scale` is the page's `RuleScale`."""
     h, w = dark.shape
-    ys, xs, ridge = rule_evidence(dark)
+    ys, xs, ridge = rule_evidence(dark, scale.reach)
     if len(ys) == 0:
         return []
     ys = ys.astype(np.float64)
@@ -225,22 +301,22 @@ def find_rules(dark):
                 best = (float(smooth[at]), float(s), float((at + lo) * 3.0))
         if best[0] < RULE_MIN_SPAN * w * 1.5:
             break
-        coef, seen = _fit_rule(ys[alive], xs[alive], ridge[alive], w, (best[1], best[2]))
+        coef, seen = _fit_rule(ys[alive], xs[alive], ridge[alive], w, (best[1], best[2]), scale.tolerances)
         pred = np.polyval(coef, xc)
-        gone = np.abs(ys - pred) <= 6.0
+        gone = np.abs(ys - pred) <= scale.gone
         alive &= ~gone
-        if seen >= RULE_MIN_SPAN * w and not _crowds(coef, found, w):
+        if seen >= RULE_MIN_SPAN * w and not _crowds(coef, found, w, scale.apart):
             found.append(coef)
     found.sort(key=lambda c: float(np.polyval(c, 0.0)))
     return _fill_gaps(found, h)
 
 
-def _crowds(coef, found, w):
-    """Whether `coef` runs closer than RULE_APART rows to a rule already found, anywhere across the page: a rule has no
+def _crowds(coef, found, w, apart):
+    """Whether `coef` runs closer than `apart` rows to a rule already found, anywhere across the page: a rule has no
     second rule on top of it, so this is the drawing's own line that the vote found along a real rule."""
     xs = np.array([0.1, 0.5, 0.9]) * w - w / 2.0
     for other in found:
-        if np.abs(np.polyval(coef, xs) - np.polyval(other, xs)).min() < RULE_APART:
+        if np.abs(np.polyval(coef, xs) - np.polyval(other, xs)).min() < apart:
             return True
     return False
 
@@ -279,7 +355,7 @@ def _smooth_shift(cols, values, w):
     return np.polyval(fit, (np.arange(w) - w / 2.0) / w)
 
 
-def rule_centre(dark, coef, w):
+def rule_centre(dark, coef, w, reaches=CENTRE_REACHES):
     """Where a rule's middle is in each column: the fit, nudged to the line itself. The fit is a curve through the
     whole page and is a few rows out at its ends; the offset of the line from it is measured in the columns where the
     line stands alone (paper at both ends of the window) and carried across the columns where it does not, three times,
@@ -291,7 +367,7 @@ def rule_centre(dark, coef, w):
     c = _smooth_columns(dark, 5)
     alone = np.zeros(w, dtype=bool)
     peak = np.zeros(w)
-    for reach in CENTRE_REACHES:  # a wide window first, then closer in: a stroke near the rule must not pull it
+    for reach in reaches:  # a wide window first, then closer in: a stroke near the rule must not pull it
         offs = np.arange(-reach, reach + 1)
         rows = np.clip(np.round(centre).astype(int)[:, None] + offs[None, :], 0, h - 1)
         profile = c[rows, xs[:, None]]
@@ -334,14 +410,14 @@ def _running_median(values, k):
     return np.median(sliding_window_view(padded, 2 * k + 1), axis=-1)
 
 
-def _take_off_halo(clean, dark, mid, alone, peak, half, keep_mask):
+def _take_off_halo(clean, dark, mid, alone, peak, half, keep_mask, halo_reach=HALO_REACH):
     """A rule is blurred, so its darkness trails off beyond the band as a faint streak, wider in one place than in
     another. At each row's distance from the rule's middle, how dark the paper is there beside the rule is measured in
     the columns where the rule stands alone, smoothed along the rule and carried across the columns where it does not,
     and that is taken off the rows beyond the band."""
     h, w = dark.shape
     xs = np.arange(w)
-    offs = np.arange(-HALO_REACH, HALO_REACH + 1)
+    offs = np.arange(-halo_reach, halo_reach + 1)
     rows = np.clip(mid[:, None] + offs[None, :], 0, h - 1)
     profile = dark[rows, xs[:, None]]
     # only the columns where the rule stands alone out to the halo's reach tell what its halo is
@@ -368,19 +444,21 @@ def _take_off_halo(clean, dark, mid, alone, peak, half, keep_mask):
         clean[yy, xx] = np.where(value <= HALO_COVER * local + HALO_SLACK, np.maximum(value - local, 0.0), value)
 
 
-def remove_rules(dark, rules, keep_mask):
-    """`dark` with a band along each rule filled from above and below. Returns (cleaned, band mask, bands)."""
+def remove_rules(dark, rules, keep_mask, scale):
+    """`dark` with a band along each rule filled from above and below. Returns (cleaned, band mask, bands, taken): `taken`
+    says for each rule over how much of its length more ink was taken out than the rule itself holds (`_ink_taken`)."""
     h, w = dark.shape
     clean = dark.copy()
     band_mask = np.zeros(dark.shape, dtype=bool)
     xs = np.arange(w)
     bands = []
+    taken = []
     for coef in rules:
-        centre, alone, peak = rule_centre(dark, coef, w)
+        centre, alone, peak = rule_centre(dark, coef, w, scale.centre_reaches)
         half = rule_half_width(dark, centre)
         bands.append(half)
         mid = np.round(centre).astype(int)
-        _take_off_halo(clean, dark, mid, alone, peak, half, keep_mask)
+        _take_off_halo(clean, dark, mid, alone, peak, half, keep_mask, scale.halo_reach)
         reach = half + 2
         # the strip along the rule: strip[o + reach, x] = the cleaned darkness `o` rows from the rule's middle
         offs = np.arange(-reach, reach + 1)
@@ -409,7 +487,27 @@ def remove_rules(dark, rules, keep_mask):
             free = ~keep_mask[yy, xx]
             clean[yy[free], xx[free]] = fill[slot][ok][free]
             band_mask[yy, xx] = True
-    return clean, band_mask, bands
+        taken.append(_ink_taken(dark, clean, mid, scale.halo_reach))
+    return clean, band_mask, bands, taken
+
+
+def _ink_taken(dark, clean, mid, reach):
+    """How much of a rule's length had more than INK_COLUMN times the rule's own ink taken out of it: the ink within `reach`
+    rows of the rule's middle, above the paper beside it, summed down each column; the rule's own is what the quarter-way
+    column holds (a stroke along it is in the columns above that, and the rule alone is in the rest). Over the middle of the
+    page's width, 0..1."""
+    h, w = dark.shape
+    xs = np.arange(w)
+    offs = np.arange(-reach, reach + 1)
+    rows = np.clip(mid[None, :] + offs[:, None], 0, h - 1)
+    before = dark[rows, xs[None, :]]
+    after = clean[rows, xs[None, :]]
+    base = np.minimum(before[0], before[-1])
+    held = np.clip(before - base[None, :], 0.0, None).sum(axis=0)
+    gone = np.clip(before - after, 0.0, None).sum(axis=0)
+    c0, c1 = int(0.1 * w), int(0.9 * w)
+    own = float(np.percentile(held[c0:c1], 25))
+    return float((gone[c0:c1] > INK_COLUMN * own + 0.05).mean())
 
 
 # ------------------------------------------------------------------------------------------------------------------ levels
@@ -433,26 +531,142 @@ def _rect_mask(shape, rects):
     return mask
 
 
-def clean_page(grey, recipe):
-    """The whole of the page's work: returns a dict of the stages' arrays at the working size:
-    flat, dark (before the rules go), rules (the coefficients), bands (rows each side), band_mask, cleaned (dark after
-    the rules go and the erase), line (cleaned, levelled), line_before (dark levelled the same way)."""
+def rule_contrast(dark, coef, w, scale):
+    """How much darker a rule is than the paper beside it: the middle, over the columns where paper lies above and below,
+    of its darkest row within three rows of the fit (a stroke that crosses it is in a minority of the columns)."""
+    h = dark.shape[0]
+    xs = np.arange(w)
+    centre = np.round(np.polyval(coef, xs - w / 2.0)).astype(int)
+    reach = scale.reach
+    c = _smooth_columns(dark, 5)
+    offs = np.arange(-reach, reach + 1)
+    rows = np.clip(centre[:, None] + offs[None, :], 0, h - 1)
+    profile = c[rows, xs[:, None]]
+    base = np.minimum(profile[:, 0], profile[:, -1])
+    lift = profile[:, reach - 3: reach + 4].max(axis=1) - base
+    quiet = (profile[:, 0] < 0.12) & (profile[:, -1] < 0.12)
+    return float(np.median(lift[quiet])) if int(quiet.sum()) >= 20 else 0.0
+
+
+def check_page(grey, paper_kind):
+    """Refuses a page that is not a pencil drawing on paper, or too small to make a card from: one line, what would help."""
+    h, w = grey.shape
+    if min(h, w) < PAGE_LEAST:
+        raise PortraitError("page", "too small: %d x %d pixels (the short side is at least %d: photograph the whole page from nearer)" % (w, h, PAGE_LEAST))
+    help_text = "try plain paper, the whole page in the photograph, even light"
+    dark_share = float((grey < 0.3).mean())
+    if dark_share > PAGE_DARK_MOST:
+        raise PortraitError("page", "not a pencil drawing on paper: %.0f%% of the photograph is dark (at most %.0f%%); %s" % (
+            100 * dark_share, 100 * PAGE_DARK_MOST, help_text))
     flat = flatten(grey)
+    paper_share = float((flat > 0.94).mean())
+    if paper_share < PAGE_PAPER_LEAST:
+        raise PortraitError("page", "not a pencil drawing on paper: only %.0f%% of it is paper (at least %.0f%%); %s" % (
+            100 * paper_share, 100 * PAGE_PAPER_LEAST, help_text))
+    return flat
+
+
+def check_ink(taken):
+    """Refuses a page the rule removal took far more ink out of than a rule can hold: `taken` is, for each rule, the share of
+    its length that more than INK_COLUMN times the rule's own ink was taken out of (`remove_rules`). A rule alone is none of
+    it, and a stroke that crosses a rule is bridged, not taken; a stroke that lies along the rule is taken, and when that is
+    more than INK_TAKEN_MOST of a rule's length what is being taken out is the drawing."""
+    if taken and max(taken) > INK_TAKEN_MOST:
+        worst = int(np.argmax(taken))
+        raise PortraitError("clean", "the drawing was being erased: more than %.0f times the ink a rule holds was taken out along %.0f%% of rule %d of %d "
+                            "(at most %.0f%% is allowed); mark the strokes that lie along a rule in the recipe's `keep`, or use plain paper" % (
+                                INK_COLUMN, 100 * max(taken), worst + 1, len(taken), 100 * INK_TAKEN_MOST))
+
+
+def _spans(rows):
+    """Runs of consecutive row numbers as [(first, last)]."""
+    rows = sorted(set(int(r) for r in rows))
+    out = []
+    for r in rows:
+        if out and r <= out[-1][1] + 1:
+            out[-1][1] = r
+        else:
+            out.append([r, r])
+    return [(a, b) for a, b in out]
+
+
+def check_clean(line, dark, rules, row_scale=1.0, scale=None):
+    """The tool checks its own work after the rules are out of a ruled page, with the two measures the owner's drawing test
+    uses: (1) the paper's row profile is flat (the lightest fifth of each row, across the middle of the page, has nothing in
+    it), and (2) along each rule, where it crossed bare paper, no pencil-dark run is left. Raises PortraitError naming the
+    rows (of the photograph, `row_scale` times the working rows) that still hold a rule."""
+    h, w = line.shape
+    left = []
+    c0, c1 = int(0.1 * w), int(0.9 * w)
+    profile = np.percentile(line[:, c0:c1], 20, axis=1)
+    left.extend(np.nonzero(profile > RESIDUE_ROW)[0].tolist())
+    if scale is None:
+        scale = RuleScale(max(estimate_spacing(dark)[0], float(SPACING_LEAST)))
+    centres = []
+    for coef in rules:
+        centre, alone, _ = rule_centre(dark, coef, w, scale.centre_reaches)
+        centres.append((centre, alone))
+    # bare paper: the columns with no pencil in them anywhere but along a rule (what the drawing lays along a rule is the
+    # drawing's, and cannot be told from a rule's last trace by its darkness)
+    pencil = line > RESIDUE_PENCIL
+    xs = np.arange(w)
+    for centre, _alone in centres:
+        for o in range(-RESIDUE_BAND, RESIDUE_BAND + 1):
+            pencil[np.clip(np.round(centre).astype(int) + o, 0, h - 1), xs] = False
+    empty = pencil.sum(axis=0) <= 2
+    for centre, alone in centres:
+        cols = np.nonzero(alone & empty)[0]
+        if len(cols) < 20:
+            continue
+        mids = np.round(centre[cols]).astype(int)
+        marks = np.max([line[np.clip(mids + o, 0, h - 1), cols] for o in (-1, 0, 1)], axis=0)
+        bad = marks > RESIDUE_RUN
+        if float(bad.mean()) > RESIDUE_SHARE:
+            left.extend(range(int(mids[bad].min()) - 1, int(mids[bad].max()) + 2))
+    if left:
+        spans = [(int(round(a * row_scale)), int(round(b * row_scale))) for a, b in _spans(left)]
+        shown = ", ".join("%d-%d" % span for span in spans[:4])
+        more = " and %d more" % (len(spans) - 4) if len(spans) > 4 else ""
+        raise PortraitError("clean", "rules remain at rows %s%s of the photograph (the rules may be too close together or too faint to take out; "
+                            "plain paper, or a photograph with the page filling the frame, helps)" % (shown, more))
+
+
+def clean_page(grey, recipe, row_scale=1.0):
+    """The whole of the page's work: returns a dict of the stages' arrays at the working size:
+    flat, dark (before the rules go), rules (the coefficients of each rule taken out), faint_rules (found, too faint to
+    show: left), spacing, taken, bands (rows each side), band_mask, cleaned (dark after the rules go and the erase), line
+    (cleaned, levelled), line_before (dark levelled the same way). Raises PortraitError for a page it cannot handle."""
+    flat = check_page(grey, recipe["paper"])
     dark = 1.0 - flat
     keep_mask = _rect_mask(dark.shape, recipe["keep"])
-    rules, band_mask, bands = [], np.zeros(dark.shape, dtype=bool), []
+    rules, faint, taken = [], [], []
+    spacing = 0.0
+    band_mask, bands = np.zeros(dark.shape, dtype=bool), []
     cleaned = dark.copy()
     if recipe["paper"] == "ruled":
-        rules = find_rules(dark)
-        if not rules:
-            raise PortraitError("rules", "none found")
-        cleaned, band_mask, bands = remove_rules(dark, rules, keep_mask)
+        spacing, strength = estimate_spacing(dark)
+        found = []
+        if strength >= SPACING_STRENGTH:
+            scale = RuleScale(spacing)
+            found = find_rules(dark, scale)
+        if not found:
+            raise PortraitError("rules", "none found (is the paper plain? then the recipe's paper is \"plain\")")
+        floor = float(np.median(dark)) + 0.03
+        ceiling = max(float(np.percentile(dark, 99.7)), floor + 0.05)
+        for coef in found:
+            lifted = rule_contrast(dark, coef, dark.shape[1], scale)
+            (rules if (lifted - floor) / (ceiling - floor) > FAINT_RULE * LEVEL_NOISE else faint).append(coef)
+        if rules:
+            cleaned, band_mask, bands, taken = remove_rules(dark, rules, keep_mask, scale)
     erase_mask = _rect_mask(dark.shape, recipe["erase"])
     cleaned[erase_mask] = 0.0
     line, used = levels(cleaned)
+    if recipe["paper"] == "ruled":
+        check_ink(taken)
+        check_clean(line, dark, rules, row_scale, scale)
     before = np.clip((np.clip((dark - used[0]) / (used[1] - used[0]), 0.0, 1.0) - LEVEL_NOISE) / (1.0 - LEVEL_NOISE), 0.0, 1.0).astype(np.float32)
-    return {"flat": flat, "dark": dark, "rules": rules, "bands": bands, "band_mask": band_mask, "cleaned": cleaned,
-            "line": line, "line_before": before}
+    return {"flat": flat, "dark": dark, "rules": rules, "faint_rules": faint, "spacing": spacing, "taken": taken, "bands": bands,
+            "band_mask": band_mask, "cleaned": cleaned, "line": line, "line_before": before}
 
 
 # -------------------------------------------------------------------------------------------------------------- the card
@@ -626,13 +840,19 @@ def _rules_picture(stages):
     return (rgb * 255.0 + 0.5).astype(np.uint8)
 
 
+def _row_scale(sketch, grey):
+    """How many rows of the photograph one working row is."""
+    with Image.open(sketch) as image:
+        return image.height / float(grey.shape[0])
+
+
 def make(sketch, recipe, out, only=None, stages_folder=None):
     """Makes the pictures. Returns the names written. Raises PortraitError."""
     recipe = load_recipe(recipe) if isinstance(recipe, str) else recipe
     if only is not None and only not in recipe["expressions"]:
         raise PortraitError("recipe", "--only %s: no such expression in the recipe (%s)" % (only, ", ".join(recipe["expressions"])))
     grey = load_page(sketch)
-    stages = clean_page(grey, recipe)
+    stages = clean_page(grey, recipe, _row_scale(sketch, grey))
     card_line = crop_card(stages["line"], recipe["crop"])
     picture = compose(card_line, recipe)
     os.makedirs(out, exist_ok=True)
