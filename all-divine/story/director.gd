@@ -27,6 +27,14 @@ extends Node
 ## A first viewing cannot be skipped; later ones can (skip): the cast is put where the scene leaves it and the glide home
 ## takes SKIP_LEAD_OUT frames from the picture the camera shows then.
 ##
+## A COMBAT MOMENT (SceneShots.Kind.MOMENT: the finisher's camera dip, made by MomentCam) is the same node with most of that left out: it
+## has no cast and no brains, waits for nothing, does not touch Game.state, the Hud or the world, and has no phases but the camera's
+## (LEAD_IN while the dip comes in, PLAY while it holds, LEAD_OUT while it goes). The camera takes the pose its one shot solves to
+## (`@pair`, the middle of the two fighters' chests, is its aim), the CameraRig's `cine_weight` is the dip's own curve (a way in, a
+## hold, a way out, over the scene's frames) and is exactly 0 when it is over. A second moment while one runs restarts it
+## (restart_moment) from the weight and the picture the camera shows. Nothing in a moment can be skipped, paused apart from the
+## world's own pause, or seen: a scene refuses to begin while one runs (`moment_playing`).
+##
 ## It runs before the actors it drives (physics priority -10) and the timeline before it (-20), so a beat that arrives on a
 ## frame is acted on by that frame's actors. Once it is DONE the node is freed with its Cutscene root: read what you need
 ## from `finished`.
@@ -73,6 +81,7 @@ static var allow_any_state := false
 static var skip_always := false
 
 static var _current: Director = null
+static var _moment: Director = null
 static var _spawned := {}  # actor name -> how many have been made, for the dice of the brains they get
 
 var scene: SceneShots
@@ -114,6 +123,21 @@ var _frozen_world := {}  # name -> Vector3: where the targets were when the scen
 var _handed_back := false
 var _owns_state := false  # the scene moved the game to CUTSCENE, so it watches that nobody moves it elsewhere
 
+## A combat moment (see the class comment): the two fighters whose middle `@pair` is, the frames it holds at full, and whether it may
+## go on (asked each frame; false ends it by the way out, from where it is).
+var hold_frames := 0
+var may_go_on := Callable()
+## How far (in frames of the way in) the picture's aim is eased from the last moment's middle to this one's.
+var _is_moment := false
+var _pair: Array[Actor] = []
+var _pair_at := Vector3.ZERO  # the middle of the pair as last seen (a fighter that is gone leaves it where it was)
+var _pair_offset := Vector3.ZERO  # how far the aim still is from the middle, easing to nothing after a restart
+var _offset_from := Vector3.ZERO
+var _run_start := 0  # the frame this run of the dip began on (a restart begins another)
+var _run_weight := 0.0  # the camera's weight then
+var _ending := -1  # the frame the dip was told to end early on, or -1
+var _ending_from := 0.0
+
 
 ## Plays the scene `scene_id` (res://scenes/story/<id>/shots.tres) in the game `host` (a Main): finds the camera rig (group
 ## `camera_rig`), the stage and the Hud under it and begins. Null if the scene is unknown or refused (Director.last_refusal
@@ -139,9 +163,25 @@ static func play(scene_id: StringName, host: Node) -> Director:
 	return director
 
 
-## The scene playing now (one that has begun and is not over), or null.
+## Makes the finisher's camera dip hear `player`'s combat moments (a MomentCam under `rig`); the same one if it is already made.
+static func watch_moments(player: Actor, rig: CameraRig, hud: Hud) -> MomentCam:
+	var found := rig.get_node_or_null(NodePath(MomentCam.NAME)) as MomentCam
+	if found == null:
+		found = MomentCam.new()
+		found.name = MomentCam.NAME
+		rig.add_child(found)
+	found.watch(player, rig, hud)
+	return found
+
+
+## The scene playing now (one that has begun and is not over), or null. A combat moment is not one.
 static func current() -> Director:
 	return _current if is_instance_valid(_current) and _current.phase != Phase.DONE else null
+
+
+## The combat moment playing now, or null.
+static func moment_playing() -> Director:
+	return _moment if is_instance_valid(_moment) and _moment.phase != Phase.DONE else null
 
 
 ## Forgets how many of each name were made (the dice of a spawned foe's brain): for tests.
@@ -154,6 +194,9 @@ static func reset_spawn_counts() -> void:
 ## nothing at all has changed (no state, brain, node or camera) and Director.last_refusal says why.
 func begin(shots: SceneShots, region: Node3D, rig: CameraRig, hud: Hud, _host: Node) -> bool:
 	last_refusal = &""
+	if shots != null and shots.kind == SceneShots.Kind.MOMENT:
+		last_refusal = &"no_pair"  # a moment has the fighters it is about: begin_moment
+		return false
 	var reason := _refusal(shots, rig)
 	if reason != &"":
 		last_refusal = reason
@@ -172,6 +215,70 @@ func begin(shots: SceneShots, region: Node3D, rig: CameraRig, hud: Hud, _host: N
 	if _settled():
 		_start_scene()
 	return true
+
+
+## Begins the combat moment `shots` (a MOMENT) about `lead` and `other`, the two fighters of a paired move: the camera dips toward the
+## middle of their chests. True if it is taken, and then it is playing; false if it is refused (Director.last_refusal: `not_playing`
+## when the game is not in play, `already_playing` while a scene is on, `empty_scene`, `no_pair`, `no_game`, `no_timeline`), and then
+## nothing has changed.
+func begin_moment(shots: SceneShots, rig: CameraRig, hud: Hud, lead: Actor, other: Actor) -> bool:
+	last_refusal = &""
+	var reason := &""
+	if shots == null or shots.shots.is_empty() or shots.kind != SceneShots.Kind.MOMENT:
+		reason = &"empty_scene"
+	elif lead == null or other == null or not is_instance_valid(lead) or not is_instance_valid(other):
+		reason = &"no_pair"
+	elif rig == null or hud == null:
+		reason = &"no_game"
+	elif current() != null:
+		reason = &"already_playing"
+	elif Game.state != Game.State.PLAY and not allow_any_state:
+		reason = &"not_playing"
+	if reason != &"":
+		last_refusal = reason
+		return false
+	scene = shots
+	_is_moment = true
+	_rig = rig
+	_hud = hud
+	_world_root = rig.get_parent()
+	_pair = [lead, other]
+	_pair_at = _pair_middle()
+	if not _build_timeline():
+		_is_moment = false
+		last_refusal = &"no_timeline"
+		return false
+	_camera.hud = null  # a moment never touches the Hud, not even to give it back
+	_return_frames = TimelineBuilder.return_frames(scene)
+	hold_frames = roundi(0.4 * float(scene.length()))
+	if moment_playing() != null:
+		moment_playing().abort()
+	_moment = self
+	frame = 0
+	_run_start = 0
+	_run_weight = rig.cine_weight
+	phase = Phase.LEAD_IN
+	_player.play(TimelineBuilder.animation_of(_player))
+	started.emit(scene.id)
+	return true
+
+
+## A second moment while this one runs: it begins again from the weight and the picture the camera shows (its aim eases from where it
+## was to the new pair's middle over the way in), so that nothing jumps. A moment that is over is left alone.
+func restart_moment(lead: Actor, other: Actor) -> void:
+	if not _is_moment or phase == Phase.DONE or lead == null or other == null:
+		return
+	var shown := _pair_middle() + _pair_offset
+	_pair = [lead, other]
+	_pair_at = _pair_middle()
+	_offset_from = shown - _pair_at
+	_pair_offset = _offset_from
+	_run_start = frame
+	_run_weight = _rig.cine_weight
+	_ending = -1
+	phase = Phase.LEAD_IN
+	_player.stop()
+	_player.play(TimelineBuilder.animation_of(_player))
 
 
 ## Cuts the scene short, after a first viewing: the cast is put where the scene leaves it and the camera glides home in
@@ -200,7 +307,7 @@ func abort() -> void:
 
 ## Whether skip() would do something now.
 func is_skippable() -> bool:
-	if scene == null or _skipping or (phase != Phase.LEAD_IN and phase != Phase.PLAY):
+	if scene == null or _is_moment or _skipping or (phase != Phase.LEAD_IN and phase != Phase.PLAY):
 		return false
 	return skip_always or StoryLog.seen(scene.id)
 
@@ -217,6 +324,9 @@ func _exit_tree() -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	if _is_moment:
+		_moment_frame()
+		return
 	if _state_lost():
 		abort()
 		return
@@ -236,9 +346,14 @@ func _physics_process(_delta: float) -> void:
 func _tear_down(all_spawns: bool, now: bool) -> void:
 	if _current == self:
 		_current = null
+	if _moment == self:
+		_moment = null
 	if phase == Phase.DONE:
 		return
-	if phase != Phase.WAITING:
+	if _is_moment:
+		if is_instance_valid(_rig):
+			_rig.cine_weight = 0.0  # the camera is the game's again (release, below, takes the pose)
+	elif phase != Phase.WAITING:
 		if not _handed_back:
 			_give_back_control()
 		if is_instance_valid(_hud):
@@ -292,10 +407,10 @@ func _state_lost() -> bool:
 func _refusal(shots: SceneShots, rig: CameraRig) -> StringName:
 	if shots == null or shots.shots.is_empty():
 		return &"empty_scene"
-	if shots.kind == SceneShots.Kind.MOMENT:
-		return &"moment_not_built"  # a combat moment is Task 4's
 	if current() != null:
 		return &"already_playing"
+	if moment_playing() != null:
+		return &"moment_playing"
 	if Game.state != Game.State.PLAY and not allow_any_state:
 		return &"not_playing"
 	for entry in shots.cast:
@@ -377,6 +492,8 @@ func _build_timeline() -> bool:
 
 # Where a name is, as CinePose.solve asks: a cast member's feet, a mark, `name@start`; null for anything else.
 func _where(target: StringName) -> Variant:
+	if String(target) == ShotChecker.PAIR:
+		return _pair_middle() + _pair_offset
 	if _skipping and _frozen_world.has(target):
 		return _frozen_world[target]
 	var text := String(target)
@@ -612,6 +729,71 @@ func _outsiders() -> Array[Actor]:
 		if actor != null and not actor.dead and _world_root.is_ancestor_of(actor) and not members.has(actor):
 			out.append(actor)
 	return out
+
+
+# --- a combat moment's frames ---
+
+# The middle of the two fighters' chests, as they stand now (where it was last, if one has left the tree or been freed).
+func _pair_middle() -> Vector3:
+	var points: Array[Vector3] = []
+	for actor in _pair:
+		if is_instance_valid(actor) and actor.is_inside_tree():
+			points.append(actor.chest_point())
+	if points.size() == 2:
+		_pair_at = (points[0] + points[1]) / 2.0
+	elif points.size() == 1:
+		_pair_at = points[0]
+	return _pair_at
+
+
+# One frame of a moment: the camera's weight follows the dip's curve (a way in, a hold, a way out) from the run's own start; the
+# aim eases from where the last moment's middle was; told to end early (the player turned the dips off), it goes out from where it is.
+func _moment_frame() -> void:
+	if phase == Phase.DONE:
+		return
+	if _ending < 0 and may_go_on.is_valid() and not may_go_on.call():
+		_ending = frame
+		_ending_from = _rig.cine_weight
+	var total := scene.lead_in + scene.length() + _return_frames
+	var hold := clampi(hold_frames, 0, total)
+	var way_in := (total - hold) / 2
+	var way_out := total - hold - way_in
+	var n := frame - _run_start
+	var weight := 0.0
+	if _ending >= 0:
+		var gone := frame - _ending
+		phase = Phase.LEAD_OUT
+		if gone >= maxi(_return_frames, 1):
+			_finish_moment()
+			return
+		weight = _ending_from * (1.0 - float(gone) / float(maxi(_return_frames, 1)))
+	elif n >= total:
+		_finish_moment()
+		return
+	elif n < way_in:
+		phase = Phase.LEAD_IN
+		weight = lerpf(_run_weight, 1.0, float(n) / float(way_in))
+	elif n < way_in + hold:
+		phase = Phase.PLAY
+		weight = 1.0
+	else:
+		phase = Phase.LEAD_OUT
+		weight = float(total - n) / float(way_out)
+	var ease_t := clampf(float(n) / float(maxi(way_in, 1)), 0.0, 1.0)
+	_pair_offset = _offset_from * (1.0 - ease_t * ease_t * (3.0 - 2.0 * ease_t))
+	_rig.cine_weight = weight
+	frame += 1
+
+
+# The moment is over and the camera is the game's: weight exactly 0, no pose.
+func _finish_moment() -> void:
+	_rig.cine_weight = 0.0
+	phase = Phase.DONE
+	if _moment == self:
+		_moment = null
+	_camera.release()
+	_root.queue_free()
+	finished.emit(false)
 
 
 # --- the scene's frames ---
