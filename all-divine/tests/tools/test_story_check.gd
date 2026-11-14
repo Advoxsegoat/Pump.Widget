@@ -46,7 +46,8 @@ func _placeholder_scene() -> String:
 func test_the_repository_is_ok_and_says_how_many() -> void:
 	var run := await _run(PackedStringArray())
 	assert_eq(run.code, 0, run.text)
-	assert_true(run.text.contains("story_check: 1 scenes OK (0 placeholders)"), run.text)
+	assert_true(run.text.contains("story_check: 1 scenes OK (1 placeholders)"), run.text)  # the fixture's Knuckle has only the blank card
+	assert_true(run.text.contains("fixture_knuckle's portrait 'neutral' is a stand-in"), run.text)
 	assert_false(run.text.contains("ERROR") or run.text.contains("WARNING"), run.text)
 
 
@@ -54,8 +55,9 @@ func test_final_is_read_before_the_double_dash_and_after_it() -> void:
 	var path := _placeholder_scene()
 	var plain := await _run(PackedStringArray(["--", path]))
 	assert_eq(plain.code, 0, plain.text)
-	assert_true(plain.text.contains("(1 placeholders)"), plain.text)
+	assert_true(plain.text.contains("(2 placeholders)"), plain.text)  # the clip, and the fixture's blank-card speaker
 	assert_true(plain.text.contains("placeholder: knuckle has no clip 'no_such_clip'"), plain.text)
+	assert_true(plain.text.contains("is a stand-in"), plain.text)
 	for args in [["--final", "--", path], ["--", "--final", path], ["--", path, "--final"]]:
 		var run := await _run(PackedStringArray(args))
 		assert_eq(run.code, 1, "%s: %s" % [args, run.text])
