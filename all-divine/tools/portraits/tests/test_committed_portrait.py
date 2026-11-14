@@ -4,6 +4,7 @@ being made again, for a picture painted by hand, and for a change to the tool th
 
 Run: python3 -I -m unittest discover -s tools/portraits/tests   (from all-divine/)
 """
+import json
 import os
 import sys
 import tempfile
@@ -43,6 +44,26 @@ class CommittedPortraitTest(unittest.TestCase):
                          int(np.abs(made.astype(int) - committed.astype(int)).max()),
                          "docs/art/owner/abarax-portrait-sketch-2026-11-14.jpg",
                          "docs/art/owner/abarax-portrait-sketch-2026-11-14.recipe.json"))
+
+
+class FeatherWashTest(unittest.TestCase):
+    """The feather's wash is a light warm ochre (the model's feather is gold with brown bars, and the portrait and the model must
+    agree), as restrained as the other washes: not rose."""
+
+    def test_the_feather_wash_is_a_restrained_warm_ochre(self):
+        import colorsys
+        with open(RECIPE, encoding="utf-8") as handle:
+            recipe = json.load(handle)
+        wash = [t for t in recipe["tints"] if t["name"] == "feather"][0]["colour"]
+        r, g, b = [int(wash[i:i + 2], 16) / 255.0 for i in (1, 3, 5)]
+        hue, saturation, value = colorsys.rgb_to_hsv(r, g, b)
+        self.assertTrue(35.0 <= hue * 360.0 <= 55.0, "the feather's wash %s has hue %.0f degrees: ochre is 35 to 55 (rose is about 5)" % (wash, hue * 360.0))
+        skin = [t for t in recipe["tints"] if t["name"] == "skin"][0]["colour"]
+        sr, sg, sb = [int(skin[i:i + 2], 16) / 255.0 for i in (1, 3, 5)]
+        self.assertLessEqual(saturation, 0.55, "the feather's wash %s is stronger than a restrained wash (saturation %.2f)" % (wash, saturation))
+        self.assertGreater(value, 0.8, "the feather's wash %s is not light" % wash)
+        _hs, skin_saturation, _vs = colorsys.rgb_to_hsv(sr, sg, sb)
+        self.assertLessEqual(saturation, 2.5 * skin_saturation + 0.1, "the feather's wash is far stronger than the skin's")
 
 
 if __name__ == "__main__":
