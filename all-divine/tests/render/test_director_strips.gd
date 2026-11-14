@@ -4,13 +4,15 @@ extends TestCase
 ## frames to a wide first shot, to a close one, and to a close one with a longer lead-in; the glide out from a last shot at yaw 90
 ## and at yaw 180 every 3 frames. Each is saved as a contact sheet in out/story/ (director_<name>.png, 320x180 a frame, five to a
 ## row, in order) for a person to look at, with the frames themselves at 640x360 in out/story/director_<name>/. What is checked
-## here is only what a machine can: no black frame, and the picture never changes by more than a limit between two frames 3 apart.
+## here is only what a machine can: no black frame. A run shoots three sheets (DEFAULT, to keep the render job short);
+## DIRECTOR_STRIPS_ONLY=<comma list of sheet names> shoots those, DIRECTOR_STRIPS_ONLY=all shoots all eleven (about nine minutes).
 
 const MAIN := "res://main/main.tscn"
 const FIXTURE := "res://scenes/story/fixture_yard_entrance/shots.tres"
 const OUT := "out/story"
 const TILE := Vector2i(320, 180)
 const COLUMNS := 5
+const DEFAULT := ["standing_cutscene", "glide_in_close_45", "glide_out_yaw_180"]
 
 var main: Main
 
@@ -19,6 +21,14 @@ func after_each() -> void:
 	Game.reset()
 	Inputs._device = Inputs.Device.KEYBOARD_MOUSE
 	get_window().size = Vector2i(1920, 1080)
+
+
+# Whether the sheet `name` is to be shot in this run (see the header).
+func _wanted(name: String) -> bool:
+	var only := OS.get_environment("DIRECTOR_STRIPS_ONLY")
+	if only == "all":
+		return true
+	return (only.split(",") if only != "" else PackedStringArray(DEFAULT)).has(name)
 
 
 func _fixture() -> SceneShots:
@@ -114,11 +124,9 @@ func _every(from: int, to: int, step: int) -> Array[int]:
 # --- the whole scene, as the owner will see it ---
 
 func test_the_scene_every_15_frames_standing_mid_jab_and_in_a_hop_as_a_mini_and_a_cutscene() -> void:
-	var only := OS.get_environment("DIRECTOR_STRIPS_ONLY")  # a comma list of sheet names, to shoot only those again
 	for start: String in ["standing", "mid_jab", "hop"]:
 		for kind: SceneShots.Kind in [SceneShots.Kind.MINI, SceneShots.Kind.CUTSCENE]:
-			var wanted := "%s_%s" % [start, "cutscene" if kind == SceneShots.Kind.CUTSCENE else "mini"]
-			if only != "" and not only.split(",").has(wanted):
+			if not _wanted("%s_%s" % [start, "cutscene" if kind == SceneShots.Kind.CUTSCENE else "mini"]):
 				continue
 			await _scene()
 			var scene := _fixture()
@@ -139,13 +147,16 @@ func test_the_scene_every_15_frames_standing_mid_jab_and_in_a_hop_as_a_mini_and_
 # --- the glide in, every 3 frames ---
 
 func test_the_glide_in_to_a_wide_first_shot_and_to_a_close_one() -> void:
-	await _scene()
-	var wide := await _shoot(_fixture(), _every(0, 33, 3))
-	_no_black_frames("glide_in_wide", wide)
-	_save("glide_in_wide", wide)
-	main.free()
-	await frames(2)
+	if _wanted("glide_in_wide"):
+		await _scene()
+		var wide := await _shoot(_fixture(), _every(0, 33, 3))
+		_no_black_frames("glide_in_wide", wide)
+		_save("glide_in_wide", wide)
+		main.free()
+		await frames(2)
 	for lead in [30, 45]:
+		if not _wanted("glide_in_close_%d" % lead):
+			continue
 		await _scene()
 		var scene := _fixture()
 		scene.lead_in = lead
@@ -169,6 +180,8 @@ func test_the_glide_in_to_a_wide_first_shot_and_to_a_close_one() -> void:
 
 func test_the_glide_out_from_a_shot_at_yaw_90_and_at_yaw_180() -> void:
 	for yaw in [90.0, 180.0]:
+		if not _wanted("glide_out_yaw_%d" % int(yaw)):
+			continue
 		await _scene()
 		var scene := _fixture()
 		var last := scene.shots[scene.shots.size() - 1]
