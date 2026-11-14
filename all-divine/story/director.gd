@@ -177,7 +177,7 @@ func skip() -> bool:
 	_skipping = true
 	_frozen_world = _snapshot_world()
 	if is_instance_valid(_player):
-		_player.stop()
+		_player.pause()  # not stop(): that puts the animated shot and progress back to their first values, and the picture jumps
 	_overlay.close()
 	_place_the_cast()
 	_weight_from = _rig.cine_weight
