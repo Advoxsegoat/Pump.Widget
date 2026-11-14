@@ -347,8 +347,9 @@ func test_the_counter_policy_dodges_the_drummers_string_by_line_untouched() -> v
 # --- the bot sees the fight late (reaction_frames) ---
 
 # The bot's recorded controls against a tier I Knuckle that thinks for itself, 240 frames: with reaction 0 they are what they were before
-# reaction_frames existed (the hash of the recording, taken then).
-const BEFORE_REACTION := {CombatBot.Policy.COUNTER: 1082102833, CombatBot.Policy.MIXED: 1880729488}
+# reaction_frames existed (the hash of the recording, taken then). Format 2 adds the aiming device to each frame (the pad, for a bot), which
+# changed the constants once, from COUNTER 1082102833 and MIXED 1880729488: the same recordings with the device key taken out still hash to those.
+const BEFORE_REACTION := {CombatBot.Policy.COUNTER: 2472883534, CombatBot.Policy.MIXED: 816274831}
 
 
 func _knuckle_fight(policy: CombatBot.Policy, seed_number: int, reaction: int) -> Dictionary:

@@ -17,6 +17,7 @@ var hash_every := 60
 
 var _rec := InputRecording.new()
 var _skipped := false  # the frame the recorder was first run on has gone by
+var _pending := -1  # the entry whose frame the brain has yet to think, for the cursor it will read (taken at the next frame)
 
 
 func _init() -> void:
@@ -37,6 +38,7 @@ func begin(region: String, seed: int, start_frame := 0, policy := "") -> void:
 	_rec.seed = seed
 	_rec.start_frame = start_frame
 	_skipped = false
+	_pending = -1
 
 
 ## What has been recorded so far (the recording itself, not a copy: it grows as the recorder runs).
@@ -47,6 +49,7 @@ func recording() -> InputRecording:
 ## Closes the recording: the header's frame count, and the state hash after its last frame. Call it where the fight stands after the
 ## last recorded frame (the end of a frame, or between frames); save does.
 func close() -> void:
+	_take_cursor()
 	_rec.frame_count = _rec.frames.size()
 	if arena != null and is_instance_valid(arena) and arena.is_inside_tree():
 		_rec.hashes[_rec.frames.size()] = arena.state_hash()
@@ -62,6 +65,7 @@ func save(path: String) -> Error:
 
 
 func _physics_process(_delta: float) -> void:
+	_take_cursor()
 	if not _skipped:
 		_skipped = true
 		return
@@ -85,4 +89,15 @@ func _physics_process(_delta: float) -> void:
 		"pressed": pressed,
 		"held": kept,
 		"direction": Inputs.direction_pressed_this_frame(),
+		"device": Inputs.last_device(),
 	})
+	_pending = _rec.frames.size() - 1
+
+
+# The cursor's point the brain read on the frame of the entry before this one, if it read one, goes into that entry (the brain thinks after the
+# recorder has written the frame's input, so the point is known a frame later); and the note is cleared for the frame to come.
+func _take_cursor() -> void:
+	if _pending >= 0 and Inputs.cursor_read is Vector3 and Inputs.last_device() == Inputs.Device.KEYBOARD_MOUSE:
+		_rec.frames[_pending]["cursor"] = Inputs.cursor_read
+	_pending = -1
+	Inputs.cursor_read = null

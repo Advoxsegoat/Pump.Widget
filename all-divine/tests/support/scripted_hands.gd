@@ -8,6 +8,8 @@ extends Node
 ##   press       actions pressed on the step's first frame only
 ##   hold        actions held on every frame of the step (a pressed action is held only if it is listed here too)
 ##   direction   Vector2, the direction pressed on the step's first frame (a sway or duck needs guard held with it)
+##   device      Inputs.Device the aim is given as (default: none given, the devices are read), and with the keyboard and mouse
+##   cursor      the Vector3 ground point the cursor is given at (default: none)
 ## It works at the end of each frame (InputFeed.PRIORITY), giving the next frame its input as a replayer does, and its first step
 ## on the first frame it runs. After the last step it lets everything go.
 
@@ -35,5 +37,7 @@ func _physics_process(_delta: float) -> void:
 		"pressed": PackedStringArray(step.get("press", []) if first else []),
 		"held": PackedStringArray(step.get("hold", [])),
 		"direction": step.get("direction", Vector2.ZERO) if first else Vector2.ZERO,
+		"device": step.get("device"),
+		"cursor": step.get("cursor"),
 	})
 	_frame += 1

@@ -11,6 +11,9 @@ extends Resource
 ##   direction   Vector2, the screen direction a key or a flick of the stick pressed on the frame, or zero
 ##               (Inputs.direction_pressed_this_frame). A sway or a duck is guard with this, so a recording needs it as it
 ##               needs the stick: the stick alone says where he walks, not that a flick began.
+##   device      Inputs.Device, the aiming device the brain read on the frame (a pad aims with the stick, the keyboard and mouse at the cursor)
+##   cursor      Vector3, on the keyboard and mouse and only on a frame the brain read it: the point of the ground it took for the cursor's
+##               (not the screen position, which depends on the window it was recorded in). Added in format 2.
 
 ##
 ## And a header, so that a recording says what it is and checks itself: the format's `version`, the `seed` and `policy` of the bot that
@@ -19,7 +22,7 @@ extends Resource
 ## compares as it goes.
 
 ## The format this game reads.
-const VERSION := 1
+const VERSION := 2
 
 ## The settings that change a fight (Settings keys): the header stores their values, and a replay runs with them. Found by playing a
 ## seeded fight with each setting at its default and at its other end; only the slow-down on a perfect dodge changed it.

@@ -113,14 +113,19 @@ func test_the_recorder_writes_what_inputs_reports_each_physics_frame() -> void:
 	hands.queue_free()
 	var rec := recorder.recording()
 	assert_true(rec.frames.size() >= 4, "a frame each, from the frame after the one it began on")
-	assert_eq(rec.frames[0], InputRecording.idle(), "an idle frame is idle")
+	var first: Dictionary = rec.frames[0].duplicate()
+	assert_eq(first.get("device"), Inputs.last_device(), "a frame says which device aimed")
+	first.erase("device")
+	assert_eq(first, InputRecording.idle(), "an idle frame is idle")
 	assert_eq(rec.frames[1]["pressed"], PackedStringArray(["guard"]))
 	assert_eq(rec.frames[1]["held"], PackedStringArray(["guard"]))
 	assert_eq(rec.frames[1]["direction"], LEFT)
 	assert_eq(rec.frames[1]["move"], LEFT)
 	assert_eq(rec.frames[2]["pressed"], PackedStringArray(), "held is not pressed again")
 	assert_eq(rec.frames[2]["direction"], Vector2.ZERO)
-	assert_eq(rec.frames[3], InputRecording.idle())
+	var last: Dictionary = rec.frames[3].duplicate()
+	last.erase("device")
+	assert_eq(last, InputRecording.idle())
 
 
 func test_replay_goes_through_the_player_brain() -> void:
