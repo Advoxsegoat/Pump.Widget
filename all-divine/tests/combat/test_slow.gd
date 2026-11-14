@@ -170,3 +170,11 @@ func test_a_slowed_fight_replays_to_the_same_state() -> void:
 	assert_true((states[0].moves as Array).size() >= 4, "the fight happened (%s)" % [states[0].moves])
 	assert_eq(states[1], states[0], "the same input through the same slow-downs is the same fight")
 	assert_true(states[0].b_hp < 100.0 or states[0].a_hp < 100.0, "someone was hit, so the slow-down was inside a real exchange")
+
+
+func test_game_reset_ends_a_slow_down_that_was_running() -> void:
+	# A slow-down is the game's: one left running when a game is freed would freeze the first frames of the next.
+	Melee.slow(12, 0.4)
+	assert_true(Melee.slowed(), "a slow-down is on")
+	Game.reset()
+	assert_false(Melee.slowed(), "and a reset of the game ends it")

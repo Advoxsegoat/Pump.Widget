@@ -43,6 +43,11 @@ var bindings_path := BINDINGS_PATH
 var clock: Callable = wall_clock
 
 var _device := Device.KEYBOARD_MOUSE
+var _injected_device: Variant = null  # a Device given by inject_aim, or null
+var _injected_cursor: Variant = null  # the ground point of the cursor given by inject_aim, a Vector3, or null
+## The ground point of the cursor the PlayerBrain last read (it says so each time it reads one), a Vector3, or null: what a recorder
+## writes down of the aim for the frame the brain has just thought. The recorder clears it as it takes it.
+var cursor_read: Variant = null
 var _latched: Dictionary = {}  # flick action -> true while it is down
 var _flicks_frame := -1
 var _flicks: Array[StringName] = []
@@ -52,6 +57,8 @@ var _direction_frame := -1
 var _direction := Vector2.ZERO
 var _sweep_px := 0.0
 var _sweep_began := 0.0
+var _injected_move: Variant = null  # a Vector2 given by inject_move, or null
+var _injected_direction: Variant = null  # a Vector2 given by inject_direction, or null
 var _quarantined: Dictionary = {}  # gameplay action -> true while it is held from before the quarantine
 var _was_down: Dictionary = {}  # gameplay action -> whether it was down at the latest physics frame
 var _paused_down: Dictionary = {}  # gameplay action -> true while it is down, having gone down while the game was paused
@@ -117,7 +124,7 @@ func _mouse_moved(px: float) -> void:
 ## Which kind of device the player used last (Device): the keyboard and mouse until a pad is touched, or from the
 ## start if a pad is connected.
 func last_device() -> int:
-	return _device
+	return _injected_device if _injected_device != null else _device
 
 
 ## A stick reading with the deadzone taken out: 0 below DEADZONE, then (length - DEADZONE) / (1 - DEADZONE),
@@ -137,6 +144,39 @@ static func combine(stick: Vector2, keys: Vector2) -> Vector2:
 	return unit if unit.length_squared() > stick.length_squared() else stick
 
 
+## Gives `move` (a screen-space Vector2, as move_vector returns it) in place of what the devices read, until it is given null.
+## A headless run has no pad to push a stick on, so a replay and the combat bot move Abarax through this: it is the one seam
+## for movement, and the buttons go through the real actions (Input.action_press).
+func inject_move(move: Variant) -> void:
+	_injected_move = move
+
+
+## Gives `direction` (a screen direction of length 1, or Vector2.ZERO) as the direction pressed on every frame until it is given
+## null: the press a key or a flick of the stick makes, which a sway or duck is made of (direction_pressed_this_frame). A caller
+## gives it frame by frame, so a press lasts the one frame it is set for.
+func inject_direction(direction: Variant) -> void:
+	_injected_direction = direction
+
+
+## Gives the aim as a feeder has it: `device` (a Device) is the one the brain reads as the last used, and `cursor` (a Vector3, the point
+## of the ground under the cursor, or null for none) is the point it reads as the cursor's, whatever the mouse and the window are, until
+## `device` is null. A pad player (the combat bot) is injected as GAMEPAD, which nothing in the game reads the cursor for; a recording
+## of a person on the keyboard and mouse brings the point they aimed at.
+func inject_aim(device: Variant, cursor: Variant = null) -> void:
+	_injected_device = device
+	_injected_cursor = cursor
+
+
+## Whether the aim is given by inject_aim, and so the cursor is not read from the mouse.
+func aim_injected() -> bool:
+	return _injected_device != null
+
+
+## The cursor's ground point as inject_aim gave it (a Vector3), or null.
+func injected_cursor() -> Variant:
+	return _injected_cursor
+
+
 ## The movement the player is asking for, in screen space (right is +x, up is -y), at most length 1.
 ## It reads what move_left, move_right, move_up and move_down are bound to, so any of them can be
 ## rebound to a key, a mouse button, a gamepad button or a gamepad axis. Bound axes make the analog
@@ -145,6 +185,8 @@ static func combine(stick: Vector2, keys: Vector2) -> Vector2:
 ## The longer of the two wins (see combine).
 ## `devices` are the gamepads that count (the strongest analog push wins); by default, every one connected.
 func move_vector(devices: Array[int] = Input.get_connected_joypads()) -> Vector2:
+	if _injected_move is Vector2:
+		return _injected_move
 	var analog := Vector2.ZERO
 	for device in devices:
 		var raw := Vector2(
@@ -184,6 +226,8 @@ func pressed_this_frame() -> Array[StringName]:
 ## when both press. `devices` are the gamepads read, as for move_vector(). Worked out once a physics frame, however often
 ## it is asked, so call it every frame (a brain does).
 func direction_pressed_this_frame(devices: Array[int] = Input.get_connected_joypads()) -> Vector2:
+	if _injected_direction is Vector2:
+		return _injected_direction
 	var frame := Engine.get_physics_frames()
 	if frame == _direction_frame:
 		return _direction
