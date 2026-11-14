@@ -282,3 +282,39 @@ func test_the_moment_is_no_more_than_ninety_frames_and_the_checker_agrees() -> v
 	await frames(2)
 	cam.moment(&"finisher", parts.foe)
 	assert_true(cam.director != null and cam.director.total_frames() == 90, "the Director plays it in 90 frames")
+
+
+# The dip never hides a blow: at the top the picture shows half the width it does in play, so a foe that can strike must still be
+# in it, whole. An attack is begun from at most the longest `max_range` of any brain (measured where the move lands), and the ring
+# of 3.5 m the ruling names is beyond that; a foe past that cannot begin a blow, and the pair itself takes none for its first ~64 frames.
+const STRIKE_RING := 3.5
+
+
+func test_the_dip_never_hides_a_foe_that_can_strike() -> void:
+	var longest := 0.0
+	var dir := DirAccess.open("res://data/brains")
+	for file in dir.get_files():
+		if not file.ends_with(".tres"):
+			continue
+		for option: AttackOption in (load("res://data/brains/%s" % file) as BrainDef).attacks:
+			longest = maxf(longest, option.max_range)
+	assert_true(longest <= STRIKE_RING, "no brain begins an attack from further than %.2f m, the ring the picture must hold (%.2f)" % [STRIKE_RING, longest])
+	var parts := _stage()
+	Director.watch_moments(parts.player, parts.rig, parts.hud)
+	var ring: Array[Actor] = []
+	var n := 16
+	for k in n:
+		var a := TAU * float(k) / float(n)
+		var at := Vector3(sin(a), 0, cos(a)) * STRIKE_RING
+		ring.append(StoryStage.knuckle(parts.region, at, a + PI, "Ring%d" % k))
+	var guard := 0
+	while parts.rig.cine_weight < 1.0 and guard < 200:
+		await frames(1)
+		guard += 1
+	await frames(2)
+	assert_eq(parts.rig.cine_weight, 1.0, "the dip is at its top")
+	for foe in ring:
+		for point: Vector3 in [foe.global_position, foe.chest_point(), foe.head_point()]:
+			var on_picture := StoryStage.screen_of(parts, point)
+			assert_true(on_picture.x >= 0.0 and on_picture.x <= 640.0 and on_picture.y >= 0.0 and on_picture.y <= 360.0,
+					"%s at %.2f m is on the picture whole at the top of the dip (%s)" % [foe.name, foe.global_position.distance_to(parts.player.global_position), on_picture])
