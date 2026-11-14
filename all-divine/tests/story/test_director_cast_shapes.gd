@@ -11,6 +11,7 @@ var _watched: Array = []
 
 
 func before_each() -> void:
+	RenderingServer.render_loop_enabled = false  # these tests look at no picture: a render run need not draw their frames (it is most of the time)
 	Game.reset()
 	Arena.reset_spawn_counts()
 	Director.reset_spawn_counts()
@@ -21,6 +22,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	RenderingServer.render_loop_enabled = true
 	_key(KEY_W, false)
 	for action in [&"palm", &"heavy", &"guard", &"dodge", &"menu"]:
 		Input.action_release(action)

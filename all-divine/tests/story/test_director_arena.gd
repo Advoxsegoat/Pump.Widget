@@ -7,6 +7,7 @@ const MAIN := "res://main/main.tscn"
 
 
 func before_each() -> void:
+	RenderingServer.render_loop_enabled = false  # these tests look at no picture: a render run need not draw their frames (it is most of the time)
 	Game.reset()
 	Arena.reset_spawn_counts()
 	Director.reset_spawn_counts()
@@ -15,6 +16,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	RenderingServer.render_loop_enabled = true
 	Melee.slow(0, 1.0)
 	Game.reset()
 

@@ -10,6 +10,7 @@ const LAST := 360
 
 
 func before_each() -> void:
+	RenderingServer.render_loop_enabled = false  # nothing here looks at a picture: a render run need not draw its thousands of frames
 	Game.reset()
 	Game.change(Game.State.PLAY)
 	StoryLog.forget_all()
@@ -18,6 +19,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	RenderingServer.render_loop_enabled = true
 	Melee.slow(0, 1.0)
 	Game.reset()
 

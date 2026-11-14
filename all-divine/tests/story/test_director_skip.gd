@@ -9,6 +9,7 @@ var _finished: Array = []
 
 
 func before_each() -> void:
+	RenderingServer.render_loop_enabled = false  # these tests look at no picture: a render run need not draw their frames (it is most of the time)
 	Game.reset()
 	Game.change(Game.State.PLAY)
 	StoryLog.forget_all()
@@ -20,6 +21,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	RenderingServer.render_loop_enabled = true
 	Input.action_release(&"menu")
 	Director.skip_always = false
 	Melee.slow(0, 1.0)

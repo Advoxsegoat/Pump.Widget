@@ -9,6 +9,7 @@ const MIDDLE_OF := [&"palm_jab", &"palm_cross", &"palm_hook", &"hop", &"sway_lef
 
 
 func before_each() -> void:
+	RenderingServer.render_loop_enabled = false  # these tests look at no picture: a render run need not draw their frames (it is most of the time)
 	Game.reset()
 	Game.change(Game.State.PLAY)
 	StoryLog.forget_all()
@@ -16,6 +17,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	RenderingServer.render_loop_enabled = true
 	Melee.slow(0, 1.0)
 	Input.action_release(&"heavy")
 	Game.reset()

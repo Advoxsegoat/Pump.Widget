@@ -12,6 +12,7 @@ const WITH_ROW := ["Resume", "Skip scene", "Controls", "Settings", "Quit"]
 
 
 func before_each() -> void:
+	RenderingServer.render_loop_enabled = false  # these tests look at no picture: a render run need not draw their frames (it is most of the time)
 	Settings.path = SETTINGS_PATH
 	Game.reset()
 	Director.reset_spawn_counts()
@@ -20,6 +21,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	RenderingServer.render_loop_enabled = true
 	for code in [KEY_SPACE, KEY_ENTER, KEY_ESCAPE, KEY_W]:
 		_key(code, false)
 	_pad(JOY_BUTTON_A, false)

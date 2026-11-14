@@ -12,6 +12,7 @@ var _finished: Array = []
 
 
 func before_each() -> void:
+	RenderingServer.render_loop_enabled = false  # these tests look at no picture: a render run need not draw their frames (it is most of the time)
 	Game.reset()
 	Game.change(Game.State.PLAY)
 	StoryLog.forget_all()
@@ -22,6 +23,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	RenderingServer.render_loop_enabled = true
 	_key(KEY_W, false)
 	_key(KEY_ESCAPE, false)
 	for action in [&"palm", &"heavy", &"guard", &"dodge", &"menu"]:
