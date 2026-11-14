@@ -55,9 +55,11 @@ CARD_PICTURE = (464, 640)
 # The page is worked on at this width (a larger photograph is brought down to it; a smaller one is not made larger).
 WORK_WIDTH = 900
 
-RECIPE_KEYS = {"paper", "crop", "erase", "keep", "tints", "card", "expressions", "notes"}
+RECIPE_KEYS = {"paper", "crop", "erase", "keep", "tints", "card", "line_gain", "expressions", "notes"}
 TINT_KEYS = {"name", "colour", "polygon"}
 CARD_KEYS = {"paper", "ink"}
+# A crop is at least this share of the page each way.
+CROP_LEAST = 0.1
 
 # The rule finder: how far above and below a pixel paper must lie for the pixel to be evidence of a rule, how dark a rule
 # is at the least above that paper, the tilts looked for (rise per column), and how much of the page's width a rule must
@@ -517,7 +519,7 @@ def compose(line_card, recipe):
     """The washes with the line over them in the card's ink: uint8 RGB, 640 x 464 x 3."""
     base = wash_layer(recipe)
     ink = parse_colour(recipe["card"]["ink"], "card ink")
-    d = line_card[..., None]
+    d = (np.clip(line_card, 0.0, 1.0) ** recipe["line_gain"])[..., None]
     rgb = base * (1.0 - d) + ink * d
     return (np.clip(rgb, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
 
@@ -533,51 +535,75 @@ def _rect(value, where):
 
 
 def load_recipe(path):
-    """The recipe, checked: a dict with every key present. Raises PortraitError for what it does not know."""
+    """The recipe, checked: a dict with every key present. Raises PortraitError for what it does not know, and for any
+    key that is missing: a recipe is never completed with a guess (no `paper` must not quietly mean "ruled")."""
     try:
         with open(path, encoding="utf-8") as handle:
             recipe = json.load(handle)
     except (OSError, ValueError) as error:
         raise PortraitError("recipe", "cannot read %s (%s)" % (path, error))
+    return check_recipe(recipe)
+
+
+def check_recipe(recipe):
+    """`load_recipe` for a recipe already read (a dict)."""
     if not isinstance(recipe, dict):
         raise PortraitError("recipe", "the recipe is an object")
     for key in recipe:
         if key not in RECIPE_KEYS:
             raise PortraitError("recipe", "a key this tool does not know: '%s'" % key)
-    out = {"paper": recipe.get("paper", "ruled"), "erase": [], "keep": [], "tints": [], "notes": recipe.get("notes", "")}
+    for key in sorted(RECIPE_KEYS - {"notes"}):
+        if key not in recipe:
+            raise PortraitError("recipe", "no '%s' (every key of the recipe is written out; --init-recipe writes a first one)" % key)
+    out = {"paper": recipe["paper"], "erase": [], "keep": [], "tints": [], "notes": recipe.get("notes", "")}
     if out["paper"] not in ("ruled", "plain"):
         raise PortraitError("recipe", "paper is \"ruled\" or \"plain\", not %r" % (out["paper"],))
-    crop = recipe.get("crop")
-    if not (isinstance(crop, list) and len(crop) == 4 and all(isinstance(v, (int, float)) for v in crop)):
+    crop = recipe["crop"]
+    if not (isinstance(crop, list) and len(crop) == 4 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in crop)):
         raise PortraitError("recipe", "crop is [x0, y0, x1, y1]")
     if not (0 <= crop[0] < crop[2] <= 1 and 0 <= crop[1] < crop[3] <= 1):
         raise PortraitError("crop", "outside the page: %s (fractions of the page, x0 < x1, y0 < y1, all 0 to 1)" % (crop,))
+    if crop[2] - crop[0] < CROP_LEAST or crop[3] - crop[1] < CROP_LEAST:
+        raise PortraitError("crop", "smaller than a tenth of the page: %s (it is %.0f%% wide and %.0f%% tall)" % (
+            crop, 100 * (crop[2] - crop[0]), 100 * (crop[3] - crop[1])))
     out["crop"] = [float(v) for v in crop]
     for key in ("erase", "keep"):
-        for i, rect in enumerate(recipe.get(key, [])):
+        if not isinstance(recipe[key], list):
+            raise PortraitError("recipe", "%s is a list of rectangles" % key)
+        for i, rect in enumerate(recipe[key]):
             out[key].append(_rect(rect, "%s[%d]" % (key, i)))
-    for i, tint in enumerate(recipe.get("tints", [])):
+    if not isinstance(recipe["tints"], list):
+        raise PortraitError("recipe", "tints is a list")
+    for i, tint in enumerate(recipe["tints"]):
         if not isinstance(tint, dict):
             raise PortraitError("recipe", "tints[%d] is an object" % i)
         for key in tint:
             if key not in TINT_KEYS:
                 raise PortraitError("recipe", "tints[%d]: a key this tool does not know: '%s'" % (i, key))
-        for key in TINT_KEYS:
+        for key in sorted(TINT_KEYS):
             if key not in tint:
                 raise PortraitError("recipe", "tints[%d] has no '%s'" % (i, key))
         polygon = tint["polygon"]
         if not (isinstance(polygon, list) and len(polygon) >= 3 and all(
-                isinstance(p, list) and len(p) == 2 and all(isinstance(v, (int, float)) for v in p) for p in polygon)):
+                isinstance(p, list) and len(p) == 2 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in p) for p in polygon)):
             raise PortraitError("recipe", "tints[%d]: a polygon is a list of at least three [x, y]" % i)
+        for point in polygon:
+            if not (0 <= point[0] <= 1 and 0 <= point[1] <= 1):
+                raise PortraitError("recipe", "tints[%d] ('%s'): the point %s lies outside the card (a polygon is in fractions, 0 to 1, of the card's picture)" % (
+                    i, tint["name"], point))
         parse_colour(tint["colour"], "tints[%d]" % i)
         out["tints"].append({"name": str(tint["name"]), "colour": tint["colour"], "polygon": polygon})
-    card = recipe.get("card")
+    card = recipe["card"]
     if not isinstance(card, dict) or set(card) != CARD_KEYS:
         raise PortraitError("recipe", "card is {paper, ink}")
     parse_colour(card["paper"], "card paper")
     parse_colour(card["ink"], "card ink")
     out["card"] = {"paper": card["paper"], "ink": card["ink"]}
-    expressions = recipe.get("expressions", {"neutral": {}})
+    gain = recipe["line_gain"]
+    if isinstance(gain, bool) or not isinstance(gain, (int, float)) or not (0.0 < gain <= 4.0):
+        raise PortraitError("recipe", "line_gain is a number above 0 and at most 4 (1.0 is the line as drawn), not %r" % (gain,))
+    out["line_gain"] = float(gain)
+    expressions = recipe["expressions"]
     if not isinstance(expressions, dict) or not expressions:
         raise PortraitError("recipe", "expressions is {name: {}}")
     for name, spec in expressions.items():

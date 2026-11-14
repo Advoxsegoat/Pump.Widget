@@ -250,6 +250,7 @@
   "paper": "#efe6cc",
   "ink": "#2b2a30"
  },
+ "line_gain": 1.0,
  "expressions": {
   "neutral": {}
  }

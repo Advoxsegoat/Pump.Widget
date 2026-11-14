@@ -90,6 +90,7 @@ def recipe_dict(paper="ruled", keep=None, tints=None):
         "keep": keep or [],
         "tints": tints or [],
         "card": {"paper": "#ece2c8", "ink": "#2a2830"},
+        "line_gain": 1.0,
         "expressions": {"neutral": {}},
     }
 
