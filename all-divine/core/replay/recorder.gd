@@ -17,6 +17,7 @@ var hash_every := 60
 
 var _rec := InputRecording.new()
 var _skipped := false  # the frame the recorder was first run on has gone by
+var _last_settings := {}  # the fight-changing settings as the latest entry had them (the header's, before the first)
 var _pending := -1  # the entry whose frame the brain has yet to think, for the cursor it will read (taken at the next frame)
 
 
@@ -34,6 +35,7 @@ func begin(region: String, seed: int, start_frame := 0, policy := "") -> void:
 	_rec.policy = policy
 	for key in InputRecording.FIGHT_SETTINGS:
 		_rec.settings[key] = Settings.get_value(key)  # the fight as it is played: under the player's own settings, or the defaults
+	_last_settings = _rec.settings.duplicate()
 	_rec.region = region
 	_rec.seed = seed
 	_rec.start_frame = start_frame
@@ -84,13 +86,26 @@ func _physics_process(_delta: float) -> void:
 	for action in held:
 		if action != &"menu":
 			kept.append(action)
-	_rec.frames.append({
+	var entry := {
 		"move": Inputs.move_vector(),
 		"pressed": pressed,
 		"held": kept,
 		"direction": Inputs.direction_pressed_this_frame(),
 		"device": Inputs.last_device(),
-	})
+	}
+	# A fight-changing setting that is not what the last entry had: this frame is the first played under it (a change made in the pause
+	# menu belongs to the first frame after the resume, as the recorder does not run while paused).
+	var changed := {}
+	for key in InputRecording.FIGHT_SETTINGS:
+		var now: Variant = Settings.get_value(key)
+		if not _last_settings.has(key):
+			_last_settings[key] = now  # a recorder that was never begun: the first entry is the start
+		elif now != _last_settings[key]:
+			changed[key] = now
+			_last_settings[key] = now
+	if not changed.is_empty():
+		entry["settings"] = changed
+	_rec.frames.append(entry)
 	_pending = _rec.frames.size() - 1
 
 

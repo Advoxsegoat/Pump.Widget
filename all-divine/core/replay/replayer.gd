@@ -21,6 +21,7 @@ var arena: Arena
 var _rec: InputRecording
 var _at := 0
 var _lent := {}  # what the settings were before the recording's were lent, for the end
+var _lent_later: Array[Dictionary] = []  # the same for each change the recording makes in the middle, in order
 
 
 func _init() -> void:
@@ -42,10 +43,13 @@ func playing() -> bool:
 
 func _exit_tree() -> void:
 	_give_back()
+	InputFeed.release()
 
 
 # Puts the player's settings back (nothing is written: they were only lent).
 func _give_back() -> void:
+	while not _lent_later.is_empty():
+		Settings.take_back(_lent_later.pop_back())
 	if not _lent.is_empty():
 		Settings.take_back(_lent)
 		_lent = {}
@@ -70,5 +74,11 @@ func _physics_process(_delta: float) -> void:
 		InputFeed.release()
 		finished.emit()
 		return
-	InputFeed.apply(_rec.frames[_at])
+	var entry: Dictionary = _rec.frames[_at]
+	if entry.has("settings"):
+		# a setting the player changed in the middle of the fight, in force from this frame on
+		var before := Settings.lend(entry["settings"])
+		if not before.is_empty():
+			_lent_later.append(before)
+	InputFeed.apply(entry)
 	_at += 1

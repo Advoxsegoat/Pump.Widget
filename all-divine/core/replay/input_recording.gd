@@ -14,6 +14,9 @@ extends Resource
 ##   device      Inputs.Device, the aiming device the brain read on the frame (a pad aims with the stick, the keyboard and mouse at the cursor)
 ##   cursor      Vector3, on the keyboard and mouse and only on a frame the brain read it: the point of the ground it took for the cursor's
 ##               (not the screen position, which depends on the window it was recorded in). Added in format 2.
+##   settings    Dictionary key -> value, only on a frame where a setting of FIGHT_SETTINGS is not what it was on the frame before (the
+##               header holds the values at the start): the change, which the replay lends before the frame is played. A change made in the
+##               pause menu is on the first frame after the resume.
 
 ##
 ## And a header, so that a recording says what it is and checks itself: the format's `version`, the `seed` and `policy` of the bot that
