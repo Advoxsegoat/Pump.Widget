@@ -20,7 +20,7 @@ extends Resource
 
 ##
 ## And a header, so that a recording says what it is and checks itself: the format's `version`, the `seed` and `policy` of the bot that
-## made it (a person's has none), `frame_count`, whether a `debug_keys` key (F5 to F9, which change the fight and are not controls) was
+## made it (a person's has none), `frame_count`, whether a `debug_keys` key (F5 to F10, which change the fight and are not controls) was
 ## pressed, and `hashes`: the fight's state hash (Arena.state_hash) after every `hash_every` frames and after the last, which a replay
 ## compares as it goes.
 
@@ -66,7 +66,7 @@ func problem() -> String:
 	if frames.size() != frame_count:
 		return "the recording is cut short: it has %d frames of the %d it says" % [frames.size(), frame_count]
 	if debug_keys:
-		return "a debug key (F5 to F9) was pressed while it was recorded, and that is not in the recording"
+		return "a debug key (F5 to F10) was pressed while it was recorded, and that is not in the recording"
 	if not hashes.has(frame_count):
 		return "the recording has no state hash at its end (frame %d), so a replay of it could not be checked against anything" % frame_count
 	return ""
