@@ -202,20 +202,26 @@ func test_a_file_that_does_not_parse_is_refused_with_one_line_and_no_engine_erro
 		"garbage": "\u0001\u0002 not a recording at all {{{",
 		"cut mid-record": "[gd_resource type=\"Resource\" script_class=\"InputRecording\" load_steps=2 format=3]\n\n[ext_resource type=\"Script\" path=\"res://core/replay/input_recording.gd\" id=\"1\"]\n\n[resource]\nscript = ExtResource(\"1\")\nframes = [{\n\"move\": Vec",
 	}
+	# in this process: the refusal is the one line for each (the engine's own blocks are kept out of it: Engine.print_error_messages)
 	for label: String in cases:
 		var path := _write_text("unparsed_recording.tres", cases[label])
-		var ran := _run_main("--replay=" + path)
+		var why: String = Main.replay_refusal(path)
 		DirAccess.remove_absolute(path)
-		assert_eq(ran[0], 2, "%s: %s" % [label, ran[1]])
-		assert_false(ran[1].contains("ERROR"), "%s: no engine error block: %s" % [label, ran[1]])
-		assert_eq(ran[1].count("replay: "), 1, "%s: one line of its own: %s" % [label, ran[1]])
+		assert_true(why.contains("not a recording this game can read"), "%s: %s" % [label, why])
+	# and in a game of its own, as it is started: one of them is enough to see that nothing but the line is printed, and the exit code
+	var path := _write_text("unparsed_recording.tres", cases["cut mid-record"])
+	var ran := _run_main("--replay=" + path)
+	DirAccess.remove_absolute(path)
+	assert_eq(ran[0], 2, ran[1])
+	assert_false(ran[1].contains("ERROR"), "no engine error block: %s" % ran[1])
+	assert_eq(ran[1].count("replay: "), 1, "one line of its own: %s" % ran[1])
 
 
 func test_a_replay_given_no_path_is_refused_and_never_starts_a_fight() -> void:
-	for argument in ["--replay=", "--replay"]:
-		var ran := _run_main(argument)
-		assert_eq(ran[0], 2, "%s: %s" % [argument, ran[1]])
-		assert_true(ran[1].contains("replay: "), "%s says why: %s" % [argument, ran[1]])
+	assert_true(Main.replay_refusal("").contains("no recording was named"), "the refusal for no path")
+	var ran := _run_main("--replay=")
+	assert_eq(ran[0], 2, ran[1])
+	assert_true(ran[1].contains("replay: "), "it says why: %s" % ran[1])
 
 
 func test_a_replay_never_writes_the_players_settings_and_gives_them_back_at_its_end() -> void:

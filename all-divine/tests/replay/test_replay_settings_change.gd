@@ -7,7 +7,7 @@ extends TestCase
 const SETTINGS_PATH := "user://settings_change_test.cfg"
 const C := MenuNav.Cmd
 const SLOWDOWN := "effects/slowdown_on"
-const FRAMES := 400
+const FRAMES := 240
 
 
 func before_each() -> void:

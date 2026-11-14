@@ -379,6 +379,54 @@ func test_with_reaction_zero_the_bot_is_what_it_was() -> void:
 		InputFeed.release()
 
 
+# The recorded controls of a seeded fight of two (as test_with_reaction_zero_the_bot_is_what_it_was plays it), as a hash.
+func _duel_hash(policy: CombatBot.Policy) -> int:
+	var run := _knuckle_fight(policy, 7, 0)
+	await frames(240)
+	(run["bot"] as CombatBot).finish()
+	var result := (run["bot"] as CombatBot).recorder.recording().frames.hash()
+	(run["bot"] as CombatBot).free()
+	(run["arena"] as Node).free()
+	await frames(2)
+	InputFeed.release()
+	return result
+
+
+func test_the_same_seeded_fight_twice_in_one_process_is_the_same_with_another_game_between() -> void:
+	var first: int = await _duel_hash(CombatBot.Policy.MIXED)
+	var game := BotWorld.make(self, 4)
+	var other := track(CombatBot.new()) as CombatBot
+	other.begin(game.player, game.arena(), 4, CombatBot.Policy.AGGRESS)
+	await frames(200)
+	Game.change(Game.State.PAUSE)
+	await frames(10)
+	Game.change(Game.State.PLAY)
+	var motion := InputEventMouseMotion.new()
+	motion.position = Vector2(300, 200)
+	get_tree().root.push_input(motion)
+	for code in [KEY_ESCAPE, KEY_DOWN, KEY_ENTER, KEY_ESCAPE]:
+		var event := InputEventKey.new()
+		event.keycode = code
+		event.physical_keycode = code
+		event.pressed = true
+		Input.parse_input_event(event)
+		Input.flush_buffered_events()
+		await frames(2)
+		event = event.duplicate()
+		event.pressed = false
+		Input.parse_input_event(event)
+		Input.flush_buffered_events()
+	Game.change(Game.State.PLAY)
+	await frames(200)
+	other.finish()
+	other.free()
+	game.free()
+	await frames(2)
+	InputFeed.release()
+	var second: int = await _duel_hash(CombatBot.Policy.MIXED)
+	assert_eq(second, first, "the same fight after another game is the same fight")
+
+
 func test_no_defence_is_pressed_sooner_than_the_reaction_after_the_tell_that_prompted_it() -> void:
 	# A tier I foe throws jab, cross, hook, sweep, thrust and grab in turn, thirty-eight times, at three seeds; with reaction 14 and a jitter
 	# of 3, nothing is answered sooner than 11 frames after its tell.
@@ -573,6 +621,8 @@ func test_the_bot_plays_as_a_pad_player_and_nothing_reads_the_cursor() -> void:
 	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "and when it stops the devices are read again")
 
 
+# A guard that a headless run cannot make fail today (it passes on the code before the pad aim too: a headless Main's window cannot be under its
+# minimum size and the drift did not show in this seed); the proof that nothing reads the cursor is the spy test above.
 func test_a_bot_fight_does_not_depend_on_the_window_or_the_mouse() -> void:
 	var first: Array = await _bot_fight_trace(Vector2i(640, 360), Vector2(10, 10), 1000)
 	for case: Array in [[Vector2i(64, 64), Vector2(10, 10)], [Vector2i(1920, 1080), Vector2(900, 700)], [Vector2i(640, 360), Vector2(630, 5)]]:
