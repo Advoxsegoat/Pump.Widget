@@ -32,6 +32,7 @@ static func apply(frame: Dictionary) -> void:
 			Input.action_release(action)
 	Inputs.inject_move(frame.get("move", Vector2.ZERO))
 	Inputs.inject_direction(frame.get("direction", Vector2.ZERO))
+	Inputs.inject_aim(frame.get("device"), frame.get("cursor"))
 
 
 ## Lets everything go: no action is down, and the devices are read again.
@@ -41,3 +42,4 @@ static func release() -> void:
 			Input.action_release(action)
 	Inputs.inject_move(null)
 	Inputs.inject_direction(null)
+	Inputs.inject_aim(null)

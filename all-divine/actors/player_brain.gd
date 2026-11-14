@@ -186,11 +186,19 @@ func _nearest_foe(actor: Actor) -> Variant:
 
 
 # The point of the ground (at the height of the actor's feet) under the cursor, or null: no camera, or it cannot say.
+# Where a feeder says the cursor is (a recording's, with the point it was read at: the replaying window and mouse are not asked), else
+# the mouse's. The point read is noted in Inputs.cursor_read, for a recorder.
 func _cursor(actor: Actor) -> Variant:
-	var rig := actor.get_tree().get_first_node_in_group(CameraRig.GROUP) as CameraRig
-	if rig == null:
-		return null
-	return rig.cursor_ground(mouse_position(actor), actor.global_position.y)
+	var point: Variant = null
+	if Inputs.aim_injected():
+		point = Inputs.injected_cursor()
+	else:
+		var rig := actor.get_tree().get_first_node_in_group(CameraRig.GROUP) as CameraRig
+		if rig != null:
+			point = rig.cursor_ground(mouse_position(actor), actor.global_position.y)
+	if point is Vector3:
+		Inputs.cursor_read = point
+	return point
 
 
 # The nearest live foe within aim_assist_range of the actor and aim_assist_deg of `toward` (a world (x, z)

@@ -514,6 +514,76 @@ func test_a_foe_that_dies_is_dropped_no_sooner_than_the_reaction_after_his_death
 	await _end(run)
 
 
+# The state hash and Abarax's exact position on each of `count` frames of a bot fight in Main, the game's window `size` and the mouse
+# (as the window's own viewport sees it) at `mouse`.
+func _bot_fight_trace(size: Vector2i, mouse: Vector2, count: int) -> Array:
+	var window := get_window()
+	var was := window.size
+	window.size = size
+	var motion := InputEventMouseMotion.new()
+	motion.position = mouse
+	motion.global_position = mouse
+	get_tree().root.push_input(motion)
+	var game := BotWorld.make(self, 5)
+	var bot := track(CombatBot.new()) as CombatBot
+	bot.begin(game.player, game.arena(), 5, CombatBot.Policy.COUNTER)
+	var trace := []
+	for i in count:
+		await frames(1)
+		trace.append([game.arena().state_hash(), game.player.global_position])
+	bot.finish()
+	bot.free()
+	game.free()
+	window.size = was
+	await frames(2)
+	InputFeed.release()
+	return trace
+
+
+# A PlayerBrain that counts how often it is asked where the mouse is.
+class MouseSpy:
+	extends PlayerBrain
+	var asked := 0
+
+	func mouse_position(actor: Actor) -> Vector2:
+		asked += 1
+		return super.mouse_position(actor)
+
+
+func test_the_bot_plays_as_a_pad_player_and_nothing_reads_the_cursor() -> void:
+	var game := BotWorld.make(self, 5)
+	var spy := MouseSpy.new()
+	spy.view_yaw = (game.player.brain as PlayerBrain).view_yaw
+	game.player.set_brain(spy)
+	var bot := track(CombatBot.new()) as CombatBot
+	bot.begin(game.player, game.arena(), 5, CombatBot.Policy.COUNTER)
+	var devices := {}
+	for i in 240:
+		await frames(1)
+		devices[Inputs.last_device()] = true
+	assert_eq(devices.keys(), [Inputs.Device.GAMEPAD], "the aiming device is the pad while the bot plays")
+	assert_eq(spy.asked, 0, "and the cursor is never asked for")
+	assert_true(bot.summary().contains("pad"), "the run's line says so: %s" % bot.summary())
+	bot.finish()
+	bot.free()
+	game.free()
+	await frames(2)
+	InputFeed.release()
+	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "and when it stops the devices are read again")
+
+
+func test_a_bot_fight_does_not_depend_on_the_window_or_the_mouse() -> void:
+	var first: Array = await _bot_fight_trace(Vector2i(640, 360), Vector2(10, 10), 1000)
+	for case: Array in [[Vector2i(64, 64), Vector2(10, 10)], [Vector2i(1920, 1080), Vector2(900, 700)], [Vector2i(640, 360), Vector2(630, 5)]]:
+		var other: Array = await _bot_fight_trace(case[0], case[1], 1000)
+		var at := -1
+		for i in first.size():
+			if first[i] != other[i]:
+				at = i
+				break
+		assert_eq(at, -1, "window %s, mouse %s: the fight first differs on frame %d" % [case[0], case[1], at])
+
+
 func test_a_wave_the_player_dies_in_five_times_is_a_finding_not_a_problem_and_its_replay_is_saved() -> void:
 	var game := BotWorld.make(self, 9002)
 	var bot := track(CombatBot.new()) as CombatBot

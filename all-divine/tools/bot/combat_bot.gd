@@ -163,6 +163,7 @@ func begin(player: Actor, arena: Arena, seed_value: int, how: Policy = Policy.MI
 	rng_seed = seed_value
 	policy = how
 	_rng.seed = hash("bot#%d" % rng_seed)
+	Inputs.inject_aim(Inputs.Device.GAMEPAD)  # from the first frame (the feeder gives it again on every one)
 	recorder = InputRecorder.new()
 	recorder.name = &"Recorder"
 	add_child(recorder)
@@ -230,7 +231,7 @@ func save_replay() -> Error:
 ## One line of what the run came to: waves cleared, deaths and problems, then the numbers the policies are compared by.
 func summary() -> String:
 	var round_note := "" if round_done_at < 0 else ", the last wave cleared on frame %d" % round_done_at
-	return "bot seed %d: waves %d, deaths %d, problems %d (%s, reaction %d: dealt %d, taken %d, highest tempo %s, fewest frames from a tell to a defence %d%s)" % [
+	return "bot seed %d: waves %d, deaths %d, problems %d (%s, aiming as a pad player, reaction %d: dealt %d, taken %d, highest tempo %s, fewest frames from a tell to a defence %d%s)" % [
 			rng_seed, waves_cleared, deaths, problems.size(), POLICIES.find_key(policy), reaction_frames, roundi(damage_dealt), roundi(damage_taken),
 			DodgeChain.Tempo.keys()[highest_tempo].to_lower(), fewest_reaction, round_note]
 
@@ -583,7 +584,8 @@ func _entry() -> Dictionary:
 	var yaw := (_player.brain as PlayerBrain).view_yaw if _player.brain is PlayerBrain else 0.0
 	var screen := Vector3(_walk.x, 0.0, _walk.y).rotated(Vector3.UP, -yaw)
 	var move := Vector2(screen.x, screen.z) if not _walk.is_zero_approx() else _direction
-	return {"move": move, "pressed": PackedStringArray(_pressed), "held": PackedStringArray(_held), "direction": _direction}
+	# a bot's hands are a pad's: the stick aims, a held guard turns him to the nearest foe, and nothing reads a cursor nobody holds
+	return {"move": move, "pressed": PackedStringArray(_pressed), "held": PackedStringArray(_held), "direction": _direction, "device": Inputs.Device.GAMEPAD}
 
 
 # Hold guard and press a direction every fourth frame, nothing else (it still locks on, so that it faces a foe).

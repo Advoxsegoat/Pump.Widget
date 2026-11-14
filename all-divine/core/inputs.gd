@@ -43,6 +43,11 @@ var bindings_path := BINDINGS_PATH
 var clock: Callable = wall_clock
 
 var _device := Device.KEYBOARD_MOUSE
+var _injected_device: Variant = null  # a Device given by inject_aim, or null
+var _injected_cursor: Variant = null  # the ground point of the cursor given by inject_aim, a Vector3, or null
+## The ground point of the cursor the PlayerBrain last read (it says so each time it reads one), a Vector3, or null: what a recorder
+## writes down of the aim for the frame the brain has just thought. The recorder clears it as it takes it.
+var cursor_read: Variant = null
 var _latched: Dictionary = {}  # flick action -> true while it is down
 var _flicks_frame := -1
 var _flicks: Array[StringName] = []
@@ -119,7 +124,7 @@ func _mouse_moved(px: float) -> void:
 ## Which kind of device the player used last (Device): the keyboard and mouse until a pad is touched, or from the
 ## start if a pad is connected.
 func last_device() -> int:
-	return _device
+	return _injected_device if _injected_device != null else _device
 
 
 ## A stick reading with the deadzone taken out: 0 below DEADZONE, then (length - DEADZONE) / (1 - DEADZONE),
@@ -151,6 +156,25 @@ func inject_move(move: Variant) -> void:
 ## gives it frame by frame, so a press lasts the one frame it is set for.
 func inject_direction(direction: Variant) -> void:
 	_injected_direction = direction
+
+
+## Gives the aim as a feeder has it: `device` (a Device) is the one the brain reads as the last used, and `cursor` (a Vector3, the point
+## of the ground under the cursor, or null for none) is the point it reads as the cursor's, whatever the mouse and the window are, until
+## `device` is null. A pad player (the combat bot) is injected as GAMEPAD, which nothing in the game reads the cursor for; a recording
+## of a person on the keyboard and mouse brings the point they aimed at.
+func inject_aim(device: Variant, cursor: Variant = null) -> void:
+	_injected_device = device
+	_injected_cursor = cursor
+
+
+## Whether the aim is given by inject_aim, and so the cursor is not read from the mouse.
+func aim_injected() -> bool:
+	return _injected_device != null
+
+
+## The cursor's ground point as inject_aim gave it (a Vector3), or null.
+func injected_cursor() -> Variant:
+	return _injected_cursor
 
 
 ## The movement the player is asking for, in screen space (right is +x, up is -y), at most length 1.
