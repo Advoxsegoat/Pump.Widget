@@ -22,13 +22,13 @@ func after_each() -> void:
 
 
 # Abarax (a PlayerBrain, the bot on it) and a Knuckle `gap` metres off that throws nothing by itself.
-func _duel(policy: CombatBot.Policy, gap := 1.0, seed_number := 1) -> Dictionary:
+func _duel(policy: CombatBot.Policy, gap := 1.0, seed_number := 1, reaction := 0) -> Dictionary:
 	# The answers are tried at reaction 0 (the blow met on its exact frame); what the reaction does is tried by the tests at the end.
 	var run := Duel.make(self, [], [], gap, load(KNUCKLE) as ActorDef)
 	var a: Actor = run["a"]
 	a.set_brain(PlayerBrain.new())
 	var bot := track(CombatBot.new()) as CombatBot
-	bot.reaction_frames = 0
+	bot.reaction_frames = reaction
 	bot.begin(a, null, seed_number, policy)
 	run["bot"] = bot
 	run["got"] = []
@@ -406,27 +406,30 @@ func test_no_defence_is_pressed_sooner_than_the_reaction_after_the_tell_that_pro
 	assert_true(fewest[0] >= 11, "the soonest defence was %d frames after its tell" % fewest[0])
 
 
-# A tier I foe holds its jab at the charge mark and lets it go: [the bot frame it was let go on, the frames the bot's defences were
-# pressed on, Abarax's HP at the end].
+# A tier I foe holds its jab at the charge mark (for twenty frames or so: longer than the reaction of 14, so the hold is seen) and lets it go: [the bot frame it was let go on, the
+# frames the bot's defences were pressed on, Abarax's HP at the end, the bot frame the hold began on].
 func _delayed_swing(reaction: int, jitter: int) -> Array:
 	var run := _knuckle_fight(CombatBot.Policy.COUNTER, 1, reaction)
 	var foe: Actor = run["foe"]
 	var bot: CombatBot = run["bot"]
 	bot.reaction_jitter = jitter
-	var hold := EndlessMove.make(foe, &"knuckle_jab")  # for the action that holds the charge
+	var hold := EndlessMove.make(foe, &"knuckle_jab")  # a jab whose charge lasts as long as its action is held
 	foe.set_brain(ScriptBrain.new([{"frames": 40, "hold": [hold["action"]]}]))
 	var answers := []
 	bot.answered.connect(func(_since_tell: int, at: int) -> void: answers.append(at))
 	var released := [-1]
+	var began := -1
 	await frames(10)
-	foe.runner.start(Registry.fetch(&"moves", &"knuckle_jab") as MoveData, true)
+	foe.runner.start(hold["move"] as MoveData, true)
 	var was_charging := false
-	for i in 100:
+	for i in 140:
 		await frames(1)
+		if foe.runner.charging and began < 0:
+			began = bot.frame
 		if was_charging and not foe.runner.charging and released[0] < 0:
 			released[0] = bot.frame
 		was_charging = foe.runner.charging
-	var result := [released[0], answers, (run["a"] as Actor).stats.hp]
+	var result := [released[0], answers, (run["a"] as Actor).stats.hp, began]
 	bot.finish()
 	await _end({"bot": bot, "arena": run["arena"]})
 	return result
@@ -436,11 +439,79 @@ func test_a_delayed_swing_is_answered_no_sooner_than_the_reaction_after_its_rele
 	var late := await _delayed_swing(14, 3)
 	assert_true(late[0] > 0, "the foe held its swing and let it go")
 	for at: int in late[1]:
-		assert_true(at >= int(late[0]) + 11, "answered on frame %d, the swing was released on %d" % [at, late[0]])
+		# a press made on the tell, before the hold could be seen (the bot sees it `reaction` frames after it begins), is wasted on a held
+		# swing; the answer to the release comes after it
+		assert_true(at < int(late[3]) + 11 or at >= int(late[0]) + 11, "answered on frame %d, the hold began on %d and the swing was released on %d" % [at, late[3], late[0]])
 	assert_true(late[2] < 100.0, "and a swing let go a few frames from landing is not dodged on sight at reaction 14: HP %d" % late[2])
 	var quick := await _delayed_swing(4, 0)
 	assert_false(quick[1].is_empty(), "a bot with a reaction of 4 does answer it")
-	assert_true(int(quick[1][0]) >= int(quick[0]) + 4, "but not before four frames after the release: %s, released %d" % [quick[1], quick[0]])
+	for at: int in quick[1]:
+		assert_true(at < int(quick[3]) + 4 or at >= int(quick[0]) + 4, "answered on frame %d, held from %d, released on %d" % [at, quick[3], quick[0]])
+	assert_true(quick[1].any(func(at: int) -> bool: return at >= int(quick[0]) + 4), "and answers the release, not before four frames after it: %s, released %d" % [quick[1], quick[0]])
+
+
+func test_the_finisher_is_pressed_no_sooner_than_the_reaction_after_its_prompt() -> void:
+	var run := _duel(CombatBot.Policy.AGGRESS, 1.2, 1, 14)
+	var a: Actor = run["a"]
+	var b: Actor = run["b"]
+	var bot: CombatBot = run["bot"]
+	await frames(30)
+	track(PostureBreaker.make(a, b))
+	var prompt_at := -1
+	var pressed_at := -1
+	for i in 120:
+		await frames(1)
+		if prompt_at < 0 and a.finishable_target() != null:
+			prompt_at = bot.frame
+		if pressed_at < 0 and _ids(run).has(&"finisher"):
+			pressed_at = bot.frame
+	assert_true(prompt_at > 0, "the prompt showed")
+	assert_true(pressed_at > 0, "and he finished it: %s" % [_ids(run)])
+	assert_true(pressed_at >= prompt_at + 11, "the finisher began on frame %d, the prompt showed on %d" % [pressed_at, prompt_at])
+	await _end(run)
+
+
+func test_a_held_swing_is_known_to_be_held_no_sooner_than_the_reaction_after_the_hold_begins() -> void:
+	var run := _knuckle_fight(CombatBot.Policy.COUNTER, 1, 14)
+	var foe: Actor = run["foe"]
+	var bot: CombatBot = run["bot"]
+	var hold := EndlessMove.make(foe, &"knuckle_jab")
+	foe.set_brain(ScriptBrain.new([{"frames": 40, "hold": [hold["action"]]}]))
+	await frames(10)
+	foe.runner.start(Registry.fetch(&"moves", &"knuckle_jab") as MoveData, true)
+	var began := -1
+	var known := -1
+	for i in 60:
+		await frames(1)
+		if began < 0 and foe.runner.charging:
+			began = bot.frame
+		if known < 0 and bot._blows.any(func(blow: Dictionary) -> bool: return blow["held"]):
+			known = bot.frame
+	assert_true(began > 0, "the foe held its swing")
+	assert_true(known > 0, "and the bot came to know it")
+	assert_true(known >= began + 11, "known on frame %d, the hold began on %d" % [known, began])
+	bot.finish()
+	await _end(run)
+
+
+func test_a_foe_that_dies_is_dropped_no_sooner_than_the_reaction_after_his_death() -> void:
+	var run := _knuckle_fight(CombatBot.Policy.COUNTER, 1, 14)
+	var foe: Actor = run["foe"]
+	var bot: CombatBot = run["bot"]
+	await frames(30)
+	assert_eq(bot._foes().size(), 1, "he is a foe")
+	foe.die()
+	var died := bot.frame
+	var dropped := -1
+	for i in 60:
+		await frames(1)
+		if dropped < 0 and bot._foes().is_empty():
+			dropped = bot.frame
+	assert_true(foe.dead, "he died")
+	assert_true(dropped > 0, "and was dropped in the end")
+	assert_true(dropped >= died + 11, "dropped on frame %d, he died on %d" % [dropped, died])
+	bot.finish()
+	await _end(run)
 
 
 func test_a_wave_the_player_dies_in_five_times_is_a_finding_not_a_problem_and_its_replay_is_saved() -> void:

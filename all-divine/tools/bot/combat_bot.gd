@@ -140,6 +140,9 @@ var _rest_until := 0  # no new combo before this frame
 var _backing_off := false
 var _last_attacker: Actor  # who last struck him
 var _history := {}  # foe id -> [[where it stood, whether it was open], ...], one per frame, the latest last
+var _prompts: Array[bool] = []  # whether the finisher prompt showed, one per frame, the latest last (what it saw is `reaction_frames` back)
+var _foe_refs := {}  # foe id -> the foe, every one seen on the field (a foe that has died is known to have until reaction_frames later)
+var _foe_gone := {}  # foe id -> the frame it was first found dead or out of the field
 var _marked_at := Vector3.INF  # where the player stood STUCK_FRAMES ago, to tell that a walk is going nowhere
 var _marked_frame := 0
 var _steer_until := 0  # a walk that went nowhere is turned aside until this frame, by _steer_turn
@@ -182,7 +185,7 @@ func begin(player: Actor, arena: Arena, seed_value: int, how: Policy = Policy.MI
 	if player.chain != null:
 		player.chain.changed.connect(func(_count: int, tempo: DodgeChain.Tempo) -> void:
 			highest_tempo = maxi(highest_tempo, tempo)
-			var row := _row(_foes()[0] if not _foes().is_empty() else null)
+			var row := _row(_live_foes()[0] if not _live_foes().is_empty() else null)
 			row["tempo"] = maxi(row["tempo"], tempo))
 	if arena != null:
 		arena.wave_started.connect(func(_i: int) -> void: watch.note_progress(frame))
@@ -372,6 +375,7 @@ func _on_tell(foe: Actor) -> void:
 	blow["known_at"] = frame + delay
 	blow["delay"] = delay
 	blow["held"] = false
+	blow["charging"] = []
 	blow["checked"] = false
 	blow["gone"] = -1
 	_blows.append(blow)
@@ -433,13 +437,19 @@ func _forget_blows() -> void:
 	if reaction_frames > 0:
 		for blow in _blows:
 			var foe: Actor = blow["foe"]
-			if is_instance_valid(foe) and foe.runner.charging:
+			# whether the foe is holding the swing as it was `reaction_frames` ago: a hold and its release are seen that late
+			var log: Array = blow["charging"]
+			log.append(is_instance_valid(foe) and foe.runner.charging)
+			if log.size() > reaction_frames + 1:
+				log.pop_front()
+			if log.size() > reaction_frames and log[0]:
 				blow["held"] = true
 			elif blow["held"] and _eta(blow) != INF:
+				# let go `reaction_frames` ago: the swing's time from its release is what the bot knows, and it answers after its delay from that
 				blow["held"] = false
-				blow["tell_f"] = frame
-				blow["eta0"] = _eta(blow)
-				blow["known_at"] = frame + int(blow["delay"])
+				blow["tell_f"] = frame - reaction_frames
+				blow["eta0"] = _eta(blow) + reaction_frames
+				blow["known_at"] = frame - reaction_frames + int(blow["delay"])
 			if _eta(blow) == INF and int(blow["gone"]) < 0:
 				blow["gone"] = frame
 	_blows = _blows.filter(func(blow: Dictionary) -> bool:
@@ -501,8 +511,27 @@ func _decide() -> Dictionary:
 	return _entry()
 
 
-# The foes still living and in the tree, nearest first.
+# The foes the bot takes to be on the field, nearest first: the living ones in the tree, and with a reaction a foe that has died stays
+# one for `reaction_frames` more (a player takes a moment to see him fall), unless he has left the tree (then there is nothing to point at).
 func _foes() -> Array[Actor]:
+	if reaction_frames <= 0:
+		return _live_foes()
+	var found: Array[Actor] = []
+	for id: int in _foe_refs.keys():
+		var foe := _foe_refs[id] as Actor
+		if not is_instance_valid(foe) or not foe.is_inside_tree():
+			_foe_refs.erase(id)
+			_foe_gone.erase(id)
+			continue
+		if _foe_gone.has(id) and frame - int(_foe_gone[id]) >= reaction_frames:
+			continue
+		found.append(foe)
+	found.sort_custom(func(a: Actor, b: Actor) -> bool: return _distance(a) < _distance(b))
+	return found
+
+
+# The foes still living and in the tree, nearest first (what is true now: the bookkeeping reads it, the bot does not).
+func _live_foes() -> Array[Actor]:
 	var found: Array[Actor] = []
 	for node in get_tree().get_nodes_in_group(Actor.LOCKABLE_GROUP):
 		var foe := node as Actor
@@ -520,14 +549,22 @@ func _distance(foe: Actor) -> float:
 func _sample_foes() -> void:
 	if reaction_frames <= 0:
 		return
+	_prompts.append(_player.finishable_target() != null)
+	if _prompts.size() > reaction_frames + 1:
+		_prompts.pop_front()
 	for node in get_tree().get_nodes_in_group(Actor.LOCKABLE_GROUP):
 		var foe := node as Actor
 		if foe == null or foe == _player:
 			continue
+		_foe_refs[foe.get_instance_id()] = foe
 		var list: Array = _history.get_or_add(foe.get_instance_id(), [])
 		list.append([Vector2(foe.global_position.x, foe.global_position.z), _is_open_now(foe)])
 		if list.size() > reaction_frames + reaction_jitter + 2:
 			list.pop_front()
+	for id: int in _foe_refs.keys():
+		var known := _foe_refs[id] as Actor
+		if is_instance_valid(known) and (known.dead or not known.is_inside_tree()) and not _foe_gone.has(id):
+			_foe_gone[id] = frame
 
 
 # [where `foe` stood, whether it was open] as the bot sees it: reaction_frames ago (as it is, with no reaction, or before it was seen).
@@ -626,10 +663,17 @@ func _tap_guard(frames: int) -> void:
 
 # The finisher, when the prompt shows (a foe the palm would finish).
 func _finish() -> bool:
-	if _player.finishable_target() == null or not _free_to_start(&"palm"):
+	if not _prompt_seen() or not _free_to_start(&"palm"):
 		return false
 	_pressed.append(&"palm")
 	return true
+
+
+# Whether the finisher prompt shows, as the bot sees it: it showed `reaction_frames` ago (as it is, with no reaction).
+func _prompt_seen() -> bool:
+	if reaction_frames <= 0:
+		return _player.finishable_target() != null
+	return _prompts.size() > reaction_frames and _prompts[0]
 
 
 # The counter or clear-out decided at the last evade, once it is time.
