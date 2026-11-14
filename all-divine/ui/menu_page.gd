@@ -6,3 +6,5 @@ var heading := ""
 var rows: Array[MenuRow] = []
 var back: Callable = Callable()
 var start := 0
+## What the page does beyond its rows, if it is the Controls page: a capture that takes the next press, a list that follows the hand.
+var controls: ControlsPage = null

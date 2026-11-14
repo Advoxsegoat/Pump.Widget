@@ -105,6 +105,8 @@ var stage: PixelStage
 var arena: Arena
 ## Whether the controls are shown now.
 var hints_visible := true
+## True while a scene plays: the HUD draws nothing (the Director's CineOverlay has the picture).
+var suppressed := false
 
 var _hint_left := HINT_SECONDS
 var _hints_pinned := false  # F1 was pressed: the timer no longer hides them
@@ -299,6 +301,8 @@ func controls_text() -> String:
 # --- drawing ---
 
 func _draw() -> void:
+	if suppressed:
+		return
 	if player == null or player.stats == null:
 		return
 	_draw_player_bars()

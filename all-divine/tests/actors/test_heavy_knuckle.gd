@@ -155,6 +155,7 @@ func test_the_brain_is_data_and_has_its_numbers() -> void:
 	var slam: AttackOption = brain.attacks[1]
 	assert_eq([haymaker.action, haymaker.weight, haymaker.combo], [&"palm", 1.0, PackedStringArray()], "the haymaker")
 	assert_eq([slam.action, slam.weight, slam.cooldown, slam.min_range, slam.max_range], [&"gift", 0.7, 5.0, 0.0, CHOSEN], "the slam: within 1.8 m")
+	assert_eq([haymaker.tokens, slam.tokens], [AttackTokens.ALL, AttackTokens.ALL], "both hold every token their target gives (Task 14e)")
 
 
 func test_the_clip_checker_passes_it() -> void:
@@ -406,6 +407,22 @@ func test_the_ring_goes_when_the_slam_is_cut() -> void:
 	await Duel.play_to(self, heavy, 13)
 	assert_eq(heavy.runner.current.id, &"posture_broken", "the slam was cut")
 	assert_eq(_rings().filter(func(n: Node) -> bool: return n.is_in_group(&"slam_warning")).size(), 0, "and the ring went with it")
+
+
+func test_the_ring_and_the_wave_go_with_an_actor_that_is_freed_mid_slam() -> void:
+	# An arena reset (F9) frees the actors with their moves running: no move_ended comes, and the ring used to stand for the
+	# rest of its 0.75 s round nothing.
+	for free_at in [20, 40]:
+		var run := _fight(4.0, [], _slam_steps())
+		var heavy: Actor = run["heavy"]
+		await Duel.play_to(self, heavy, free_at)
+		var shown := get_tree().get_nodes_in_group(SlamRing.GROUP).size()
+		assert_true(shown >= 1, "a ring is up on frame %d (%d)" % [free_at, shown])
+		heavy.queue_free()
+		await frames(1)
+		assert_eq(get_tree().get_nodes_in_group(SlamRing.GROUP).size(), 0, "freed on frame %d: no ring or wave of the slam on the next frame" % free_at)
+		assert_eq(get_tree().get_nodes_in_group(GroundWave.GROUP).size(), 0, "and no ground wave of any kind")
+		_end(run)
 
 
 func test_the_ring_is_full_through_the_live_frames() -> void:

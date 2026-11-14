@@ -35,7 +35,7 @@ var _skeleton: Skeleton3D
 
 
 ## The pose `rig` shows now, to be copied later: {skeleton: its transform, bones: each bone's transform in skeleton space as shown
-## (Rig.shown_pose, the clips' pose with the modifiers over it), meshes: [[the MeshInstance3D, its transform in skeleton space]],
+## (Rig.shown_pose, the clips' pose with the modifiers over it), inflate: how much thicker it is drawn (Rig.shader_inflate), meshes: [[the MeshInstance3D, its transform in skeleton space]],
 ## source: the skeleton}.
 static func capture(rig: Rig) -> Dictionary:
 	var source := rig.skeleton
@@ -50,7 +50,7 @@ static func capture(rig: Rig) -> Dictionary:
 		var mesh := node as MeshInstance3D
 		if mesh.is_visible_in_tree() and mesh.mesh != null:
 			meshes.append([mesh, to_skeleton * mesh.global_transform])
-	return {skeleton = source.global_transform, bones = bones, meshes = meshes, source = source}
+	return {skeleton = source.global_transform, bones = bones, meshes = meshes, source = source, inflate = rig.shader_inflate()}
 
 
 ## A copy of `rig`'s body in `color` (its alpha is how solid it starts) that lasts `frames_` frames: of `clock`'s own, if an actor is
@@ -110,15 +110,19 @@ func _physics_process(_delta: float) -> void:
 # The captured pose's meshes on a skeleton of their own, held in that pose, with the two passes over them. Nothing of the actor is
 # copied but what is drawn: no hurtbox, hitbox or modifier comes with it, and no tree of the actor's runs in it.
 func _copy(pose: Dictionary) -> void:
+	var inflate: float = pose.get("inflate", 0.0)
+	var shader := InflatedShader.of(SHADER) if inflate > 0.0 else SHADER  # the copy of a thicker body is thicker
 	var depth := ShaderMaterial.new()
-	depth.shader = SHADER
+	depth.shader = shader
 	depth.render_priority = DEPTH_PRIORITY
 	depth.set_shader_parameter(&"depth_only", 1.0)
+	depth.set_shader_parameter(&"inflate", inflate)
 	_color_material = ShaderMaterial.new()
-	_color_material.shader = SHADER
+	_color_material.shader = shader
 	_color_material.render_priority = COLOR_PRIORITY
 	_color_material.set_shader_parameter(&"tint", _color)
 	_color_material.set_shader_parameter(&"strength", alpha())
+	_color_material.set_shader_parameter(&"inflate", inflate)
 	depth.next_pass = _color_material
 	if pose.is_empty():
 		return

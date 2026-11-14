@@ -233,6 +233,14 @@ func test_camera_fields_must_fit_the_move_and_the_framing() -> void:
 	scene.shots[2].pitch_to_deg = -10.0
 	_only(_check(scene), "S3", "pitch -10")
 	scene = _fixture()
+	scene.shots[2].pitch_deg = 0.0
+	scene.shots[2].pitch_to_deg = 0.0
+	assert_eq(_check(scene).size(), 0, "pitch 0 is the framing's own: no problem")
+	scene = _fixture()
+	scene.shots[2].pitch_deg = -50.0
+	scene.shots[2].pitch_to_deg = -20.0
+	_only(_check(scene), "S3", "pitch_to_deg is set but the move is STATIC")
+	scene = _fixture()
 	scene.shots[2].aim_to = &"knuckle"
 	_only(_check(scene), "S3", "aim_to is set but the move is STATIC")
 	scene = _fixture()
@@ -250,6 +258,14 @@ func test_camera_fields_must_fit_the_move_and_the_framing() -> void:
 	scene = _fixture()
 	scene.shots[2].move = Shot.CamMove.CRANE
 	_only(_check(scene), "S3", "CRANE pitch_to_deg")
+	scene = _fixture()
+	scene.shots[2].move = Shot.CamMove.CRANE
+	scene.shots[2].pitch_to_deg = -25.0  # the close framing's own pitch: no crane
+	_only(_check(scene), "S3", "CRANE pitch_to_deg")
+	scene = _fixture()
+	scene.shots[2].move = Shot.CamMove.CRANE
+	scene.shots[2].pitch_to_deg = -45.0
+	assert_eq(_check(scene).size(), 0, "a crane from the framing's own pitch to -45")
 
 
 # --- the kinds ---
