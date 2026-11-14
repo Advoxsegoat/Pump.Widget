@@ -338,3 +338,20 @@ func test_a_scene_skipped_from_the_pause_menu_ends_when_the_menu_resumes() -> vo
 	assert_eq(_finished, [true], "and the glide home runs out")
 	assert_eq(Game.state, Game.State.PLAY)
 	assert_false(main.hud.suppressed)
+
+
+func test_a_man_who_dies_in_the_scene_is_not_given_his_health_back_at_the_hand_back() -> void:
+	var parts := StoryStage.make(self, Vector3(3, 0, 4), deg_to_rad(200.0))
+	await frames(3)
+	var player: Actor = parts.player
+	var director := _start(parts)
+	assert_true(director != null)
+	if director == null:
+		return
+	while director.frame < 100:
+		await frames(1)
+	player.stats.take_damage(1000.0)
+	player.die()
+	await _until_hand_back(director)
+	assert_true(player.dead, "he is dead")
+	assert_eq(player.stats.hp, 0.0, "and his bar is empty, not full on a man lying down")

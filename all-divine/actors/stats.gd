@@ -138,9 +138,11 @@ func save() -> Dictionary:
 			stamina_idle = _stamina_idle, posture_idle = _posture_idle}
 
 
-## Puts the bars and the clocks back as `saved` (from save) had them.
+## Puts the bars and the clocks back as `saved` (from save) had them; the health of one who has died since is not given back
+## (a full bar on a man lying down).
 func restore(saved: Dictionary) -> void:
-	hp = saved.hp
+	if hp > 0.0:
+		hp = saved.hp
 	stamina = saved.stamina
 	posture = saved.posture
 	exhausted = saved.exhausted
