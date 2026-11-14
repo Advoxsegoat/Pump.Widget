@@ -457,3 +457,23 @@ func test_pressing_f10_while_a_scene_plays_or_when_paused_does_nothing() -> void
 	await frames(3)
 	assert_eq(Game.state, Game.State.PLAY)
 	RenderingServer.render_loop_enabled = true
+
+
+func test_a_region_change_ends_a_dip_at_once_and_f10_does_nothing_in_one() -> void:
+	RenderingServer.render_loop_enabled = false
+	var main := _main()
+	await frames(5)
+	var cam := _rig(main).get_node(NodePath(MomentCam.NAME)) as MomentCam
+	assert_true(cam != null, "Main has made the finisher's camera dip")
+	cam.moment(&"finisher", main.arena().enemies()[0])
+	await frames(40)
+	assert_eq(_rig(main).cine_weight, 1.0, "the dip is at its top")
+	_press_key(KEY_F10)
+	assert_true(Director.current() == null, "F10 starts no scene in a dip")
+	assert_eq(Game.state, Game.State.PLAY)
+	_press_key(KEY_F5)  # the courtyard
+	assert_eq(_rig(main).cine_weight, 0.0, "a region change gives the camera back at once")
+	assert_true(Director.moment_playing() == null and cam.director == null, "and the dip is over")
+	await frames(5)
+	assert_eq(_rig(main).cine_weight, 0.0, "it stays given back")
+	RenderingServer.render_loop_enabled = true
