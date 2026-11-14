@@ -353,6 +353,43 @@ func test_lamps_world_lights_only_the_world() -> void:
 	assert_eq(_build("lamps #ffb98a 6 0.5 3.45 sky").problems.size(), 1, "a fifth word that is not `world` is a problem")
 
 
+# A lantern is a solid slim post (a cylinder) with its lamp up the post; `ghost` leaves out the collider, `y=` stands it on a low wall.
+func test_lantern_options_ghost_and_y() -> void:
+	var solid := _build("lamps #ffb98a 6 0.5 3.45 world\nlantern 2 2")
+	assert_eq(solid.problems, PackedStringArray())
+	assert_eq(_bodies(solid.root).size(), 1, "a lantern is solid")
+	assert_true((_bodies(solid.root)[0].get_child(0) as CollisionShape3D).shape is CylinderShape3D, "a slim round post")
+	var ghost := _build("lamps #ffb98a 6 0.5 3.45 world\nlantern 2 2 ghost y=0.65")
+	assert_eq(ghost.problems, PackedStringArray())
+	assert_eq(_bodies(ghost.root).size(), 0, "a ghost lantern has no collider")
+	var lamp := (ghost.root as Node).find_children("Lamp", "OmniLight3D", true, false)[0] as OmniLight3D
+	assert_near(lamp.global_position.y, 0.65 + 3.45, 1e-6, "its lamp is up the post, which stands on the wall")
+	for bad in ["lantern 2 2 ghost ghost", "lantern 2 2 y=high", "lantern 2 ghost"]:
+		var built := _build("lamps #ffb98a 6 0.5 3.45 world\n" + bad)
+		assert_eq(built.problems.size(), 1, "%s is one problem: %s" % [bad, built.problems])
+		if built.problems.size() == 1:
+			assert_true((built.problems[0] as String).begins_with("T.txt:2:"), "%s names its line" % bad)
+
+
+# A guard is an unseen solid on `world` only: bodies bump into it, no foot stands on it, nothing of it is drawn.
+func test_guard_is_an_unseen_wall() -> void:
+	var built := _build("guard 0 0 10 0.4 2.5 name=Rail")
+	assert_eq(built.problems, PackedStringArray())
+	var body := (built.root as Node).get_node_or_null("Rail") as StaticBody3D
+	assert_true(body != null, "named Rail")
+	if body != null:
+		assert_eq(body.collision_layer, Layers.WORLD, "on world only")
+		assert_eq(body.find_children("*", "MeshInstance3D", true, false).size(), 0, "nothing of it is drawn")
+		var shape := body.get_child(0) as CollisionShape3D
+		assert_vec_near((shape.shape as BoxShape3D).size, Vector3(10, 2.5, 0.4), 1e-6, "10 x 2.5 x 0.4")
+		assert_vec_near(shape.position, Vector3(5, 1.25, 0.2), 1e-6, "standing on the ground")
+	for bad in ["guard 0 0 10 0.4", "guard 0 0 10 0.4 0", "guard 0 0 10 0.4 x", "guard 0 0 10 0.4 2 name=A extra"]:
+		var wrong := _build(bad)
+		assert_eq(wrong.problems.size(), 1, "%s is one problem: %s" % [bad, wrong.problems])
+		if wrong.problems.size() == 1:
+			assert_true((wrong.problems[0] as String).begins_with("T.txt:1:"), "%s names its line" % bad)
+
+
 # --- the older regions ---
 
 # What the builder makes of a node, and what a scene holds of it, as a line of text: its class, transform and the settings

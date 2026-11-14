@@ -648,16 +648,23 @@ func test_nothing_tall_touches_walkable_ground_on_its_south_side() -> void:
 		if body.get_parent().name == &"Walkable" or String(body.name).begins_with("Vat"):
 			continue
 		for shape: CollisionShape3D in body.find_children("*", "CollisionShape3D", true, false):
-			var box := (shape.shape as BoxShape3D).size
+			var box := _size_of(shape)
 			var centre := shape.global_position
 			var top := centre.y + box.y / 2.0
 			if centre.y - box.y / 2.0 >= 1.8 or (top <= 1.05 and top > 0.65 + 1e-6):
 				continue
-			var x := centre.x - box.x / 2.0 + 0.05
 			var north := false
-			while x < centre.x + box.x / 2.0 - 0.04:
-				north = north or _ground_under(space, Vector2(x, centre.z - box.z / 2.0 - 0.1))
-				x += 0.25
+			if shape.shape is CylinderShape3D:
+				# A round post: a body can stand north of it (within 45 degrees of north) where a capsule fits on a ring just outside it, on ground a body can stand on.
+				var ring := box.x / 2.0 + BODY + 0.03
+				for degrees in range(225, 316, 5):
+					var around := Vector2(centre.x, centre.z) + Vector2.from_angle(deg_to_rad(degrees)) * ring
+					north = north or (_ground_under(space, around) and not _blocked(space, around))
+			else:
+				var x := centre.x - box.x / 2.0 + 0.05
+				while x < centre.x + box.x / 2.0 - 0.04:
+					north = north or _ground_under(space, Vector2(x, centre.z - box.z / 2.0 - 0.1))
+					x += 0.25
 			if north and top > 0.65 + 1e-6:
 				tall.append("%s is %.2f m high with ground on its north side" % [body.get_path(), top])
 			elif north:
@@ -1189,7 +1196,7 @@ func test_the_gate_is_a_closed_low_shortcut_gate() -> void:
 		if body.get_parent().name == &"Walkable":
 			continue
 		for s: CollisionShape3D in body.find_children("*", "CollisionShape3D", true, false):
-			var b := (s.shape as BoxShape3D).size
+			var b := _size_of(s)
 			var rect := Rect2(s.global_position.x - b.x / 2.0, s.global_position.z - b.z / 2.0, b.x, b.z)
 			if rect.intersection(zone).get_area() > 1e-4 and s.global_position.y + b.y / 2.0 > 1.3 and not s.global_position.y + b.y / 2.0 <= 1.3:
 				tall.append("%s" % body.get_path())
@@ -1291,7 +1298,7 @@ func test_every_solid_prop_on_walkable_ground_is_fought_round_and_nothing_rides_
 	var bodies: Array = region.get_node("Props").find_children("*", "StaticBody3D", true, false) + region.find_children("Bollard*", "StaticBody3D", false, false) + region.find_children("Plinth_*", "StaticBody3D", false, false)
 	for body: StaticBody3D in bodies:
 		for shape: CollisionShape3D in body.find_children("*", "CollisionShape3D", true, false):
-			var size := (shape.shape as BoxShape3D).size
+			var size := _size_of(shape)
 			var world_box: AABB = shape.global_transform * AABB(-size / 2.0, size)
 			var rect := Rect2(world_box.position.x, world_box.position.z, world_box.size.x, world_box.size.z)
 			var near := false
@@ -1373,12 +1380,11 @@ func test_the_kit_pieces_that_fit_are_used_and_none_of_them_stands_behind_a_figh
 	for piece in ["lantern", "pillar-wood", "balcony-wall", "rock-small"]:
 		assert_true(_pieces(region, piece).size() >= 2, "%s is used (%d)" % [piece, _pieces(region, piece).size()])
 	# Each stands north of the ground it overlooks (against a front, or beyond the unwalkable): no body is before it from the camera.
-	var fronts := {"lantern": -4.0, "pillar-wood": -24.0, "balcony-wall": -4.0}
+	var fronts := {"pillar-wood": -24.0, "balcony-wall": -4.0}
 	for piece: String in fronts:
 		for k in _pieces(region, piece):
 			assert_true(k.box.end.z <= fronts[piece] + 1e-3, "%s at %s stands against a front" % [piece, k.box])
-	for k in _pieces(region, "lantern"):
-		assert_true((k.node as Node).get_node_or_null("Body") == null, "a lantern is drawn only (a lamp on a wall)")
+	# The lanterns have their own test (the post is a slim solid one, or a ghost on a low wall where no body is): see test_lanterns_are_posts.
 
 
 # The ring leaves no gap: on the 2.5 m tiles of x -60..62.5, z -95..5 every tile is under a ring block, a solid mass, a plate of ground (walkable
@@ -1419,3 +1425,366 @@ func test_the_ring_leaves_no_gap_wider_than_a_tile() -> void:
 		if open.has(cell + Vector2i(1, 0)) or open.has(cell + Vector2i(0, 1)):
 			gaps.append("tiles at x %.2f z %.2f" % [-60.0 + 2.5 * cell.x, -95.0 + 2.5 * cell.y])
 	assert_eq(gaps.slice(0, 6), PackedStringArray(), "no two neighbouring tiles of the footprint are bare (%d bare tiles in all)" % open.size())
+
+
+# --- The light (Task 4): the book's cold snow-noon ---
+
+const GRADE := "res://data/render/grades/bilibara_noon.tres"
+const HAZE := "#aebbcc"
+
+
+func _env(region: Region) -> Environment:
+	var holders := region.find_children("*", "WorldEnvironment", true, false)
+	assert_eq(holders.size(), 1, "one WorldEnvironment")
+	return (holders[0] as WorldEnvironment).environment
+
+
+# The box round a collision shape (a lantern's post is a cylinder), in its own space.
+func _size_of(shape: CollisionShape3D) -> Vector3:
+	if shape.shape is CylinderShape3D:
+		var cylinder := shape.shape as CylinderShape3D
+		return Vector3(cylinder.radius * 2.0, cylinder.height, cylinder.radius * 2.0)
+	return (shape.shape as BoxShape3D).size
+
+
+func _lamps(region: Region) -> Array[OmniLight3D]:
+	var found: Array[OmniLight3D] = []
+	for lamp: OmniLight3D in region.find_children("*", "OmniLight3D", true, false):
+		found.append(lamp)
+	return found
+
+
+func test_the_light_is_the_snow_noon() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var env := _env(region)
+	var sun := region.get_node_or_null("Sun") as DirectionalLight3D
+	var fill := region.get_node_or_null("Fill") as DirectionalLight3D
+	assert_true(sun != null and fill != null, "a Sun and a Fill")
+	if sun == null or fill == null:
+		return
+	# The fill: for the bodies only, no shadow, cool, 1.0 to 1.3, from the camera's side and above.
+	assert_eq(fill.light_cull_mask, Layers.RENDER_BODIES, "the fill lights the bodies and nothing else")
+	assert_false(fill.shadow_enabled, "the fill casts no shadow")
+	assert_true(fill.light_energy >= 1.0 and fill.light_energy <= 1.3, "the fill's energy is 1.0 to 1.3 (%.2f)" % fill.light_energy)
+	assert_true(fill.light_color.b >= fill.light_color.r, "the fill is cool (%s)" % fill.light_color.to_html(false))
+	# The light travels along -z of its basis: it comes from the camera's side (+z) and above when basis.z has z > 0.5 and y > 0.3.
+	var from := fill.global_transform.basis.z
+	assert_true(from.z > 0.5 and from.y > 0.3, "the fill comes from the camera's side and above (%s)" % from)
+	# The sun: shadows, a gentle key, and it leaves the bodies to the fill.
+	assert_true(sun.shadow_enabled, "the sun casts shadows")
+	assert_near(sun.light_energy, 0.25, 1e-6, "the sun is a gentle key")
+	assert_eq(sun.light_cull_mask & Layers.RENDER_BODIES, 0, "the sun leaves the bodies to the fill")
+	assert_eq(env.ambient_light_source, Environment.AMBIENT_SOURCE_COLOR, "ambient from a colour")
+	assert_eq(env.ambient_light_color.to_html(false), "bccadf", "the ambient is #bccadf")
+	assert_near(env.ambient_light_energy, 0.62, 1e-6, "ambient energy 0.62")
+	assert_eq(env.background_color.to_html(false), "aebbcc", "the sky is the haze")
+	var grade := region.grade
+	assert_true(grade != null and grade.resource_path == GRADE, "the grade is bilibara_noon (%s)" % [grade.resource_path if grade != null else "none"])
+	if grade != null:
+		assert_eq(grade.fog_color.to_html(false), "aebbcc", "the grade's fog is the sky's colour")
+		assert_near(grade.fog_density, 0.015, 1e-6, "fog density")
+		assert_near(grade.saturation, 0.9, 1e-6, "saturation")
+
+
+func test_shade_is_at_least_seventy_percent_of_sun() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var env := _env(region)
+	var sun := region.get_node_or_null("Sun") as DirectionalLight3D
+	if sun == null:
+		fail("no Sun")
+		return
+	# The toon shader's lowest step gives 0.35 of a light; ambient is kept whole.
+	var ambient := env.ambient_light_energy * env.ambient_light_color.v
+	var ratio := (ambient + 0.35 * sun.light_energy) / (ambient + sun.light_energy)
+	assert_true(ratio >= 0.7, "shade is %.2f of sunlit ground (at least 0.7)" % ratio)
+
+
+func test_the_environment_meets_the_looks_preconditions() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var env := _env(region)
+	assert_eq(env.tonemap_mode, Environment.TONE_MAPPER_LINEAR, "tonemap linear")
+	assert_near(env.tonemap_exposure, 1.0, 1e-6, "exposure 1")
+	assert_false(env.glow_enabled, "no glow")
+	assert_false(env.ssao_enabled, "no SSAO")
+	assert_false(env.ssil_enabled, "no SSIL")
+	assert_false(env.sdfgi_enabled, "no SDFGI")
+	assert_false(env.adjustment_enabled, "no colour adjustments")
+	assert_false(env.fog_enabled, "no environment fog")
+	assert_false(env.volumetric_fog_enabled, "no volumetric fog")
+	var ambient := env.ambient_light_color
+	assert_true(ambient.b >= ambient.r, "the ambient is cool (%s)" % ambient.to_html(false))
+	assert_true(env.ambient_light_energy > 0.0 and env.ambient_light_energy * ambient.r < 0.5, "the ambient is soft (energy %.2f)" % env.ambient_light_energy)
+
+
+## The 18 lanterns of the layout: x, z of the post, whether the lamp casts shadows, and how high the post's foot is (0.65 on a low wall).
+const LANTERNS := [
+	[-36.1, -4.13, true, 0.0], [-28.5, -4.7, false, 0.0],
+	[-20.0, -4.72, false, 0.0], [-5.0, -4.72, false, 0.0], [10.0, -4.72, false, 0.0], [22.0, -4.72, false, 0.0],
+	[23.75, -15.0, false, 0.65], [31.25, -46.5, false, 0.65],
+	[36.9, -37.23, true, 0.0], [33.7, -37.23, false, 0.0],
+	[-18.75, -24.33, false, 0.0], [-1.25, -24.33, false, 0.0], [16.25, -24.33, false, 0.0],
+	[-28.75, -15.0, false, 0.65],
+	[17.5, -74.72, false, 0.0], [37.5, -74.72, false, 0.0], [23.75, -50.0, false, 0.65], [31.25, -50.0, false, 0.65],
+]
+
+
+func test_lamps_light_the_world_only_and_are_warm_and_few() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var lamps := _lamps(region)
+	assert_eq(lamps.size(), 18, "18 lamps")
+	var shadowed: Array[OmniLight3D] = []
+	var posts := region.get_node_or_null("Lanterns")
+	assert_true(posts != null and posts.get_child_count() == 18, "18 lanterns")
+	for lamp in lamps:
+		assert_true(lamp.get_parent() != null and lamp.get_parent().get_parent() == posts, "a lamp sits in a lantern (%s)" % lamp.get_path())
+		assert_eq(lamp.light_color.to_html(false), "ffb98a", "a warm lamp")
+		assert_near(lamp.omni_range, 6.0, 1e-6, "range 6")
+		assert_near(lamp.light_energy, 0.5, 1e-6, "energy 0.5")
+		assert_eq(lamp.light_cull_mask, Layers.RENDER_WORLD, "a lamp lights the world and not the bodies")
+		if lamp.shadow_enabled:
+			shadowed.append(lamp)
+		# None in the street's clear band (a prop's south edge is no further south than z -2.4).
+		var at := lamp.global_position
+		if at.x < 30.0 and at.z > -6.0 and at.z < 0.0:
+			assert_true(at.z + 0.27 <= -2.4, "the lantern at %s is out of the street's clear band" % at)
+	assert_eq(shadowed.size(), 2, "two shadow casters")
+	if shadowed.size() == 2:
+		assert_true(shadowed[0].global_position.distance_to(shadowed[1].global_position) >= 60.0, "the two shadow casters are 60 m or more apart")
+	# Every one of the layout's posts has a lamp 3.45 up over it.
+	for spec: Array in LANTERNS:
+		var found := lamps.any(func(l: OmniLight3D) -> bool:
+			return absf(l.global_position.x - spec[0]) < 0.05 and absf(l.global_position.z - spec[1]) < 0.05 and absf(l.global_position.y - (3.45 + spec[3])) < 0.05 and l.shadow_enabled == spec[2])
+		assert_true(found, "a lamp %.2f m over (%.2f, %.2f)" % [3.45, spec[0], spec[1]])
+
+
+func test_no_mesh_is_reached_by_more_than_six_lamps_and_no_point_by_more_than_two_shadows() -> void:   # Review Focus 5
+	var region := _region()
+	if region == null:
+		return
+	var lamps := _lamps(region)
+	var worst := 0
+	var worst_name := ""
+	for node: Node3D in region.find_children("*", "GeometryInstance3D", true, false):
+		var box := AABB()
+		if node is KitRun:
+			box = (node as KitRun).bounds()
+		elif node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+			box = node.global_transform * (node as MeshInstance3D).get_aabb()
+		else:
+			continue
+		# A mesh that is drawn unshaded (the dark interiors behind the windows) takes no light, so no lamp reaches it.
+		var material := (node as GeometryInstance3D).material_override as StandardMaterial3D
+		if material != null and material.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED:
+			continue
+		var count := 0
+		for lamp in lamps:
+			var centre := lamp.global_position
+			var nearest := centre.clamp(box.position, box.end)
+			if nearest.distance_to(centre) <= lamp.omni_range:
+				count += 1
+		if count > worst:
+			worst = count
+			worst_name = String(region.get_path_to(node))
+	assert_true(worst <= 6, "%s is reached by %d lamps (at most 6)" % [worst_name, worst])
+	var casters := lamps.filter(func(l: OmniLight3D) -> bool: return l.shadow_enabled)
+	var most := 0
+	for x in range(-45, 46):
+		for z in range(-80, 11):
+			var inside := 0
+			for lamp: OmniLight3D in casters:
+				if lamp.global_position.distance_to(Vector3(x, 0.0, z)) <= lamp.omni_range:
+					inside += 1
+			most = maxi(most, inside)
+	assert_true(most <= 2, "no point is in the range of more than two shadow casters (%d)" % most)
+
+
+# --- Posts: a lantern's post or a colonnade's pillar is something a fighter slides round, and nothing hangs in the air ---
+
+## A fighter sprints at a post from 4 m, in eight directions, at offsets across its width of 10 cm steps.
+const SPRINT_START := 4.0
+const SPRINT_OFFSETS: Array[float] = [-0.2, -0.1, 0.0, 0.1, 0.2]
+## The posts tried: one of each kind of place (court A's free-standing post, a street front's, the Rack Walk's, alcove B's and the yard's wall).
+const SPRINT_POSTS: Array[String] = ["Lantern", "Lantern3", "Lantern11", "Lantern10", "Lantern15"]
+
+
+func test_every_lamp_hangs_from_a_post_that_stands_on_the_ground_or_a_low_wall() -> void:
+	var region := _region()
+	if region == null:
+		return
+	await frames(2)
+	var space := region.get_world_3d().direct_space_state
+	var solid := 0
+	var on_wall := 0
+	for post: Node3D in region.get_node("Lanterns").get_children():
+		var lamp := post.get_node("Lamp") as OmniLight3D
+		assert_near(lamp.position.y, 3.45, 1e-6, "%s: the lamp is 3.45 m up its post" % post.name)
+		var foot := post.global_position
+		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(foot + Vector3(0, 0.02, 0), foot - Vector3(0, 0.2, 0), Layers.WORLD | Layers.IK_SURFACE))
+		assert_false(hit.is_empty(), "%s stands on something (foot %s)" % [post.name, foot])
+		if not hit.is_empty():
+			assert_near((hit["position"] as Vector3).y, foot.y, 0.02, "%s's foot is on what it stands on" % post.name)
+		var body := post.get_node_or_null("Body") as StaticBody3D
+		if body != null:
+			solid += 1
+			var shape := body.get_child(0) as CollisionShape3D
+			assert_true(shape.shape is CylinderShape3D and (shape.shape as CylinderShape3D).radius <= 0.3, "%s: a slim round post" % post.name)
+		else:
+			# A ghost: its foot is on a low wall's top, where no body reaches.
+			on_wall += 1
+			assert_near(foot.y, 0.65, 1e-6, "%s: a ghost post stands on a low wall's top" % post.name)
+			assert_true(hit.get("collider") != null and String((hit["collider"] as Node).name).begins_with("Coping"), "%s stands on a low wall's coping (%s)" % [post.name, hit.get("collider")])
+	assert_eq(solid + on_wall, 18, "18 posts")
+	assert_true(solid >= 10 and on_wall >= 4, "most posts are solid, four stand on walls (%d, %d)" % [solid, on_wall])
+
+
+# The frames an open sprint takes to cover `metres` from rest (Abarax, in the street, east).
+func _open_sprint_frames(region: Region, metres: float) -> int:
+	var actor := _spawn(region, ABARAX, Vector3(-18.0, 0.0, 1.0))
+	actor.set_brain(ScriptBrain.new([{frames = 400, move = Vector2(1, 0), hold = [&"dodge"]}]))
+	await frames(2)
+	var start := actor.global_position
+	var count := 0
+	while actor.global_position.distance_to(start) < metres and count < 400:
+		await frames(1)
+		count += 1
+	actor.queue_free()
+	await frames(1)
+	return count
+
+
+# Eight bodies at once, each sprinting at the point `at` (a post of radius `radius`) from one of eight ways, `offset` m to the side:
+# the problems found: not past the post (or, dead on, not stopped square at it) when the time is up, or shaking from side to side.
+func _sprint_at(region: Region, posts: Dictionary, radius: float, offset: float, run_frames: int, way: Vector2) -> PackedStringArray:
+	var space := region.get_world_3d().direct_space_state
+	var runners: Array[Dictionary] = []
+	for label: String in posts:
+		var at: Vector2 = posts[label]
+		var start := at - way * SPRINT_START + way.orthogonal() * offset
+		# The way must be open: the start stands free, and a ray from it to the post meets nothing before it.
+		var ray := space.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(start.x, 0.5, start.y), Vector3(at.x, 0.5, at.y), Layers.WORLD))
+		if _blocked(space, start) or not _ground_under(space, start) or (not ray.is_empty() and (ray["position"] as Vector3).distance_to(Vector3(at.x, 0.5, at.y)) > radius + 0.05):
+			continue
+		var actor := _spawn(region, ABARAX, Vector3(start.x, 0.0, start.y))
+		actor.set_brain(ScriptBrain.new([{frames = run_frames, move = way, hold = [&"dodge"]}]))
+		runners.append({actor = actor, way = way, trail = [], label = label, at = at})
+	await frames(2)
+	for i in run_frames:
+		await frames(1)
+		for r in runners:
+			var p := (r.actor as Actor).global_position
+			(r.trail as Array).append(Vector2(p.x, p.z))
+	var problems := PackedStringArray()
+	for r in runners:
+		var heading: Vector2 = r.way
+		var at: Vector2 = r.at
+		var label: String = r.label
+		var trail := PackedVector2Array(r.trail)
+		var end: Vector2 = trail[trail.size() - 1]
+		var along := (end - at).dot(heading)
+		var side := (end - at).dot(heading.orthogonal())
+		var square := absf(offset) < 0.05 and along < radius + BODY + 0.15
+		# Close to dead on (under 0.2 m aside) a body pressing into a round post turns aside slowly, as a body does against any wall
+		# (the legs go no faster than the body): it is not past it in the time, but it must be moving aside, not standing and pressing.
+		var creeping := absf(offset) < 0.2 - 1e-6 and (absf((end - at).dot(heading.orthogonal())) - absf((trail[trail.size() - 30] - at).dot(heading.orthogonal()))) >= 0.02
+		if along < 0.2 and not square and not creeping:
+			problems.append("%s, from %s at %.1f m aside: not past it after %d frames (%.2f along, %.2f aside)" % [label, -heading, offset, run_frames, along, side])
+		# Shaking: the sideways movement reverses direction again and again over the last half second.
+		var reversals := 0
+		var last_sign := 0
+		for k in range(maxi(trail.size() - 30, 1), trail.size()):
+			var step := (trail[k] - trail[k - 1]).dot(heading.orthogonal())
+			if absf(step) > 0.002:
+				var sign_now := 1 if step > 0.0 else -1
+				if last_sign != 0 and sign_now != last_sign:
+					reversals += 1
+				last_sign = sign_now
+		if reversals > 2:
+			problems.append("%s, from %s at %.1f m aside: shakes (%d reversals)" % [label, -heading, offset, reversals])
+	for r in runners:
+		(r.actor as Actor).queue_free()
+	await frames(1)
+	return problems
+
+
+func test_a_sprint_at_a_post_slides_round_it_or_stops_square() -> void:
+	var region := _region()
+	if region == null:
+		return
+	await frames(2)
+	var open_frames := await _open_sprint_frames(region, SPRINT_START + 1.4)
+	assert_true(open_frames > 20 and open_frames < 300, "an open sprint of %.1f m takes %d frames" % [SPRINT_START + 1.4, open_frames])
+	var ways: Array[Vector2] = []
+	for k in 8:
+		# Every solid post stands against a front, a wall or a plinth to its north: a sprint into that side is a sprint into a corner (the
+		# wall holds him, as it holds him anywhere), so the five ways that do not run north are tried.
+		var way := Vector2.from_angle(TAU * k / 8.0)
+		if way.y > -0.1:
+			ways.append(way)
+	var posts := {}
+	for post_name in SPRINT_POSTS:
+		var post := region.get_node("Lanterns/" + post_name) as Node3D
+		assert_true(post.get_node_or_null("Body") != null, "%s is a solid post" % post_name)
+		posts[post_name] = Vector2(post.global_position.x, post.global_position.z)
+	var problems := PackedStringArray()
+	var tried := 0
+	# One way at a time (bodies from all round at once would jam each other at the post), the posts together (they are far apart).
+	for way in ways:
+		for offset in SPRINT_OFFSETS:
+			tried += posts.size()
+			problems.append_array(await _sprint_at(region, posts, POST_R, offset, open_frames + 60, way))
+	assert_true(tried >= 100, "the sprints were tried (%d)" % tried)
+	assert_eq(problems.slice(0, 8), PackedStringArray(), "every sprint at a lantern's post ends past it or square on it, and none shakes (%d problems)" % problems.size())
+
+
+const POST_R := 0.27
+
+
+func test_a_sprint_at_the_colonnade_stops_square_or_slides_along_it() -> void:
+	var region := _region()
+	if region == null:
+		return
+	await frames(2)
+	var guard := region.get_node("ColonnadeGuard") as StaticBody3D
+	var space := region.get_world_3d().direct_space_state
+	var problems := PackedStringArray()
+	# Straight at it, and at 45 degrees either way, at five places along it and offsets between pillars.
+	for x: float in [-30.0, -10.1, 0.0, 9.9, 18.0]:
+		for dx: float in [0.0, 1.0, -1.0]:
+			var way := Vector2(dx, -1.0).normalized()
+			var start := Vector2(x, -24.6) - way * 3.4
+			var actor := _spawn(region, ABARAX, Vector3(start.x, 0.0, start.y))
+			actor.set_brain(ScriptBrain.new([{frames = 120, move = way, hold = [&"dodge"]}]))
+			await frames(2)
+			var trail := PackedVector2Array()
+			for i in 90:
+				await frames(1)
+				trail.append(Vector2(actor.global_position.x, actor.global_position.z))
+			var end := trail[trail.size() - 1]
+			if end.y < -24.6 + BODY - 0.05:
+				problems.append("x %.1f way %s: ended %.2f m inside the pillars' line (z %.2f)" % [x, way, -24.6 + BODY - end.y, end.y])
+			if absf(dx) > 0.5 and absf(end.x - start.x) < 1.5:
+				problems.append("x %.1f way %s: stuck, moved %.2f m along it" % [x, way, end.x - start.x])
+			var reversals := 0
+			var last_sign := 0
+			for k in range(trail.size() - 30, trail.size()):
+				var step := (trail[k] - trail[k - 1]).x
+				if absf(step) > 0.002:
+					var sign_now := 1 if step > 0.0 else -1
+					if last_sign != 0 and sign_now != last_sign:
+						reversals += 1
+					last_sign = sign_now
+			if reversals > 2:
+				problems.append("x %.1f way %s: shakes" % [x, way])
+			actor.queue_free()
+			await frames(1)
+	assert_true(guard != null, "a ColonnadeGuard")
+	assert_eq(problems, PackedStringArray(), "the colonnade holds a sprint and lets it slide")
+	assert_true(space != null)

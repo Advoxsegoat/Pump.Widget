@@ -199,6 +199,9 @@ var _brain_given := false  # set_brain was called: the def's brain does not repl
 
 
 func _ready() -> void:
+	# Engine default is 15 degrees: a body walking straight into a round post, within 9 degrees of dead on, would not slide at all and
+	# stand there pressing (nothing in the game is sticky): it slides at any angle, round a post and along a wall.
+	wall_min_slide_angle = 0.0
 	if def == null or def.rig_scene == null:
 		push_error("Actor: '%s' has no def with a rig_scene" % name)
 		set_physics_process(false)

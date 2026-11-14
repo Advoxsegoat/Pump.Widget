@@ -26,7 +26,9 @@ extends SceneTree
 ##   water X0 Z0 X1 Z1 Y [liquor]       a thin plane at height Y, seen only; two at one height may not overlap
 ##   drift X Z W D [y=Y] [seed=N]       a mound of snow of rounded lumps (about W x D, at most 0.32 m high), seen only, on Y
 ##   vat X Z                            a 2.5 m slate box 1 m high, solid, with liquor in it
-##   lantern X Z [shadow]               a lantern with its lamp (see lamps)
+##   lantern X Z [shadow] [ghost] [y=Y]  a lantern with its lamp (see lamps): a solid post, or `ghost` (no collider: where no body can reach, on a
+##                                      low wall's top at y=Y)
+##   guard X0 Z0 X1 Z1 H [name=NAME]    an unseen solid box H high (world only): the body of a colonnade's pillars
 ##   lamps COLOUR RANGE ENERGY UP [world]   every lantern's lamp; `world`: it lights the world and not the bodies
 ##   marker NAME X Z [YAW]  /  poi NAME X Z UP    a Marker3D, and one to glance at
 ##   sun PITCH YAW COLOUR ENERGY [ortho]  the DirectionalLight3D, with shadows (`ortho`: one orthogonal shadow map, not four splits:
@@ -289,9 +291,26 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				if _is_colour(args[0]) and n.size() == 3:
 					_lamp = {colour = Color(args[0]), range = n[0], energy = n[1], up = n[2], world = world}
 			"lantern":
-				var n := _numbers(PackedStringArray(Array(args).filter(func(a: String) -> bool: return a != "shadow")), 2, 2)
-				if n.size() == 2:
-					_lantern(Vector2(n[0], n[1]), args.has("shadow"))
+				var lantern_words := PackedStringArray(Array(args).filter(func(a: String) -> bool: return a != "shadow" and a != "ghost" and not a.begins_with("y=")))
+				var raise: Variant = _y_option(args)
+				var n := _numbers(lantern_words, 2, 2)
+				if args.count("shadow") > 1 or args.count("ghost") > 1:
+					problem("lantern needs X Z [shadow] [ghost] [y=Y]")
+				elif n.size() == 2:
+					_lantern(Vector2(n[0], n[1]), args.has("shadow"), args.has("ghost"), raise if raise != null else 0.0)
+			"guard":
+				var guard_name := ""
+				var guard_words := PackedStringArray()
+				for word in args:
+					if word.begins_with("name="):
+						guard_name = word.trim_prefix("name=")
+					else:
+						guard_words.append(word)
+				var n := _numbers(guard_words, 5, 5)
+				if guard_name.is_empty() and args.size() == 6:
+					problem("guard needs X0 Z0 X1 Z1 H [name=NAME]")
+				elif n.size() == 5:
+					_guard(_rect(n), n[4], guard_name)
 			"marker":
 				if args.is_empty():
 					problem("marker needs NAME X Z [YAW]")
@@ -419,6 +438,16 @@ class Builder extends "res://tools/world/region_nodes.gd":
 		if moonlit:
 			(body.get_node("Mesh") as MeshInstance3D).layers = LAYERS.RENDER_WORLD | LAYERS.RENDER_BODIES
 
+	# An unseen solid box over `rect`, H high, on `world` only (bodies bump into it and never stand on it): the thickness of a wall that a row
+	# of pieces drawn against it (a colonnade's pillars) does not have, so that no body stands inside them.
+	func _guard(rect: Rect2, height: float, node_name := "") -> void:
+		if height <= 0.0:
+			problem("a guard has a height above 0")
+			return
+		var body := make_body(unique_name(node_name if not node_name.is_empty() else "Guard"), _root, LAYERS.WORLD)
+		var centre := rect.get_center()
+		add_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, height / 2, centre.y)), null)
+
 	# `count` steps over `rect`, climbing toward `up` to the ground past its far edge.
 	func _stairs(rect: Rect2, count: int, up: Vector2) -> void:
 		var frame := _climb_frame(rect, up)
@@ -545,12 +574,13 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				add_box(make_body("Body", holder, world_and_feet), size, Transform3D(Basis(), centre), null)
 		return holder
 
-	# A lantern at `at` with its lamp (the `lamps` line), which casts shadows if `shadow`.
-	func _lantern(at: Vector2, shadow: bool) -> void:
+	# A lantern at `at` with its lamp (the `lamps` line), which casts shadows if `shadow`: standing `raise` up (on a low wall), and with no
+	# collider if `ghost` (where no body can reach: on a wall's top, in a wall).
+	func _lantern(at: Vector2, shadow: bool, ghost := false, raise := 0.0) -> void:
 		if _lamp.is_empty():
 			problem("a lantern needs a lamps line before it")
 			return
-		var holder := _piece(group_node("Lanterns"), "lantern", Vector3(at.x, _ground(at), at.y), 0.0)
+		var holder := _piece(group_node("Lanterns"), "lantern", Vector3(at.x, _ground(at) + raise, at.y), 0.0, ghost)
 		if holder == null:
 			return
 		var lamp := OmniLight3D.new()

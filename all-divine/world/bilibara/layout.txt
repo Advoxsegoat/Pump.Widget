@@ -45,8 +45,14 @@
 # wall-half pieces would be 1 m deep.
 
 kit bilibara
+# The light is the book's cold snow-noon, overcast: a cool soft ambient, a gentle sun (it gives the shapes their shadows and
+# nothing hot), a haze that is also the grade's fog, and a bodies-only fill, so that a fighter is the same brightness on cobble, earth
+# and slate (the fill is the moon of the training yard under a day's name). The lamps are the only warm light, and light the world only.
 sky #aebbcc
+ambient #bccadf 0.62
 sun -60 30 #f4f7ff 0.25 ortho
+fill -40 20 #f4f7ff 1.1
+grade res://data/render/grades/bilibara_noon.tres
 
 # --- The ground: the seven places, in plates of at most 12.5 m a side, exactly tiling each ---
 # W1 court A, "Behind the Lazyman's" (slate)
@@ -410,15 +416,34 @@ row fence 40.85 -73.75 40.85 -56.25 180
 # ghost lanterns on the street's fronts and the yard's wall (their lamps are Task 4's), a colonnade of wooden pillars under the works'
 # galleries along the Rack Walk, balconies on the street's row, small rocks in the drying yard. Left: wall-corner (a whole tile of its own),
 # wall-doorway-round (an open arch), stairs-stone and its handrail (2.5 m high: they would hide a fighter), fountain-round (a quarter of the spawn court). ---
-piece lantern -26.25 -4.72 0 ghost
-piece lantern -3.75 -4.72 0 ghost
-piece lantern 12.5 -4.72 0 ghost
-piece lantern 20 -4.72 0 ghost
-piece lantern 17.5 -74.72 0 ghost
-piece lantern 23.75 -74.72 0 ghost
-piece lantern 31.25 -74.72 0 ghost
-piece lantern 37.5 -74.72 0 ghost
+# The lanterns (their lamps are the layout's only warm light): 18 posts, each with its lamp 3.45 m over it, so no lamp hangs in the air. A tall
+# post hides a fighter standing within about 2.5 m north of it, so each stands where no body is north of it: against a front or a wall
+# (the street's four, the Rack Walk's three beside the colonnade's pillars, court A's two, the yard's two on its north wall), or, where the
+# ground is open, on the top of a low wall (ghost: nobody reaches it; the wall's fences are not before a body, see the notes there), 4.1 m up
+# from the ground to the lamp. A post on the ground is solid, a slim round post a fighter slides round. Two lamps cast shadows, at the shrine
+# sites 80 m apart (ShrineLampA in court A, ShrineLampB in alcove B). Where these differ from the plan's coordinates: the report lists them.
+lamps #ffb98a 6 0.5 3.45 world
+lantern -36.1 -4.13 shadow
+lantern -28.5 -4.7
+lantern -20 -4.72
+lantern -5 -4.72
+lantern 10 -4.72
+lantern 22 -4.72
+lantern 23.75 -15 ghost y=0.65
+lantern 31.25 -46.5 ghost y=0.65
+lantern 36.9 -37.23 shadow
+lantern 33.7 -37.23
+lantern -18.75 -24.33
+lantern -1.25 -24.33
+lantern 16.25 -24.33
+lantern -28.75 -15 ghost y=0.65
+lantern 17.5 -74.72
+lantern 37.5 -74.72
+lantern 23.75 -50 ghost y=0.65
+lantern 31.25 -50 ghost y=0.65
 row pillar-wood -35 -24.8 20 -24.8 0
+# The pillars stand in the wall's own thickness (z -25 to -24.6): one unseen solid there, so that no body stands inside one.
+guard -35.2 -25 20.2 -24.6 2.5 name=ColonnadeGuard
 row balcony-wall -16.25 -3.75 -11.25 -3.75 90 y=2.5
 row balcony-wall 6.25 -3.75 11.25 -3.75 90 y=2.5
 piece rock-small -26 -13.5
