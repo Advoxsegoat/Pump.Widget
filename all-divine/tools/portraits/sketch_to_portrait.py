@@ -2,6 +2,10 @@
 """Turns a photographed pencil drawing and a small recipe into the game's portrait pictures.
 
     python3 -I tools/portraits/sketch_to_portrait.py --sketch <jpg> --recipe <json> --out <folder> [--only <expr>] [--stages <folder>]
+    python3 -I tools/portraits/sketch_to_portrait.py --init-recipe <jpg> --out <recipe.json>
+
+The second form writes a first recipe for a new drawing by itself (the paper found, ruled or plain; the crop at the drawing's own
+bounds; no erase, no keep, no tints) and stops; the first form then makes an untinted portrait that is the drawing, cleaned.
 
 It writes `<expr>.png` (464 x 640, RGB, no alpha) for each expression of the recipe. With `--stages` it also writes each
 stage's picture for a person to look at: `flat.png` (the paper evened out), `rules.png` (the notebook's rules the tool
@@ -109,6 +113,13 @@ INK_COLUMN = 2.0
 INK_TAKEN_MOST = 0.15
 # An erase fades out over this many working pixels outside its rectangle.
 ERASE_FEATHER = 8.0
+# --init-recipe: a cell of 12 x 12 working pixels holds pencil when this many of its pixels are over INIT_PENCIL; fewer cells than
+# INIT_CELLS_LEAST is no drawing ; the crop gets INIT_MARGIN of the drawing's size on each side.
+INIT_PENCIL = 0.2
+INIT_CELL_INK = 6
+INIT_CELLS_LEAST = 12
+INIT_MARGIN = 0.04
+INIT_CARD = {"paper": "#efe6cc", "ink": "#2b2a30"}
 # Levelled darkness under this is not pencil.
 LEVEL_NOISE = 0.05
 # The most a rule's band is, in rows each side of its middle, and the least.
@@ -926,15 +937,92 @@ def make(sketch, recipe, out, only=None, stages_folder=None):
     return written
 
 
+def _has_rules(dark):
+    """Whether the page is ruled: its rhythm is strong enough and at least three rules are found."""
+    spacing, strength = estimate_spacing(dark)
+    return strength >= SPACING_STRENGTH and len(find_rules(dark, RuleScale(spacing))) >= 3
+
+
+def _drawing_bounds(line):
+    """(x0, y0, x1, y1) as fractions of the page: where the pencil is. The page is cut in cells; a cell holds pencil when enough
+    of it is dark. Cells that touch each other make a piece; a piece that reaches the page's edge (the notebook's edge, the
+    desk beside it) is not the drawing, and a piece of fewer than INIT_CELLS_LEAST cells is a speck. The drawing is what is left."""
+    h, w = line.shape
+    cell = 12
+    rows, cols = h // cell, w // cell
+    blocks = (line[: rows * cell, : cols * cell] > INIT_PENCIL).reshape(rows, cell, cols, cell).sum(axis=(1, 3))
+    active = blocks >= INIT_CELL_INK
+    seen = np.zeros_like(active)
+    kept = []
+    for y0 in range(rows):
+        for x0 in range(cols):
+            if not active[y0, x0] or seen[y0, x0]:
+                continue
+            piece, queue, touches = [], [(y0, x0)], False
+            seen[y0, x0] = True
+            while queue:
+                y, x = queue.pop()
+                piece.append((y, x))
+                touches = touches or y <= 0 or x <= 0 or y >= rows - 1 or x >= cols - 1
+                for dy in (-1, 0, 1):
+                    for dx in (-1, 0, 1):
+                        yy, xx = y + dy, x + dx
+                        if 0 <= yy < rows and 0 <= xx < cols and active[yy, xx] and not seen[yy, xx]:
+                            seen[yy, xx] = True
+                            queue.append((yy, xx))
+            if not touches and len(piece) >= INIT_CELLS_LEAST:
+                kept.extend(piece)
+    if not kept:
+        return None
+    ys, xs = np.array([c[0] for c in kept]), np.array([c[1] for c in kept])
+    return xs.min() * cell / w, ys.min() * cell / h, (xs.max() + 1) * cell / w, (ys.max() + 1) * cell / h
+
+
+def init_recipe(sketch, out_path, row_scale_of=None):
+    """Writes a first recipe for a drawing: the paper found (ruled or plain), the crop at the drawing's own bounds with a margin
+    (the card pads it to its shape), no erase, no keep, no tints, the card's colours and line as Abarax's, `neutral`. The page
+    is cleaned once to find where the pencil is, so a page the tool cannot handle is said here, in one line, with what would help."""
+    grey = load_page(sketch)
+    flat = check_page(grey, "plain")
+    dark = 1.0 - flat
+    paper = "ruled" if _has_rules(dark) else "plain"
+    provisional = {"paper": paper, "crop": [0.0, 0.0, 1.0, 1.0], "erase": [], "keep": [], "tints": [], "notes": "",
+                   "card": dict(INIT_CARD), "line_gain": 1.0, "expressions": {"neutral": {}}}
+    stages = clean_page(grey, provisional, _row_scale(sketch, grey))
+    bounds = _drawing_bounds(stages["line"])
+    if bounds is None:
+        raise PortraitError("page", "no pencil found on it (the photograph shows paper and nothing drawn; draw darker, or photograph from nearer with even light)")
+    x0, y0, x1, y1 = bounds
+    mx, my = INIT_MARGIN * (x1 - x0), INIT_MARGIN * (y1 - y0)
+    crop = [round(max(x0 - mx, 0.0), 4), round(max(y0 - my, 0.0), 4), round(min(x1 + mx, 1.0), 4), round(min(y1 + my, 1.0), 4)]
+    recipe = {"notes": "A first recipe written by --init-recipe: the paper found, the crop at the drawing's own bounds, no erase, no keep, "
+                       "no tints. Look at the picture, then add tints, keep and erase by hand.",
+              "paper": paper, "crop": crop, "erase": [], "keep": [], "tints": [], "card": dict(INIT_CARD), "line_gain": 1.0,
+              "expressions": {"neutral": {}}}
+    check_recipe(recipe)
+    with open(out_path, "w", encoding="utf-8") as handle:
+        json.dump(recipe, handle, indent=1)
+        handle.write("\n")
+    return recipe
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Makes the game's portrait pictures from a photographed pencil drawing.")
-    parser.add_argument("--sketch", required=True)
-    parser.add_argument("--recipe", required=True)
-    parser.add_argument("--out", required=True)
+    parser.add_argument("--sketch")
+    parser.add_argument("--recipe")
+    parser.add_argument("--out", required=True, help="the folder the pictures go in (with --init-recipe: the recipe file to write)")
     parser.add_argument("--only")
     parser.add_argument("--stages")
+    parser.add_argument("--init-recipe", metavar="DRAWING", help="write a first recipe for this drawing into --out, and stop")
     args = parser.parse_args(argv)
     try:
+        if args.init_recipe:
+            init_recipe(args.init_recipe, args.out)
+            print("sketch_to_portrait: wrote %s; now: python3 -I tools/portraits/sketch_to_portrait.py --sketch %s --recipe %s --out <folder>" % (
+                args.out, args.init_recipe, args.out))
+            return 0
+        if not (args.sketch and args.recipe):
+            parser.error("--sketch and --recipe are needed (or --init-recipe <drawing> --out <recipe.json>)")
         make(args.sketch, args.recipe, args.out, args.only, args.stages)
     except PortraitError as error:
         print("sketch_to_portrait: %s" % error, file=sys.stderr)
