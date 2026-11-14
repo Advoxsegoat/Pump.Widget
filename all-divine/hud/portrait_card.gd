@@ -7,7 +7,7 @@ extends Control
 ## It is the one thing in the game that is not on the 640x360 grid. The portrait is a pencil drawing, and its line is thin:
 ## on the grid it would be broken into pixels (the owner was shown both and chose their own line), so the card is a child of
 ## the PixelStage drawn in the window, above the pixel picture and the HUD's picture, at the picture's whole-number scale
-## (PixelStage.layout) with linear filtering and mipmaps. Everything outside its rectangle is exactly what it was: the
+## (PixelStage.layout) with linear filtering and mipmaps, with a one-picture-pixel edge in the box's line colour. Everything outside its rectangle is exactly what it was: the
 ## picture upscaled by a whole number. The rectangle (`card_rect`, in picture pixels) is whole picture pixels at every scale,
 ## and the pause menu, which is in the picture, ends above it.
 ##
@@ -65,4 +65,12 @@ func _draw() -> void:
 	var layout := PixelStage.layout(window)
 	var k := PixelStage.scale_for(window)
 	var at := card_rect()
-	draw_texture_rect(texture, Rect2(Vector2(layout.position + at.position * k), Vector2(at.size * k)), false)
+	var on_window := Rect2(Vector2(layout.position + at.position * k), Vector2(at.size * k))
+	draw_texture_rect(texture, on_window, false)
+	# The edge: one picture pixel (k window pixels) in the box's own line colour round the card, inside its rectangle, so
+	# that the card is seated against the box and against any scene behind it.
+	var edge := float(k)
+	draw_rect(Rect2(on_window.position, Vector2(on_window.size.x, edge)), Hud.WHITE)
+	draw_rect(Rect2(on_window.position.x, on_window.end.y - edge, on_window.size.x, edge), Hud.WHITE)
+	draw_rect(Rect2(on_window.position, Vector2(edge, on_window.size.y)), Hud.WHITE)
+	draw_rect(Rect2(on_window.end.x - edge, on_window.position.y, edge, on_window.size.y), Hud.WHITE)

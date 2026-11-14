@@ -195,3 +195,27 @@ func test_shots_for_a_person() -> void:
 		await _shot_for_a_person(size, Shot.Framing.OVER_SHOULDER, "A longer line, to see two rows of text at this size: the fixture's lines are short.", again)
 	assert_true(FileAccess.file_exists(ProjectSettings.globalize_path("res://").path_join(OUT).path_join("card_abarax_640.png")), "the 640 picture is saved")
 	assert_true(FileAccess.file_exists(ProjectSettings.globalize_path("res://").path_join(OUT).path_join("card_abarax_1080.png")), "the 1080 picture is saved")
+
+
+func _is_line_colour(c: Color) -> bool:
+	return absf(c.r - Hud.WHITE.r) < 0.012 and absf(c.g - Hud.WHITE.g) < 0.012 and absf(c.b - Hud.WHITE.b) < 0.012
+
+
+# The card has an edge: a frame of one picture pixel in the box's line colour round it, drawn with it, so at every window size it
+# is k window pixels wide (one picture pixel) and the portrait's paper begins right inside it.
+func test_the_card_has_an_edge_one_picture_pixel_wide() -> void:
+	for window in [Vector2i(640, 360), Vector2i(1280, 720), Vector2i(1920, 1080), Vector2i(1366, 768)]:
+		await _scene(window)
+		var shown := await _pair()
+		var k := PixelStage.scale_for(window)
+		var rect := _expected(window)
+		var image: Image = shown[0]
+		var mid := rect.position + rect.size / 2
+		for edge in [Vector2i(mid.x, rect.position.y), Vector2i(mid.x, rect.end.y - 1), Vector2i(rect.position.x, mid.y), Vector2i(rect.end.x - 1, mid.y)]:
+			var inward := Vector2i(1 if edge.x == rect.position.x else (-1 if edge.x == rect.end.x - 1 else 0), 1 if edge.y == rect.position.y else (-1 if edge.y == rect.end.y - 1 else 0))
+			for i in k:
+				assert_true(_is_line_colour(image.get_pixel(edge.x + inward.x * i, edge.y + inward.y * i)), "x%d %s: the edge is line-coloured %d px in (from %s)" % [k, window, i, edge])
+			var next := image.get_pixel(edge.x + inward.x * k, edge.y + inward.y * k)
+			assert_false(_is_line_colour(next), "x%d %s: the frame is one picture pixel wide, not more (from %s)" % [k, window, edge])
+		stage.queue_free()
+		await frames(2)

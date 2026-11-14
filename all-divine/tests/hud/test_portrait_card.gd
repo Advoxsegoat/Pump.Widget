@@ -189,13 +189,26 @@ func test_the_card_goes_with_the_overlay() -> void:
 	assert_eq(_cards().size(), 0, "release() takes the card with the box")
 
 
+func test_the_card_is_drawn_with_linear_filtering_and_mipmaps() -> void:
+	# The pencil is thin: drawn small it must be averaged (linear with mipmaps), not sampled (nearest drops strokes).
+	overlay.show_line(abarax, "Hmph.", &"neutral", 60)
+	var card := _first_card()
+	if card == null:
+		return
+	assert_eq(card.texture_filter, CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS, "the card's filter")
+	assert_eq(track(PortraitCard.new()).texture_filter, CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS, "and a new card's")
+	# ... and the picture has mipmaps to be filtered with: the import says so (the file's own setting)
+	var imported := FileAccess.get_file_as_string("res://assets/portraits/abarax/neutral.png.import")
+	assert_true(imported.contains("mipmaps/generate=true"), "Abarax's card picture is imported with mipmaps")
+
+
 func test_the_card_never_covers_the_pause_menu() -> void:
 	var card := overlay.portrait_rect()
 	assert_eq(card.position.y, 194, "the card begins at row 194")
 	var menu := track(Menu.new()) as Menu
 	menu.open()
-	var pages: Array[StringName] = [MenuPages.ROOT, MenuPages.QUIT, MenuPages.SETTINGS, MenuPages.EFFECTS, MenuPages.CAMERA,
-			MenuPages.LOOK, MenuPages.SOUND, MenuPages.WINDOW, MenuPages.RESTORE]
+	var pages := MenuPages.ids()  # every page the menu has, not a list written here (a new page is covered at once)
+	assert_true(pages.has(&"controls"), "the list of pages is the menu's own, and has the controls page")
 	for id in pages:
 		menu.show_page(id)
 		for step in 40:  # and scrolled through, however long the page
