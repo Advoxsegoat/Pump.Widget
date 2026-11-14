@@ -4,7 +4,8 @@ extends RefCounted
 ##
 ## The menu's own controls are fixed, not read from the InputMap, so that rebinding the game's actions can never lock the
 ## player out of the menu: Up/W, Down/S, Left/A, Right/D move and adjust; Enter, Space and KP Enter choose; Esc and Backspace
-## go back; the pad's D-pad and left stick move and adjust, A chooses and B goes back. Whatever the `menu` action is bound to
+## go back; the pad's D-pad and left stick move and adjust, A chooses, and B and Start go back (Start whatever `menu` is bound to, so
+## a rebinding can never leave the pad without a way out). Whatever the `menu` action is bound to
 ## goes back too (it is the one button the game itself asks of the menu). The mouse does nothing.
 ##
 ## A key's echo and every release give NONE. The left stick gives one command when it is pushed past Bindings.FLICK_DEADZONE
@@ -32,6 +33,7 @@ const _BUTTONS := {
 	JOY_BUTTON_DPAD_RIGHT: Cmd.RIGHT,
 	JOY_BUTTON_A: Cmd.CHOOSE,
 	JOY_BUTTON_B: Cmd.BACK,
+	JOY_BUTTON_START: Cmd.BACK,
 }
 # The left stick's two axes, and the command a push in each direction gives: [axis, sign] -> Cmd.
 const _STICK := {

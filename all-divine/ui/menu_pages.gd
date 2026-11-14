@@ -1,7 +1,7 @@
 class_name MenuPages
 extends RefCounted
 ## The pages of the menu: each is a heading and rows, built fresh when it is shown, so a row's text is always the
-## current one. The Settings pages are SettingsPages'; Task 4 adds the Controls page.
+## current one. The Settings pages are SettingsPages' and the Controls page is ControlsPage's.
 ##
 ## A built page is a MenuPage: its heading, rows, what Back does on it (`back`) and the row selected on arrival (`start`).
 
@@ -14,11 +14,12 @@ const LOOK := &"look"
 const SOUND := &"sound"
 const WINDOW := &"window"
 const RESTORE := &"restore"
+const CONTROLS := &"controls"
 
 
 ## Every page there is, by id: for the shots and the tests that go through them all.
 static func ids() -> Array[StringName]:
-	return [ROOT, QUIT, SETTINGS, EFFECTS, CAMERA, LOOK, SOUND, WINDOW, RESTORE]
+	return [ROOT, QUIT, SETTINGS, EFFECTS, CAMERA, LOOK, SOUND, WINDOW, RESTORE, CONTROLS]
 
 
 ## The page `id` is opened from and goes back to by default (a page shown directly has no trail to follow).
@@ -36,15 +37,21 @@ static func build(id: StringName, menu: Menu) -> MenuPage:
 	match id:
 		QUIT:
 			return _quit(menu)
+		CONTROLS:
+			return ControlsPage.build(menu)
 		SETTINGS, EFFECTS, CAMERA, LOOK, SOUND, WINDOW, RESTORE:
 			return SettingsPages.build(id, menu)
 		_:
 			return _root(menu)
 
 
-# Resume, Settings, and Quit, which asks first (and is left out on the web, where the page owns the window).
+# Resume, Controls, Settings, and Quit, which asks first (and is left out on the web, where the page owns the window).
 static func _root(menu: Menu) -> MenuPage:
-	var rows: Array[MenuRow] = [MenuRow.action("Resume", resume), MenuRow.action("Settings", func() -> void: menu.push_page(SETTINGS))]
+	var rows: Array[MenuRow] = [
+		MenuRow.action("Resume", resume),
+		MenuRow.action("Controls", func() -> void: menu.push_page(CONTROLS)),
+		MenuRow.action("Settings", func() -> void: menu.push_page(SETTINGS)),
+	]
 	if not menu.web:
 		rows.append(MenuRow.action("Quit", func() -> void: menu.show_page(QUIT)))
 	return _page("Paused", rows, resume)

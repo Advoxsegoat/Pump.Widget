@@ -158,7 +158,7 @@ func _pause() -> void:
 
 func test_the_settings_page_lists_its_rows_in_order() -> void:
 	var menu := _menu()
-	assert_eq(_labels(menu), ["Resume", "Settings", "Quit"], "the root page has Settings between Resume and Quit")
+	assert_eq(_labels(menu), ["Resume", "Controls", "Settings", "Quit"], "the root page has Controls and Settings between Resume and Quit")
 	menu.show_page(&"settings")
 	assert_eq(menu.heading(), "Settings")
 	assert_eq(_labels(menu), ["Effects", "Camera", "Screen look", "Sound", "Window", "Restore defaults", "Back"])
@@ -183,7 +183,7 @@ func test_choosing_settings_opens_it_and_back_returns_to_the_row_left() -> void:
 		assert_eq([menu.page, menu.index], [&"settings", left], "%s: the Back row does the same" % id)
 	_select(menu, "Back")
 	menu.press(C.CHOOSE)
-	assert_eq([menu.page, menu.index], [&"root", 1], "Settings returns to the root page, on its own row")
+	assert_eq([menu.page, menu.index], [&"root", 2], "Settings returns to the root page, on its own row")
 	menu.show_page(&"effects")
 	menu.press(C.BACK)
 	assert_eq(menu.page, &"settings", "a page shown directly still goes back to its parent")
@@ -362,7 +362,7 @@ func test_the_window_page_and_the_quit_row_are_left_out_on_the_web() -> void:
 	Settings.on_web = true
 	var menu := track(Menu.new()) as Menu
 	menu.open()
-	assert_eq(_labels(menu), ["Resume", "Settings"], "no Quit on the web")
+	assert_eq(_labels(menu), ["Resume", "Controls", "Settings"], "no Quit on the web")
 	menu.show_page(&"settings")
 	assert_eq(_labels(menu), ["Effects", "Camera", "Screen look", "Sound", "Restore defaults", "Back"], "and no Window")
 	Settings.on_web = false
