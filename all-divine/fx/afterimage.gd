@@ -96,11 +96,11 @@ func alpha() -> float:
 
 
 func _physics_process(_delta: float) -> void:
-	if _clock != null and is_instance_valid(_clock):
+	if _clock != null and is_instance_valid(_clock) and Game.state != Game.State.CUTSCENE:
 		left -= _clock.buffer_frame - _clock_at
 		_clock_at = _clock.buffer_frame
 	else:
-		left -= 1
+		left -= 1  # no owner, or a scene (the owner's clock stands still in one): the wall's frames, so a ghost fades out and never hangs in a shot
 	if left <= 0:
 		queue_free()
 		return

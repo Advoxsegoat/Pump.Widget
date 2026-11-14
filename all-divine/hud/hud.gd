@@ -139,7 +139,7 @@ func _process(delta: float) -> void:
 
 ## Counts the controls list's timer by `delta` seconds: it hides itself after HINT_SECONDS unless F1 has been pressed.
 func advance(delta: float) -> void:
-	if _hints_pinned:
+	if _hints_pinned or Game.state == Game.State.CUTSCENE:  # a scene does not spend the list's seconds
 		return
 	_hint_left -= delta
 	if _hint_left <= 0.0:
