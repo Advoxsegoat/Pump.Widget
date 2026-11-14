@@ -138,7 +138,8 @@ func test_quit_asks_first() -> void:
 	var asked := []
 	menu.quit_requested.connect(func() -> void: asked.append(1))
 	menu.open()
-	assert_eq(menu.rows().map(func(r: Dictionary) -> String: return r.label), ["Resume", "Settings", "Quit"])
+	assert_eq(menu.rows().map(func(r: Dictionary) -> String: return r.label), ["Resume", "Controls", "Settings", "Quit"])
+	menu.press(C.DOWN)
 	menu.press(C.DOWN)
 	menu.press(C.DOWN)
 	menu.press(C.CHOOSE)
@@ -157,7 +158,7 @@ func test_quit_asks_first() -> void:
 	assert_eq(asked, [1], "Quit, Down, Choose asks, once")
 	menu.web = true
 	menu.open()
-	assert_eq(menu.rows().map(func(r: Dictionary) -> String: return r.label), ["Resume", "Settings"], "on the web the Quit row is left out")
+	assert_eq(menu.rows().map(func(r: Dictionary) -> String: return r.label), ["Resume", "Controls", "Settings"], "on the web the Quit row is left out")
 
 
 func test_the_menu_is_whole_pixels_inside_the_left_column() -> void:
@@ -364,7 +365,7 @@ const LONG_PAUSE := 200
 # Pauses the game for `n` physics frames, and plays on.
 func _pause_for(n: int) -> void:
 	if Game.state != Game.State.PLAY:
-		Game.reset()
+		Game.state = Game.State.BOOT  # not Game.reset(), which ends a slow-down: the fight this pauses may have one running
 		Game.change(Game.State.PLAY)
 	Game.change(Game.State.PAUSE)
 	await frames(n)
