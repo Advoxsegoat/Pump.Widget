@@ -272,3 +272,27 @@ func test_the_three_kinds_differ_only_as_specified() -> void:
 	assert_true(counts[SceneShots.Kind.MINI] >= 300 and counts[SceneShots.Kind.MINI] <= 302,
 			"a MINI of 300 frames takes %d physics frames, 5.0 s" % counts[SceneShots.Kind.MINI])
 	assert_eq(counts[SceneShots.Kind.CUTSCENE], counts[SceneShots.Kind.MINI], "and a CUTSCENE of the same shots takes as long")
+
+
+func test_the_bars_slide_out_over_the_whole_glide_home() -> void:
+	# The timeline's own slide-out takes its last 30 frames, and the fixture's glide home (its last shot is turned) is 60: the bars
+	# must not be gone while the camera still turns.
+	var parts := StoryStage.make(self, Vector3(3, 0, 4), deg_to_rad(200.0))
+	await frames(3)
+	var scene := _fixture()
+	scene.kind = SceneShots.Kind.CUTSCENE
+	scene.letterbox = true
+	var director := _start(parts, scene)
+	assert_true(director != null)
+	if director == null:
+		return
+	var overlay := _overlay_of(parts)
+	await _until_hand_back(director)
+	assert_eq(overlay.bar_height(), 44, "the bars are all the way in as control comes back")
+	var worst := 0.0
+	var n := 0
+	while _finished.is_empty() and is_instance_valid(overlay) and n < 100:
+		worst = maxf(worst, absf(float(overlay.bar_height()) - 44.0 * parts.rig.cine_weight))
+		await frames(1)
+		n += 1
+	assert_true(worst <= 2.0, "the bars go out in step with the camera's glide (off by %.1f px at most)" % worst)

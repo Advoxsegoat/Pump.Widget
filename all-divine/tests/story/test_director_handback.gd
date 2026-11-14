@@ -288,3 +288,28 @@ func test_a_scene_can_be_paused_from_the_menu_and_goes_on_from_the_same_frame() 
 		main.free()
 		await frames(1)
 	assert_eq(seen[1], seen[0], "paused for 90 frames, the scene is where an unpaused one is at the same frame")
+
+
+# --- a scene that cannot go on ---
+
+func test_a_region_change_in_the_middle_of_a_scene_gives_everything_back() -> void:
+	var main := await _main()
+	var player := main.player
+	var brain := player.brain
+	var director := Director.play(&"fixture_yard_entrance", main)
+	assert_true(director != null, "the scene plays: %s" % Director.last_refusal)
+	if director == null:
+		return
+	while director.frame < 100:
+		await frames(1)
+	assert_true(player.brain is DirectorBrain)
+	main.switch_region()
+	await frames(2)
+	assert_true(Director.current() == null, "no scene is playing")
+	assert_eq(Game.state, Game.State.PLAY, "the game plays")
+	assert_true(player.brain == brain, "he has his own hands back")
+	assert_false(main.hud.suppressed, "the Hud is back")
+	assert_eq(main.camera_rig.cine_weight, 0.0, "the camera is the game's")
+	assert_true(main.stage.hud.get_children().filter(func(c: Node) -> bool: return c is CineOverlay).is_empty(), "the overlay is gone")
+	await frames(30)
+	assert_eq(Game.state, Game.State.PLAY)

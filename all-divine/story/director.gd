@@ -186,6 +186,31 @@ func skip() -> bool:
 	return true
 
 
+## Ends the scene at once, giving everything back (the fight's brains, the state, the Hud, the camera, the bars) and taking away
+## the actors it made: for a region change or a reset, where a scene cannot go on. A scene that is over, or one that has not begun,
+## has nothing to give back.
+func abort() -> void:
+	if phase == Phase.DONE:
+		return
+	if phase == Phase.LEAD_IN or phase == Phase.PLAY or phase == Phase.LEAD_OUT:
+		if not _handed_back:
+			_give_back_control()
+		_hud.suppressed = false
+		_rig.cine_weight = 0.0
+		_camera.release()
+		if is_instance_valid(_overlay):
+			_overlay.queue_free()
+		for entry in scene.cast:
+			var actor := cast.get(entry.actor) as Actor
+			if actor != null and is_instance_valid(actor) and entry.source == CastEntry.Source.SPAWN and actor.get_parent() != null:
+				actor.get_parent().remove_child(actor)
+				actor.queue_free()
+	phase = Phase.DONE
+	if _current == self:
+		_current = null
+	_root.queue_free()
+
+
 ## Whether skip() would do something now.
 func is_skippable() -> bool:
 	if scene == null or _skipping or (phase != Phase.LEAD_IN and phase != Phase.PLAY):
@@ -733,8 +758,8 @@ func _lead_out_frame() -> void:
 		_raise_the_guards()
 	var t := clampf(float(n) / float(_lead_out_length), 0.0, 1.0)
 	_rig.cine_weight = _weight_from * (1.0 - t)
-	if _skipping:
-		_camera.letterbox = _bars_from * (1.0 - t)
+	if _bars_from > 0.0:
+		_camera.letterbox = _bars_from * (1.0 - t)  # the bars go out as the camera comes home, not on the timeline's own 30 frames
 	frame += 1
 	if n >= _lead_out_length:
 		_finish()

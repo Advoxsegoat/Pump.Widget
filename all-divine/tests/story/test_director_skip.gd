@@ -277,3 +277,16 @@ func test_a_skipped_cutscene_slides_its_bars_out_with_the_glide() -> void:
 	for i in range(1, heights.size()):
 		assert_true(heights[i] <= heights[i - 1], "the bars only go out (%s)" % [heights])
 	assert_true(heights.size() > 10 and heights[heights.size() - 1] <= 3, "and are out by the end (%s)" % [heights])
+
+
+func test_the_tools_may_skip_a_first_viewing() -> void:
+	var parts := StoryStage.make(self, Vector3(3, 0, 4), deg_to_rad(200.0))
+	await frames(3)
+	Director.skip_always = true
+	var director := _start(parts)
+	assert_true(director != null)
+	if director == null:
+		return
+	await frames(5)
+	assert_true(director.is_skippable(), "a tool can skip what no one has seen")
+	assert_true(director.skip())

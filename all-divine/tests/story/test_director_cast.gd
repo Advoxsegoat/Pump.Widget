@@ -273,3 +273,15 @@ func test_a_second_scene_while_one_plays_is_refused() -> void:
 	assert_eq(Director.last_refusal, &"already_playing")
 	assert_eq(_snap(parts), before, "and nothing changed")
 	assert_true(Director.current() == first, "the first plays on")
+
+
+func test_the_tools_may_play_a_scene_in_any_state() -> void:
+	var parts := StoryStage.make(self)
+	await frames(3)
+	Game.reset()  # BOOT: not playing
+	assert_true(_start(parts, _fixture()) == null, "refused while the game is not playing")
+	Director.allow_any_state = true
+	var director := _start(parts, _fixture())
+	Director.allow_any_state = false
+	assert_true(director != null, "a tool plays it anyway")
+	assert_eq(Game.state, Game.State.BOOT, "and the game's state is left alone")

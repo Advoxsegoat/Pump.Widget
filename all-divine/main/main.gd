@@ -157,6 +157,8 @@ func switch_region() -> void:
 
 # Replaces the region with the scene `to` (switch_region says what it does).
 func _go_to(to: String) -> void:
+	if Director.current() != null:
+		Director.current().abort()  # a scene cannot go on in another place: it gives the fight back first
 	var old := region
 	if old is Arena:
 		(old as Arena).clear_foes()  # ends what holds them (pairs, the lock) before they go with the region
