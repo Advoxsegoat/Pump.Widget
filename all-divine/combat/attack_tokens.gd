@@ -18,13 +18,19 @@ extends Node
 const GROUP := &"attack_tokens"
 ## How many enemies may commit to one target at a time.
 const PER_TARGET := 2
+## Seconds a foe who needs more tokens than are free waits before the others are held back for him, how long they are held back, and
+## how long he must wait for the next time (so a heavy is let in, but does not shut the others out).
+const RESERVE_AFTER := 0.0
+const RESERVE_FOR := 3.0
+const RESERVE_REST := 1.0
 ## Seconds a token is kept without being taken again before it comes back by itself.
 const TIMEOUT := 3.0
 ## Asked for as a count: all of a target's tokens, whatever their number.
 const ALL := 0
 
 var _held := {}  # attacker (Actor) -> [target (Actor), seconds since last taken, how many tokens]
-var _reserved := {}  # attacker (Actor) -> [target (Actor), seconds since reserved]: waits for tokens a big attack needs
+var _reserved := {}  # attacker (Actor) -> [target (Actor), seconds it has waited, seconds since it last asked]: waits for tokens a big attack needs
+var _rested := {}  # attacker (Actor) -> seconds before it may hold others back again
 var _watching := {}  # attacker (Actor) -> the Callables connected to its signals
 
 
@@ -68,9 +74,12 @@ func take(attacker: Actor, target: Actor, n := 1) -> bool:
 ## `attacker` waits for the tokens a big attack needs (it holds none, and fewer than it needs are free): until it has them, or
 ## TIMEOUT passes, no other attacker begins to hold one of `target`'s tokens, so the ones in use run out and it is let in. Task 14f.
 func reserve(attacker: Actor, target: Actor) -> void:
-	if attacker == null or target == null or _reserved.has(attacker):
+	if attacker == null or target == null or _rested.has(attacker):
 		return
-	_reserved[attacker] = [target, 0.0]
+	if _reserved.has(attacker):
+		_reserved[attacker][2] = 0.0
+	else:
+		_reserved[attacker] = [target, 0.0, 0.0]
 
 
 ## Gives up `attacker`'s reservation, if it has one.
@@ -134,8 +143,16 @@ func _physics_process(delta: float) -> void:
 			_reserved.erase(key)
 			continue
 		_reserved[key][1] += delta
-		if _reserved[key][1] >= TIMEOUT - 1e-6:
+		_reserved[key][2] += delta
+		if _reserved[key][2] > 0.5:
+			_reserved.erase(key)  # it stopped asking: it chose something else, or the tokens came free
+		elif _reserved[key][1] >= RESERVE_AFTER + RESERVE_FOR:
 			_reserved.erase(key)
+			_rested[key] = RESERVE_REST
+	for key: Variant in _rested.keys():
+		_rested[key] -= delta
+		if _rested[key] <= 0.0 or not is_instance_valid(key):
+			_rested.erase(key)
 	for key: Variant in _held.keys():
 		if not is_instance_valid(key) or (key as Actor).dead or not is_instance_valid(_held[key][0]):
 			_held.erase(key)
@@ -189,7 +206,7 @@ func _unwatch(attacker: Actor) -> void:
 # Whether another attacker waits for tokens of `target`.
 func _reserved_by_other(attacker: Actor, target: Actor) -> bool:
 	for key: Variant in _reserved:
-		if key != attacker and is_instance_valid(key) and _reserved[key][0] == target:
+		if key != attacker and is_instance_valid(key) and _reserved[key][0] == target and _reserved[key][1] >= RESERVE_AFTER:
 			return true
 	return false
 

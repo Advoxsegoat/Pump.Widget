@@ -335,6 +335,13 @@ func _reangle() -> void:
 
 # The other foes of this target, with the signed angle (degrees, seen from the target) each stands at from `actor`.
 func _neighbour_angles(actor: Actor) -> Array[float]:
+	var angles := _all_neighbour_angles(actor)
+	if angles.size() < 2:
+		angles.clear()  # two foes fight as they always did: it takes a third to crowd the ring
+	return angles
+
+
+func _all_neighbour_angles(actor: Actor) -> Array[float]:
 	var angles: Array[float] = []
 	var from := -_flat(actor, target.global_position)
 	if from.length() < 1e-3:
@@ -410,7 +417,7 @@ func _spread_swing(actor: Actor, still_to_go: float) -> float:
 
 # Whether it waits for its turn: no token for it to take (both are held by others).
 func _waiting(actor: Actor) -> bool:
-	if def.ignores_tokens:
+	if def.ignores_tokens or _neighbour_angles(actor).is_empty():
 		return false
 	var tokens := AttackTokens.of(actor)
 	return tokens != null and not tokens.holds(actor) and not tokens.can_take(actor, target)
