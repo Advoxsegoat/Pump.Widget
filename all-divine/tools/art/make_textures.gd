@@ -1,8 +1,9 @@
 extends SceneTree
 ## Makes the textures we draw ourselves:
 ##   tools/godot.sh -s res://tools/art/make_textures.gd
-## writes assets/env/textures/flagstone.png, slate.png, cobble.png, tan_earth.png, snow.png and bilibara_colormap.png (the
-## Kenney kit's colormap in Bilibara's colours), the same bytes every time. Run `tools/godot.sh --import`
+## writes assets/env/textures/flagstone.png, slate.png, cobble.png, tan_earth.png, snow.png, slate_cold.png and flagstone_cold.png
+## (the training yard's stones drawn darker and colder for the stretch's grounds) and bilibara_colormap.png (the Kenney kit's colormap
+## in Bilibara's colours), the same bytes every time. Run `tools/godot.sh --import`
 ## afterwards. Exits 0, or 1 if a file could not be written.
 
 const OUT_DIR := "res://assets/env/textures"
@@ -38,9 +39,9 @@ const KERBSTONE := TEXELS_PER_METRE
 ## straight bright joint would be dropped and found again as it moves). The joints are a little darker than the darkest
 ## stone, and a few setts carry frost: the snow that lies on the street is the `snow` ground. (The colours are first
 ## values: the snow-noon light may move them.)
-const COBBLES: Array[Color] = [Color8(80, 84, 100), Color8(86, 90, 106), Color8(92, 96, 112), Color8(98, 102, 118)]
-const COBBLE_JOINT := Color8(66, 70, 86)
-const FROST := Color8(120, 130, 148)
+const COBBLES: Array[Color] = [Color8(25, 27, 36), Color8(31, 33, 44), Color8(37, 39, 50), Color8(44, 46, 57)]
+const COBBLE_JOINT := Color8(18, 20, 28)
+const FROST := Color8(70, 77, 92)
 const COBBLE_SEED := 13
 const COBBLE_DEPTH_MIN := 5
 const COBBLE_DEPTH_MAX := 7
@@ -50,8 +51,8 @@ const COBBLE_WIDTH_MAX := 9
 const FROSTED_SETTS := 0.35
 const FROST_SHARE := 0.12
 ## The Tanneries' earth: warm browns in blotches 4 to 8 texels across, with a few texels of lime.
-const EARTHS: Array[Color] = [Color8(86, 72, 60), Color8(94, 80, 66), Color8(78, 66, 56)]
-const LIME := Color8(124, 114, 100)
+const EARTHS: Array[Color] = [Color8(21, 19, 16), Color8(27, 24, 21), Color8(34, 29, 25)]
+const LIME := Color8(60, 56, 52)
 const EARTH_SEED := 17
 const BLOTCH_MIN := 4
 const BLOTCH_MAX := 8
@@ -69,7 +70,8 @@ const CLUMP_MAX := 5
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	for made: Array in [["flagstone.png", flagstone()], ["slate.png", slate()], ["cobble.png", cobble()],
-			["tan_earth.png", tan_earth()], ["snow.png", snow()], ["bilibara_colormap.png", bilibara_colormap()]]:
+			["tan_earth.png", tan_earth()], ["snow.png", snow()], ["slate_cold.png", slate_cold()], ["flagstone_cold.png", flagstone_cold()],
+			["bilibara_colormap.png", bilibara_colormap()]]:
 		var path := OUT_DIR.path_join(made[0])
 		var error := (made[1] as Image).save_png(ProjectSettings.globalize_path(path))
 		if error != OK:
@@ -279,6 +281,31 @@ static func snow() -> Image:
 	for i in size * size:
 		colours.append(SNOWS[1] if shadowed[i] == 1 else SNOWS[0])
 	return _image(colours, size)
+
+
+## The stretch's court and alcove slate: the training yard's kerbstones (slate()) drawn SLATE_COLD of their value and a little cooler,
+## so that the ground under the fighters sits where the picture needs it (see the readability test). slate() itself is unchanged.
+const SLATE_COLD := Vector3(0.52, 0.57, 0.66)
+## The yard's stone square in the same way (flagstone() unchanged): about a fifth of the training yard's value.
+const FLAGSTONE_COLD := Vector3(0.23, 0.25, 0.30)
+
+
+static func slate_cold() -> Image:
+	return _tinted(slate(), SLATE_COLD)
+
+
+static func flagstone_cold() -> Image:
+	return _tinted(flagstone(), FLAGSTONE_COLD)
+
+
+# `img` with each channel multiplied (a new image).
+static func _tinted(img: Image, by: Vector3) -> Image:
+	var colours: Array[Color] = []
+	for y in img.get_height():
+		for x in img.get_width():
+			var c := img.get_pixel(x, y)
+			colours.append(Color8(roundi(c.r8 * by.x), roundi(c.g8 * by.y), roundi(c.b8 * by.z)))
+	return _image(colours, img.get_width())
 
 
 ## The Kenney kit's colormap drawn in Bilibara's colours: each of its colours (the flat swatches and their shading) is

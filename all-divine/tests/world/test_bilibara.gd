@@ -21,17 +21,17 @@ const GRID_X := Vector2i(-90, 90)
 const GRID_Z := Vector2i(-165, 25)
 ## The seven places of the plan's table (x0 z0 w d), and the stone each is laid in.
 const PLACES := {
-	"W1 court A": {rect = Rect2(-40, -5, 10, 10), stone = "slate"},
+	"W1 court A": {rect = Rect2(-40, -5, 10, 10), stone = "slate_cold"},
 	"W2 Rue Caillou": {rect = Rect2(-30, -5, 62.5, 10), stone = "cobble"},
 	"W3 the Tanneries lane": {rect = Rect2(25, -55, 5, 50), stone = "tan_earth"},
 	"W4 the Rack Walk": {rect = Rect2(-35, -25, 60, 5), stone = "tan_earth"},
 	"W5 the loop lane": {rect = Rect2(-35, -20, 5, 15), stone = "tan_earth"},
-	"W6 alcove B": {rect = Rect2(30, -37.5, 7.5, 7.5), stone = "slate"},
+	"W6 alcove B": {rect = Rect2(30, -37.5, 7.5, 7.5), stone = "slate_cold"},
 	"W7 the Tanneries yard": {rect = Rect2(15, -75, 25, 20), stone = "tan_earth"},
 }
 ## The yard's fighting square is laid in its own stone with a border course of another round it: the margins stay tan earth.
-const YARD_CENTRE_STONE := "flagstone"
-const YARD_BORDER_STONE := "slate"
+const YARD_CENTRE_STONE := "flagstone_cold"
+const YARD_BORDER_STONE := "slate_cold"
 const AREA := 1906.25
 ## Markers: name -> [x, z, yaw in degrees about +Y (0 faces south, 90 east, 180 north, 270 west)].
 const MARKERS := {
@@ -1484,7 +1484,7 @@ func test_the_light_is_the_snow_noon() -> void:
 	assert_true(grade != null and grade.resource_path == GRADE, "the grade is bilibara_noon (%s)" % [grade.resource_path if grade != null else "none"])
 	if grade != null:
 		assert_eq(grade.fog_color.to_html(false), "aebbcc", "the grade's fog is the sky's colour")
-		assert_near(grade.fog_density, 0.015, 1e-6, "fog density")
+		assert_near(grade.fog_density, 0.01, 1e-6, "fog density")
 		assert_near(grade.saturation, 0.9, 1e-6, "saturation")
 
 

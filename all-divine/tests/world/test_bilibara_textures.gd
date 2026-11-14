@@ -167,7 +167,7 @@ func test_tan_earth_is_three_earths_with_lime_stains_that_wrap() -> void:
 	for earth: Color in MAKE_TEXTURES.EARTHS:
 		var key := earth.to_html(false)
 		assert_true(earth.r > earth.g and earth.g > earth.b, "%s is warm" % key)
-		assert_true(earth.v >= 0.25 and earth.v <= 0.45, "%s is a mid-dark earth" % key)
+		assert_true(earth.v >= 0.05 and earth.v <= 0.20, "%s is a dark earth (the grade lifts it into the readability band)" % key)
 		assert_true(counts.get(key, 0) > 4096 / 8, "%s covers %d texels" % [key, counts.get(key, 0)])
 	var lime: int = counts.get(MAKE_TEXTURES.LIME.to_html(false), 0)
 	assert_true(lime >= 4096 * 0.02 and lime <= 4096 * 0.08, "lime covers %d of 4096 texels" % lime)
@@ -317,3 +317,36 @@ func test_bilibara_colormap_is_made_the_same_every_time_and_has_its_material() -
 	if material != null:
 		assert_eq((material.get_shader_parameter(&"albedo_tex") as Texture2D).resource_path, BILIBARA_COLORMAP)
 		assert_eq(material.get_shader_parameter(&"texels_per_metre"), 32.0)
+
+
+# --- The cold stones (the stretch's court, alcove and yard square) and the training yard's own stones, left alone ---
+
+## The md5 of the training yard's flagstone.png and slate.png as they were before this task: the stretch draws its own darker copies.
+const FLAGSTONE_MD5 := "1e21e11f7a445c0ad64a2326a41f80c3"
+const SLATE_MD5 := "63708a753dbadb81215e45ab74672665"
+
+
+func test_the_training_yards_stones_are_unchanged_pixel_for_pixel() -> void:
+	for pair: Array in [["flagstone", FLAGSTONE_MD5], ["slate", SLATE_MD5]]:
+		var bytes := FileAccess.get_file_as_bytes(TEXTURES % pair[0])
+		var hash := HashingContext.new()
+		hash.start(HashingContext.HASH_MD5)
+		hash.update(bytes)
+		assert_eq(hash.finish().hex_encode(), pair[1], "%s.png is the file the training yard was made with" % pair[0])
+	_same_as_committed(MAKE_TEXTURES.flagstone, "flagstone")
+	_same_as_committed(MAKE_TEXTURES.slate, "slate")
+
+
+func test_the_cold_stones_are_the_yards_stones_drawn_darker_and_cooler() -> void:
+	for pair: Array in [["slate_cold", MAKE_TEXTURES.slate_cold, MAKE_TEXTURES.slate, MAKE_TEXTURES.SLATE_COLD], ["flagstone_cold", MAKE_TEXTURES.flagstone_cold, MAKE_TEXTURES.flagstone, MAKE_TEXTURES.FLAGSTONE_COLD]]:
+		var cold := (pair[1] as Callable).call() as Image
+		var warm := (pair[2] as Callable).call() as Image
+		assert_eq(cold.get_size(), Vector2i(64, 64), "%s: a 2 m tile" % pair[0])
+		var by: Vector3 = pair[3]
+		assert_true(by.x < by.z and by.z <= 1.0, "%s is drawn cooler (blue at least red) and no brighter" % pair[0])
+		for at in [Vector2i(0, 0), Vector2i(17, 5), Vector2i(40, 33), Vector2i(63, 63)]:
+			var a := warm.get_pixelv(at)
+			var b := cold.get_pixelv(at)
+			assert_true(absf(b.r8 - a.r8 * by.x) <= 1.0 and absf(b.g8 - a.g8 * by.y) <= 1.0 and absf(b.b8 - a.b8 * by.z) <= 1.0, "%s at %s is the yard's stone times %s" % [pair[0], at, by])
+		_same_as_committed(pair[1], pair[0])
+		_ground_material(pair[0])
