@@ -22,6 +22,9 @@ var percent: Callable = Callable()
 ## Every text the row can show on the right (returns an Array of Strings), so that the panel is wide enough for the widest
 ## whatever the value is when the page is shown: the page's width is fixed while it is open. The text shown now is counted too.
 var all_values: Callable = Callable()
+## The most room, in picture pixels, the right-hand text may take (0 for no limit): a longer text is cut with an ellipsis. A binding's
+## name can be anything (two long key names in one row), and the panel's width is fixed while the page is open.
+var value_width := 0
 ## Whether the row is enabled, asked again whenever the menu refreshes (a row that depends on a setting another row changes).
 var enabled_when: Callable = Callable()
 
@@ -59,4 +62,5 @@ func fill() -> int:
 
 ## The right-hand text, or "" for a row with none.
 func value() -> String:
-	return str(value_text.call()) if value_text.is_valid() else ""
+	var text := str(value_text.call()) if value_text.is_valid() else ""
+	return Menu.cut(text, value_width) if value_width > 0 else text

@@ -53,7 +53,7 @@ func test_the_root_page_is_narrower_than_140_px_and_every_text_fits_inside_it() 
 			assert_true(w <= inner, "%s: a text ending at %d is inside the padding (%d)" % [id, w, inner])
 	menu.show_page(&"root")
 	var rows := menu.rows()
-	assert_eq([rows[0].rect.position.y, rows[1].rect.position.y, menu.panel().size.y], [28, 38, 70], "heights: three rows now (Resume, Settings, Quit)")
+	assert_eq([rows[0].rect.position.y, rows[1].rect.position.y, menu.panel().size.y], [28, 38, 80], "heights: four rows now (Resume, Controls, Settings, Quit)")
 
 
 func test_a_page_whose_row_would_pass_224_is_cut_there_and_the_width_stays_while_open() -> void:

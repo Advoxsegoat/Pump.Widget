@@ -53,7 +53,11 @@ run_godot() {
 # A test that never finishes would hang the run for good, so the run is capped (TEST_TIMEOUT seconds).
 status=0
 if [ ${#mode[@]} -eq 0 ]; then
-	run_godot || status=$?
+	# user:// is one folder for every checkout on a machine, and seven test files keep user://settings_test.cfg in it: two runs at once
+	# (two lanes) would fail each other. A headless run gets a folder of its own (a render run keeps the shared one, with its shader cache).
+	user_data="$(mktemp -d)"
+	trap 'rm -f "$import_log"; rm -rf "$user_data"' EXIT
+	XDG_DATA_HOME="$user_data" run_godot || status=$?
 else
 	# Render modes run under xvfb-run, which folds Godot's stderr into stdout, so stdout is where the
 	# warning is. With pipefail the pipeline's status is Godot's (or timeout's), not the filter's.
