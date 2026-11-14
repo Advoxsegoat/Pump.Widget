@@ -356,12 +356,15 @@ HAIRLINE = ((-0.04, 1.768), (0.0, 1.742), (0.05, 1.700), (0.08, 1.650))
 EAR_CLEAR = {"x": 0.06, "y": (-0.03, 0.06), "z": 1.735}
 CUT_CLOSE, PULLED_BACK = 0.004, 0.011  # the hair's thickness on the sides and nape, and on top
 CUT_CLOSE_BELOW, PULLED_BACK_ABOVE = 1.75, 1.79  # blended between these heights
-# The bun: a lathe round the vertical axis, a ring of (radius, z) at a time and a point on top, standing on the crown. It is
-# 12.6 cm across at its widest where the drawing's is about half the head's width (7 cm): at the game's camera, where a
-# pixel is 3 cm, anything smaller is a speck; this is 4 pixels.
-BUN_CENTRE_Y = 0.012
-BUN_PROFILE = ((0.034, 1.800), (0.038, 1.826), (0.054, 1.845), (0.063, 1.870), (0.057, 1.900), (0.037, 1.925))
-BUN_TOP = 1.935
+# The bun: a knot tied at the back of the head, as in the drawing (where its top shows over the skull from ahead): a lathe
+# round an axis that stands off the skull backward and up from BUN_BASE (a point just inside the back of the skull, high on
+# it), a ring of (radius, distance along the axis) at a time and a point at the end, all times BUN_SCALE. At scale 1 it is
+# 12.6 cm across; the drawing's is about 7 cm (scale 0.55).
+BUN_BASE = (0.0, 0.092, 1.755)
+BUN_AXIS = (0.0, 0.75, 0.66)
+BUN_SCALE = 0.72
+BUN_PROFILE = ((0.034, 0.0), (0.038, 0.026), (0.054, 0.045), (0.063, 0.070), (0.057, 0.100), (0.037, 0.125))
+BUN_END = 0.135
 BUN_SEGMENTS = 10
 # The forelock: a lock from the hairline toward the bridge of the nose: (x, z, half width) along it.
 FORELOCK_PATH = ((0.018, 1.778, 0.009), (0.024, 1.757, 0.0085), (0.020, 1.736, 0.007), (0.010, 1.718, 0.005),
@@ -526,19 +529,24 @@ def topknot(head, armature):
         made.faces.append(tuple(ids))  # the head's own winding faces outward already
         made.slots.append(HAIR)
     bm.free()
-    # the bun
+    # the bun: rings round BUN_AXIS, standing off the back of the skull
+    axis = Vector(BUN_AXIS).normalized()
+    across = Vector((1.0, 0.0, 0.0))
+    up = axis.cross(across)
+    base = Vector(BUN_BASE)
     rings = []
-    for r, z in BUN_PROFILE:
-        rings.append([made.vert((r * math.cos(a), BUN_CENTRE_Y + r * math.sin(a), z), head_only)
+    for r, along in BUN_PROFILE:
+        centre = base + axis * (along * BUN_SCALE)
+        rings.append([made.vert(centre + (across * math.cos(a) + up * math.sin(a)) * (r * BUN_SCALE), head_only)
                       for a in (2 * math.pi * k / BUN_SEGMENTS for k in range(BUN_SEGMENTS))])
-    axis_point = Vector((0.0, BUN_CENTRE_Y, 1.86))
+    middle = base + axis * (BUN_END * 0.45 * BUN_SCALE)
     for lower, upper in zip(rings, rings[1:]):
         for k in range(BUN_SEGMENTS):
             k1 = (k + 1) % BUN_SEGMENTS
-            made.face([lower[k], lower[k1], upper[k1], upper[k]], HAIR, away=axis_point)
-    top = made.vert((0.0, BUN_CENTRE_Y, BUN_TOP), head_only)
+            made.face([lower[k], lower[k1], upper[k1], upper[k]], HAIR, away=middle)
+    top = made.vert(base + axis * (BUN_END * BUN_SCALE), head_only)
     for k in range(BUN_SEGMENTS):
-        made.face([rings[-1][k], rings[-1][(k + 1) % BUN_SEGMENTS], top], HAIR, away=axis_point)
+        made.face([rings[-1][k], rings[-1][(k + 1) % BUN_SEGMENTS], top], HAIR, away=middle)
     return made_object(TOPKNOT_MESH, made, armature, ["Head"])
 
 

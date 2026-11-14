@@ -370,3 +370,4 @@ func test_the_bun_clears_the_scarf_and_collar_in_five_poses() -> void:
 		assert_true(least >= BUN_CLEAR, "%s: the bun came within %.3f m of the scarf or the collar" % [pose, least])
 		r.free()
 	assert_eq(worst.size(), 5, "every pose was played (%s)" % [worst])
+	print("bun clearance by pose (m): ", worst)
