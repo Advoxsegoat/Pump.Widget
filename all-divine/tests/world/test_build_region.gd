@@ -930,3 +930,16 @@ func test_a_drift_is_a_rounded_mound_that_feathers_to_nothing() -> void:
 	assert_eq(first.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX], shapes[0], "the same seed, the same drift")
 	for bad in ["drift 5 5 4", "drift 5 5 0 3", "drift 5 5 4 3 seed=x", "drift 5 5 4 3 y=up", "drift 5 5 40 3"]:
 		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)
+
+
+# A region's `script` line replaces the root's script, and a script swap forgets what was set on the old one: a `grade` line before it was lost
+# (the stretch's whole colour grade with it), and a `script` line before it was fine. Either order keeps the grade.
+func test_a_script_line_after_the_grade_line_keeps_the_grade() -> void:
+	var path := "res://data/render/grades/bilibara_noon.tres"
+	for order in [["grade " + path, "script res://world/arena.gd"], ["script res://world/arena.gd", "grade " + path]]:
+		var built := _build("\n".join(order) + "\n")
+		assert_eq(built.problems, PackedStringArray(), "builds clean (%s)" % [order])
+		var root := built.root as Node
+		assert_true(root.get_script() != null and (root.get_script() as Script).resource_path == "res://world/arena.gd", "the script is set (%s)" % [order])
+		var grade := root.get(&"grade") as Resource
+		assert_true(grade != null and grade.resource_path == path, "the grade is kept (%s)" % [order])

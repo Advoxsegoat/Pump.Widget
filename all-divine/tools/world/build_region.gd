@@ -11,7 +11,7 @@ extends SceneTree
 ##   ramp X0 Z0 X1 Z1 UP                a wedge up toward UP
 ##   edge PIECE X0 Z0 X1 Z1 FACING [solid]   a wall-like Kenney piece every 2.5 m along a line, its face toward FACING
 ##   piece PIECE X Z [YAW] [y=Y] [ghost]   a Kenney piece, colliding as MODELS says (`ghost`: not at all)
-##   curb X0 Z0 X1 Z1 H [STONE] [moonlit] [name=NAME] [y=RAISE]    a low solid box of STONE (flagstone, slate, slate_cold, flagstone_cold, cobble,
+##   curb X0 Z0 X1 Z1 H [STONE] [moonlit] [name=NAME] [y=RAISE]    a low solid box of STONE (flagstone, slate, slate_cold, slate_pale, flagstone_cold, cobble,
 ##                                      tan_earth, snow), named NAME (default Curb), its underside RAISE up (default 0)
 ##   ground X0 Z0 X1 Z1 STONE [visual] [name=NAME]  a plate of ground 1 m thick with its top at y = 0, at most 12.5 m a side: solid and
 ##                                      walkable (world, ik_surface; under Walkable), or `visual`: only seen (under
@@ -60,6 +60,7 @@ const STONES := {
 	"flagstone": FLAGSTONE,
 	"slate": preload("res://world/materials/slate.tres"),
 	"slate_cold": preload("res://world/materials/slate_cold.tres"),
+	"slate_pale": preload("res://world/materials/slate_pale.tres"),
 	"flagstone_cold": preload("res://world/materials/flagstone_cold.tres"),
 	"cobble": preload("res://world/materials/cobble.tres"),
 	"tan_earth": preload("res://world/materials/tan_earth.tres"),
@@ -412,7 +413,11 @@ class Builder extends "res://tools/world/region_nodes.gd":
 					env.ambient_light_energy = n[0]
 			"script":
 				if args.size() == 1 and ResourceLoader.exists(args[0]) and load(args[0]) is Script:
+					# A new script forgets what was set on the old one: the grade of a `grade` line above this one is kept.
+					var grade: Variant = _root.get(&"grade")
 					_root.set_script(load(args[0]))
+					if grade != null:
+						_root.set(&"grade", grade)
 				else:
 					problem("script needs the path of a script (a Region's, or one that extends it)")
 			"grade":
