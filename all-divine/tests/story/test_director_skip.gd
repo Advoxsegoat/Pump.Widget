@@ -330,3 +330,37 @@ func test_a_skip_at_any_tenth_frame_never_moves_him_more_than_12_px_or_25_degree
 		await frames(1)
 	assert_true(worst_head <= 12.0, "his head moves at most 12 px a frame through any skip, not %.1f (skipped from frame %d)" % [worst_head, worst_at])
 	assert_true(worst_bone <= 25.0, "no bone but the scarf's turns more than 25 degrees a frame, not %.1f (skipped from frame %d)" % [worst_bone, bone_at])
+
+
+func test_a_skip_puts_an_actor_who_walks_twice_at_his_last_mark() -> void:
+	var scene := _fixture()
+	var back := SceneMark.new()
+	back.name = &"foe_back"
+	back.space = SceneMark.Space.ACTOR_START
+	back.actor = &"abarax"
+	back.position = Vector3(1.7, 0, 2.6)  # 0.5 m behind where he stopped
+	scene.marks.append(back)
+	var walk := ActorBeat.new()
+	walk.actor = &"knuckle"
+	walk.at = 0
+	walk.move_to = &"foe_back"
+	scene.shots[2].beats.append(walk)  # the shot of the first line, from frame 150
+	var parts := StoryStage.make(self, Vector3(3, 0, 4), deg_to_rad(200.0))
+	await frames(3)
+	StoryLog.mark_seen(&"fixture_yard_entrance")
+	var director := _start(parts, scene)
+	assert_true(director != null, "the scene with two walks is taken: %s" % Director.last_refusal)
+	if director == null:
+		return
+	var foe: Actor = director.cast[&"knuckle"]
+	var at_first_mark: Vector3 = director._mark_place(&"foe_stop")
+	var at_last_mark: Vector3 = director._mark_place(&"foe_back")
+	assert_true(at_first_mark.distance_to(at_last_mark) > 0.4, "the two marks are apart")
+	await _to_frame(director, 60)
+	assert_true(director.skip())
+	var n := 0
+	while _finished.is_empty() and n < 80:
+		await frames(1)
+		n += 1
+	assert_eq(_finished, [true])
+	assert_true(foe.global_position.distance_to(at_last_mark) < 0.15, "he stands at his last mark, not his first (%.2f m from it, %.2f from the first)" % [foe.global_position.distance_to(at_last_mark), foe.global_position.distance_to(at_first_mark)])
