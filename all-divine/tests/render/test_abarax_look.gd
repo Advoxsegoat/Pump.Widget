@@ -15,6 +15,11 @@ const KNUCKLE_HASHES := {
 }
 ## A pixel is the body's when its colour differs from the empty stage's by more than this (summed over red, green, blue).
 const BODY_THRESHOLD := 0.06
+## The least the knot adds, at zoom 1 (behind: at zoom 3 nine times that, a pixel being a third as long: area; the others scale
+## with the zoom): from the side behind the head, over the skull from ahead, over and beside it from behind.
+const MIN_BEHIND := 3
+const MIN_AHEAD := 2
+const MIN_BESIDE := 2
 const PARTS: PackedStringArray = ["Abarax_Topknot", "Abarax_Forelock", "Abarax_Feather", "Abarax_EarRing", "Abarax_Stubble"]
 
 var shots: AbaraxShots
@@ -52,27 +57,57 @@ func _top_row(mask: PackedByteArray) -> int:
 	return -1
 
 
-func test_the_bun_stands_above_the_old_outline_in_all_eight_facings() -> void:
+## What the new parts add to the bare head's outline in one facing at one zoom: `above` (pixels over the old outline's top
+## row), `behind` (pixels past the old outline's behind side, in the head's rows; the two side facings only: yaw 90 faces
+## screen right and so has its back to the left) and `beside` (past either side, for the view from behind). `bare` has the
+## parts hidden, `empty` is the stage without him.
+func _added(def: ActorDef, bare: ActorDef, yaw: int, zoom: int, empty: Image) -> Dictionary:
+	shots.pose(bare, yaw)
+	var old := _mask(await shots.draw(zoom, -40.0), empty)
+	shots.pose(def, yaw)
+	var now := _mask(await shots.draw(zoom, -40.0), empty)
+	var top := _top_row(old)
+	var band := 8 * zoom  # the head's rows: a head is 6 pixels tall at zoom 1
+	var lo := 640
+	var hi := -1
+	for y in range(top, top + band):
+		for x in 640:
+			if old[y * 640 + x] == 1:
+				lo = mini(lo, x)
+				hi = maxi(hi, x)
+	var found := {"above": 0, "behind": 0, "beside": 0}
+	for y in range(maxi(top - 12 * zoom, 0), top + band):
+		for x in 640:
+			if now[y * 640 + x] == 1 and old[y * 640 + x] == 0:
+				if y < top:
+					found["above"] += 1
+				if x < lo:
+					found["behind" if yaw == 90 else "beside"] += 1
+				elif x > hi:
+					found["behind" if yaw == 270 else "beside"] += 1
+	return found
+
+
+func test_the_bun_shows_behind_the_head_from_the_side_and_over_it_from_ahead() -> void:
 	var def := load("res://data/actors/abarax.tres") as ActorDef
 	var bare := def.duplicate() as ActorDef
 	bare.hidden_parts = PARTS
 	shots.pose(def, 0)
 	shots.rig.visible = false
-	var empty := await shots.draw(1)
+	var empty := {1: await shots.draw(1), 3: await shots.draw(3, -40.0)}
 	var report := PackedStringArray()
-	for yaw in FACINGS:
-		shots.pose(bare, yaw)
-		var old := _mask(await shots.draw(1), empty)
-		shots.pose(def, yaw)
-		var now := _mask(await shots.draw(1), empty)
-		var top := _top_row(old)
-		var above := 0
-		for i in now.size():
-			if now[i] == 1 and i / 640 < top:
-				above += 1
-		report.append("%d: %d" % [yaw, above])
-		assert_true(above >= 6, "facing %d: the bun adds %d pixels above the head's outline (at least 6)" % [yaw, above])
-	print("look: bun pixels above the outline by facing: ", ", ".join(report))
+	for zoom in [1, 3]:
+		for yaw in FACINGS:
+			var found := await _added(def, bare, yaw, zoom, empty[zoom])
+			report.append("x%d yaw %d: %s" % [zoom, yaw, found])
+			if yaw == 90 or yaw == 270:
+				assert_true(found["behind"] >= MIN_BEHIND * zoom * zoom, "x%d yaw %d: the knot adds %d pixels behind the head's outline (at least %d)" % [zoom, yaw, found["behind"], MIN_BEHIND * zoom * zoom])
+			if yaw == 0:
+				assert_true(found["above"] >= MIN_AHEAD * zoom, "x%d yaw 0: the top of the knot adds %d pixels over the skull (at least %d)" % [zoom, found["above"], MIN_AHEAD * zoom])
+			if yaw == 180:
+				assert_true(found["above"] >= MIN_AHEAD * zoom, "x%d yaw 180: %d pixels above the outline (at least %d)" % [zoom, found["above"], MIN_AHEAD * zoom])
+				assert_true(found["beside"] >= MIN_BESIDE * zoom, "x%d yaw 180: %d pixels beside it (at least %d)" % [zoom, found["beside"], MIN_BESIDE * zoom])
+	print("look: what the knot adds, by zoom and facing:\n", "\n".join(report))
 
 
 func test_every_knuckles_picture_is_what_it_was() -> void:

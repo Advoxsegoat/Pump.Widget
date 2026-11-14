@@ -145,8 +145,8 @@ class BuildAbarax(unittest.TestCase):
     def test_the_four_new_parts_are_where_the_drawing_has_them(self):
         head_low, head_high = self.bounds("Abarax_Head")
         low, high = self.bounds("Abarax_Topknot")
-        self.assertGreater(high[1], head_high[1] + 0.07, "the bun stands 7 cm or more above the skull")
-        self.assertLess(abs((low[0] + high[0]) / 2), 0.01, "on the crown, not to a side")
+        self.assertLess(abs((low[0] + high[0]) / 2), 0.01, "on the middle line, not to a side")
+        self.assertLess(low[2], -0.16, "the knot stands out behind the head (the skull ends at -0.123)")
         low, high = self.bounds("Abarax_Feather")
         self.assertGreater(low[0], 0.05, "the feather is on his left")
         self.assertGreater(high[0], 0.15, "and reaches out past the jaw")
@@ -157,6 +157,27 @@ class BuildAbarax(unittest.TestCase):
         self.assertLess(abs((low[0] + high[0]) / 2), 0.05, "the forelock is near the middle of the forehead")
         self.assertGreater(high[2], 0.085, "in front of the skull")
         self.assertLess(low[1], 1.745, "and falls toward the bridge of the nose")
+
+    def test_the_bun_is_a_knot_at_the_back_of_the_head(self):
+        # The drawing's bun is tied at the back of the head and shows over the skull from the front. The points of
+        # Abarax_Topknot behind the skull's rearmost point (+0.14 m back; the cut hair stops 1.1 cm outside the skull,
+        # which is 12.3 cm deep) are the bun's: they make a knot behind the head bone and not above the skull.
+        j = self.j
+        buffers = gltf_inspect._buffers(j, self.path)
+        points = []
+        for m in j["meshes"]:
+            if m["name"] == "Abarax_Topknot":
+                for prim in m["primitives"]:
+                    points += gltf_inspect._read_accessor(j, buffers, prim["attributes"]["POSITION"])
+        beyond = [p for p in points if p[2] < -0.14]
+        self.assertGreater(len(beyond), 20, "the bun stands out behind the skull")
+        head_bone = gltf_inspect.joint_positions(j)["Head"]
+        centre = [sum(p[i] for p in beyond) / len(beyond) for i in range(3)]
+        self.assertLessEqual(centre[2], head_bone[2] - 0.06, "the bun is 6 cm or more behind the head bone")
+        radius = (max(p[0] for p in beyond) - min(p[0] for p in beyond)) / 2
+        head_top = self.bounds("Abarax_Head")[1][1]
+        self.assertLessEqual(max(p[1] for p in beyond), head_top + radius, "and not above the skull by more than its radius")
+        self.assertLess(abs(centre[0]), 0.01, "on the middle line")
 
     def test_the_stubble_is_on_the_chin_and_jaw_and_the_mole_on_his_left_cheek(self):
         low, high = self.bounds("Abarax_Stubble")

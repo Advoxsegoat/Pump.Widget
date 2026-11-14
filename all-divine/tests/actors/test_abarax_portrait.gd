@@ -281,3 +281,92 @@ func test_the_feather_stays_off_the_shoulder_and_neck_in_five_poses() -> void:
 		assert_true(least >= CLEAR_OF_BODY, "%s: a point of the feather came within %.3f m of the body" % [clip, least])
 		r.free()
 	assert_eq(worst.size(), POSES.size(), "every pose was played (%s)" % [worst])
+
+
+## The Knuckles' built model, as the main branch has it (sha256). Nothing a picture's renderer does can move these: the
+## Knuckles are made from their own file, and this task never builds it.
+const KNUCKLE_MODEL_SHA256 := "695c0566f80959861c7ea67c54230a1413eaba18e556827e06037e23b31d7184"
+
+
+func test_the_knuckles_model_file_is_byte_for_byte_the_main_branchs() -> void:
+	assert_eq(FileAccess.get_sha256("res://assets/characters/knuckle/knuckle.glb"), KNUCKLE_MODEL_SHA256)
+
+
+# --- the bun, at the back of the head ---
+
+## The least distance the bun's vertices may come to a vertex of the scarf (loop and ribbon) or the shirt (the collar), in
+## idle, with his head bowed and thrown back, in a flinch and knocked down. The scarf's loop is 4 cm wide a segment: 1.5 cm
+## from a vertex is clear of its surface.
+const BUN_CLEAR := 0.015
+
+
+# The vertices of the meshes called `names` as the last tick shows them (skinned by hand), those of Abarax_Topknot only
+# if they stand more than 14 cm behind the model's origin plane (the bun: the cut hair stays within 1.2 cm of the skull).
+static func _shown_vertices(r: Rig, names: Array, bun_only: bool) -> Array[Vector3]:
+	var found: Array[Vector3] = []
+	for node in r.skeleton.get_children():
+		var mi := node as MeshInstance3D
+		if mi == null or not names.has(String(mi.name)):
+			continue
+		var arrays := (mi.mesh as ArrayMesh).surface_get_arrays(0)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+		var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+		var skin := mi.skin
+		var poses: Array[Transform3D] = []
+		for i in skin.get_bind_count():
+			var bone := skin.get_bind_bone(i)
+			if bone < 0:
+				bone = r.skeleton.find_bone(skin.get_bind_name(i))
+			poses.append(r.shown_pose(StringName(r.skeleton.get_bone_name(bone))) * skin.get_bind_pose(i))
+		for v in verts.size():
+			if bun_only and verts[v].z > -0.14:
+				continue
+			var at := Vector3.ZERO
+			for k in 4:
+				var w := weights[v * 4 + k]
+				if w > 0.0:
+					at += w * (poses[bones[v * 4 + k]] * verts[v])
+			found.append(at)
+	return found
+
+
+static func _bun_clearance(r: Rig) -> float:
+	var bun := _shown_vertices(r, ["Abarax_Topknot"], true)
+	var near := _shown_vertices(r, ["Abarax_Scarf", "Male_Peasant_Body"], false)
+	var least := INF
+	for p in bun:
+		for v in near:
+			least = minf(least, p.distance_to(v))
+	return least
+
+
+func test_the_bun_clears_the_scarf_and_collar_in_five_poses() -> void:
+	var worst := {}
+	for pose in [&"idle", &"bowed", &"thrown_back", &"flinch", &"death"]:
+		var r: Rig = track(load(RIG).instantiate())
+		for i in 40:
+			await frames(1)
+			r.tick(1.0 / 60)
+		var bun := _shown_vertices(r, ["Abarax_Topknot"], true)
+		assert_true(bun.size() > 20, "the bun's vertices were found (%d)" % bun.size())
+		var least := INF
+		var steps := 1
+		if pose == &"bowed" or pose == &"thrown_back":
+			# The head turned as far as it goes down or up: a point at his feet, a point high above.
+			r.look_at_point(r.global_position + (Vector3(0, 0.0, 1.0) if pose == &"bowed" else Vector3(0, 6.0, 1.0)))
+			steps = 60
+		elif pose != &"idle":
+			r.play_move(pose, 0.15)
+			steps = int(r.tree.get_animation(pose).length * 60) + 1
+		for f in steps:
+			await frames(1)
+			if steps > 1 and pose != &"bowed" and pose != &"thrown_back":
+				r.set_move_time(f / 60.0)
+			r.tick(1.0 / 60)
+			if steps == 1 or f % 2 == 0 or f == steps - 1:
+				least = minf(least, _bun_clearance(r))
+		worst[pose] = "%.3f" % least
+		assert_true(least >= BUN_CLEAR, "%s: the bun came within %.3f m of the scarf or the collar" % [pose, least])
+		r.free()
+	assert_eq(worst.size(), 5, "every pose was played (%s)" % [worst])
