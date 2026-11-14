@@ -126,7 +126,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var key := event as InputEventKey
 	if key != null and key.pressed and not key.echo:
-		if _recorder != null and key.keycode >= KEY_F5 and key.keycode <= KEY_F9:
+		# (not while the pause menu is open: the game ignores them there, and a key that did nothing changed no fight)
+		if _recorder != null and Game.state != Game.State.PAUSE and key.keycode >= KEY_F5 and key.keycode <= KEY_F9:
 			_recorder.recording().debug_keys = true  # these change the fight and are not controls: the recording says so
 		match key.keycode:
 			KEY_F3:

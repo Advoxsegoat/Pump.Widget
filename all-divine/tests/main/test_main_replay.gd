@@ -112,6 +112,22 @@ func test_a_debug_key_pressed_while_recording_is_said_in_the_header_and_the_repl
 	assert_true(Main.replay_refusal(FILE).contains("debug key"), "and a replay of it is refused: %s" % Main.replay_refusal(FILE))
 
 
+func test_a_debug_key_the_pause_menu_ignored_is_not_a_debug_key_in_the_recording() -> void:
+	var main := _main()
+	main.start_recording(FILE)
+	await frames(3)
+	assert_true(Game.change(Game.State.PAUSE), "the game is paused")
+	for keycode in [KEY_F5, KEY_F6, KEY_F7, KEY_F8, KEY_F9]:
+		var event := InputEventKey.new()
+		event.keycode = keycode
+		event.physical_keycode = keycode
+		event.pressed = true
+		main._unhandled_input(event)
+	assert_false(main._recorder.recording().debug_keys, "F5 to F9 did nothing in the menu, so nothing is said of them")
+	Game.change(Game.State.PLAY)
+	assert_false(main._recorder.recording().debug_keys, "and not later either")
+
+
 func test_a_replay_is_refused_before_any_fight_for_a_file_that_cannot_be_used() -> void:
 	assert_true(Main.replay_refusal("user://no_such_recording.tres").contains("no recording"), "none there")
 	var garbage := FileAccess.open(FILE, FileAccess.WRITE)
