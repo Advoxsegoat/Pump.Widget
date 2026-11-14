@@ -17,10 +17,13 @@ const MOST_OPEN := 0.15
 ## Where he stands: the node's name, the north face's z, the xs along it.
 const SPOTS := [
 	["LowWall1", -55.0, [23.0, 23.75]], ["LowWall2", -55.0, [31.25, 32.0]], ["LowWall3", -30.0, [30.5, 31.25, 32.0]],
-	["LowWall4", -20.0, [23.0, 23.75, 24.5]], ["LowWall5", -20.0, [-29.5, -28.75, -28.0]], ["Gate", -5.5, [-34.0, -32.5, -31.0]],
+	["LowWall4", -20.0, [23.0, 23.75, 24.5]], ["LowWall5", -20.0, [-29.5, -28.75, -28.0]], ["Gate", -5.5, [-34.65, -34.0, -32.5, -31.0, -30.35]],
 	# The props in alcove B a fighter can stand north of (the street's stalls, cart, bench and stools stand against the fronts, with no
 	# ground north of them): the north face of the stool, and of the bench (it stands 1.7 m off the alcove's north wall).
 	["Props/StallStool/Body", -33.325, [33.8, 34.0, 34.2]], ["Props/StallBench/Body", -35.825, [34.2, 35.0, 35.8]],
+	# The yard mouth's two bollards (0.9 m), at contact and 1 m back (the fourth word: how far back, with no push). The plinths stand against
+	# a wall's south face and the street's props against its north front: no ground north of them, so nobody stands behind them.
+	["Bollard", -55.325, [24.875]], ["Bollard2", -55.325, [30.125]], ["Bollard", -55.325, [24.875], 1.0], ["Bollard2", -55.325, [30.125], 1.0],
 ]
 
 var _main: Main
@@ -51,11 +54,12 @@ func _differs(a: Color, b: Color) -> bool:
 
 # Stands Abarax against the south wall at (x, z) (shoved into it), and returns {hidden: the share of his pixels hidden, rays: the
 # heights from 0.4 m up that a ray from his body toward the camera finds blocked, at: where he ended}.
-func _measure(x: float, z: float) -> Dictionary:
+func _measure(x: float, z: float, push := true) -> Dictionary:
 	var player := _main.player
 	player.place(Transform3D(Basis(), Vector3(x, 0.0, z)))
-	for i in 20:
-		player.push(Vector3(0, 0, 5.0))
+	for i in (20 if push else 1):
+		if push:
+			player.push(Vector3(0, 0, 5.0))
 		await frames(1)
 	await frames(15)
 	_main.camera_rig.snap_now()
@@ -110,12 +114,13 @@ func test_nothing_low_hides_a_fighter_against_it() -> void:
 		var wall := _main.region.get_node(spot[0] as String) as StaticBody3D
 		assert_true(wall != null, "%s exists" % spot[0])
 		for x: float in spot[2]:
-			var got := await _measure(x, (spot[1] as float) - 0.36)
+			var back: float = spot[3] if spot.size() > 3 else 0.0
+			var got := await _measure(x, (spot[1] as float) - 0.36 - back, back == 0.0)
 			if (spot[0] == "LowWall4" and x == 23.75) or (spot[0] == "Gate" and x == -32.5) or (spot[0] == "LowWall1" and x == 23.0):
 				var path := ProjectSettings.globalize_path("res://").path_join("out/shots/bilibara/against_%s.png" % String(spot[0]).to_snake_case())
 				DirAccess.make_dir_recursive_absolute(path.get_base_dir())
 				(got.shot as Image).save_png(path)
 			print("hidden share at %s x %.2f: %.1f%% (rays blocked at %s)" % [spot[0], x, got.hidden * 100.0, got.rays])
-			assert_true(absf(got.at.z - ((spot[1] as float) - 0.35)) < 0.05, "%s x %.2f: he stands against it (z %.3f)" % [spot[0], x, got.at.z])
+			assert_true(back > 0.0 or absf(got.at.z - ((spot[1] as float) - 0.35)) < 0.05, "%s x %.2f: he stands against it (z %.3f)" % [spot[0], x, got.at.z])
 			assert_eq(got.rays, [] as Array[float], "%s x %.2f: no ray from his body above 0.4 m is blocked" % [spot[0], x])
 			assert_true(got.hidden <= MOST_HIDDEN, "%s x %.2f: %.1f%% of him hidden (at most %d%%)" % [spot[0], x, got.hidden * 100.0, MOST_HIDDEN * 100])

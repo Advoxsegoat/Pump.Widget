@@ -122,10 +122,12 @@ curb -35 -5.5 -30 -4.5 0.6 slate name=Gate
 # The rail across the tops of the posts: 0.1 m thick, its underside 2.4 m up, above any head (it hides nothing of a body). Task 3 dresses
 # the gate; the board and the rail are what a gate is until then.
 curb -35.125 -5.15 -29.875 -5.05 0.12 slate name=GateRail y=2.4
-piece pillar-stone 24.875 -55.125
-piece pillar-stone 30.125 -55.125
-piece pillar-stone -34.8 -5.1
-piece pillar-stone -30.2 -5.1
+# Bollards (0.65 m, 0.4 square) at the low walls' north ends at the yard's mouth: nothing a fighter can stand behind.
+curb 24.675 -55.325 25.075 -54.925 0.65 slate name=Bollard
+curb 29.925 -55.325 30.325 -54.925 0.65 slate name=Bollard
+# The gate's pilasters: pillar-stone half in the wall on each face of the slot (ghosts: they are in the wall), so no body stands behind one.
+piece pillar-stone -35.2 -5.1 ghost
+piece pillar-stone -29.8 -5.1 ghost
 # Two fence-gate pieces across the slot (seen, no collider: the board is the barrier), so that it reads as a shut gate: a picket gate with
 # its round boss, 0.95 m high, standing in the board and showing 0.35 m above it.
 piece fence-gate -33.75 -3.85 90
@@ -154,12 +156,12 @@ piece fence 23.75 -13.75 0 y=0.65
 piece fence -28.75 -16.25 0 y=0.65
 piece fence -28.75 -13.75 0 y=0.65
 
-# --- The shrine sites as places: a pillar-stone plinth (decoration: the shrine will stand on it, and a body spawns on the site, so it
-# has no collider); alcove B with a bench, a stool and a plinth ---
-piece pillar-stone -35 0 ghost
+# --- The shrine sites as places: a plinth (solid, 0.6 m, against the south face of the nearest wall, not before a door or the gate, so
+# that whatever the shrine puts on it hides nobody), and alcove B with a bench and a stool ---
+curb -36.9 -5 -35.3 -4.4 0.6 slate name=Plinth_A
+curb 31 -37.5 32.6 -36.9 0.6 slate name=Plinth_B
 piece stall-bench 35 -35.5 90
 piece stall-stool 34 -33
-piece pillar-stone 36.25 -33.75 ghost
 
 # --- Street props at the street's north margin, flush with the fronts, off the clear line (the south margin is the camera's side: a 3 m
 # stall there would hide a fighter and stand in front of the sight line) ---
@@ -392,8 +394,6 @@ curb 21.73 -42.94 24.73 -40.94 0.25 snow name=Drift y=7.83
 curb 20.20 -38.96 23.20 -36.96 0.25 snow name=Drift y=7.83
 curb 21.66 -33.55 24.66 -31.55 0.25 snow name=Drift y=7.83
 curb 21.77 -28.66 24.77 -26.66 0.25 snow name=Drift y=7.83
-row chimney 31.7 -43.4 31.7 -43.4 0 y=8.4 backdrop
-row chimney 36.7 -43.4 36.7 -43.4 0 y=8.4 backdrop
 row chimney 12.7 -43.4 12.7 -43.4 0 y=8.15 backdrop
 
 # --- Fronts: banners as the pink neon of the street (a banner hangs on the face, turned to the south) ---
@@ -464,8 +464,8 @@ marker HandDoor_2 27.5 -73.8 0
 marker HandDoor_3 35 -73.8 0
 
 # --- Points of interest (UP metres above the ground) ---
-poi ShrinePlinth_A -35 0 1.0
-poi ShrinePlinth_B 36.25 -33.75 1.0
+poi ShrinePlinth_A -36.1 -4.7 0.65
+poi ShrinePlinth_B 31.8 -37.2 0.65
 poi Lazymans -38.75 -5 1.8
 poi HatShop -10 -5 1.6
 poi ShortcutGate -32.5 -5 1.0
