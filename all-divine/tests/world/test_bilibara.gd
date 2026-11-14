@@ -689,6 +689,14 @@ func _edges() -> Array[Dictionary]:
 	for x: float in [-34.5, -32.5, -30.5]:
 		list.append({label = "the gate from the north, x %.1f" % x, x = x, face = -5.5, way = 1})
 		list.append({label = "the gate from the south, x %.1f" % x, x = x, face = -4.5, way = -1})
+	# The solid props (north faces are stood against from the north with way +1, south faces from the south with way -1): the bench and
+	# stool of alcove B (its south face is left out: the 3 m start of the sprint lies beyond the alcove's kerb), the bollards, the yard's vats, the plinths, the street's stalls, cart, bench and stool.
+	for prop in [["alcove bench north", 34.5, -35.825, 1], ["alcove bench north", 35.5, -35.825, 1], ["alcove bench south", 35.0, -35.175, -1],
+			["alcove stool north", 34.0, -33.325, 1], ["west bollard", 24.875, -55.325, 1], ["east bollard", 30.125, -55.325, 1],
+			["west vat north", 20.0, -67.5, 1], ["west vat south", 20.0, -65.0, -1], ["east vat north", 35.0, -67.5, 1], ["east vat south", 35.0, -65.0, -1],
+			["plinth A", -36.1, -4.4, -1], ["plinth B", 31.8, -36.9, -1], ["stall west", -8.75, -2.5, -1], ["stall east", 8.75, -2.5, -1],
+			["cart", -22.5, -2.76, -1], ["street bench", 12.5, -4.35, -1], ["street stool", 14.1, -4.35, -1]]:
+		list.append({label = "%s, x %.2f" % [prop[0], prop[1]], x = prop[1], face = prop[2], way = prop[3]})
 	return list
 
 
@@ -896,6 +904,7 @@ func test_the_drying_yard_and_the_harbor_are_dressed_and_unwalkable() -> void:
 	var reached: Dictionary = fill.reached
 	var ground: Dictionary = fill.ground
 	var kit := _kit_instances(region)
+	var boxes := _kit_boxes(region)
 	var count := func(piece: String) -> int: return kit.filter(func(k: Dictionary) -> bool: return k.piece == piece).size()
 	assert_true(count.call("poles-horizontal") >= 12, "at least 12 poles-horizontal (%d)" % count.call("poles-horizontal"))
 	assert_true(count.call("poles") >= 12, "at least 12 poles (%d)" % count.call("poles"))
@@ -922,8 +931,20 @@ func test_the_drying_yard_and_the_harbor_are_dressed_and_unwalkable() -> void:
 				tall_near.append("%s at %s is %.2f m, the line allows %.2f" % [k.piece, k.at, height, most])
 	assert_eq(tall_near, PackedStringArray(), "nothing in the drying yard stands above the line of sight")
 	# The harbor: the water at y -0.9 from z 9 to 32, a quay wall of wall-half along z 9, an apron of visual cobble.
-	var water := region.find_children("Water*", "MeshInstance3D", true, false).filter(func(w: MeshInstance3D) -> bool: return is_equal_approx(w.global_position.y, -0.9))
-	assert_eq(water.size(), 1, "one sheet of water at y -0.9")
+	var water := region.find_children("Water*", "MeshInstance3D", true, false)
+	assert_eq(water.size(), 1, "one sheet of water")
+	var quay_top := -INF
+	for k in boxes:
+		if k.piece == "wall-half":
+			quay_top = maxf(quay_top, (k.box as AABB).end.y)
+	var apron_top := -INF
+	for g: MeshInstance3D in region.get_node("Backdrop").find_children("Ground*", "MeshInstance3D", true, false):
+		if g.global_position.z > 5.0:
+			apron_top = maxf(apron_top, (g.global_transform * g.get_aabb()).end.y)
+	if water.size() == 1:
+		var level: float = (water[0] as MeshInstance3D).global_position.y
+		assert_true(level <= apron_top - 0.5, "the water (%.2f) lies at least 0.5 m below the apron (%.2f), so the quay is a drop" % [level, apron_top])
+		assert_true(level < quay_top - 1.0, "and well below the quay wall's top (%.2f)" % quay_top)
 	if water.size() == 1:
 		var plane := (water[0] as MeshInstance3D).mesh as PlaneMesh
 		var w := water[0] as MeshInstance3D
@@ -1358,3 +1379,43 @@ func test_the_kit_pieces_that_fit_are_used_and_none_of_them_stands_behind_a_figh
 			assert_true(k.box.end.z <= fronts[piece] + 1e-3, "%s at %s stands against a front" % [piece, k.box])
 	for k in _pieces(region, "lantern"):
 		assert_true((k.node as Node).get_node_or_null("Body") == null, "a lantern is drawn only (a lamp on a wall)")
+
+
+# The ring leaves no gap: on the 2.5 m tiles of x -60..62.5, z -95..5 every tile is under a ring block, a solid mass, a plate of ground (walkable
+# or only seen) or a low wall, bar single tiles (no gap wider than 2.5 m, at any depth of row: the void test frames only the first).
+func test_the_ring_leaves_no_gap_wider_than_a_tile() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var covers: Array[Rect2] = []
+	for holder in region.get_node("Backdrop").get_children():
+		var interior := holder.get_node_or_null("Interior") as MeshInstance3D
+		if interior != null:
+			var box := interior.global_transform * interior.get_aabb()
+			covers.append(Rect2(box.position.x, box.position.z, box.size.x, box.size.z + 0.25))
+		elif String(holder.name).begins_with("Ground"):
+			var box := (holder as MeshInstance3D).global_transform * (holder as MeshInstance3D).get_aabb()
+			covers.append(Rect2(box.position.x, box.position.z, box.size.x, box.size.z))
+	for block in region.get_node("Blocks").get_children():
+		var shape := block.get_node("Body/Shape") as CollisionShape3D
+		var size := (shape.shape as BoxShape3D).size
+		covers.append(Rect2(shape.global_position.x - size.x / 2.0, shape.global_position.z - size.z / 2.0, size.x, size.z))
+	for plate in _plates(region):
+		covers.append(plate.rect)
+	for wall in 5:
+		var shape := region.get_node("LowWall%d" % (wall + 1)).get_node("Shape") as CollisionShape3D
+		var size := (shape.shape as BoxShape3D).size
+		covers.append(Rect2(shape.global_position.x - size.x / 2.0, shape.global_position.z - size.z / 2.0, size.x, size.z))
+	var nx := 49
+	var nz := 40
+	var open := {}
+	for i in nx:
+		for j in nz:
+			var centre := Vector2(-60.0 + 2.5 * (i + 0.5), -95.0 + 2.5 * (j + 0.5))
+			if not covers.any(func(r: Rect2) -> bool: return r.grow(0.01).has_point(centre)):
+				open[Vector2i(i, j)] = true
+	var gaps := PackedStringArray()
+	for cell: Vector2i in open:
+		if open.has(cell + Vector2i(1, 0)) or open.has(cell + Vector2i(0, 1)):
+			gaps.append("tiles at x %.2f z %.2f" % [-60.0 + 2.5 * cell.x, -95.0 + 2.5 * cell.y])
+	assert_eq(gaps.slice(0, 6), PackedStringArray(), "no two neighbouring tiles of the footprint are bare (%d bare tiles in all)" % open.size())
