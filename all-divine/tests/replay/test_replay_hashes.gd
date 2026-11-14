@@ -108,6 +108,10 @@ func test_a_recording_that_cannot_be_used_says_why() -> void:
 	var rec := InputRecording.new()
 	rec.frames.append(InputRecording.idle())
 	rec.frame_count = 1
+	assert_true(rec.problem().contains("hash"), "no hashes at all: %s" % rec.problem())
+	rec.hashes[0] = 7
+	assert_true(rec.problem().contains("hash"), "none at its end, which is all a short file could be checked by: %s" % rec.problem())
+	rec.hashes[1] = 7
 	assert_eq(rec.problem(), "", "a whole recording")
 	rec.frame_count = 5
 	assert_true(rec.problem().contains("cut short"), "fewer frames than it says: %s" % rec.problem())

@@ -128,7 +128,21 @@ func test_a_replay_is_refused_before_any_fight_for_a_file_that_cannot_be_used() 
 	assert_true(Main.replay_refusal(FILE).contains("format"), "an unknown format: %s" % Main.replay_refusal(FILE))
 	rec.version = InputRecording.VERSION
 	ResourceSaver.save(rec, FILE)
+	assert_true(Main.replay_refusal(FILE).contains("hash"), "no hash to agree with: %s" % Main.replay_refusal(FILE))
+	rec.hashes[1] = 9
+	ResourceSaver.save(rec, FILE)
 	assert_eq(Main.replay_refusal(FILE), "", "a good file is not refused")
+
+
+func test_a_replay_says_as_recorded_only_when_the_hash_at_its_end_was_compared() -> void:
+	var rec := InputRecording.new()
+	rec.frames.append(InputRecording.idle())
+	rec.frame_count = 1
+	assert_false(Main.end_is_compared(rec), "no hashes")
+	rec.hashes[0] = 3
+	assert_false(Main.end_is_compared(rec), "a hash, but not at the end")
+	rec.hashes[1] = 3
+	assert_true(Main.end_is_compared(rec), "one at the end")
 
 
 func test_the_lines_a_replay_ends_with() -> void:

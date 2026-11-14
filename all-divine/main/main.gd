@@ -229,13 +229,18 @@ func start_replay(rec: InputRecording) -> void:
 	_replayer.name = &"Replayer"
 	add_child(_replayer)
 	_replayer.arena = arena()
-	_replayer.finished.connect(_on_replay_finished.bind(not rec.hashes.is_empty()))
+	_replayer.finished.connect(_on_replay_finished.bind(end_is_compared(rec)))
 	_replayer.diverged.connect(_on_replay_diverged)
 	_replayer.play(rec)
 
 
+## Whether a replay of `rec` ends with a comparison against the fight's recorded state hash: only then can it say "as recorded".
+static func end_is_compared(rec: InputRecording) -> bool:
+	return rec.hashes.has(rec.frames.size())
+
+
 ## Why the recording at `path` cannot be played, in one line, or "" if it can: there is none, it cannot be read, or it is cut short, of a
-## format this game does not know or made with a debug key pressed (InputRecording.problem).
+## format this game does not know, made with a debug key pressed or with no hash at its end (InputRecording.problem).
 static func replay_refusal(path: String) -> String:
 	if not FileAccess.file_exists(path):
 		return "no recording at %s" % path

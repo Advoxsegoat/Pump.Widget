@@ -52,7 +52,8 @@ static func idle() -> Dictionary:
 
 
 ## Why this recording cannot be played, in one line, or "" if it can: from a format the game does not know, cut short (fewer frames
-## than its header says), or made with a debug key pressed.
+## than its header says), made with a debug key pressed, or with no state hash at its end (a file without one, or one cut short whose
+## header was edited to match, is not a recording of a fight: a replay of it would agree with nothing).
 func problem() -> String:
 	if version != VERSION:
 		return "the recording is of format %d and this game reads format %d" % [version, VERSION]
@@ -60,4 +61,6 @@ func problem() -> String:
 		return "the recording is cut short: it has %d frames of the %d it says" % [frames.size(), frame_count]
 	if debug_keys:
 		return "a debug key (F5 to F9) was pressed while it was recorded, and that is not in the recording"
+	if not hashes.has(frame_count):
+		return "the recording has no state hash at its end (frame %d), so a replay of it could not be checked against anything" % frame_count
 	return ""
