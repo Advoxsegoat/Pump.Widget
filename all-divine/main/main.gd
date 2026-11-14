@@ -160,8 +160,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 				return
 			KEY_F6, KEY_F7, KEY_F8, KEY_F9:
-				if Game.state == Game.State.PAUSE:
-					return
+				if Game.state == Game.State.PAUSE or Game.state == Game.State.CUTSCENE:
+					return  # nor in a scene
 				# The arena lives in the stage's own viewport, which the window's keys never reach.
 				if arena() != null and arena().debug_key(key.keycode):
 					get_viewport().set_input_as_handled()
@@ -181,7 +181,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed(&"menu"):
-		if Game.state == Game.State.PLAY:
+		if Game.state == Game.State.PLAY or Game.state == Game.State.CUTSCENE:  # a scene can be paused as the fight is
 			Game.change(Game.State.PAUSE)
 		get_viewport().set_input_as_handled()
 
@@ -333,6 +333,8 @@ func switch_region() -> void:
 
 # Replaces the region with the scene `to` (switch_region says what it does).
 func _go_to(to: String) -> void:
+	if Director.current() != null:
+		Director.current().abort()  # a scene cannot go on in another place: it gives the fight back first
 	var old := region
 	if old is Arena:
 		(old as Arena).clear_foes()  # ends what holds them (pairs, the lock) before they go with the region
@@ -435,7 +437,7 @@ func _apply_look() -> void:
 
 # Any way out of the pause leaves the buttons held and pressed in it out of the fight (Inputs.quarantine).
 func _on_game_state_changed(from: Game.State, to: Game.State) -> void:
-	if from == Game.State.PAUSE and to == Game.State.PLAY:
+	if from == Game.State.PAUSE and (to == Game.State.PLAY or to == Game.State.CUTSCENE):
 		Inputs.quarantine()
 
 

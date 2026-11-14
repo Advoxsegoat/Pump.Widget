@@ -143,8 +143,9 @@ var stats: Stats
 var buffer := InputBuffer.new()
 ## Physics frames this actor has lived; the first is frame 1.
 var frame := 0
-## `frame` less the frames spent frozen: the clock the input buffer keeps its time by (presses are stamped with it
-## and age by it), so that hit-stop does not count toward the 9 frames a press is good for.
+## `frame` less the frames spent frozen and the frames of a scene (Game.State.CUTSCENE): the fight's own clock for the actor. The input
+## buffer keeps its time by it (presses are stamped with it and age by it, so hit-stop does not count toward the 9 frames a press
+## is good for), and so do the dodge chain's timeout, the sway and parry windows, the counter window and the parry refresh.
 var buffer_frame := 0
 var locomotion: Locomotion
 ## How it takes the blows Melee hands it, and dies (apply_hits and die are its front).
@@ -505,7 +506,7 @@ func revive(at: Transform3D) -> void:
 
 func _physics_process(delta: float) -> void:
 	frame += 1
-	if frozen == 0:
+	if frozen == 0 and Game.state != Game.State.CUTSCENE:  # a scene is not fight time: the chain, the windows and the buffer wait
 		buffer_frame += 1
 	var intent: Intent = brain.think(self, delta) if brain != null and not dead and paired_with == null else null
 	if intent == null:

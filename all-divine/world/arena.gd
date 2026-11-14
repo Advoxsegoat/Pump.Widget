@@ -16,7 +16,7 @@ extends Region
 ## F6, F7 and F8 spawn one Knuckle of tier I, II or III (a debug foe: it is not part of any wave and does not count toward
 ## clearing one) and F9 resets.
 ##
-## Times are counted in physics frames of game time, so they stop while the game is paused.
+## Times are counted in physics frames of game time (Game.play_frames), so they stop while the game is paused and while a scene plays.
 
 ## One wave went down and the next starts after this many seconds; the player's death resets after as many.
 const NEXT_WAVE_DELAY := 3.0
@@ -60,6 +60,7 @@ var _extras: Array[Actor] = []  # the debug foes
 var _cleared := false  # the wave that is on has been cleared
 var _next_in := -1.0  # seconds to the next wave, or -1
 var _reset_in := -1.0  # seconds to the reset after the player's death, or -1
+var _counted := -1  # the Game.play_frames the timers last counted, so that a frame of no play (a scene) does not count
 var _wave_frames := 0  # physics frames since the wave that is on was sent (state_hash)
 
 
@@ -205,9 +206,10 @@ static func start_seed(seed_number: int) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	_wave_frames += 1
-	if not automatic:
-		return
+	_wave_frames += 1  # every physics frame, a scene's too: the state hash's count, not a clock of the fight
+	if not automatic or Game.play_frames == _counted:
+		return  # a frame of no play (a scene is on: Game.play_frames stands still) counts for nothing
+	_counted = Game.play_frames
 	if _next_in >= 0.0:
 		_next_in -= delta
 		if _next_in < 0.0:
