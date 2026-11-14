@@ -80,7 +80,14 @@ func _fight(kinds: Array, seed_value: int, origin: Vector3, circles := false) ->
 static func _is_ready(b: EnemyBrain, foe: Actor) -> bool:
 	if b.mode != EnemyBrain.Mode.ENGAGED or b.plan() != null or b._rest > 0.0 or foe.runner.busy() or b._backing:
 		return false
-	return b.def.attacks.any(func(o: AttackOption) -> bool: return o.weight > 0.0 and b._cooldowns.get(o, 0.0) <= 0.0)
+	if b.target != null and b.target.paired_with != null:
+		return false  # the target is in a grab: nobody else may begin an attack on him
+	# ready for an option off cooldown, on the menu at his range, whose tokens are free (the heavy's blows wait for every token: that is his rule)
+	var tokens := AttackTokens.of(foe)
+	var free := AttackTokens.PER_TARGET - tokens.count(b.target) if tokens != null and b.target != null else AttackTokens.PER_TARGET
+	return b.def.attacks.any(func(o: AttackOption) -> bool:
+		var need := 1 if not o.needs_token else (AttackTokens.PER_TARGET if o.tokens < 1 or o.tokens > AttackTokens.PER_TARGET else o.tokens)
+		return o.weight > 0.0 and b._cooldowns.get(o, 0.0) <= 0.0 and need <= free and b.on_menu(o, _flat(foe.global_position, b.target.global_position).length()))
 
 
 static func _flat(from: Vector3, to: Vector3) -> Vector2:

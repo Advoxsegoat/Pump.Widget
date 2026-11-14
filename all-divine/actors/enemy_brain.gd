@@ -68,7 +68,7 @@ const SPREAD_DEG := 60.0
 const SPREAD_SWING := 25.0
 ## A neighbour this close to a foe's own line to the target is in his way: only then is his way in swung round him.
 const LINE_DEG := 30.0
-const SPREAD_SWING_CLOSE := 50.0
+const SPREAD_SWING_CLOSE := 75.0
 const SPREAD_REACH := 1.5
 ## How much further than an attack's back_up_margin (metres) a back-up may go before the attack is given up.
 const BACK_UP_SPARE := 0.1
@@ -447,11 +447,13 @@ func _choose(actor: Actor) -> void:
 		token = AttackTokens.take_for(actor, target)
 	var open: Array[AttackOption] = []
 	var total := 0.0
+	var needs_more := false
 	var distance := _flat(actor, target.global_position).length()
 	for option in def.attacks:
 		if _cooldowns.get(option, 0.0) > 0.0 or option.weight <= 0.0 or (option.needs_token and not token):
 			continue
 		if option.needs_token and not def.ignores_tokens and option.tokens != 1 and not _may_hold(actor, option):
+			needs_more = true
 			continue  # a big attack waits until the tokens it needs are free
 		if not on_menu(option, distance):
 			continue
@@ -459,6 +461,8 @@ func _choose(actor: Actor) -> void:
 		total += option.weight
 	if open.is_empty():
 		_give_back(actor)
+		if needs_more:
+			AttackTokens.reserve_for(actor, target)  # the others let the tokens run out for it (Task 14f)
 		return
 	var roll := rng.randf() * total
 	var chosen := open.back() as AttackOption
