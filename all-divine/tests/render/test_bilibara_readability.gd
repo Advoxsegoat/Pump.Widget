@@ -29,7 +29,7 @@ const POSITIONS := [
 	["street kerb", 0.0, 4.5], ["lane (earth)", 27.5, -30.0], ["alcove B (slate, pool)", 35.0, -34.0],
 	["Rack Walk", -10.0, -22.5], ["loop lane", -32.5, -12.0], ["yard (square centre)", 27.5, -65.0],
 	["yard under the north wall", 27.5, -73.0], ["yard by the kerb", 20.0, -56.5], ["lane's mouth", 27.5, -10.0],
-	["yard square's border", 27.5, -69.5], ["yard west margin", 17.5, -66.0],
+	["yard square's border", 27.5, -69.5], ["yard west margin", 19.5, -66.0],
 ]
 
 
