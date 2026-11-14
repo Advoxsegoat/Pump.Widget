@@ -42,7 +42,8 @@ signal music_cue(id: StringName)
 ## A line has come up in the dialogue box.
 signal line_shown(speaker: StringName, text: String)
 
-## Frames the wait for hit-stop, the slow-down and the floor may last, and for a pair to end.
+## Frames the wait for hit-stop, the slow-down and the floor may last, and for a pair to end (a pair that has not ended by then
+## gives the scene up: `refused`, `cast_busy:<actor>`; the end of a pair cannot be known in advance).
 const START_WAIT := 36
 const PAIR_WAIT := 90
 ## Frames the cast's clips fade back to locomotion before the last shot's end (the timeline's own number).
@@ -222,10 +223,10 @@ func _refusal(shots: SceneShots, rig: CameraRig) -> StringName:
 		return &"empty_scene"
 	if shots.kind == SceneShots.Kind.MOMENT:
 		return &"moment_not_built"  # a combat moment is Task 4's
-	if Game.state != Game.State.PLAY and not allow_any_state:
-		return &"not_playing"
 	if current() != null:
 		return &"already_playing"
+	if Game.state != Game.State.PLAY and not allow_any_state:
+		return &"not_playing"
 	for entry in shots.cast:
 		var reason := _cast_problem(entry, rig)
 		if reason == &"":
@@ -247,8 +248,6 @@ func _cast_problem(entry: CastEntry, rig: CameraRig) -> StringName:
 		return &"no_def"
 	if found.dead:
 		return &"cast_dead"
-	if found.paired_with != null and _pair_frames_left(found) > PAIR_WAIT:
-		return &"cast_busy"
 	return &""
 
 
@@ -268,15 +267,6 @@ func _find_live(entry: CastEntry, rig: CameraRig) -> Actor:
 		if entry.source == CastEntry.Source.LIVE_NAMED and actor.name == entry.node_name:
 			return actor
 	return null
-
-
-# Frames a pair has left, as far as the move in it says; 0 when that cannot be known (it is then waited for, and given up after
-# PAIR_WAIT).
-func _pair_frames_left(actor: Actor) -> int:
-	var runner := actor.runner
-	if runner.current == null or not actor.rig.tree.has_animation(runner.current.clip):
-		return 0
-	return maxi(ceili((actor.rig.tree.get_animation(runner.current.clip).length - runner.time) * 60.0), 0)
 
 
 # --- the cast, the marks and the timeline ---
@@ -412,7 +402,7 @@ func _wait() -> void:
 		if _waited < PAIR_WAIT:
 			_waited += 1
 		else:
-			_give_up(&"cast_busy")
+			_give_up(StringName("cast_busy:%s" % _paired_name()))
 	else:
 		_start_scene()
 		_play_frame()
@@ -432,6 +422,15 @@ func _settled() -> bool:
 		if not actor.runner.busy() and actor.locomotion.speed > 0.0:
 			return false
 	return true
+
+
+# The cast name of the first live actor that is in a pair.
+func _paired_name() -> StringName:
+	for name_in_cast: StringName in cast:
+		var actor := cast[name_in_cast] as Actor
+		if is_instance_valid(actor) and actor.paired_with != null:
+			return name_in_cast
+	return &""
 
 
 func _paired() -> bool:
@@ -561,8 +560,8 @@ func _play_frame() -> void:
 
 func _hold_the_world(now: int) -> void:
 	for actor in _outsiders():
-		if _settling.has(actor) and now < _settling[actor]:
-			continue
+		if (_settling.has(actor) and now < _settling[actor]) or actor.paired_with != null:
+			continue  # a foe settling after a stopped swing, and one still in a pair that began before the scene, finish first
 		actor.freeze(2)
 
 
