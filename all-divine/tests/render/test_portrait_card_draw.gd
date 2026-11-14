@@ -25,7 +25,7 @@ func after_each() -> void:
 
 
 # A ground with a fine checker (8 px cells), so that the picture has detail everywhere, and the overlay with a line up.
-func _scene(window: Vector2i, line := "Fixture line two.") -> void:
+func _scene(window: Vector2i, line := "Fixture line two.", speaker: Speaker = null) -> void:
 	get_window().size = window
 	await get_tree().process_frame
 	stage = track(STAGE_SCENE.instantiate()) as PixelStage
@@ -56,7 +56,7 @@ func _scene(window: Vector2i, line := "Fixture line two.") -> void:
 	overlay.auto = false
 	stage.hud.add_child(overlay)
 	overlay.letterbox = 1.0
-	overlay.show_line(Registry.fetch(&"speakers", &"abarax") as Speaker, line, &"neutral", 600)
+	overlay.show_line(speaker if speaker != null else Registry.fetch(&"speakers", &"abarax") as Speaker, line, &"neutral", 600)
 	overlay.advance(line.length() * 2 + 4)
 	await frames(6)
 
@@ -219,3 +219,58 @@ func test_the_card_has_an_edge_one_picture_pixel_wide() -> void:
 			assert_false(_is_line_colour(next), "x%d %s: the frame is one picture pixel wide, not more (from %s)" % [k, window, edge])
 		stage.queue_free()
 		await frames(2)
+
+
+# The owner's choice of line weight: the card in the box as drawn (the game's picture, `line_gain` 1.0) beside the same drawing
+# with the line's darkness to the power 0.7, at 640x360 and 1080p. The second picture is made by the tool into
+# out/story/line_gain_07/neutral.png (the recipe with "line_gain": 0.7); without it there is nothing to compare and the test
+# says so and stops. Saved to out/story/card_line_gain_compare.png.
+func _box_crop(window: Vector2i, texture: Texture2D) -> Image:
+	var speaker := Speaker.new()
+	speaker.id = &"abarax"
+	speaker.display_name = "Abarax"
+	speaker.portraits = {&"neutral": texture}
+	await _scene(window, "Fixture line two.", speaker)
+	var image := await _window()
+	var k := PixelStage.scale_for(window)
+	var layout := PixelStage.layout(window)
+	var part := Rect2i(layout.position + Vector2i(0, 186) * k, Vector2i(340, 174) * k)
+	var crop := image.get_region(part)
+	crop.convert(Image.FORMAT_RGB8)
+	stage.queue_free()
+	await frames(2)
+	return crop
+
+
+func _texture_from(file: String) -> ImageTexture:
+	var image := Image.load_from_file(file)
+	image.convert(Image.FORMAT_RGB8)
+	image.generate_mipmaps()
+	return ImageTexture.create_from_image(image)
+
+
+func test_line_gain_comparison_for_the_owner() -> void:
+	var path := ProjectSettings.globalize_path("res://").path_join(OUT).path_join("line_gain_07/neutral.png")
+	if not FileAccess.file_exists(path):
+		print("  (no %s: make it with the tool and a recipe whose line_gain is 0.7 to get the comparison picture)" % path)
+		return
+	# both pictures are read from their files and made into textures the same way (with mipmaps), so that they differ in the
+	# line's weight and in nothing else
+	var as_drawn := _texture_from(ProjectSettings.globalize_path("res://assets/portraits/abarax/neutral.png"))
+	var heavier := _texture_from(path)
+	var rows: Array[Image] = []
+	for window in [Vector2i(640, 360), Vector2i(1920, 1080)]:
+		var left := await _box_crop(window, as_drawn)
+		var right := await _box_crop(window, heavier)
+		var row := Image.create(left.get_width() * 2 + 12, left.get_height(), false, Image.FORMAT_RGB8)
+		row.fill(Color.WHITE)
+		row.blit_rect(left, Rect2i(Vector2i.ZERO, left.get_size()), Vector2i.ZERO)
+		row.blit_rect(right, Rect2i(Vector2i.ZERO, right.get_size()), Vector2i(left.get_width() + 12, 0))
+		rows.append(row)
+	var width := rows[1].get_width()
+	var sheet := Image.create(width, rows[0].get_height() + 12 + rows[1].get_height(), false, Image.FORMAT_RGB8)
+	sheet.fill(Color.WHITE)
+	sheet.blit_rect(rows[0], Rect2i(Vector2i.ZERO, rows[0].get_size()), Vector2i.ZERO)
+	sheet.blit_rect(rows[1], Rect2i(Vector2i.ZERO, rows[1].get_size()), Vector2i(0, rows[0].get_height() + 12))
+	var out := ProjectSettings.globalize_path("res://").path_join(OUT).path_join("card_line_gain_compare.png")
+	assert_eq(sheet.save_png(out), OK, "saved %s" % out)
