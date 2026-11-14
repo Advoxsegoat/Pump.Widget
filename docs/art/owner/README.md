@@ -7,6 +7,7 @@ files are sources, not game assets: the game's own copies live under `all-divine
 | File | What it is | Received |
 |---|---|---|
 | `abarax-portrait-sketch-2026-11-14.jpg` | Abarax, a bust in pencil, for his dialogue portrait and as the style for every character's portrait. | 14 Nov 2026 |
+| `abarax-portrait-sketch-2026-11-14.recipe.json` | Ours, not the owner's: the recipe `all-divine/tools/portraits/sketch_to_portrait.py` reads to make Abarax's portrait from the drawing (the crop, what to wipe or leave alone where a rule lay on a line, the soft tints). The drawing itself is never edited. | 14 Nov 2026 |
 
 ## Abarax, as drawn (what the portrait and, later, his model follow)
 

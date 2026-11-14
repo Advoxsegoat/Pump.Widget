@@ -65,8 +65,10 @@ jobs:
 
       - name: Python tools' tests
         run: |
+          python3 -m pip install --quiet pillow==12.3.0 numpy==2.5.3
           python3 -I -m unittest discover -s tools/assets/tests
           python3 -I -m unittest discover -s tools/audio/tests
+          python3 -I -m unittest discover -s tools/portraits/tests
 
   render:
     name: Tests (render, Compatibility, ${{ matrix.shard }} of 3)

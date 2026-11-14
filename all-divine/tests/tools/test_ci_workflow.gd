@@ -65,6 +65,22 @@ func test_the_render_job_runs_the_whole_suite_in_shards() -> void:
 	assert_true(job.has("      fail-fast: false"), "one shard failing does not stop the others")
 
 
+func test_the_python_tools_step_installs_the_pinned_libraries_and_runs_the_portrait_tests() -> void:
+	# The sketch tool needs Pillow and numpy, which the runner's own Python may not have: the step installs them at the
+	# versions the tool was made with, before it runs the tool's tests.
+	var steps := _steps(_block(_lines(), "  test:", 2))
+	var found := ""
+	for step in steps:
+		if step.contains("name: Python tools' tests"):
+			found = step
+	assert_false(found.is_empty(), "the headless job has a Python tools' step")
+	var install := found.find("python3 -m pip install --quiet pillow==12.3.0 numpy==2.5.3")
+	var portraits := found.find("python3 -I -m unittest discover -s tools/portraits/tests")
+	assert_true(install >= 0, "the step installs pillow==12.3.0 and numpy==2.5.3")
+	assert_true(portraits >= 0, "the step runs the portrait tests")
+	assert_true(install < portraits, "the libraries are installed before the portrait tests run")
+
+
 func _lines() -> PackedStringArray:
 	var path := ProjectSettings.globalize_path("res://").path_join(WORKFLOW).simplify_path()
 	assert_true(FileAccess.file_exists(path), "%s is there" % path)
