@@ -59,6 +59,7 @@ F0 (Foundation) is built: a lit courtyard to walk in, with Abarax moving, dash-s
 ### The Director
 
 - Director Task 1: the shot list as data and its checker. A scene is a `SceneShots` resource (`story/`): shots that follow one another from frame 0 (framing, a whole-number zoom, yaw, pitch, aim, glide), marks, a cast, actor beats (`move_to`, clips, looks), cues and dialogue lines, with five speakers and thirty portraits from the book's art (`data/speakers/`, `assets/portraits/`). `StoryWalk` says how long a walk takes from the game's own locomotion (from rest to rest at the mark), and a walk carries across a cut. The shot checker (`tools/godot.sh -s res://tools/story_check.gd [--final] [--scene=<id>] [-- <file.tres> …]`; exit 2 for a file it cannot use, 3 for an error of its own) refuses a scene whose shots leave a gap or overlap, whose glides are too short or long, whose walks cannot be made in their time, whose file the engine would load with pieces dropped, or whose marks a body cannot stand on or walk to from the place's spawn; it never says OK after an error of its own. The fixture scene `fixture_yard_entrance` is clean (`tools/test.sh`: 1416 passed, 0 failed; `story_check`: 1 scenes OK).
+- Director Task 2: the cutscene layer. `TimelineBuilder` turns a scene's shots into one timeline (shot, progress and letterbox tracks, and cue calls that fire on their own frames, several on one frame in data order; it refuses what the checker refuses; `tools/story/bake_timeline.gd` writes one out to edit by hand). The camera rig has a cine layer (`CinePose`: a whole-number zoom, yaw, pitch, aim and focus solved for each shot; a shot that leaves its pitch unset takes its framing's own: wide −40°, medium −30°, close and insert −25°, over-the-shoulder −20°; `CineCamera` glides in, hands the rig the pose each frame and gives everything back when it leaves the tree). `CineOverlay` draws the letterbox (44 rows top and bottom) and the dialogue box (a portrait, a name tab, text typed at 30 characters a second with a quiet voice blip, line breaks kept), the box sitting in the lower bar, and a shot that holds a line is framed in the free band above it for its whole length. With no scene playing the camera, the stage and the HUD are byte for byte what they were; a scene paused at any frame goes on from that frame, and one cut short at any frame leaves nothing behind. Nothing plays a scene in the game yet: that is Task 3 (`tools/test.sh`: 1570 passed, 0 failed).
 
 ### The Bilibara stretch
 
@@ -124,6 +125,12 @@ F1 Combat core (spec §9). Its plan is written, awaiting the owner's review: [`d
 8. Window: switch to a window at ×2 and ×3 and back to fullscreen on your real screen, and press F11 with the Size row selected (none of this could be tried on a real screen here).
 9. Quit and start again: is everything as you left it? Delete `settings.cfg` by hand and start: are the defaults back without a word?
 10. On and Off are both drawn in gold and are told apart by the word only: should Off be dim?
+
+## Owner checklist for the Director
+
+1. Look at the five framings with a line showing (`tools/test.sh --render --filter=test_cine_shots` writes `out/story/cine_*.png` at 640×360 and ×3): wide, medium, close, insert, over-the-shoulder, and the close shot from four sides. Does a close shot show enough of the person (the camera drops from the fight's −40° to −25°), and is the dialogue box in the lower bar the right place for it?
+2. At zoom 3 and 4 the ground's texels are big blocks beside the fighters' one-pixel outlines: acceptable in a close shot, or should close shots get a different ground treatment?
+3. The words are the HUD's soft anti-aliased font, typed at 30 characters a second with a blip on every second character (about 8 dB under a palm's impact): the right speed and sound?
 
 ## Known limits / notes for later
 
