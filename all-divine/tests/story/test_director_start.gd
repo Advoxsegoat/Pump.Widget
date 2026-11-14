@@ -189,12 +189,16 @@ func test_started_during_the_slow_down_waits_it_out_and_never_stutters() -> void
 	assert_true(foe != null, "the Knuckle is made")
 	if foe == null:
 		return
-	var before := [player.buffer_frame, foe.buffer_frame]
+	# A frame on which an actor acts is one on which its stamina's wait is a frame older (a held frame ages nothing; the actor's
+	# own acting clock, buffer_frame, stands still for the whole scene, so it cannot say).
+	player.stats.spend_stamina(1.0)
+	foe.stats.spend_stamina(1.0)
+	var before := [player.stats.save().stamina_idle, foe.stats.save().stamina_idle]
 	for i in 40:
 		await frames(1)
-		var now := [player.buffer_frame, foe.buffer_frame]
-		assert_eq(now[0] - before[0], 1, "Abarax acts on scene frame %d" % i)
-		assert_eq(now[1] - before[1], 1, "and so does the Knuckle (frame %d)" % i)
+		var now := [player.stats.save().stamina_idle, foe.stats.save().stamina_idle]
+		assert_near(now[0] - before[0], 1.0 / 60.0, 1e-5, "Abarax acts on scene frame %d" % i)
+		assert_near(now[1] - before[1], 1.0 / 60.0, 1e-5, "and so does the Knuckle (frame %d)" % i)
 		before = now
 
 

@@ -106,6 +106,7 @@ var _lead_out_at := 0  # the frame the hand-back and the glide home began on
 var _lead_out_length := 1
 var _weight_from := 1.0
 var _bars_from := 0.0
+var _fade_from := 0.0  # how much of the Hud the scene had taken when it handed back
 var _skipping := false
 var _frozen_world := {}  # name -> Vector3: where the targets were when the scene was skipped (the camera holds still)
 var _handed_back := false
@@ -239,6 +240,7 @@ func _tear_down(all_spawns: bool, now: bool) -> void:
 		if not _handed_back:
 			_give_back_control()
 		if is_instance_valid(_hud):
+			_hud.scene_fade = -1.0
 			_hud.suppressed = false
 		if is_instance_valid(_rig):
 			_rig.cine_weight = 0.0
@@ -531,6 +533,7 @@ func _start_scene() -> void:
 		holder.move_child(_overlay, menu.get_index())  # under the pause menu, never over it
 	_camera.overlay = _overlay
 	_hud.suppressed = true
+	_hud.scene_fade = 0.0  # the Hud goes with the bars: whole in the scene's first frame, gone as they are in
 	if Game.state == Game.State.PLAY:
 		Game.change(Game.State.CUTSCENE)
 		_owns_state = true
@@ -620,6 +623,7 @@ func _play_frame() -> void:
 		_lead_out_frame()
 		return
 	_rig.cine_weight = clampf(float(now) / float(maxi(scene.lead_in, 1)), 0.0, 1.0)
+	_hud.scene_fade = clampf(float(now) / float(TimelineBuilder.BARS_FRAMES), 0.0, 1.0)
 	_hold_the_world(now)
 	_steer_the_cast()
 	_drive_the_clips(now)
@@ -760,9 +764,10 @@ func _hand_back(glide_frames: int) -> void:
 		_weight_from = 1.0
 		_bars_from = _camera.letterbox
 	_clips.clear()
+	_fade_from = maxf(_hud.scene_fade, 0.0)
 	phase = Phase.LEAD_OUT
 	_give_back_control()
-	_hud.suppressed = false
+	_hud.suppressed = false  # the Hud is the fight's again; it comes back to full over the glide, as the bars go
 	_set_up_the_after()
 
 
@@ -802,6 +807,7 @@ func _lead_out_frame() -> void:
 		_raise_the_guards()
 	var t := clampf(float(n) / float(_lead_out_length), 0.0, 1.0)
 	_rig.cine_weight = _weight_from * (1.0 - t)
+	_hud.scene_fade = _fade_from * (1.0 - t)
 	if _bars_from > 0.0:
 		_camera.letterbox = _bars_from * (1.0 - t)  # the bars go out as the camera comes home, not on the timeline's own 30 frames
 	frame += 1
@@ -821,6 +827,7 @@ func _raise_the_guards() -> void:
 
 func _finish() -> void:
 	_rig.cine_weight = 0.0
+	_hud.scene_fade = -1.0
 	phase = Phase.DONE
 	for entry in scene.cast:
 		var actor := cast.get(entry.actor) as Actor

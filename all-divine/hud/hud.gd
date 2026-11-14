@@ -105,8 +105,19 @@ var stage: PixelStage
 var arena: Arena
 ## Whether the controls are shown now.
 var hints_visible := true
-## True while a scene plays: the HUD draws nothing (the Director's CineOverlay has the picture).
-var suppressed := false
+## True while a scene plays: the HUD draws nothing (the Director's CineOverlay has the picture), unless the scene is fading it
+## (scene_fade).
+var suppressed := false:
+	set(value):
+		suppressed = value
+		self_modulate.a = shown_alpha()
+## How much of the HUD a scene has taken while it fades it in and out with the bars: 0 whole, 1 gone; the Director moves it. Below 0
+## no scene is fading it: it is gone while `suppressed` and whole otherwise. While it is 0 or more, it alone says how opaque the
+## HUD is, `suppressed` or not (the scene holds the HUD from its first frame to the hand-back, and the fade out runs on after).
+var scene_fade := -1.0:
+	set(value):
+		scene_fade = value
+		self_modulate.a = shown_alpha()
 
 var _hint_left := HINT_SECONDS
 var _hints_pinned := false  # F1 was pressed: the timer no longer hides them
@@ -293,6 +304,13 @@ func picture_point(point: Vector3) -> Vector2:
 	return (p + Vector2(-PixelSnap.MARGIN - sub.x, -PixelSnap.MARGIN + sub.y)).round()
 
 
+## How opaque the HUD is drawn now, 0 to 1 (see scene_fade).
+func shown_alpha() -> float:
+	if scene_fade >= 0.0:
+		return clampf(1.0 - scene_fade, 0.0, 1.0)
+	return 0.0 if suppressed else 1.0
+
+
 ## The controls list, one line a row (see ControlsList).
 func controls_text() -> String:
 	return ControlsList.text()
@@ -301,7 +319,7 @@ func controls_text() -> String:
 # --- drawing ---
 
 func _draw() -> void:
-	if suppressed:
+	if shown_alpha() <= 0.0:
 		return
 	if player == null or player.stats == null:
 		return
