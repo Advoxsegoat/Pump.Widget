@@ -98,17 +98,12 @@ func _ready() -> void:
 	var arguments := parse_arguments(OS.get_cmdline_user_args())
 	var replaying: InputRecording = null
 	if not arguments["replay"].is_empty():
-		# A replay is the recording's settings (the replayer lends those) and the defaults for the rest, whatever the player chose: the
-		# player's file is neither read for it nor written, and the window is left as it is.
-		var defaults := {}
-		for key in Settings.keys():
-			if not key.begins_with("window/"):
-				defaults[key] = Settings.default_of(key)
-		_lent_settings = Settings.lend(defaults)
+		lend_replay_defaults()
 		var why := replay_refusal(arguments["replay"])
 		if not why.is_empty():
 			# no fight is begun, and none is played in its place
 			printerr("replay: " + why)
+			_give_back_settings()
 			get_tree().quit(EXIT_REFUSED)
 			return
 		replaying = _load_recording(arguments["replay"])
@@ -178,6 +173,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		if Game.state == Game.State.PLAY:
 			Game.change(Game.State.PAUSE)
 		get_viewport().set_input_as_handled()
+
+
+## A replay is the recording's settings (the replayer lends those) and the defaults for the rest, whatever the player chose: the
+## player's file is neither read for it nor written, and the window is left as it is. This lends the defaults; the replay's end gives
+## them back (_give_back_settings).
+func lend_replay_defaults() -> void:
+	var defaults := {}
+	for key in Settings.keys():
+		if not key.begins_with("window/"):
+			defaults[key] = Settings.default_of(key)
+	_lent_settings = Settings.lend(defaults)
 
 
 ## The paths --record= and --replay= give, in the user arguments (&"" for one not given): {record, replay}.
@@ -261,14 +267,28 @@ func _load_recording(path: String) -> InputRecording:
 	return rec
 
 
+# Puts the settings a replay lent back as the player had them (nothing was written meanwhile).
+func _give_back_settings() -> void:
+	if not _lent_settings.is_empty():
+		Settings.take_back(_lent_settings)
+		_lent_settings = {}
+
+
+# The game is quit in the middle of a replay: the player's own values are in force again from here, and are what the next start reads.
+func _exit_tree() -> void:
+	_give_back_settings()
+
+
 func _on_replay_finished(agreed: bool) -> void:
 	print(finished_line(arena().state_hash() if arena() != null else 0, agreed))
+	_give_back_settings()
 	if _quit_after_replay and DisplayServer.get_name() == "headless":
 		get_tree().quit()
 
 
 func _on_replay_diverged(at: int, recorded: int, got: int) -> void:
 	print(diverged_line(at, recorded, got))
+	_give_back_settings()
 	if _quit_after_replay:
 		get_tree().quit(EXIT_DIVERGED)
 

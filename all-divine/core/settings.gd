@@ -88,6 +88,10 @@ var _fraction := RegEx.create_from_string("^-?([0-9]+\\.[0-9]+|\\.[0-9]+|[0-9]+(
 var _keys: Array[String] = []
 var _spec: Dictionary[String, Spec] = {}
 var _values: Dictionary[String, Variant] = {}
+# How many lends are out (each that lent something), and every value as it was when the first went out: while any is out the
+# player's file is not written, and when the last is given back every value is what the player had.
+var _lent_count := 0
+var _kept: Dictionary[String, Variant] = {}
 
 
 func _init() -> void:
@@ -162,7 +166,8 @@ func set_value(key: String, value: Variant) -> bool:
 
 ## Lends the values in `values` (key -> value; keys that are not settings, and values that do not check, are left out) to the game
 ## without writing the player's file or telling anyone: for a replay, which runs the settings its recording was made with. Returns what
-## they were, for take_back.
+## they were, for take_back. While anything is lent nothing is written to the file, whatever is changed (the lent values are not the
+## player's, and a save would write them as if they were); a change made then lasts until the last lend is given back and is dropped.
 func lend(values: Dictionary) -> Dictionary:
 	var before := {}
 	for key: String in values:
@@ -171,15 +176,29 @@ func lend(values: Dictionary) -> Dictionary:
 		var checked: Variant = _checked(key, values[key], true)
 		if checked == null:
 			continue
+		if before.is_empty() and _lent_count == 0:
+			_kept = _values.duplicate()
 		before[key] = _values[key]
 		_values[key] = checked
 		_apply(key)
+	if not before.is_empty():
+		_lent_count += 1
 	return before
 
 
-## Gives back what lend returned.
+## Gives back what lend returned (nothing, for a lend that lent nothing). When the last lend is given back every setting is what the
+## player had, and the file is written again from then on.
 func take_back(before: Dictionary) -> void:
-	lend(before)
+	if before.is_empty() or _lent_count == 0:
+		return
+	for key: String in before:
+		_values[key] = before[key]
+		_apply(key)
+	_lent_count -= 1
+	if _lent_count == 0:
+		_values = _kept.duplicate()
+		_kept = {}
+		_apply_all()
 
 
 ## Every key back to its default, applied and saved, with `changed` for each that moved.
@@ -224,7 +243,7 @@ func load_file() -> bool:
 ## Writes every key to `path + ".tmp"` and renames that over `path`. Returns the error if either step fails; the old
 ## file is then whole. The self-test writes nothing, and a test run none of the player's file.
 func save_file() -> Error:
-	if SelfTest.active or not _may_use(path):
+	if SelfTest.active or _lent_count > 0 or not _may_use(path):
 		return OK
 	var config := ConfigFile.new()
 	config.set_value("meta", "version", VERSION)

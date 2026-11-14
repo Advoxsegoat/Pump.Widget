@@ -4,13 +4,51 @@ extends TestCase
 
 const MAIN := "res://main/main.tscn"
 const FILE := "user://main_recording.tres"
+const PLAYER_FILE := "user://main_replay_player_settings.cfg"
+
+var _was_path := ""
+var _was_player_path := ""
+var _was_scripted := false
+
+
+func before_each() -> void:
+	_was_path = Settings.path
+	_was_player_path = Settings.player_path
+	_was_scripted = Settings.scripted_run
 
 
 func after_each() -> void:
 	InputFeed.release()
+	Settings.scripted_run = _was_scripted
+	Settings.path = _was_path
+	Settings.player_path = _was_player_path
+	Settings.reset_all()  # the player's own file is out of reach here (a scripted run), so this writes nothing
+	for file in [PLAYER_FILE, PLAYER_FILE + ".tmp"]:
+		DirAccess.remove_absolute(file)
 	DirAccess.remove_absolute(FILE)
 	Game.reset()
 	await frames(1)
+
+
+# A scratch file standing in for the player's, as the game would use it (not a scripted run), holding master 40, shake 25 and the
+# slow-down off; returns its text.
+func _players_file() -> String:
+	Settings.path = PLAYER_FILE
+	Settings.player_path = PLAYER_FILE
+	Settings.scripted_run = false
+	Settings.set_value("sound/master", 40)
+	Settings.set_value("camera/shake", 25)
+	Settings.set_value("effects/slowdown_on", false)
+	return FileAccess.get_file_as_string(PLAYER_FILE)
+
+
+func _idle_recording(count: int) -> InputRecording:
+	var rec := InputRecording.new()
+	rec.region = "res://world/training_yard/training_yard.tscn"
+	for i in count:
+		rec.frames.append(InputRecording.idle())
+	rec.frame_count = count
+	return rec
 
 
 func _main() -> Main:
@@ -111,3 +149,55 @@ func test_main_given_a_file_it_cannot_use_says_so_and_quits_with_2_without_a_fig
 	DirAccess.remove_absolute("user://garbage_recording.tres")
 	assert_eq(code, 2, str(output))
 	assert_true(str(output[0]).contains("replay: "), "one line saying why: %s" % str(output))
+
+
+func test_a_replay_never_writes_the_players_settings_and_gives_them_back_at_its_end() -> void:
+	var players := _players_file()
+	var main := _main()
+	main.lend_replay_defaults()
+	main.start_replay(_idle_recording(12))
+	await frames(3)
+	assert_eq(Settings.get_value("sound/master"), 100, "the replay runs on the defaults")
+	Settings.note_window_mode(Window.MODE_WINDOWED)  # F11
+	Settings.set_value("sound/music", 50)  # a slider
+	Settings.set_value("camera/dips", false)  # a switch
+	await frames(20)
+	assert_false(main._replayer.playing(), "the replay is over")
+	assert_eq(FileAccess.get_file_as_string(PLAYER_FILE), players, "the player's file is as it was")
+	assert_eq(Settings.get_value("sound/master"), 40, "the player's values are in force again")
+	assert_eq(Settings.get_value("camera/shake"), 25)
+	assert_eq(Settings.get_value("effects/slowdown_on"), false)
+	assert_eq(Settings.get_value("sound/music"), 100, "a change made during the replay is dropped")
+	assert_eq(Settings.get_value("camera/dips"), true)
+	assert_eq(Settings.get_value("window/mode"), Settings.default_of("window/mode"))
+	Settings.set_value("sound/ui", 30)
+	assert_ne(FileAccess.get_file_as_string(PLAYER_FILE), players, "a change after it is written again")
+
+
+func test_a_replay_cut_short_leaves_the_file_alone_and_gives_the_settings_back() -> void:
+	var players := _players_file()
+	var main := _main()
+	main.lend_replay_defaults()
+	main.start_replay(_idle_recording(600))
+	await frames(5)
+	Settings.set_value("sound/music", 50)
+	assert_eq(Settings.get_value("sound/master"), 100, "lent")
+	main.free()  # the game quit in the middle of it
+	assert_eq(FileAccess.get_file_as_string(PLAYER_FILE), players, "the file is untouched")
+	assert_eq(Settings.get_value("sound/master"), 40, "the player's values are back")
+	assert_eq(Settings.get_value("effects/slowdown_on"), false)
+
+
+func test_a_replay_that_diverges_gives_the_settings_back() -> void:
+	var players := _players_file()
+	var main := _main()
+	main.lend_replay_defaults()
+	var rec := _idle_recording(600)
+	rec.hashes[3] = 12345  # not the fight's
+	var said := []
+	main.start_replay(rec)
+	main._replayer.diverged.connect(func(at: int, _recorded: int, _got: int) -> void: said.append(at))
+	await frames(10)
+	assert_eq(said, [3], "it diverged")
+	assert_eq(Settings.get_value("sound/master"), 40, "the player's values are back")
+	assert_eq(FileAccess.get_file_as_string(PLAYER_FILE), players, "the file is untouched")
