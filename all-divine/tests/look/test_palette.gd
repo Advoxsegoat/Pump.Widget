@@ -140,7 +140,7 @@ func test_rig_wears_one_shared_toon_material() -> void:
 	rig.apply_palette(p)
 	assert_eq(rig.palette, p)
 	var meshes := rig.get_node("Model").find_children("*", "MeshInstance3D", true, false)
-	assert_eq(meshes.size(), 9)
+	assert_eq(meshes.size(), 13)
 	var shared: Material = (meshes[0] as MeshInstance3D).material_override
 	assert_true(shared is ShaderMaterial, "a ShaderMaterial")
 	for mi: MeshInstance3D in meshes:
@@ -166,7 +166,7 @@ func test_rig_wears_one_shared_toon_material() -> void:
 func test_a_bodys_meshes_are_on_the_bodies_render_layer() -> void:
 	var rig := track(load(RIG).instantiate()) as Rig
 	var meshes := rig.get_node("Model").find_children("*", "MeshInstance3D", true, false)
-	assert_eq(meshes.size(), 9)
+	assert_eq(meshes.size(), 13)
 	for mi: MeshInstance3D in meshes:
 		assert_eq(mi.layers, Layers.RENDER_BODIES, "%s is drawn on `bodies` only" % mi.name)
 
