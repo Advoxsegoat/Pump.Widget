@@ -28,9 +28,10 @@ enum CamMove { STATIC, PAN, DOLLY, CRANE, ORBIT, HANDHELD }
 @export var yaw_deg := 0.0
 ## Where an ORBIT ends.
 @export var yaw_to_deg := 0.0
-@export var pitch_deg := -40.0
-## Where a CRANE ends.
-@export var pitch_to_deg := -40.0
+## 0: the framing's own pitch (wide -40, medium -30, close and insert -25, over-the-shoulder -20); otherwise -65 to -15.
+@export var pitch_deg := 0.0
+## Where a CRANE ends; 0 is no crane.
+@export var pitch_to_deg := 0.0
 ## HANDHELD: 0 to 1.
 @export_range(0.0, 1.0) var shake := 0.0
 ## OVER_SHOULDER: the actor in the foreground.

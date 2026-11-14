@@ -29,7 +29,7 @@ extends RefCounted
 ##   a sound cue is in the Registry kind `sounds`
 ##   the camera fields fit the move (STATIC none, PAN aim_to, DOLLY a zoom_to unlike its zoom, CRANE a pitch_to_deg
 ##       unlike its pitch, ORBIT a yaw_to_deg unlike its yaw, HANDHELD a shake) and the framing (OVER_SHOULDER names the
-##       foreground actor, no other does), zoom is 0 to 4 and pitch -15 to -65
+##       foreground actor, no other does), zoom is 0 to 4 and pitch 0 (the framing's own) or -15 to -65
 ##   a MINI is 180 to 360 frames in all, a MOMENT one shot of 90 frames at most with no letterbox and no beats, a
 ##       CUTSCENE 120 frames or more; the glides are 20 to 90 frames (15 to 90 for a MOMENT)
 ##   every `move_to` a mark, from a place that is known (a spawn mark, a rehearsal mark, the mark of the actor's last
@@ -50,7 +50,6 @@ const MIN_HOLD_EXTRA := 20
 const DEFAULT_HOLD_EXTRA := 45
 const MIN_PITCH := -65.0
 const MAX_PITCH := -15.0
-const DEFAULT_PITCH := -40.0
 const FRAMES_PER_SECOND := 60.0
 const MINI_FRAMES := Vector2i(180, 360)
 const MOMENT_MAX_FRAMES := 90
@@ -793,9 +792,10 @@ func _check_camera(shot: Shot) -> bool:
 		_add(where, "zoom %d is not 0 to 4" % shot.zoom)
 	if shot.zoom_to < 0 or shot.zoom_to > 4:
 		_add(where, "zoom_to %d is not 0 to 4" % shot.zoom_to)
-	if shot.pitch_deg < MIN_PITCH or shot.pitch_deg > MAX_PITCH:
+	var own_pitch: float = shot.pitch_deg if shot.pitch_deg != 0.0 else CinePose.FRAMING_PITCH[shot.framing]
+	if shot.pitch_deg != 0.0 and (shot.pitch_deg < MIN_PITCH or shot.pitch_deg > MAX_PITCH):
 		_add(where, "pitch %s is outside %d to %d degrees" % [String.num(shot.pitch_deg), int(MIN_PITCH), int(MAX_PITCH)])
-	var pitch_set := not is_equal_approx(shot.pitch_to_deg, shot.pitch_deg) and not is_equal_approx(shot.pitch_to_deg, DEFAULT_PITCH)
+	var pitch_set := shot.pitch_to_deg != 0.0 and not is_equal_approx(shot.pitch_to_deg, own_pitch)
 	if pitch_set and (shot.pitch_to_deg < MIN_PITCH or shot.pitch_to_deg > MAX_PITCH):
 		_add(where, "pitch_to %s is outside %d to %d degrees" % [String.num(shot.pitch_to_deg), int(MIN_PITCH), int(MAX_PITCH)])
 	var yaw_set := not is_zero_approx(shot.yaw_to_deg) and not is_equal_approx(shot.yaw_to_deg, shot.yaw_deg)
