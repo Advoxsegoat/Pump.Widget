@@ -6,7 +6,7 @@ extends Node3D
 ## The warning (`wave` false) is the ring as it stands: the reach of the blow to a body's centre (2.0 m: the hitbox is the
 ## body's own radius smaller), there from its first frame, growing stronger up to the blow and lit through its last live
 ## frame, so that a player standing outside it can see he is safe and one inside it can see how far he has to go. It goes
-## when the move is cut (bind_to_move). The tell's own wave (ActorFx, 1.8 m) is smaller than this blow and grows from nothing, so it cannot
+## when the move is cut, or its actor is freed (bind_to_move). The tell's own wave (ActorFx, 1.8 m) is smaller than this blow and grows from nothing, so it cannot
 ## say where this one lands. The wave (`wave` true) is a GroundWave of the same radius, going out at the blow.
 ##
 ## It lies on the ground, never over a body (the ring's shader is read against the depth buffer, as the waves' are).
@@ -82,11 +82,20 @@ func shown_colour() -> Color:
 	return _material.get_shader_parameter(&"ring_color") as Color if _material != null else Color.TRANSPARENT
 
 
-## Ties the warning to the move that shows it: when the move ends, cut off or not, the ring goes (ActorFx hands it the runner).
+## Ties the ring to the move that shows it (ActorFx hands it the runner): the warning goes when the move ends, cut off or not, and
+## either kind goes with its actor when that leaves the tree (an arena reset frees it with the move running, and no move_ended
+## comes), so no ring or wave is left round nothing.
 func bind_to_move(runner: MoveRunner) -> void:
 	if not wave and not runner.move_ended.is_connected(_on_move_ended):
 		runner.move_ended.connect(_on_move_ended)
+	var actor := runner.actor
+	if actor != null and not actor.tree_exiting.is_connected(_on_actor_leaving):
+		actor.tree_exiting.connect(_on_actor_leaving)
 
 
 func _on_move_ended(_move: MoveData, _cancelled: bool) -> void:
+	queue_free()
+
+
+func _on_actor_leaving() -> void:
 	queue_free()

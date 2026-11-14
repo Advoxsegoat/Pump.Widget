@@ -25,8 +25,11 @@ uniform vec4 rim_color : source_color = vec4(1.0);
 uniform float rim_strength : hint_range(0.0, 1.0) = 0.0;
 // In pixels of the viewport the world is drawn in (the 642x362 picture's: one of them is one picture pixel).
 uniform float rim_width = 1.5;
+// The body's own pass is drawn thicker by this much (toon_character.gdshader's inflate): the rim grows from that body.
+uniform float inflate = 0.0;
 
 void vertex() {
+	VERTEX += NORMAL * inflate;
 	vec4 clip = PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
 	// Which way the surface faces in the picture: its normal across the view, taken through the projection like the vertex
 	// itself (the projection turns the view's up into the picture's, which is not the same way up in every renderer and

@@ -243,12 +243,13 @@ static func _rig_scene(def_or_rig: Variant) -> PackedScene:
 
 
 # Dresses `rig` as the actor `def_or_rig` is in the game, when it is an actor's definition: without the parts it goes
-# without (hidden_parts), at its model_scale. A bare rig scene shows every part at the model's size.
+# without (hidden_parts), at its model_scale and body_inflate. A bare rig scene shows every part at the model's size.
 static func _dress(rig: Rig, def_or_rig: Variant) -> void:
 	if not def_or_rig is Object or not (def_or_rig as Object).get(&"hidden_parts") is PackedStringArray:
 		return
 	rig.hide_parts((def_or_rig as Object).get(&"hidden_parts"))
 	rig.set_model_scale(float((def_or_rig as Object).get(&"model_scale")))
+	rig.set_body_inflate(float((def_or_rig as Object).get(&"body_inflate")))
 
 
 # The palette of `def_or_rig` when it has one (an actor's definition), else null (a rig scene has none).

@@ -59,7 +59,7 @@ func test_each_mark_has_its_own_copy_of_the_two_shaders() -> void:
 	assert_eq(RimMarks.hull_shader(255).code, RimMarks.HULL_SHADER.code.replace("compare_not_equal, 1;", "compare_not_equal, 255;"))
 	# The copies compile (a headless run compiles shaders, as Forward+): their uniforms are the file's.
 	var names := hull.get_shader_uniform_list().map(func(u: Dictionary) -> String: return u["name"])
-	assert_eq(names, ["rim_color", "rim_strength", "rim_width"], "the hull takes a colour, a strength and a width, and no push")
+	assert_eq(names, ["rim_color", "rim_strength", "rim_width", "inflate"], "the hull takes a colour, a strength and a width, and how much thicker the body it grows from is drawn (Task 14e)")
 
 
 func test_a_shader_with_no_stencil_line_is_handed_back_as_it_is() -> void:

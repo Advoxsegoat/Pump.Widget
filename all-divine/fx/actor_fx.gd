@@ -286,6 +286,7 @@ func _show_wave(radius: float) -> void:
 	var wave := GroundWave.make(radius, tuning.wave_seconds, tuning.wave_color, tuning.wave_ring_width, tuning.wave_fill_alpha)
 	_actor.get_parent().add_child(wave)
 	wave.global_position = _actor.global_position + Vector3.UP * GroundWave.LIFT
+	_actor.tree_exiting.connect(wave.queue_free)  # it belongs to the body that threw it: an arena reset takes it too
 
 
 # Abarax's parry or catch has landed: the bright rim on him and a ring where the blows met.

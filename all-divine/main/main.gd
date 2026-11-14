@@ -405,6 +405,11 @@ func _enter_region() -> void:
 	player.rig.warm_rim()
 	Afterimage.warm(player.rig, Rig.WARM_FRAMES)
 	var fight := arena()
+	if fight != null:  # a thicker body the waves send has its own shaders: built now, not when he walks in
+		var defs: Array = []
+		for wave in fight.waves:
+			defs.append_array(wave.defs)
+		InflatedWarm.start(player.rig, defs)
 	hud.bind(player, camera_rig, stage, fight)
 	if fight != null:
 		fight.automatic = not SelfTest.active
