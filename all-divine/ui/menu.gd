@@ -23,7 +23,7 @@ const PITCH := 10
 const GAP := 4
 ## The lowest the panel may end. A page with more rows than fit above it scrolls (CAPACITY rows show).
 const BOTTOM := 190
-const CAPACITY := (BOTTOM - PANEL_Y - 2 * PADDING - PITCH - 2 * GAP - PITCH) / PITCH
+const CAPACITY := (BOTTOM - PANEL_Y - 2 * PADDING - PITCH - 2 * GAP - PITCH) / PITCH  # with a footer of one line
 ## Room kept at the right of a scrolling page for its arrows (5 px wide), and the space between a label and its value.
 const ARROW_ROOM := 8
 const VALUE_GAP := 8
@@ -72,6 +72,8 @@ var _top := 0  # the first row shown (a page with more rows than fit scrolls)
 var _width := PANEL_W  # the panel's width: what the page needs, fixed while it is open
 var _trail: Array[Dictionary] = []  # the pages opened from others: {from, index, to}
 var _since_sample := SAMPLE_GAP  # seconds since the last sample, on the menu's own clock
+var _controls: ControlsPage = null  # the Controls page's capture and hand-following, while that page is shown
+var _footer_lines := 1  # the lines the page reserves for its footer
 
 
 func _init() -> void:
@@ -86,6 +88,7 @@ func _init() -> void:
 
 func _ready() -> void:
 	Game.state_changed.connect(_on_state_changed)
+	Input.joy_connection_changed.connect(_on_joy_connection_changed)
 	if Game.state == Game.State.PAUSE:
 		open()
 
@@ -94,10 +97,13 @@ func _process(delta: float) -> void:
 	_since_sample += delta
 	if not is_open:
 		return
+	if _controls != null:
+		_controls.tick(delta)
 	refresh()
-	var cmd := nav.tick(delta)
+	# A held direction does not repeat under a capture: nothing else in the menu moves while one waits.
+	var cmd := MenuNav.Cmd.NONE if capturing() else nav.tick(delta)
 	if cmd != MenuNav.Cmd.NONE:
-		press(cmd)
+		press(cmd, true)
 	# A pad picked up or put down changes the footer; values change under their rows: draw what is there now.
 	queue_redraw()
 
@@ -134,6 +140,8 @@ func pop_page() -> void:
 ## Asks every row whether it is enabled now, and moves the selection off a row that has gone dim (so a chevron is always shown). Called
 ## each frame, and by press and show_page.
 func refresh() -> void:
+	if _controls != null:
+		_heading = _controls.heading()
 	for row in _rows:
 		if row.enabled_when.is_valid():
 			row.enabled = row.enabled_when.call()
@@ -163,6 +171,10 @@ func play_sample(cue: StringName, bus: StringName, key: String) -> void:
 func close() -> void:
 	is_open = false
 	visible = false
+	if _controls != null:
+		_controls.cancel()
+		_controls = null
+	sample_player.stop()  # a sample started a moment ago must not play on into the fight
 
 
 ## Shows the page `id` (built by MenuPages unless `built` is given), with its starting row selected.
@@ -172,6 +184,8 @@ func show_page(id: StringName, built: MenuPage = null) -> void:
 	page = id
 	_heading = built.heading
 	_rows = built.rows
+	_controls = built.controls
+	_footer_lines = ControlsPage.FOOTER_LINES if _controls != null else 1
 	_back = built.back
 	index = clampi(built.start, 0, maxi(_rows.size() - 1, 0))
 	for row in _rows:
@@ -190,6 +204,14 @@ func show_page(id: StringName, built: MenuPage = null) -> void:
 func handle(event: InputEvent) -> bool:
 	if not is_open:
 		return false
+	if _controls != null:
+		_controls.sync()
+		if _controls.capturing():
+			_controls.capture(event)
+			refresh()
+			queue_redraw()
+			return true
+		refresh()
 	var cmd := nav.command(event)
 	if cmd != MenuNav.Cmd.NONE:
 		press(cmd)
@@ -197,8 +219,11 @@ func handle(event: InputEvent) -> bool:
 
 
 ## Does what the command `cmd` means on the page shown: moves the selection (it wraps, and skips text), adjusts or chooses
-## the selected row, or goes back.
-func press(cmd: MenuNav.Cmd) -> void:
+## the selected row, or goes back. A `repeat` is a held direction coming round again: it moves the selection and steps a slider,
+## but never flips a switch, a choice (the window's Mode and Size act at once) or anything else that a fresh press means.
+func press(cmd: MenuNav.Cmd, repeat := false) -> void:
+	if capturing():
+		return
 	var row := _selected()
 	match cmd:
 		MenuNav.Cmd.UP:
@@ -206,7 +231,7 @@ func press(cmd: MenuNav.Cmd) -> void:
 		MenuNav.Cmd.DOWN:
 			_move(1)
 		MenuNav.Cmd.LEFT, MenuNav.Cmd.RIGHT:
-			if row != null and row.enabled and row.on_step.is_valid():
+			if row != null and row.enabled and row.on_step.is_valid() and (not repeat or row.kind == MenuRow.Kind.SLIDER):
 				row.on_step.call(-1 if cmd == MenuNav.Cmd.LEFT else 1)
 		MenuNav.Cmd.CHOOSE:
 			if row != null and row.enabled and row.on_choose.is_valid():
@@ -218,6 +243,11 @@ func press(cmd: MenuNav.Cmd) -> void:
 	queue_redraw()
 
 
+## Whether a binding is waiting for its new button (the Controls page): nothing else in the menu moves meanwhile.
+func capturing() -> bool:
+	return _controls != null and _controls.capturing()
+
+
 ## The heading of the page shown.
 func heading() -> String:
 	return _heading
@@ -225,13 +255,15 @@ func heading() -> String:
 
 ## The footer line: the keys for the keyboard, or the buttons when a pad is in hand (and connected).
 func footer() -> String:
+	if _controls != null:
+		return _controls.footer()
 	var pad: bool = Inputs.last_device() == Inputs.Device.GAMEPAD and pad_present.call()
 	return FOOTER_PAD if pad else FOOTER_KEYBOARD
 
 
 ## The panel, in picture pixels.
 func panel() -> Rect2i:
-	var lines := PADDING + PITCH + GAP + PITCH * mini(_rows.size(), CAPACITY) + GAP + PITCH + PADDING
+	var lines := PADDING + PITCH + GAP + PITCH * mini(_rows.size(), _capacity()) + GAP + PITCH * _footer_lines + PADDING
 	return Rect2i(PANEL_X, PANEL_Y, _width, lines)
 
 
@@ -246,7 +278,7 @@ func layout() -> Dictionary:
 	var rise := roundi(font.get_ascent(FONT_SIZE)) + maxi(0, (PITCH - roundi(font.get_height(FONT_SIZE))) / 2)
 	var rows_top := top + PITCH + GAP
 	var shown: Array[Dictionary] = []
-	var last := mini(_top + CAPACITY, _rows.size())
+	var last := mini(_top + _capacity(), _rows.size())
 	for i in range(_top, last):
 		var row := _rows[i]
 		var line := rows_top + PITCH * (i - _top)
@@ -264,6 +296,8 @@ func layout() -> Dictionary:
 			fill = row.fill(),
 			enabled = row.enabled,
 			selected = i == index and row.selectable(),
+			colour = _colour_of(row, i == index and row.selectable()),
+			value_colour = _value_colour_of(row, i == index and row.selectable()),
 			rect = Rect2i(left, line, width, PITCH),
 			text_at = Vector2i(left + INDENT, line + rise),
 			value_at = Vector2i(left + width - wide, line + rise),
@@ -274,18 +308,39 @@ func layout() -> Dictionary:
 		panel = area,
 		heading_at = Vector2i(left, top + rise),
 		footer_at = Vector2i(left, rows_top + PITCH * (last - _top) + GAP + rise),
+		footer_rows = _footer_rows(width - (ARROW_ROOM if _rows.size() > _capacity() else 0)),
 		rows = shown,
 		arrow_up = Rect2i(arrow_x, top + 3, 5, 3) if _top > 0 else Rect2i(),
 		arrow_down = Rect2i(arrow_x, area.end.y - PADDING - 7, 5, 3) if last < _rows.size() else Rect2i(),
 	}
 
 
-## What is drawn for each row of the page shown, as {index (in the page), label, value, kind, enabled, selected, rect, text_at, value_at, chevron, bar, fill}: the
+## What is drawn for each row of the page shown, as {index (in the page), label, value, kind, enabled, selected, colour (the label's), value_colour, rect, text_at, value_at, chevron, bar, fill}: the
 ## rect is the row's line, text_at where its label starts, value_at its right-hand text, chevron the cells' box.
 func rows() -> Array[Dictionary]:
 	var shown: Array[Dictionary] = []
 	shown.assign(layout().rows)
 	return shown
+
+
+# The colour a row's label is drawn in: rose when selected, warm white when live, and the dim note colour for a row switched off and
+# for a line of words (which is not a row, and must not read as one).
+func _colour_of(row: MenuRow, selected: bool) -> Color:
+	if selected:
+		return Hud.ROSE
+	if row.kind == MenuRow.Kind.TEXT or not row.enabled:
+		return Color(Hud.POSTURE, DIM_ALPHA)
+	return Hud.WHITE
+
+
+# The colour of a row's right-hand text: the label's when selected or switched off, dim for "Not bound" (the absence of a key, not a
+# key's name), else gold.
+func _value_colour_of(row: MenuRow, selected: bool) -> Color:
+	if selected or not row.enabled:
+		return _colour_of(row, selected)
+	if row.kind == MenuRow.Kind.BINDING and row.value() == ControlsList.NOT_BOUND:
+		return Color(Hud.POSTURE, DIM_ALPHA)
+	return Hud.GOLD
 
 
 func _selected() -> MenuRow:
@@ -303,7 +358,10 @@ func _fit_width() -> int:
 			wide += VALUE_GAP + room
 		widest = maxi(widest, wide)
 	widest = maxi(widest, maxi(_text_width(FOOTER_KEYBOARD), _text_width(FOOTER_PAD)))
-	if _rows.size() > CAPACITY:
+	if _controls != null:
+		for text in _controls.widest_texts():
+			widest = maxi(widest, _text_width(text))
+	if _rows.size() > _capacity():
 		widest += ARROW_ROOM
 	return mini(widest + 2 * PADDING, PANEL_W)
 
@@ -314,6 +372,8 @@ func _value_room(row: MenuRow) -> int:
 	var texts: Array = [row.value()]
 	if row.all_values.is_valid():
 		texts.append_array(row.all_values.call())
+	if row.value_width > 0:
+		return row.value_width
 	var room := 0
 	for text: String in texts:
 		room = maxi(room, _text_width(text))
@@ -323,16 +383,71 @@ func _value_room(row: MenuRow) -> int:
 
 
 func _text_width(text: String) -> int:
+	return measure(text)
+
+
+# How many rows show at once: fewer when the page reserves more than one line for its footer.
+func _capacity() -> int:
+	return CAPACITY - (_footer_lines - 1)
+
+
+# The footer as lines that fit `width`, at most the page's reserved lines (the last is cut if the text is longer still).
+func _footer_rows(width: int) -> Array[String]:
+	var lines := wrap_lines(footer(), width)
+	var out: Array[String] = []
+	out.assign(lines.slice(0, _footer_lines))
+	if lines.size() > _footer_lines:
+		out[out.size() - 1] = cut(out.back() + " " + " ".join(lines.slice(_footer_lines)), width)
+	return out
+
+
+## The width of `text` in the menu's font, in picture pixels.
+static func measure(text: String) -> int:
 	return ceili(ThemeDB.fallback_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x)
+
+
+## `text`, or its start and an ellipsis when it is wider than `width`.
+static func cut(text: String, width: int) -> String:
+	if measure(text) <= width:
+		return text
+	var start := text
+	while not start.is_empty() and measure(start + "…") > width:
+		start = start.left(-1)
+	return start.strip_edges(false, true) + "…"
+
+
+## `text` as lines no wider than `width`, broken at spaces (one line when it fits; a word wider than a line stands alone).
+static func wrap_lines(text: String, width: int) -> Array[String]:
+	var lines: Array[String] = []
+	if measure(text) <= width:
+		lines.append(text)
+		return lines
+	var line := ""
+	for word in text.split(" ", false):
+		var tried := word if line.is_empty() else line + " " + word
+		if line.is_empty() or measure(tried) <= width:
+			line = tried
+		else:
+			lines.append(line)
+			line = word
+	lines.append(line)
+	return lines
+
+
+func _on_joy_connection_changed(_device: int, _connected: bool) -> void:
+	if _controls != null and is_open:
+		_controls.joy_changed()
+		refresh()
+		queue_redraw()
 
 
 # The window of rows follows the selection: it moves one row when the selection passes its edge.
 func _scroll_to_selection() -> void:
 	if index < _top:
 		_top = index
-	elif index >= _top + CAPACITY:
-		_top = index - CAPACITY + 1
-	_top = clampi(_top, 0, maxi(_rows.size() - CAPACITY, 0))
+	elif index >= _top + _capacity():
+		_top = index - _capacity() + 1
+	_top = clampi(_top, 0, maxi(_rows.size() - _capacity(), 0))
 
 
 # The selection moves `step` (-1 or 1) rows, wrapping and skipping rows that are only text.
@@ -370,22 +485,18 @@ func _draw() -> void:
 		draw_rect(Rect2(edge), Hud.GOLD)
 	draw_string(font, Vector2(map.heading_at), _heading, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, Hud.GOLD)
 	for shown: Dictionary in map.rows:
-		var colour := Hud.WHITE
-		if _rows[shown.index].kind == MenuRow.Kind.TEXT:
-			colour = Hud.POSTURE
-		elif not shown.enabled:
-			colour = Color(Hud.POSTURE, DIM_ALPHA)
-		if shown.selected:
-			colour = Hud.ROSE
+		var colour: Color = shown.colour
 		draw_string(font, Vector2(shown.text_at), shown.label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, colour)
 		if not (shown.value as String).is_empty():
-			var value_colour := colour if shown.selected or not shown.enabled else Hud.GOLD
+			var value_colour: Color = shown.value_colour
 			draw_string(font, Vector2(shown.value_at), shown.value, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, value_colour)
 		if (shown.bar as Rect2i).size != Vector2i.ZERO:
 			_draw_bar(shown.bar, shown.fill, shown.enabled)
 		if shown.selected:
 			_draw_chevron((shown.chevron as Rect2i).position)
-	draw_string(font, Vector2(map.footer_at), footer(), HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, Hud.POSTURE)
+	for i in (map.footer_rows as Array).size():
+		draw_string(font, Vector2(map.footer_at) + Vector2(0, PITCH * i), map.footer_rows[i], HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE,
+				Hud.GOLD if _controls != null and _controls.alert() else Hud.POSTURE)
 	_draw_arrow((map.arrow_up as Rect2i).position, ARROW_UP_CELLS, map.arrow_up.size != Vector2i.ZERO)
 	_draw_arrow((map.arrow_down as Rect2i).position, ARROW_DOWN_CELLS, map.arrow_down.size != Vector2i.ZERO)
 

@@ -129,3 +129,48 @@ func test_a_scrolled_page_is_shot_with_its_arrows() -> void:
 		assert_true(arrow.size != Vector2i.ZERO, "both arrows show (rows hidden above and below)")
 		var c := picture.get_pixelv(arrow.position + Vector2i(2, 0) if arrow == layout.arrow_down else arrow.position + Vector2i(2, 2))
 		assert_true(absf(c.r - Hud.GOLD.r) < 0.03 and absf(c.g - Hud.GOLD.g) < 0.03 and c.a > 0.8, "the arrow is gold at its tip row: %s" % c.to_html(false))
+
+
+# The Controls page for each device, as it opens, mid-capture (Palm waiting) and scrolled to its last row: out/menu/controls_<device>_<state>_640.png
+# and _1080.png. The panel stays inside its limits, and its size does not change between the three.
+func test_the_controls_page_is_shot_for_each_device_mid_capture_and_scrolled() -> void:
+	Game.reset()
+	Arena.reset_spawn_counts()
+	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
+	await frames(90)
+	Game.change(Game.State.PAUSE)
+	main.menu.pad_present = func() -> bool: return Inputs.last_device() == Inputs.Device.GAMEPAD
+	var path_was := Inputs.bindings_path
+	Inputs.bindings_path = "user://menu_shots_input.cfg"
+	for pad in [false, true]:
+		Inputs._device = Inputs.Device.GAMEPAD if pad else Inputs.Device.KEYBOARD_MOUSE
+		var name := "controls_pad" if pad else "controls_keyboard"
+		main.menu.show_page(MenuPages.CONTROLS)
+		var size := main.menu.panel().size
+		await _settle()
+		_save(main.stage.hud.get_texture().get_image(), "%s_normal_640.png" % name)
+		_save(get_viewport().get_texture().get_image(), "%s_normal_1080.png" % name)
+		for i in 4:  # Palm is the fifth row
+			main.menu.press(MenuNav.Cmd.DOWN)
+		main.menu.press(MenuNav.Cmd.CHOOSE)
+		assert_true(main.menu.capturing(), "%s: waiting for Palm" % name)
+		await _settle()
+		_save(main.stage.hud.get_texture().get_image(), "%s_capture_640.png" % name)
+		_save(get_viewport().get_texture().get_image(), "%s_capture_1080.png" % name)
+		assert_eq(main.menu.panel().size, size, "%s: the panel does not change in a capture" % name)
+		assert_true(main.menu.panel().end.y <= 190)
+		var escape := InputEventKey.new()
+		escape.keycode = KEY_ESCAPE
+		escape.physical_keycode = KEY_ESCAPE
+		escape.pressed = true
+		main.menu.handle(escape)
+		assert_false(main.menu.capturing())
+		main.menu.show_page(MenuPages.CONTROLS)
+		main.menu.press(MenuNav.Cmd.UP)  # from the first row to the last (Back): the list is scrolled to its end
+		await _settle()
+		_save(main.stage.hud.get_texture().get_image(), "%s_scrolled_640.png" % name)
+		_save(get_viewport().get_texture().get_image(), "%s_scrolled_1080.png" % name)
+		assert_eq(main.menu.panel().size, size)
+	Inputs.bindings_path = path_was
+	Inputs._device = Inputs.Device.KEYBOARD_MOUSE
+	Bindings.apply(Bindings.defaults())
