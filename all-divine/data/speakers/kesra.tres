@@ -1,23 +1,11 @@
-[gd_resource type="Resource" script_class="Speaker" load_steps=8 format=3]
+[gd_resource type="Resource" script_class="Speaker" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://story/speaker.gd" id="1_speaker"]
-[ext_resource type="Texture2D" uid="uid://d2soqjsonmgta" path="res://assets/portraits/kesra/neutral.png" id="2_neutral"]
-[ext_resource type="Texture2D" uid="uid://bkochx0wafgyq" path="res://assets/portraits/kesra/smile.png" id="3_smile"]
-[ext_resource type="Texture2D" uid="uid://di4jaep7qo26s" path="res://assets/portraits/kesra/serious.png" id="4_serious"]
-[ext_resource type="Texture2D" uid="uid://pt0ghvp4brcn" path="res://assets/portraits/kesra/angry.png" id="5_angry"]
-[ext_resource type="Texture2D" uid="uid://dklpw6vlheqa0" path="res://assets/portraits/kesra/sad.png" id="6_sad"]
-[ext_resource type="Texture2D" uid="uid://bmrrhp2u6l0pn" path="res://assets/portraits/kesra/surprise.png" id="7_surprise"]
 
 [resource]
 script = ExtResource("1_speaker")
 id = &"kesra"
 display_name = "Kesra"
-portraits = {
-&"neutral": ExtResource("2_neutral"),
-&"smile": ExtResource("3_smile"),
-&"serious": ExtResource("4_serious"),
-&"angry": ExtResource("5_angry"),
-&"sad": ExtResource("6_sad"),
-&"surprise": ExtResource("7_surprise")
-}
+portraits = {}
+placeholder_exprs = Array[StringName]([&"neutral", &"smile", &"serious", &"angry", &"sad", &"surprise"])
 blip_pitch = 0.85

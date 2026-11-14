@@ -14,8 +14,24 @@ func after_each() -> void:
 
 # --- helpers ---
 
+# The fixture with Knuckle's line said by Abarax: the fixture's own speaker has no drawing yet, and the stand-in that lists is the
+# portrait tests' business (tests/hud/test_portrait_card.gd), not this file's.
 func _fixture() -> SceneShots:
-	return (load(FOLDER + "/shots.tres") as SceneShots).duplicate_deep()
+	var scene := (load(FOLDER + "/shots.tres") as SceneShots).duplicate_deep()
+	for shot in scene.shots:
+		for line in shot.lines:
+			if line.speaker == &"fixture_knuckle":
+				line.speaker = &"abarax"
+	return scene
+
+
+# `lines` without the stand-in lines (the fixture's own speaker has no drawing yet; the portrait tests own that rule).
+func _without_stand_ins(lines: PackedStringArray) -> PackedStringArray:
+	var kept := PackedStringArray()
+	for line in lines:
+		if not line.contains("is a stand-in"):
+			kept.append(line)
+	return kept
 
 
 func _check(scene: SceneShots, folder := "") -> PackedStringArray:
@@ -140,14 +156,14 @@ func test_a_line_that_cannot_finish_or_overlaps_another_or_is_too_long() -> void
 	scene.shots[2].lines[0].at = 10
 	_only(_check(scene), "S3", "cannot finish")
 	scene = _fixture()
-	scene.shots[2].lines.append(_line(&"fixture_knuckle", "Fixture line one.", 5, 54))
+	scene.shots[2].lines.append(_line(&"abarax", "Fixture line one.", 5, 54))
 	_only(_check(scene), "S3", "overlaps the line at frame 0")
 	# 161 characters in a shot long enough to type them
 	scene = _fixture()
 	scene.kind = SceneShots.Kind.CUTSCENE
 	scene.shots[2].length = 400
 	_shift(scene, 3, 340)
-	scene.shots[2].lines[0] = _line(&"fixture_knuckle", "x".repeat(161), 0, 360)
+	scene.shots[2].lines[0] = _line(&"abarax", "x".repeat(161), 0, 360)
 	_only(_check(scene), "S3", "161 characters, at most 160")
 
 
@@ -387,6 +403,6 @@ func _write(path: String, text: String) -> void:
 
 
 func test_check_all_walks_the_scene_folders() -> void:
-	assert_eq(ShotChecker.new().check_all(), PackedStringArray())
+	assert_eq(_without_stand_ins(ShotChecker.new().check_all()), PackedStringArray())
 	var lines := ShotChecker.new().check_all("user://no_such_scenes")
 	assert_eq(lines.size(), 0, "a root with no scenes has nothing to report")

@@ -9,8 +9,15 @@ const FOLDER := "res://scenes/story/fixture_yard_entrance"
 const EXEMPT: PackedStringArray = ["_enter", "_leave", "_init", "_initialize"]
 
 
+# The fixture with Knuckle's line said by Abarax: the fixture's own speaker has no drawing yet, and the stand-in that lists is the
+# portrait tests' business (tests/hud/test_portrait_card.gd), not this file's.
 func _fixture() -> SceneShots:
-	return (load(FOLDER + "/shots.tres") as SceneShots).duplicate_deep()
+	var scene := (load(FOLDER + "/shots.tres") as SceneShots).duplicate_deep()
+	for shot in scene.shots:
+		for line in shot.lines:
+			if line.speaker == &"fixture_knuckle":
+				line.speaker = &"abarax"
+	return scene
 
 
 # The functions of the source: {name, header line, body lines (with their numbers)}; static ones are pure sums and out.
@@ -203,4 +210,9 @@ func test_the_job_never_trusts_an_entry_point_that_did_not_finish() -> void:
 	assert_true("\n".join(lines).contains("the checker stopped before it finished"), "file: " + "\n".join(lines))
 	lines = quietly(func() -> PackedStringArray: return job.place_lines(ErrorInCheckPlace.new(), _fixture(), null, null))
 	assert_true("\n".join(lines).contains("the checker stopped before it finished"), "place: " + "\n".join(lines))
-	assert_eq(job.folder_lines(ShotChecker.new(), FOLDER), PackedStringArray(), "a checker that finishes is trusted")
+	var trusted := job.folder_lines(ShotChecker.new(), FOLDER)
+	var problems := PackedStringArray()
+	for line in trusted:
+		if not line.contains("is a stand-in"):  # the fixture's own speaker has no drawing yet: listed, not a problem
+			problems.append(line)
+	assert_eq(problems, PackedStringArray(), "a checker that finishes is trusted")

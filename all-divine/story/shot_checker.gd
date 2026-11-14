@@ -24,8 +24,10 @@ extends RefCounted
 ##       of a paired move, is a target only in a MOMENT; a beat does something; an actor has one clip a frame
 ##   a clip is a clip of the actor's rig (a LIVE_PLAYER's def is abarax); one that is not is an error, or, when the beat
 ##       says `placeholder`, a line that begins PLACEHOLDER (listed, not an error in a draft)
-##   a line has text of at most 160 characters and 3 lines in a speaker's portrait, holds at least its typing time plus
-##       20 frames and fits in its shot, and lines of one shot do not overlap
+##   a line has a speaker, and a portrait of its expression: one that is in the speaker's `placeholder_exprs` is a stand-in,
+##       listed as `placeholder: line <n> of <shot>: <speaker>'s portrait '<expr>' is a stand-in` (a placeholder, like a clip
+##       not made); one the speaker has no word of is an error. It has text of at most 160 characters and 3 lines, holds at
+##       least its typing time plus 20 frames and fits in its shot, and lines of one shot do not overlap
 ##   a sound cue is in the Registry kind `sounds`
 ##   the camera fields fit the move (STATIC none, PAN aim_to, DOLLY a zoom_to unlike its zoom, CRANE a pitch_to_deg
 ##       unlike its pitch, ORBIT a yaw_to_deg unlike its yaw, HANDHELD a shake) and the framing (OVER_SHOULDER names the
@@ -868,8 +870,13 @@ func _check_line(shot: Shot, line: DialogueLine) -> bool:
 		_add(where, "speaker '%s' is not in the Registry" % line.speaker)
 	else:
 		speaker = Registry.fetch(&"speakers", line.speaker) as Speaker
-	if speaker != null and not speaker.portraits.has(line.expr):
-		_add(where, "speaker '%s' has no '%s' portrait" % [line.speaker, line.expr])
+	if speaker != null:
+		if speaker.placeholder_exprs.has(line.expr):
+			# a stand-in (or none yet: the blank card) is listed, and refused in an approved scene and by --final
+			_placeholders += 1
+			_add(where, "%sline %d of %s: %s's portrait '%s' is a stand-in" % [PLACEHOLDER, shot.lines.find(line) + 1, where, line.speaker, line.expr])
+		elif not speaker.portraits.has(line.expr):
+			_add(where, "speaker '%s' has no '%s' portrait" % [line.speaker, line.expr])
 	if line.text.strip_edges() == "":
 		_add(where, "the line at frame %d has no text" % line.at)
 		return _leave(&"_check_line", true)

@@ -1,12 +1,7 @@
-[gd_resource type="Resource" script_class="Speaker" load_steps=8 format=3]
+[gd_resource type="Resource" script_class="Speaker" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://story/speaker.gd" id="1_speaker"]
 [ext_resource type="Texture2D" uid="uid://c7hbv5bxt6t7k" path="res://assets/portraits/abarax/neutral.png" id="2_neutral"]
-[ext_resource type="Texture2D" uid="uid://dfxd0d38ewit0" path="res://assets/portraits/abarax/smile.png" id="3_smile"]
-[ext_resource type="Texture2D" uid="uid://dqxulmdns515i" path="res://assets/portraits/abarax/serious.png" id="4_serious"]
-[ext_resource type="Texture2D" uid="uid://pdedwb8toaji" path="res://assets/portraits/abarax/angry.png" id="5_angry"]
-[ext_resource type="Texture2D" uid="uid://cjkg3t0ka8toy" path="res://assets/portraits/abarax/sad.png" id="6_sad"]
-[ext_resource type="Texture2D" uid="uid://f4bxw1w0wwmd" path="res://assets/portraits/abarax/surprise.png" id="7_surprise"]
 
 [resource]
 script = ExtResource("1_speaker")
@@ -14,10 +9,11 @@ id = &"abarax"
 display_name = "Abarax"
 portraits = {
 &"neutral": ExtResource("2_neutral"),
-&"smile": ExtResource("3_smile"),
-&"serious": ExtResource("4_serious"),
-&"angry": ExtResource("5_angry"),
-&"sad": ExtResource("6_sad"),
-&"surprise": ExtResource("7_surprise")
+&"smile": ExtResource("2_neutral"),
+&"serious": ExtResource("2_neutral"),
+&"angry": ExtResource("2_neutral"),
+&"sad": ExtResource("2_neutral"),
+&"surprise": ExtResource("2_neutral")
 }
+placeholder_exprs = Array[StringName]([&"smile", &"serious", &"angry", &"sad", &"surprise"])
 blip_pitch = 1.0

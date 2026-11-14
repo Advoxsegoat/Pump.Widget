@@ -265,8 +265,13 @@ func test_the_builder_refuses_what_the_checker_refuses() -> void:
 	for name in cases:
 		var built: Variant = quietly(func() -> Variant: return TimelineBuilder.build(cases[name]))
 		assert_true(built == null, "%s: not built" % name)
-		var lines := ShotChecker.new().check(cases[name])
-		assert_true(lines.size() > 0 and TimelineBuilder.last_error == lines[0], "%s: the checker's first line is the error: '%s'" % [name, TimelineBuilder.last_error])
+		var checker := ShotChecker.new()
+		var first := ""
+		for line in checker.check(cases[name]):
+			if not checker.is_placeholder(line):  # a stand-in portrait is listed, not refused
+				first = line
+				break
+		assert_true(first != "" and TimelineBuilder.last_error == first, "%s: the checker's first problem is the error: '%s'" % [name, TimelineBuilder.last_error])
 
 
 # The most the picture turns in one frame while the camera glides from a pose at `yaw` back to the game's, over `frames`
