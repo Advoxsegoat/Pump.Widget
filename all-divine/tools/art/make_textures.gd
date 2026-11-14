@@ -1,7 +1,7 @@
 extends SceneTree
 ## Makes the textures we draw ourselves:
 ##   tools/godot.sh -s res://tools/art/make_textures.gd
-## writes assets/env/textures/flagstone.png, slate.png, cobble.png, tan_earth.png, snow.png, slate_cold.png and flagstone_cold.png
+## writes assets/env/textures/flagstone.png, slate.png, cobble.png, tan_earth.png, snow.png, slate_cold.png, slate_pale.png and flagstone_cold.png
 ## (the training yard's stones drawn darker and colder for the stretch's grounds) and bilibara_colormap.png (the Kenney kit's colormap
 ## in Bilibara's colours), the same bytes every time. Run `tools/godot.sh --import`
 ## afterwards. Exits 0, or 1 if a file could not be written.
@@ -33,34 +33,36 @@ const SLATE_SIZE := 2 * TEXELS_PER_METRE
 const SLATE_SEED := 11
 ## A kerbstone is this many texels long, its joint included: a metre.
 const KERBSTONE := TEXELS_PER_METRE
-## Bilibara's street: a calm mosaic of cold blue-grey setts, told by tone and not by bright lines. A sett is 5 to 9 texels
+## Bilibara's street at noon: trodden snow over cobbles, pale cold setts with cool grey joints, told by tone and not by bright lines. A sett is 5 to 9 texels
 ## wide and 5 to 7 deep, its joint included; the rows wobble (a row's lower edge steps a texel from sett to sett) and are laid
 ## in an irregular bond, so no straight joint crosses the tile (the camera draws a texel row 0.64 of a pixel tall, and a
 ## straight bright joint would be dropped and found again as it moves). The joints are a little darker than the darkest
-## stone, and a few setts carry frost: the snow that lies on the street is the `snow` ground. (The colours are first
-## values: the snow-noon light may move them.)
-const COBBLES: Array[Color] = [Color8(25, 27, 36), Color8(31, 33, 44), Color8(37, 39, 50), Color8(44, 46, 57)]
-const COBBLE_JOINT := Color8(18, 20, 28)
-const FROST := Color8(70, 77, 92)
+## stone, and a few whole setts are trodden greyer. The grain is soft (the four stones are within 0.05 in luma) and nothing is a
+## single bright or dark texel: a pale ground with speckle reads as static. (The colours are tuned in the picture: see the
+## readability test.)
+const COBBLES: Array[Color] = [Color8(190, 185, 178), Color8(186, 181, 175), Color8(182, 177, 171), Color8(178, 174, 168)]
+const COBBLE_JOINT := Color8(145, 146, 147)
+## A trodden sett: the whole sett a little greyer than the rest (snow trodden down over it), a patch and never a speck.
+const TRODDEN := Color8(169, 168, 165)
 const COBBLE_SEED := 13
 const COBBLE_DEPTH_MIN := 5
 const COBBLE_DEPTH_MAX := 7
 const COBBLE_WIDTH_MIN := 5
 const COBBLE_WIDTH_MAX := 9
-## The share of setts that carry frost, and of such a sett's texels that are frost (about 4% of the tile in all).
-const FROSTED_SETTS := 0.35
-const FROST_SHARE := 0.12
-## The Tanneries' earth: warm browns in blotches 4 to 8 texels across, with a few texels of lime.
-const EARTHS: Array[Color] = [Color8(21, 19, 16), Color8(27, 24, 21), Color8(34, 29, 25)]
-const LIME := Color8(60, 56, 52)
+## The share of setts that are trodden.
+const TRODDEN_SETTS := 0.25
+## The Tanneries' earth under snow: three pale greys (the snow trodden flat) in blotches 4 to 8 texels across, with a warm grey-tan
+## showing through in patches (whole blotches, about one in five): packed earth in tracks and patches, not a brown field.
+const EARTHS: Array[Color] = [Color8(174, 169, 161), Color8(171, 165, 158), Color8(167, 162, 155)]
+const TAN := Color8(150, 139, 125)
+## The share of blotches that are tan.
+const TAN_SHARE := 0.2
 const EARTH_SEED := 17
 const BLOTCH_MIN := 4
 const BLOTCH_MAX := 8
-## The share of the earth's texels that are lime.
-const LIME_SHARE := 0.04
-## Snow: a cold blue-grey light ground, not white (a man in white must stand out on it), with a tenth of its texels in a
+## Snow (the drifts, off the ground a fighter walks on): the palest ground of the stretch, a cold near-white, with a tenth of its texels in a
 ## bluer shadow tone, in soft clumps of two to five texels.
-const SNOWS: Array[Color] = [Color8(150, 162, 172), Color8(130, 144, 160)]
+const SNOWS: Array[Color] = [Color8(238, 242, 248), Color8(224, 230, 240)]
 const SNOW_SEED := 19
 const SNOW_SHADOW := 0.10
 const CLUMP_MIN := 2
@@ -70,7 +72,7 @@ const CLUMP_MAX := 5
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	for made: Array in [["flagstone.png", flagstone()], ["slate.png", slate()], ["cobble.png", cobble()],
-			["tan_earth.png", tan_earth()], ["snow.png", snow()], ["slate_cold.png", slate_cold()], ["flagstone_cold.png", flagstone_cold()],
+			["tan_earth.png", tan_earth()], ["snow.png", snow()], ["slate_cold.png", slate_cold()], ["slate_pale.png", slate_pale()], ["flagstone_cold.png", flagstone_cold()],
 			["roof_slate.png", roof(ROOF_SLATE, ROOF_SLATE_SEED)], ["roof_tannery.png", roof(ROOF_TANNERY, ROOF_TANNERY_SEED)],
 			["bilibara_colormap.png", bilibara_colormap()], ["bilibara_neon_colormap.png", bilibara_neon_colormap()]]:
 		var path := OUT_DIR.path_join(made[0])
@@ -157,7 +159,7 @@ static func cobble() -> Image:
 	rng.seed = COBBLE_SEED
 	var size := FLAGSTONE_SIZE
 	var depths := _split_within(rng, size, COBBLE_DEPTH_MIN, COBBLE_DEPTH_MAX)
-	# Each row's setts: {x, length, tone, step, frosted}, and the joint's y under the row at every column.
+	# Each row's setts: {x, length, tone, step, trodden}, and the joint's y under the row at every column.
 	var rows: Array[Array] = []
 	var edges: Array[PackedInt32Array] = []
 	var bottom := 0
@@ -184,7 +186,7 @@ static func cobble() -> Image:
 			if tone == last_tone:
 				tone = (tone + 1 + rng.randi_range(0, COBBLES.size() - 2)) % COBBLES.size()
 			last_tone = tone
-			setts.append({x = x, length = length, tone = tone, step = step, frosted = rng.randf() < FROSTED_SETTS})
+			setts.append({x = x, length = length, tone = tone, step = step, trodden = rng.randf() < TRODDEN_SETTS})
 			for dx in length:
 				edge[(x + dx) % size] = bottom + step
 			x += length
@@ -204,15 +206,14 @@ static func cobble() -> Image:
 					var c := COBBLES[sett.tone]
 					if dx == sett.length - 1:
 						c = COBBLE_JOINT
-					elif sett.frosted and rng.randf() < FROST_SHARE:
-						c = FROST
+					elif sett.trodden:
+						c = TRODDEN
 					colours[posmod(y, size) * size + column] = c
 	return _image(colours, size)
 
 
 ## The Tanneries' ground: a 2 m tile of earth in blotches 4 to 8 texels across, laid as a lattice (each band of blotches
-## cut at its own places, so no seam runs the tile's length), one of the three EARTHS each, with LIME_SHARE of the texels
-## lime. Every band and every column is cut so that the tile's edge falls inside a blotch: it tiles seamlessly. The same
+## cut at its own places, so no seam runs the tile's length), one of the three EARTHS each or, one in five, TAN. Every band and every column is cut so that the tile's edge falls inside a blotch: it tiles seamlessly. The same
 ## seeded random numbers (EARTH_SEED) make the same tile.
 static func tan_earth() -> Image:
 	var rng := RandomNumberGenerator.new()
@@ -234,15 +235,13 @@ static func tan_earth() -> Image:
 			while (not earths.is_empty() and e == earths[-1]) or (above.size() > earths.size() and e == above[earths.size()]):
 				e = rng.randi_range(0, EARTHS.size() - 1)
 			earths.append(e)
+			var tan := rng.randf() < TAN_SHARE
 			for dy in height:
 				for dx in length:
-					colours[posmod(y0 + dy, size) * size + posmod(x0 + dx, size)] = EARTHS[e]
+					colours[posmod(y0 + dy, size) * size + posmod(x0 + dx, size)] = TAN if tan else EARTHS[e]
 			x0 += length
 		above = earths
 		y0 += height
-	for i in size * size:
-		if rng.randf() < LIME_SHARE:
-			colours[i] = LIME
 	return _image(colours, size)
 
 
@@ -284,11 +283,18 @@ static func snow() -> Image:
 	return _image(colours, size)
 
 
-## The stretch's court and alcove slate: the training yard's kerbstones (slate()) drawn SLATE_COLD of their value and a little cooler,
-## so that the ground under the fighters sits where the picture needs it (see the readability test). slate() itself is unchanged.
-const SLATE_COLD := Vector3(0.52, 0.57, 0.66)
-## The yard's stone square in the same way (flagstone() unchanged): about a fifth of the training yard's value.
-const FLAGSTONE_COLD := Vector3(0.23, 0.25, 0.30)
+## The stretch's court and alcove slate: the training yard's kerbstones (slate()) redrawn pale and cold, stone for stone (the same
+## shapes, each of slate()'s colours replaced by its cold one), so that the ground under the fighters is pale (see the readability test).
+## slate() itself is unchanged.
+const SLATE_COLD_STONES: Array[Color] = [Color8(147, 147, 147), Color8(150, 150, 150)]
+const SLATE_COLD_JOINT := Color8(117, 119, 122)
+## The alcove's slate is half in the shade of the works beside it: the same slate a hand paler (1.08 of the court's), so that its ground is in
+## the readability band in the shade as the court's is in the sun.
+const SLATE_PALE_STONES: Array[Color] = [Color8(166, 166, 166), Color8(170, 170, 170)]
+const SLATE_PALE_JOINT := Color8(133, 136, 139)
+## The yard's stone square in the same way (flagstone() unchanged): pale stone, a step paler than the slate border.
+const FLAGSTONE_COLD_STONES: Array[Color] = [Color8(161, 156, 150), Color8(165, 160, 153), Color8(169, 163, 155), Color8(172, 166, 158)]
+const FLAGSTONE_COLD_MORTAR := Color8(137, 134, 133)
 
 
 ## The roofs: one tile of a roof is 2.5 m across and 2.5 m up its piece, drawn from the ridge (the top of the picture) to the eave (the
@@ -393,20 +399,27 @@ static func bilibara_neon_colour(c: Color) -> Color:
 
 
 static func slate_cold() -> Image:
-	return _tinted(slate(), SLATE_COLD)
+	return _recoloured(slate(), SLATES + [SLATE_JOINT], SLATE_COLD_STONES + [SLATE_COLD_JOINT])
+
+
+static func slate_pale() -> Image:
+	return _recoloured(slate(), SLATES + [SLATE_JOINT], SLATE_PALE_STONES + [SLATE_PALE_JOINT])
 
 
 static func flagstone_cold() -> Image:
-	return _tinted(flagstone(), FLAGSTONE_COLD)
+	return _recoloured(flagstone(), STONES + [MORTAR], FLAGSTONE_COLD_STONES + [FLAGSTONE_COLD_MORTAR])
 
 
-# `img` with each channel multiplied (a new image).
-static func _tinted(img: Image, by: Vector3) -> Image:
+# `img` with each colour of `from` replaced by the one at the same place in `to` (a new image; a colour not in `from` is kept).
+static func _recoloured(img: Image, from: Array, to: Array) -> Image:
+	var map := {}
+	for i in from.size():
+		map[from[i].to_html(false)] = to[i]
 	var colours: Array[Color] = []
 	for y in img.get_height():
 		for x in img.get_width():
 			var c := img.get_pixel(x, y)
-			colours.append(Color8(roundi(c.r8 * by.x), roundi(c.g8 * by.y), roundi(c.b8 * by.z)))
+			colours.append(map.get(c.to_html(false), c))
 	return _image(colours, img.get_width())
 
 

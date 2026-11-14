@@ -78,28 +78,28 @@ func test_cobble_is_a_calm_mosaic_of_setts_told_by_tone() -> void:
 	assert_eq(img.get_size(), Vector2i(64, 64), "64 x 64 texels: 2 m at 32 texels per metre")
 	var counts := _colours(img)
 	var joint := MAKE_TEXTURES.COBBLE_JOINT
-	var frost := MAKE_TEXTURES.FROST
-	var allowed := {joint.to_html(false): true, frost.to_html(false): true}
+	var trodden := MAKE_TEXTURES.TRODDEN
+	var allowed := {joint.to_html(false): true, trodden.to_html(false): true}
 	var lowest := 1.0
 	var highest := 0.0
 	for cobble: Color in MAKE_TEXTURES.COBBLES:
 		allowed[cobble.to_html(false)] = true
 		lowest = minf(lowest, cobble.v)
 		highest = maxf(highest, cobble.v)
-		assert_true(cobble.b >= cobble.r, "%s leans blue" % cobble.to_html(false))
+		assert_true(cobble.s <= 0.10, "%s is a neutral stone (the sky's blue is in the light, not in the stone): saturation %.2f" % [cobble.to_html(false), cobble.s])
 		assert_true(counts.get(cobble.to_html(false), 0) > 64, "%s covers %d texels" % [cobble.to_html(false), counts.get(cobble.to_html(false), 0)])
 	for key: String in counts:
-		assert_true(allowed.has(key), "%s is a stone, a joint or frost" % key)
+		assert_true(allowed.has(key), "%s is a stone, a joint or a trodden sett" % key)
 	assert_true(highest - lowest <= 0.12 + 1e-6, "the stones span %.3f in value, at most 0.12" % (highest - lowest))
-	assert_true(joint.v < lowest and joint.v >= lowest - 0.10 - 1e-6, "the joint (%.3f) is darker than every stone (%.3f) by at most 0.10" % [joint.v, lowest])
-	assert_true(frost.v <= 0.62, "frost is no brighter than 0.62 (%.3f)" % frost.v)
-	assert_true(frost.b > frost.r, "frost is cold")
-	var frosted: int = counts.get(frost.to_html(false), 0)
-	assert_true(frosted > 0 and frosted <= 4096 * 0.06, "frost covers %d texels, at most 6%%" % frosted)
-	# No snow: nothing in the tile is brighter than frost.
+	assert_true(joint.v < lowest and joint.v >= lowest - 0.20 - 1e-6, "the joint (%.3f) is darker than every stone (%.3f) by at most 0.20" % [joint.v, lowest])
+	assert_true(trodden.v < lowest and trodden.v >= lowest - 0.12, "a trodden sett (%.3f) is a little greyer than the stones (%.3f)" % [trodden.v, lowest])
+	var trodden_texels: int = counts.get(trodden.to_html(false), 0)
+	assert_true(trodden_texels >= 4096 * 0.08 and trodden_texels <= 4096 * 0.35, "trodden setts cover %d texels, 8%% to 35%%" % trodden_texels)
+	# Pale: nothing in the tile is darker than the joint or brighter than white snow.
 	for y in 64:
 		for x in 64:
-			assert_true(img.get_pixel(x, y).v <= 0.62 + 1e-6, "(%d, %d) is not bright" % [x, y])
+			var v := img.get_pixel(x, y).v
+			assert_true(v >= joint.v - 1e-6 and v <= 0.85, "(%d, %d) is a pale ground (%.2f)" % [x, y, v])
 
 
 # Setts 5 to 9 texels wide and 5 to 7 deep (the joint included), of at least three widths; the rows wobble and are laid
@@ -159,18 +159,19 @@ func _row_changes(img: Image, a: int, b: int) -> int:
 	return n
 
 
-func test_tan_earth_is_three_earths_with_lime_stains_that_wrap() -> void:
+func test_tan_earth_is_three_pale_greys_with_tan_patches_that_wrap() -> void:
 	var img := MAKE_TEXTURES.tan_earth()
 	assert_eq(img.get_size(), Vector2i(64, 64), "64 x 64 texels")
 	var counts := _colours(img)
-	assert_eq(counts.size(), 4, "three earths and a lime: %s" % [counts.keys()])
+	assert_eq(counts.size(), 4, "three pale greys and a tan: %s" % [counts.keys()])
 	for earth: Color in MAKE_TEXTURES.EARTHS:
 		var key := earth.to_html(false)
-		assert_true(earth.r > earth.g and earth.g > earth.b, "%s is warm" % key)
-		assert_true(earth.v >= 0.05 and earth.v <= 0.20, "%s is a dark earth (the grade lifts it into the readability band)" % key)
-		assert_true(counts.get(key, 0) > 4096 / 8, "%s covers %d texels" % [key, counts.get(key, 0)])
-	var lime: int = counts.get(MAKE_TEXTURES.LIME.to_html(false), 0)
-	assert_true(lime >= 4096 * 0.02 and lime <= 4096 * 0.08, "lime covers %d of 4096 texels" % lime)
+		assert_true(earth.s <= 0.10 and earth.v >= 0.55, "%s is a pale grey (trodden snow)" % key)
+		assert_true(counts.get(key, 0) > 4096 / 12, "%s covers %d texels" % [key, counts.get(key, 0)])
+	var tan: Color = MAKE_TEXTURES.TAN
+	assert_true(tan.r > tan.g and tan.g > tan.b and tan.s >= 0.12 and tan.s <= 0.30, "the tan is a warm grey-tan, not a brown (%s: saturation %.2f)" % [tan.to_html(false), tan.s])
+	var patches: int = counts.get(tan.to_html(false), 0)
+	assert_true(patches >= 4096 * 0.08 and patches <= 4096 * 0.35, "tan patches cover %d of 4096 texels (8%% to 35%%)" % patches)
 	# The seam is no busier than the tile's inside.
 	var inner_columns := 0
 	var inner_rows := 0
@@ -209,15 +210,15 @@ func _clumps(img: Image, colour: Color) -> Array[int]:
 	return sizes
 
 
-func test_snow_is_a_cold_blue_grey_with_clumps_of_shadow_and_has_its_material() -> void:
+func test_snow_is_a_cold_near_white_with_clumps_of_shadow_and_has_its_material() -> void:
 	var img := MAKE_TEXTURES.snow()
 	assert_eq(img.get_size(), Vector2i(64, 64), "64 x 64 texels")
 	var counts := _colours(img)
 	assert_eq(counts.size(), 2, "two tones: %s" % [counts.keys()])
 	var light: Color = MAKE_TEXTURES.SNOWS[0]
 	var shadow: Color = MAKE_TEXTURES.SNOWS[1]
-	assert_true(light.v <= 0.72 and light.v > 0.62, "the light tone is %.3f: a light ground, not white" % light.v)
-	assert_true(shadow.v >= 0.58 and shadow.v <= 0.66 and shadow.v < light.v, "the shadow tone is %.3f" % shadow.v)
+	assert_true(light.v >= 0.92, "the light tone is %.3f: the palest ground of the stretch (the drifts lie off the ground a fighter walks on)" % light.v)
+	assert_true(shadow.v >= 0.85 and shadow.v < light.v, "the shadow tone is %.3f" % shadow.v)
 	assert_true(shadow.b - shadow.r > light.b - light.r, "and bluer")
 	assert_true(light.b > light.r, "cold")
 	var share: int = counts.get(shadow.to_html(false), 0)
@@ -321,7 +322,7 @@ func test_bilibara_colormap_is_made_the_same_every_time_and_has_its_material() -
 
 # --- The cold stones (the stretch's court, alcove and yard square) and the training yard's own stones, left alone ---
 
-## The md5 of the training yard's flagstone.png and slate.png as they were before this task: the stretch draws its own darker copies.
+## The md5 of the training yard's flagstone.png and slate.png as they were before this task: the stretch draws its own pale copies.
 const FLAGSTONE_MD5 := "1e21e11f7a445c0ad64a2326a41f80c3"
 const SLATE_MD5 := "63708a753dbadb81215e45ab74672665"
 
@@ -337,17 +338,31 @@ func test_the_training_yards_stones_are_unchanged_pixel_for_pixel() -> void:
 	_same_as_committed(MAKE_TEXTURES.slate, "slate")
 
 
-func test_the_cold_stones_are_the_yards_stones_drawn_darker_and_cooler() -> void:
-	for pair: Array in [["slate_cold", MAKE_TEXTURES.slate_cold, MAKE_TEXTURES.slate, MAKE_TEXTURES.SLATE_COLD], ["flagstone_cold", MAKE_TEXTURES.flagstone_cold, MAKE_TEXTURES.flagstone, MAKE_TEXTURES.FLAGSTONE_COLD]]:
+func test_the_cold_stones_are_the_yards_stones_redrawn_pale_stone_for_stone() -> void:
+	var pairs := [
+		["slate_cold", MAKE_TEXTURES.slate_cold, MAKE_TEXTURES.slate, MAKE_TEXTURES.SLATES + [MAKE_TEXTURES.SLATE_JOINT], MAKE_TEXTURES.SLATE_COLD_STONES + [MAKE_TEXTURES.SLATE_COLD_JOINT]],
+		["slate_pale", MAKE_TEXTURES.slate_pale, MAKE_TEXTURES.slate, MAKE_TEXTURES.SLATES + [MAKE_TEXTURES.SLATE_JOINT], MAKE_TEXTURES.SLATE_PALE_STONES + [MAKE_TEXTURES.SLATE_PALE_JOINT]],
+		["flagstone_cold", MAKE_TEXTURES.flagstone_cold, MAKE_TEXTURES.flagstone, MAKE_TEXTURES.STONES + [MAKE_TEXTURES.MORTAR], MAKE_TEXTURES.FLAGSTONE_COLD_STONES + [MAKE_TEXTURES.FLAGSTONE_COLD_MORTAR]],
+	]
+	for pair: Array in pairs:
 		var cold := (pair[1] as Callable).call() as Image
 		var warm := (pair[2] as Callable).call() as Image
 		assert_eq(cold.get_size(), Vector2i(64, 64), "%s: a 2 m tile" % pair[0])
-		var by: Vector3 = pair[3]
-		assert_true(by.x < by.z and by.z <= 1.0, "%s is drawn cooler (blue at least red) and no brighter" % pair[0])
-		for at in [Vector2i(0, 0), Vector2i(17, 5), Vector2i(40, 33), Vector2i(63, 63)]:
-			var a := warm.get_pixelv(at)
-			var b := cold.get_pixelv(at)
-			assert_true(absf(b.r8 - a.r8 * by.x) <= 1.0 and absf(b.g8 - a.g8 * by.y) <= 1.0 and absf(b.b8 - a.b8 * by.z) <= 1.0, "%s at %s is the yard's stone times %s" % [pair[0], at, by])
+		var from: Array = pair[3]
+		var to: Array = pair[4]
+		# Every texel is the colour of the yard's texel at the same place, replaced by its pale one: the same stones, the same joints.
+		var wrong := 0
+		for y in 64:
+			for x in 64:
+				var index := -1
+				for i in from.size():
+					if (from[i] as Color).to_html(false) == warm.get_pixel(x, y).to_html(false):
+						index = i
+				if index < 0 or (to[index] as Color).to_html(false) != cold.get_pixel(x, y).to_html(false):
+					wrong += 1
+		assert_eq(wrong, 0, "%s is the yard's stone with each colour replaced by its pale one" % pair[0])
+		for c: Color in to:
+			assert_true(c.v >= 0.45 and c.v <= 0.80, "%s: %s is a pale stone (value %.2f)" % [pair[0], c.to_html(false), c.v])
 		_same_as_committed(pair[1], pair[0])
 		_ground_material(pair[0])
 
