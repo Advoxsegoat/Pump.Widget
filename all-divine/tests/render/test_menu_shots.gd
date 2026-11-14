@@ -174,3 +174,41 @@ func test_the_controls_page_is_shot_for_each_device_mid_capture_and_scrolled() -
 	Inputs.bindings_path = path_was
 	Inputs._device = Inputs.Device.KEYBOARD_MOUSE
 	Bindings.apply(Bindings.defaults())
+
+
+# The pause over a scene that can be skipped: a CUTSCENE (bars) paused while a line is up in the dialogue box, the menu with its
+# Skip scene row over the top bar and the box: out/menu/pause_scene_640.png and pause_scene_1080.png.
+func test_a_paused_scene_is_shot_with_the_menu_and_its_skip_row() -> void:
+	Game.reset()
+	Arena.reset_spawn_counts()
+	Director.reset_spawn_counts()
+	StoryLog.mark_seen(&"fixture_yard_entrance")
+	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
+	for foe in main.arena().enemies():
+		foe.set_brain(Brain.new())
+	await frames(30)
+	var scene := (load("res://scenes/story/fixture_yard_entrance/shots.tres") as SceneShots).duplicate_deep()
+	scene.kind = SceneShots.Kind.CUTSCENE
+	scene.letterbox = true
+	var director := Director.new()
+	assert_true(director.begin(scene, main.region, main.camera_rig, main.hud, main), "the scene is taken: %s" % Director.last_refusal)
+	while director.frame < 30 + 150 + 12:
+		await frames(1)
+	Game.change(Game.State.PAUSE)
+	await frames(2)
+	var labels: Array = main.menu.rows().map(func(r: Dictionary) -> String: return r.label)
+	assert_eq(labels, ["Resume", "Skip scene", "Controls", "Settings", "Quit"], "the menu offers Skip scene")
+	await _settle()
+	var picture := main.stage.hud.get_texture().get_image()
+	var stage := get_viewport().get_texture().get_image()
+	assert_eq(picture.get_size(), Vector2i(640, 360))
+	_save(picture, "pause_scene_640.png")
+	_save(stage, "pause_scene_1080.png")
+	var panel := main.menu.panel()
+	assert_true(panel.size.x <= 224 and panel.end.y <= 190, "the panel is inside its limits (%s)" % panel)
+	# The top bar is black and the menu's panel is drawn over it: the panel's gold border is on top of the bar, not under it.
+	var k := PixelStage.scale_for(SIZE)
+	var origin := PixelStage.layout(SIZE).position
+	var edge := origin + (panel.position + Vector2i(40, 0)) * k
+	var c := stage.get_pixelv(edge)
+	assert_true(absf(c.r - Hud.GOLD.r) < 0.03 and absf(c.g - Hud.GOLD.g) < 0.03 and absf(c.b - Hud.GOLD.b) < 0.03, "the menu's border is gold over the bar (%s)" % c.to_html(false))
