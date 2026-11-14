@@ -47,7 +47,6 @@ SLOTS_BY_MESH = {
     "Abarax_Forelock": {1, 7},
     "Abarax_Feather": {1, 8},
     "Abarax_EarRing": {8},
-    "Abarax_Stubble": {1},
     "Abarax_Eyes": {2},
     "Male_Peasant_Arms": {0, 3},
     "Male_Peasant_Body": {3, 4},
@@ -179,20 +178,53 @@ class BuildAbarax(unittest.TestCase):
         self.assertLessEqual(max(p[1] for p in beyond), head_top + radius, "and not above the skull by more than its radius")
         self.assertLess(abs(centre[0]), 0.01, "on the middle line")
 
-    def test_the_stubble_is_on_the_chin_and_jaw_and_the_mole_on_his_left_cheek(self):
-        low, high = self.bounds("Abarax_Stubble")
-        self.assertTrue(1.55 < low[1] and high[1] < 1.69, f"between the jaw and the cheekbone ({low[1]:.3f}-{high[1]:.3f})")
-        self.assertGreater(high[2], 0.07, "on the front of the face")
-        self.assertGreater(high[0], 0.03, "reaching his left cheek (the mole is at x 0.04)")
-        self.assertLess(low[0], -0.03, "and along his right jaw")
+    def test_there_is_no_stubble_part(self):
+        # The stubble and the mole were invisible at every zoom the game has (the scarf covers the chin): they live in the portrait.
+        self.assertNotIn("Abarax_Stubble", [m["name"] for m in self.j["meshes"]])
+
+    def positions(self, mesh):
+        j = self.j
+        buffers = gltf_inspect._buffers(j, self.path)
+        points = []
+        for m in j["meshes"]:
+            if m["name"] == mesh:
+                for prim in m["primitives"]:
+                    points += gltf_inspect._read_accessor(j, buffers, prim["attributes"]["POSITION"])
+        return points
+
+    def test_the_cut_hair_is_a_cap_and_not_a_helmet(self):
+        # Every point of the cut hair (the bun and the hair round its base, within 11 cm of it, excepted) is within 1.5 cm of the skull's nearest vertex on the sides and the
+        # nape and 2.5 cm on top: the head's vertices lie 1-2 cm apart, and each hair vertex is its head vertex grown outward.
+        head = self.positions("Abarax_Head")
+        bun_base = (0.0, 1.755, -0.092)
+        worst_side = worst_top = 0.0
+        for p in self.positions("Abarax_Topknot"):
+            if math.dist(p, bun_base) < 0.11:
+                continue
+            nearest = min(math.dist(p, q) for q in head)
+            if p[1] < 1.74:
+                worst_side = max(worst_side, nearest)
+            else:
+                worst_top = max(worst_top, nearest)
+        self.assertLessEqual(worst_side, 0.015, "the hair on the sides and nape stands off the skull")
+        self.assertLessEqual(worst_top, 0.025, "and on top")
+
+    def test_the_forelock_is_a_thin_strand(self):
+        # A row of the ribbon is its points at one height; the temple tie (x > 0.05) is not part of it.
+        rows = {}
+        for p in self.positions("Abarax_Forelock"):
+            if p[0] < 0.05:
+                rows.setdefault(round(p[1], 4), []).append(p[0])
+        self.assertGreaterEqual(len(rows), 4, "the strand has its rows")
+        widest = max(max(xs) - min(xs) for xs in rows.values())
+        self.assertLessEqual(widest, 0.011, "no row of the lock is wider than 1.1 cm")
 
     def test_the_new_parts_stay_small(self):
         new = sum(self.triangles_of(m) for m in ("Abarax_Forelock", "Abarax_Feather", "Abarax_EarRing"))
         self.assertGreater(new, 0, "the made parts exist")
         self.assertLessEqual(new, 400, "the made parts (forelock, feather, ring)")
         self.assertLessEqual(self.triangles_of("Abarax_Topknot"), 450, "the bun and the cut hair")
-        self.assertGreater(self.triangles_of("Abarax_Stubble"), 0)
-        self.assertLessEqual(self.triangles_of("Abarax_Stubble"), 120, "the stubble and the mole")
+
 
     def test_scarf_chain_hangs_from_neck_down_the_back(self):
         parents = gltf_inspect.joint_parents(self.j)

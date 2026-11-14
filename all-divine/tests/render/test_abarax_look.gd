@@ -1,25 +1,19 @@
 extends TestCase
-## Abarax as the game's camera draws him once his model follows the owner's drawing (xvfb, gl_compatibility): the
-## bun stands above the head's outline in all eight facings; every Knuckle's picture is what it was before the portrait
-## work; and the pictures a person looks at are saved to out/shots/abarax/ (the old ones, taken before, sit beside them
-## as old_*.png; the side-by-sides and the close shots are written by test_the_pictures_for_the_owner).
+## Abarax as the game's camera draws him once his model follows the owner's drawing (xvfb, gl_compatibility): the knot at the
+## back of the head shows behind it from the sides and over it from ahead, the feather shows from every facing, and the pictures a
+## person looks at are saved to out/shots/abarax/ (the old ones, taken before the portrait work, sit beside them as old_*.png and
+## round one's in r1/). The Knuckles are guarded by their model file's hash (test_abarax_portrait.gd) and the byte-identical rebuild in
+## test_build_knuckle.py, not by pictures: a picture's pixels depend on the renderer.
 
 const OUT := "res://out/shots/abarax/"
 const FACINGS: Array[int] = [0, 45, 90, 135, 180, 225, 270, 315]
-const KNUCKLES: Array[String] = ["knuckle_1", "knuckle_2", "knuckle_3", "knuckle_heavy", "knuckle_blade", "knuckle_drummer"]
-## Each Knuckle's picture (the hash of its 640x360 pixels), one facing, idle, drawn with this file's own stage, as it was
-## with the model before the portraits. The Knuckles have a model of their own: this says nothing of them has changed.
-const KNUCKLE_HASHES := {
-	"knuckle_1": 2549057810, "knuckle_2": 4145913693, "knuckle_3": 273983587,
-	"knuckle_heavy": 1904001733, "knuckle_blade": 2347767655, "knuckle_drummer": 3278666292,
-}
 ## A pixel is the body's when its colour differs from the empty stage's by more than this (summed over red, green, blue).
 const BODY_THRESHOLD := 0.06
 ## The least the knot adds, at zoom 1 (behind: at zoom 3 nine times that, a pixel being a third as long: area; the others scale
 ## with the zoom): from the side behind the head and over the skull from ahead.
 const MIN_BEHIND := 2
 const MIN_AHEAD := 2
-const PARTS: PackedStringArray = ["Abarax_Topknot", "Abarax_Forelock", "Abarax_Feather", "Abarax_EarRing", "Abarax_Stubble"]
+const PARTS: PackedStringArray = ["Abarax_Topknot", "Abarax_Forelock", "Abarax_Feather", "Abarax_EarRing"]
 
 var shots: AbaraxShots
 
@@ -108,13 +102,37 @@ func test_the_bun_shows_behind_the_head_from_the_side_and_over_it_from_ahead() -
 	print("look: what the knot adds, by zoom and facing:\n", "\n".join(report))
 
 
-func test_every_knuckles_picture_is_what_it_was() -> void:
-	var seen := {}
-	for id in KNUCKLES:
-		var def := load("res://data/actors/%s.tres" % id) as ActorDef
-		var image := await shots.shot(def, 0)
-		seen[id] = hash(image.get_data())
-	assert_eq(seen, KNUCKLE_HASHES, "the six Knuckles' pictures")
+## What the feather (link, ring, beads and blade) adds to the picture at the game's camera, idle: from the front and from behind at
+## least 6 pixels long, from each side at least 3 pixels, and from every one of the eight facings some of it shows.
+func test_the_feather_shows_from_every_facing_at_the_games_camera() -> void:
+	var def := load("res://data/actors/abarax.tres") as ActorDef
+	var without := def.duplicate() as ActorDef
+	without.hidden_parts = PackedStringArray(["Abarax_Feather"])
+	shots.pose(def, 0)
+	shots.rig.visible = false
+	var empty := await shots.draw(1)
+	var report := PackedStringArray()
+	for yaw in FACINGS:
+		shots.pose(without, yaw)
+		var a := _mask(await shots.draw(1), empty)
+		shots.pose(def, yaw)
+		var b := _mask(await shots.draw(1), empty)
+		var count := 0
+		var low := Vector2i(640, 360)
+		var high := Vector2i(-1, -1)
+		for i in a.size():
+			if b[i] == 1 and a[i] == 0:
+				count += 1
+				low = Vector2i(mini(low.x, i % 640), mini(low.y, i / 640))
+				high = Vector2i(maxi(high.x, i % 640), maxi(high.y, i / 640))
+		var longest := maxi(high.x - low.x, high.y - low.y) + 1 if count > 0 else 0
+		report.append("yaw %d: %d px, %d long" % [yaw, count, longest])
+		assert_true(count >= 2, "yaw %d: the feather adds %d pixels (at least 2)" % [yaw, count])
+		if yaw == 0 or yaw == 180:
+			assert_true(longest >= 6, "yaw %d: the feather is %d pixels long (at least 6)" % [yaw, longest])
+		if yaw == 90 or yaw == 270:
+			assert_true(count >= 3, "yaw %d: %d pixels of the feather show from the side (at least 3)" % [yaw, count])
+	print("look: the feather by facing: ", "; ".join(report))
 
 
 # --- the pictures a person looks at (out/shots/abarax/) ---

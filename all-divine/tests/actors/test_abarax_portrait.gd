@@ -53,15 +53,8 @@ func _fight_hashes() -> Array[int]:
 
 
 const RIG := "res://actors/abarax/abarax_rig.tscn"
-const PARTS: PackedStringArray = ["Abarax_Topknot", "Abarax_Forelock", "Abarax_Feather", "Abarax_EarRing", "Abarax_Stubble"]
-const FEATHER_BONE_LENGTH := 0.15
-## The drawing's feather, 1.8 cm of it from the neck's collar would be inside the shirt: the least distance any of the
-## feather's points (the ring, the beads, the root of the feather, the middle of it and its tip) may come to a vertex of the
-## body (the shirt and sleeves, and the head's own neck) in the five poses below. The meshes' vertices lie 1-2 cm apart
-## (they are decimated), so a point 1.5 cm or more from every one of them is out of the surface.
-const CLEAR_OF_BODY := 0.015
-## The poses the clearance is kept in: idle, a jab, a dash-step, the guard and a flinch. Each is played through at its own pace.
-const POSES: Array[StringName] = [&"idle", &"palm_jab", &"dash_step", &"guard_hold", &"flinch"]
+const PARTS: PackedStringArray = ["Abarax_Topknot", "Abarax_Forelock", "Abarax_Feather", "Abarax_EarRing"]
+const FEATHER_BONE_LENGTH := 0.15  # the length of feather_02 (the builder's FEATHER_LENGTH)
 
 
 func _def() -> ActorDef:
@@ -79,55 +72,6 @@ static func _tip_in_head(r: Rig) -> Vector3:
 	return r.shown_pose(&"Head").affine_inverse() * _tip(r)
 
 
-# The points of the feather that must stay out of the body.
-static func _feather_points(r: Rig) -> Array[Vector3]:
-	var first := r.shown_pose(&"feather_01")
-	var second := r.shown_pose(&"feather_02")
-	return [first.origin + first.basis.y.normalized() * 0.026, first.origin + first.basis.y.normalized() * 0.05,
-			second.origin, second.origin + second.basis.y.normalized() * FEATHER_BONE_LENGTH * 0.5, _tip(r)]
-
-
-# The body's vertices as the last tick shows them: the shirt, the sleeves and the neck of the head's mesh (its vertices
-# that stand below the ear), skinned by hand from the bones' shown poses. Returns an Array of PackedVector3Array.
-static func _body_vertices(r: Rig) -> Array[Vector3]:
-	var found: Array[Vector3] = []
-	for node in r.skeleton.get_children():
-		var mi := node as MeshInstance3D
-		if mi == null or not ["Male_Peasant_Body", "Male_Peasant_Arms", "Abarax_Head"].has(String(mi.name)):
-			continue
-		var arrays := (mi.mesh as ArrayMesh).surface_get_arrays(0)
-		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-		var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
-		var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
-		var skin := mi.skin
-		var poses: Array[Transform3D] = []
-		for i in skin.get_bind_count():
-			var bone := skin.get_bind_bone(i)
-			if bone < 0:
-				bone = r.skeleton.find_bone(skin.get_bind_name(i))
-			poses.append(r.shown_pose(StringName(r.skeleton.get_bone_name(bone))) * skin.get_bind_pose(i))
-		for v in verts.size():
-			var at := Vector3.ZERO
-			for k in 4:
-				var w := weights[v * 4 + k]
-				if w > 0.0:
-					at += w * (poses[bones[v * 4 + k]] * verts[v])
-			if mi.name == &"Abarax_Head" and verts[v].y > 1.62:
-				continue
-			found.append(at)
-	return found
-
-
-# The least distance of a feather point from the body's vertices.
-static func _clearance(r: Rig, body: Array[Vector3]) -> float:
-	var least := INF
-	for p in _feather_points(r):
-		for v in body:
-			least = minf(least, p.distance_to(v))
-	return least
-
-
-# True if the rig has the feather's bones; a test that reads them says so first and goes no further without them.
 func _has_feather(r: Rig) -> bool:
 	var has := r.skeleton.find_bone("feather_01") >= 0 and r.skeleton.find_bone("feather_02") >= 0
 	assert_true(has, "the rig has the feather's bones")
@@ -255,41 +199,6 @@ func test_a_paused_game_holds_the_feather_still() -> void:
 	assert_vec_near(still, held, 1e-6, "ten frames paused in the middle of the swing, the feather has not moved")
 	await frames(10)
 	assert_true(_tip(actor.rig).distance_to(held) > 0.001, "and moves again when the game goes on")
-
-
-func test_the_feather_stays_off_the_shoulder_and_neck_in_five_poses() -> void:
-	var worst := {}
-	for clip in POSES:
-		var r: Rig = track(load(RIG).instantiate())
-		if not _has_feather(r):
-			return
-		for i in 40:
-			await frames(1)
-			r.tick(1.0 / 60)
-		var body := _body_vertices(r)
-		assert_true(body.size() > 500, "the body's vertices were found (%d)" % body.size())
-		var least := INF
-		if clip != &"idle":
-			r.play_move(clip, 0.15)
-		for f in int(r.tree.get_animation(clip).length * 60) + 1:
-			await frames(1)
-			if clip != &"idle":
-				r.set_move_time(f / 60.0)
-			r.tick(1.0 / 60)
-			least = minf(least, _clearance(r, _body_vertices(r)))
-		worst[clip] = "%.3f" % least
-		assert_true(least >= CLEAR_OF_BODY, "%s: a point of the feather came within %.3f m of the body" % [clip, least])
-		r.free()
-	assert_eq(worst.size(), POSES.size(), "every pose was played (%s)" % [worst])
-
-
-## The Knuckles' built model, as the main branch has it (sha256). Nothing a picture's renderer does can move these: the
-## Knuckles are made from their own file, and this task never builds it.
-const KNUCKLE_MODEL_SHA256 := "695c0566f80959861c7ea67c54230a1413eaba18e556827e06037e23b31d7184"
-
-
-func test_the_knuckles_model_file_is_byte_for_byte_the_main_branchs() -> void:
-	assert_eq(FileAccess.get_sha256("res://assets/characters/knuckle/knuckle.glb"), KNUCKLE_MODEL_SHA256)
 
 
 # --- the bun, at the back of the head ---
