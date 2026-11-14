@@ -679,26 +679,26 @@ func test_esc_and_start_always_go_back_whatever_menu_is_bound_to() -> void:
 	assert_eq(nav.command(_b(JOY_BUTTON_START)), C.BACK)
 
 
-func test_taking_the_last_key_of_the_menu_button_gives_it_back_its_default() -> void:
+func test_the_last_key_of_the_menu_button_cannot_be_taken_from_it() -> void:
 	var menu := _controls()
 	_start(menu, "Menu / back")
 	_send(menu, _k(KEY_F10))
-	# Target left has no key: binding it to F10 takes the menu button's only key away.
+	# Target left has no key: binding it to F10 would take the menu button's only key away, so it is refused.
 	_start(menu, "Target left")
 	_send(menu, _k(KEY_F10))
-	assert_eq(ControlsList.shown(&"target_left", false), "F10")
-	assert_eq(ControlsList.shown(&"menu", false), "Escape", "the menu button is back on Esc, so the menu can still be opened")
-	assert_true(menu.footer().begins_with("Swapped with Menu / back."), menu.footer())
-	assert_true(menu.footer().contains("Esc"), menu.footer())
+	assert_true(menu.capturing(), "refused, still waiting")
+	assert_eq(menu.footer(), "That is Menu / back's only key.")
+	assert_eq(ControlsList.shown(&"menu", false), "F10", "the menu button keeps it")
+	_send(menu, _k(KEY_ESCAPE))
 	var pad := _controls(true)
 	_start(pad, "Menu / back", true)
 	_send(pad, _b(JOY_BUTTON_Y))
-	assert_eq(ControlsList.shown(&"menu", true), "Y")
 	Bindings.apply({&"lock_on": [_k(KEY_TAB)] as Array[InputEvent]})
 	_start(pad, "Lock on", true)
 	_send(pad, _b(JOY_BUTTON_Y))
-	assert_eq(ControlsList.shown(&"lock_on", true), "Y")
-	assert_eq(ControlsList.shown(&"menu", true), "Start", "and the pad's Start likewise")
+	assert_true(pad.capturing(), "and so on the pad")
+	assert_eq(ControlsList.shown(&"menu", true), "Y")
+	_send(pad, _b(JOY_BUTTON_B))
 
 
 # --- the rest of the page ---
@@ -959,3 +959,146 @@ func _fight_with_pause(rebind: bool) -> Array:
 	menu.free()
 	Melee.slow(0, 1.0)
 	return frames_seen
+
+
+# --- fix round 1 ---
+
+# What the game's own keys do, as a person can see it.
+func _own_work(main: Main) -> Array:
+	return [main.region, main.overlay.visible, main.look_on, main.hud.hints_visible, main.window.mode, main.get_viewport().is_input_handled()]
+
+
+func test_the_games_own_keys_reach_a_waiting_capture_through_main_and_do_nothing_else() -> void:
+	var main := await _main()
+	main.window = Window.new()  # a window of its own: F11 must not touch the test runner's
+	track(main.window)
+	Game.change(Game.State.PAUSE)
+	var menu := main.menu
+	menu.press(C.DOWN)
+	menu.press(C.CHOOSE)
+	var events: Array[InputEvent] = []
+	for code in Main.OWN_KEYS:
+		events.append(_k(code))
+	var alt_enter := _k(KEY_ENTER)
+	alt_enter.alt_pressed = true
+	events.append(alt_enter)
+	var before := _own_work(main)
+	for event in events:
+		_start(menu, "Palm")
+		assert_true(menu.capturing())
+		var table := _table()
+		main._unhandled_input(event)
+		assert_true(menu.capturing(), "%s: the capture goes on" % event.as_text())
+		assert_eq(menu.footer(), "That key is the game's own.", "%s: the line shows" % event.as_text())
+		assert_eq(_table(), table, "%s: nothing is bound" % event.as_text())
+		assert_eq(_own_work(main).slice(0, 5), before.slice(0, 5), "%s: and its own job is not done" % event.as_text())
+		menu.handle(_k(KEY_ESCAPE))
+	main.player.set_brain(Brain.new())
+	for button in Main.OWN_BUTTONS:
+		Inputs._device = Inputs.Device.GAMEPAD
+		_pad_in = true
+		menu.pad_present = func() -> bool: return true
+		menu.show_page(MenuPages.CONTROLS)
+		_start(menu, "Palm", true)
+		assert_true(menu.capturing())
+		main._unhandled_input(_b(button))
+		assert_eq(menu.footer(), "That key is the game's own.", "the pad's own button")
+		assert_eq(_own_work(main).slice(0, 5), before.slice(0, 5), "and its job is not done")
+		menu.handle(_b(JOY_BUTTON_B))
+	# With no capture waiting the keys still do their own work.
+	var hints := main.hud.hints_visible
+	main._unhandled_input(_k(KEY_F1))
+	assert_eq(main.hud.hints_visible, not hints, "F1 still toggles the hints when nothing waits")
+
+
+func test_a_pad_button_is_ignored_by_a_keyboard_capture_and_the_menu_button_needs_a_button() -> void:
+	var menu := _controls()
+	_start(menu, "Palm")
+	_send(menu, _b(JOY_BUTTON_A))
+	assert_true(menu.capturing(), "a pad button is ignored by a keyboard capture")
+	assert_eq(_table(), _defaults())
+	_send(menu, _k(KEY_ESCAPE))
+	for pad in [false, true]:
+		var m := _controls(pad)
+		_start(m, "Menu / back", pad)
+		var table := _table()
+		for event: InputEvent in [_a(JOY_AXIS_TRIGGER_LEFT, 1.0), _a(JOY_AXIS_RIGHT_X, 0.9), _a(JOY_AXIS_LEFT_Y, -0.9), _a(JOY_AXIS_LEFT_X, -0.9)]:
+			_send(m, event)
+			assert_true(m.capturing(), "Menu / back still waits (%s)" % ("pad" if pad else "keyboard"))
+		_send(m, _a(JOY_AXIS_RIGHT_X, 0.0))
+		if pad:
+			_send(m, _a(JOY_AXIS_RIGHT_Y, 0.9))
+			assert_eq(m.footer(), "Menu / back needs a button.", "the line says so")
+			assert_eq(_table(), table, "nothing bound")
+			m._process(3.1)
+			assert_true(m.footer().begins_with("Press a new button for Menu / back"), "after 3 s the prompt is back")
+			_send(m, _b(JOY_BUTTON_Y))
+			assert_eq(ControlsList.shown(&"menu", true), "Y", "a button binds")
+		else:
+			_send(m, _k(KEY_F10))
+			assert_eq(ControlsList.shown(&"menu", false), "F10")
+	# An action that is not a button still binds a stick.
+	var ok := _controls(true)
+	_start(ok, "Lock on", true)
+	_send(ok, _a(JOY_AXIS_RIGHT_Y, 0.9))
+	assert_false(ok.capturing())
+
+
+func test_a_key_is_never_taken_from_an_action_whose_only_key_it_is() -> void:
+	var menu := _controls()
+	# Target left has no key. Guard's only key is Q: refused, Guard keeps it.
+	_start(menu, "Target left")
+	_send(menu, _k(KEY_Q))
+	assert_true(menu.capturing(), "refused: the capture goes on waiting")
+	assert_eq(menu.footer(), "That is Guard (tap: parry)'s only key.")
+	assert_eq(ControlsList.shown(&"guard", false), "Q", "Guard keeps it")
+	assert_eq(ControlsList.shown(&"target_left", false), "Not bound")
+	menu._process(3.1)
+	assert_true(menu.footer().begins_with("Press a new key"))
+	# Dash-step has two keys: one can be taken, and the other stays.
+	_send(menu, _k(KEY_SPACE))
+	assert_false(menu.capturing())
+	assert_eq(ControlsList.shown(&"target_left", false), "Space")
+	assert_eq(ControlsList.shown(&"dodge", false), "Shift", "Dash-step keeps the other")
+	assert_eq(menu.footer(), "Taken from Dash-step (hold: sprint).")
+	# An action with a key still swaps.
+	_start(menu, "Palm")
+	_send(menu, _k(KEY_Q))
+	assert_eq(menu.footer(), "Swapped with Guard (tap: parry).")
+	assert_eq(ControlsList.shown(&"guard", false), "LMB")
+	# An action that is not on the page is named in words.
+	_start(menu, "Target right")
+	_send(menu, _k(KEY_1))
+	assert_eq(menu.footer(), "That is slot up's only key.")
+	_send(menu, _k(KEY_ESCAPE))
+
+
+func test_not_bound_is_dim() -> void:
+	var menu := _controls()
+	var dim := Color(Hud.POSTURE, Menu.DIM_ALPHA)
+	var rows: Array = menu.layout().rows.filter(func(r: Dictionary) -> bool: return r.label == "Target left")
+	assert_eq(rows[0].get("value_colour"), dim, "Not bound is the dim colour")
+	var palm: Array = menu.layout().rows.filter(func(r: Dictionary) -> bool: return r.label == "Palm")
+	assert_eq(palm[0].get("value_colour"), Hud.GOLD, "a bound name is gold")
+
+
+func test_the_walk_of_captures_never_leaves_an_action_without_the_key_it_had() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 777
+	var keys := [KEY_F, KEY_G, KEY_Z, KEY_X, KEY_Q, KEY_E, KEY_W, KEY_A, KEY_S, KEY_D, KEY_SPACE, KEY_SHIFT, KEY_TAB, KEY_F10, KEY_1, KEY_2, KEY_R]
+	var labels: Array = ControlsList.ACTION_ROWS.map(func(r: Array) -> String: return r[1])
+	var menu := _controls()
+	var lost := []
+	for step in 300:
+		var before := {}
+		for action in Bindings.ACTIONS:
+			before[action] = Bindings.current()[action].any(func(e: InputEvent) -> bool: return not Bindings.is_gamepad(e))
+		_start(menu, labels[rng.randi() % labels.size()])
+		_send(menu, _k(keys[rng.randi() % keys.size()]))
+		if menu.capturing():
+			_send(menu, _k(KEY_ESCAPE))
+		for action in Bindings.ACTIONS:
+			var now: bool = Bindings.current()[action].any(func(e: InputEvent) -> bool: return not Bindings.is_gamepad(e))
+			if before[action] and not now:
+				lost.append("step %d: %s" % [step, action])
+	assert_eq(lost, [], "no action that had a key is left without one")

@@ -297,6 +297,7 @@ func layout() -> Dictionary:
 			enabled = row.enabled,
 			selected = i == index and row.selectable(),
 			colour = _colour_of(row, i == index and row.selectable()),
+			value_colour = _value_colour_of(row, i == index and row.selectable()),
 			rect = Rect2i(left, line, width, PITCH),
 			text_at = Vector2i(left + INDENT, line + rise),
 			value_at = Vector2i(left + width - wide, line + rise),
@@ -314,7 +315,7 @@ func layout() -> Dictionary:
 	}
 
 
-## What is drawn for each row of the page shown, as {index (in the page), label, value, kind, enabled, selected, colour (the label's), rect, text_at, value_at, chevron, bar, fill}: the
+## What is drawn for each row of the page shown, as {index (in the page), label, value, kind, enabled, selected, colour (the label's), value_colour, rect, text_at, value_at, chevron, bar, fill}: the
 ## rect is the row's line, text_at where its label starts, value_at its right-hand text, chevron the cells' box.
 func rows() -> Array[Dictionary]:
 	var shown: Array[Dictionary] = []
@@ -330,6 +331,16 @@ func _colour_of(row: MenuRow, selected: bool) -> Color:
 	if row.kind == MenuRow.Kind.TEXT or not row.enabled:
 		return Color(Hud.POSTURE, DIM_ALPHA)
 	return Hud.WHITE
+
+
+# The colour of a row's right-hand text: the label's when selected or switched off, dim for "Not bound" (the absence of a key, not a
+# key's name), else gold.
+func _value_colour_of(row: MenuRow, selected: bool) -> Color:
+	if selected or not row.enabled:
+		return _colour_of(row, selected)
+	if row.kind == MenuRow.Kind.BINDING and row.value() == ControlsList.NOT_BOUND:
+		return Color(Hud.POSTURE, DIM_ALPHA)
+	return Hud.GOLD
 
 
 func _selected() -> MenuRow:
@@ -477,7 +488,7 @@ func _draw() -> void:
 		var colour: Color = shown.colour
 		draw_string(font, Vector2(shown.text_at), shown.label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, colour)
 		if not (shown.value as String).is_empty():
-			var value_colour := colour if shown.selected or not shown.enabled else Hud.GOLD
+			var value_colour: Color = shown.value_colour
 			draw_string(font, Vector2(shown.value_at), shown.value, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, value_colour)
 		if (shown.bar as Rect2i).size != Vector2i.ZERO:
 			_draw_bar(shown.bar, shown.fill, shown.enabled)

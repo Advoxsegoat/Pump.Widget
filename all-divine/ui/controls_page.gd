@@ -25,6 +25,7 @@ const LEGEND_KEYBOARD := "Enter: change   Esc: back"
 const LEGEND_PAD := "A: change   B: back"
 const OWN_KEY_NOTE := "That key is the game's own."
 const PAD_GONE_NOTE := "Pad disconnected."
+const NEEDS_BUTTON_NOTE := "Menu / back needs a button."
 const WHEELS := [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN, MOUSE_BUTTON_WHEEL_LEFT, MOUSE_BUTTON_WHEEL_RIGHT]
 
 ## Whether the list shows the pad's bindings (else the keyboard and mouse's).
@@ -199,7 +200,10 @@ func capture(event: InputEvent) -> void:
 			_hot.erase([motion.axis, 1])
 			_hot.erase([motion.axis, -1])
 		elif strength >= PUSH and not _hot.has([motion.axis, 1 if motion.axis_value > 0.0 else -1]):
-			_bind(event)
+			if _action == &"menu":
+				_say(NEEDS_BUTTON_NOTE)  # a stick past the deadzone would open and close the pause on every motion
+			else:
+				_bind(event)
 
 
 ## Every binding back to how the game came, kept.
@@ -226,15 +230,36 @@ func _bind(event: InputEvent) -> void:
 	if Bindings.event_to_data(event).is_empty():
 		return  # nothing that can be bound (a key with no place on the keyboard)
 	var had := _menu_devices()
+	var wanted := Bindings.event_from_data(Bindings.event_to_data(event))
+	var gamepad := Bindings.is_gamepad(wanted)
+	var has_one := InputMap.action_get_events(_action).any(func(e: InputEvent) -> bool: return Bindings.is_gamepad(e) == gamepad)
+	var owner := _owner_of(wanted)
+	# A swap is a swap: an action with nothing of this kind to give back does not take a key from an action it would leave bare.
+	if not has_one and owner != &"" and _count_of_kind(owner, gamepad) <= 1:
+		_say("That is %s's only key." % _name_of(owner))
+		return
 	var other := Inputs.rebind(_action, event)
 	var note := ""
 	if other != &"":
-		note = "Swapped with %s." % _name_of(other)
+		note = ("Swapped with %s." if has_one else "Taken from %s.") % _name_of(other)
 	var restored := _keep_menu_reachable(had)
 	if not restored.is_empty():
 		note += " It is on %s again." % restored if not note.is_empty() else "Menu / back is on %s again." % restored
 	Inputs.save_bindings(Inputs.bindings_path)
 	_end(note)
+
+
+# The action that has an event equal to `event`, or "".
+func _owner_of(event: InputEvent) -> StringName:
+	for action in Bindings.ACTIONS:
+		if action != _action and InputMap.action_get_events(action).any(func(e: InputEvent) -> bool: return Bindings.same_event(e, event)):
+			return action
+	return &""
+
+
+# How many events of a device kind `action` has.
+func _count_of_kind(action: StringName, gamepad: bool) -> int:
+	return InputMap.action_get_events(action).filter(func(e: InputEvent) -> bool: return Bindings.is_gamepad(e) == gamepad).size()
 
 
 func _end(note: String) -> void:
@@ -250,7 +275,7 @@ func _name_of(action: StringName) -> String:
 	for item: Array in ControlsList.ACTION_ROWS:
 		if item[0] == action:
 			return item[1]
-	return String(action)
+	return String(action).replace("_", " ")
 
 
 # Whether the `menu` action has a button on the keyboard and mouse, and on the pad: [keyboard, pad].

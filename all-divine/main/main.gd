@@ -93,6 +93,12 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if Game.state == Game.State.PAUSE and menu.capturing():
+		# A binding waits for its button: the menu has the event first and nothing else is done with it, so that the game's own keys
+		# (which it refuses, saying so) do none of their own work meanwhile.
+		menu.handle(event)
+		get_viewport().set_input_as_handled()
+		return
 	if WindowToggle.is_toggle(event):
 		WindowToggle.apply(window)
 		Settings.note_window_mode(window.mode)
