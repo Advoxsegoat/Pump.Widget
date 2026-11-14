@@ -26,7 +26,7 @@ const PLACES := {
 	"W3 the Tanneries lane": {rect = Rect2(25, -55, 5, 50), stone = "tan_earth"},
 	"W4 the Rack Walk": {rect = Rect2(-35, -25, 60, 5), stone = "tan_earth"},
 	"W5 the loop lane": {rect = Rect2(-35, -20, 5, 15), stone = "tan_earth"},
-	"W6 alcove B": {rect = Rect2(30, -37.5, 7.5, 7.5), stone = "slate_cold"},
+	"W6 alcove B": {rect = Rect2(30, -37.5, 7.5, 7.5), stone = "slate_pale"},
 	"W7 the Tanneries yard": {rect = Rect2(15, -75, 25, 20), stone = "tan_earth"},
 }
 ## The yard's fighting square is laid in its own stone with a border course of another round it: the margins stay tan earth.
@@ -217,7 +217,7 @@ func test_the_stretch_is_a_plain_region_with_its_markers_pois_and_no_enemy_spawn
 	var env := (region.get_node("WorldEnvironment") as WorldEnvironment).environment
 	assert_eq(env.background_color.to_html(false), "aebbcc", "the sky")
 	var sun := region.get_node("Sun") as DirectionalLight3D
-	assert_vec_near(sun.rotation_degrees, Vector3(-60, 30, 0), 1e-3, "the sun's way")
+	assert_vec_near(sun.rotation_degrees, Vector3(-80, 30, 0), 1e-3, "the sun's way (noon: nearly overhead)")
 	assert_near(sun.light_energy, 0.25, 1e-6, "its energy")
 	assert_eq(sun.light_color.to_html(false), "f4f7ff", "and colour")
 	assert_eq(region.find_children("Vat*", "StaticBody3D", true, false).size(), 5, "five vats: two in the yard, three in the drying yard")
@@ -1486,6 +1486,9 @@ func test_the_light_is_the_snow_noon() -> void:
 	# The sun: shadows, a gentle key, and it leaves the bodies to the fill.
 	assert_true(sun.shadow_enabled, "the sun casts shadows")
 	assert_near(sun.light_energy, 0.25, 1e-6, "the sun is a gentle key")
+	# Noon: the sun is nearly overhead (pitch 75 degrees or steeper), so a front shades little of the ground a fighter stands on and the pale
+	# ground is the same pale in the open and by a wall (the ground's band in the readability test is 0.12 wide).
+	assert_true(sun.rotation_degrees.x <= -75.0 and sun.rotation_degrees.x >= -89.0, "the sun stands high (pitch %.0f, 75 to 89 degrees down)" % -sun.rotation_degrees.x)
 	assert_eq(sun.light_cull_mask & Layers.RENDER_BODIES, 0, "the sun leaves the bodies to the fill")
 	assert_eq(env.ambient_light_source, Environment.AMBIENT_SOURCE_COLOR, "ambient from a colour")
 	assert_eq(env.ambient_light_color.to_html(false), "bccadf", "the ambient is #bccadf")
@@ -1495,8 +1498,12 @@ func test_the_light_is_the_snow_noon() -> void:
 	assert_true(grade != null and grade.resource_path == GRADE, "the grade is bilibara_noon (%s)" % [grade.resource_path if grade != null else "none"])
 	if grade != null:
 		assert_eq(grade.fog_color.to_html(false), "aebbcc", "the grade's fog is the sky's colour")
-		assert_near(grade.fog_density, 0.01, 1e-6, "fog density")
+		assert_near(grade.fog_density, 0.015, 1e-6, "fog density")
 		assert_near(grade.saturation, 0.9, 1e-6, "saturation")
+		# The ground is pale of itself now, so the grade's lift is the plan's: it deepens the shadows, it does not lift the ground out of black.
+		assert_near(grade.lift.r, 0.05, 1e-6, "lift r")
+		assert_near(grade.lift.g, 0.06, 1e-6, "lift g")
+		assert_near(grade.lift.b, 0.09, 1e-6, "lift b")
 
 
 func test_shade_is_at_least_seventy_percent_of_sun() -> void:
@@ -1558,7 +1565,8 @@ func test_lamps_light_the_world_only_and_are_warm_and_few() -> void:
 		assert_true(lamp.get_parent() != null and lamp.get_parent().get_parent() == posts, "a lamp sits in a lantern (%s)" % lamp.get_path())
 		assert_eq(lamp.light_color.to_html(false), "ffb98a", "a warm lamp")
 		assert_near(lamp.omni_range, 6.0, 1e-6, "range 6")
-		assert_near(lamp.light_energy, 0.5, 1e-6, "energy 0.5")
+		# At noon a warm pool on pale ground is a faint tint, not a bright disc: no lamp lifts the ground under it by more than 0.06.
+		assert_near(lamp.light_energy, 0.15, 1e-6, "energy 0.15")
 		assert_eq(lamp.light_cull_mask, Layers.RENDER_WORLD, "a lamp lights the world and not the bodies")
 		if lamp.shadow_enabled:
 			shadowed.append(lamp)

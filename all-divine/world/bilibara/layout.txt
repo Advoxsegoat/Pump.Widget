@@ -50,8 +50,9 @@ kit bilibara
 # and slate (the fill is the moon of the training yard under a day's name). The lamps are the only warm light, and light the world only.
 sky #aebbcc
 ambient #bccadf 0.62
-sun -60 30 #f4f7ff 0.25 ortho
-fill -40 20 #f4f7ff 1.3
+sun -80 30 #f4f7ff 0.25 ortho
+fill -40 20 #f4f7ff 1.1
+script res://world/bilibara/bilibara_region.gd
 grade res://data/render/grades/bilibara_noon.tres
 
 # --- The ground: the seven places, in plates of at most 12.5 m a side, exactly tiling each ---
@@ -79,7 +80,7 @@ ground 15 -25 25 -20 tan_earth
 ground -35 -20 -30 -12.5 tan_earth
 ground -35 -12.5 -30 -5 tan_earth
 # W6 alcove B, "Lamp and a chair" (slate)
-ground 30 -37.5 37.5 -30 slate_cold
+ground 30 -37.5 37.5 -30 slate_pale
 # W7 the Tanneries yard (tan earth): a centre where the fights are (YardPlateCentre: one line changes its stone) and margins
 ground 22.25 -69 32.75 -61 flagstone_cold name=YardPlateCentre
 ground 21.25 -70 33.75 -69 slate_cold name=YardPlateBorderNorth
@@ -396,7 +397,7 @@ row fence 40.85 -73.75 40.85 -56.25 180
 # ground is open, on the top of a low wall (ghost: nobody reaches it; the wall's fences are not before a body, see the notes there), 4.1 m up
 # from the ground to the lamp. A post on the ground is solid, a slim round post a fighter slides round. Two lamps cast shadows, at the shrine
 # sites 80 m apart (ShrineLampA in court A, ShrineLampB in alcove B). Where these differ from the plan's coordinates: the report lists them.
-lamps #ffb98a 6 0.5 3.45 world
+lamps #ffb98a 6 0.15 3.45 world
 lantern -36.1 -4.13 shadow
 lantern -28.5 -4.7
 lantern -20 -4.72
