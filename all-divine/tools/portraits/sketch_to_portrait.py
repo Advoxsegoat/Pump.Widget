@@ -25,7 +25,7 @@ The stages, in the order they run:
   clean    a narrow band along each rule is filled from the pencil above and below it, along every direction a stroke
            could cross it, so a stroke that crosses a rule is still one line; what is not on a rule is not touched. A
            rectangle of the recipe's `keep` is not touched at all (a stroke that lies along a rule); a rectangle of
-           `erase` is wiped to paper (what is left over). The levels then make paper nothing and the pencil's darkest
+           `erase` is wiped to paper (what is left over), its edge fading out over a few pixels. The levels then make paper nothing and the pencil's darkest
            full. The tool then checks its own work, and refuses (exit 2, one line) when it took out more of a rule's length
            than the rule holds ("the drawing was being erased") or when a rule remains ("rules remain at rows ...": the
            paper's row profile is not flat, or a pencil-dark run is left along a rule on bare paper).
@@ -39,7 +39,8 @@ names it, "recipe: ..."):
 
   paper        "ruled" or "plain"
   crop         [x0, y0, x1, y1], fractions of the page
-  erase, keep  lists of [x0, y0, x1, y1], fractions of the page
+  erase, keep  lists of [x0, y0, x1, y1], fractions of the page; `erase` wipes to paper and fades out over 8 working pixels outside
+               its rectangle; `keep` leaves a stroke along a rule alone but takes the rule's own darkness off it
   tints        a list of {name, colour ("#rrggbb"), polygon [[x, y], ...]}: polygons in fractions of the card's picture
                (what `crop.png` shows). The colour is the wash at its full strength; its edge is feathered
   card         {paper, ink}: colours, "#rrggbb"
@@ -106,6 +107,8 @@ RESIDUE_BAND = 4
 # times the rule's own ink goes out of it; no more than INK_TAKEN_MOST of a rule's length may be.
 INK_COLUMN = 2.0
 INK_TAKEN_MOST = 0.15
+# An erase fades out over this many working pixels outside its rectangle.
+ERASE_FEATHER = 8.0
 # Levelled darkness under this is not pencil.
 LEVEL_NOISE = 0.05
 # The most a rule's band is, in rows each side of its middle, and the least.
@@ -123,6 +126,8 @@ FAINT_RULE = 1.5
 HALO_COVER = 1.3
 # ... plus this much (the paper's grain).
 HALO_SLACK = 0.03
+# In a `keep` rectangle the rule's own darkness is taken off by the middle of this many columns each side where it stands alone.
+KEEP_STRETCH = 100
 # How far along the rule a stroke may cross it, in columns per row of the band.
 BRIDGE_SLANT = 2.75
 BRIDGE_STEP = 0.25
@@ -444,6 +449,32 @@ def _take_off_halo(clean, dark, mid, alone, peak, half, keep_mask, halo_reach=HA
         clean[yy, xx] = np.where(value <= HALO_COVER * local + HALO_SLACK, np.maximum(value - local, 0.0), value)
 
 
+def _take_rule_off_kept(clean, dark, mid, alone, keep_mask, halo_reach):
+    """In a `keep` rectangle nothing is filled in (a stroke lies along the rule there), but the rule itself is not the
+    drawing: what the rule alone holds at each distance from its middle, taken over the columns where it stands alone and
+    smoothed over a long stretch of them (a stroke on the rule is a minority of the stretch, so the rule's own profile is
+    what the middle of it is), comes off, and what lies on the rule over that stays."""
+    h, w = dark.shape
+    xs = np.arange(w)
+    offs = np.arange(-halo_reach, halo_reach + 1)
+    rows = np.clip(mid[:, None] + offs[None, :], 0, h - 1)
+    profile = dark[rows, xs[:, None]]
+    quiet = alone & (profile[:, 0] < 0.08) & (profile[:, -1] < 0.08)
+    good = np.nonzero(quiet)[0]
+    if len(good) < 40:
+        return
+    base = np.minimum(profile[good, 0], profile[good, -1])
+    lifted = np.clip(profile[good] - base[:, None], 0.0, None)
+    for slot, o in enumerate(offs):
+        own = np.interp(xs, good, _running_median(lifted[:, slot], KEEP_STRETCH))
+        y = mid + o
+        ok = (y >= 0) & (y < h)
+        yy, xx = y[ok], xs[ok]
+        kept = keep_mask[yy, xx]
+        yy, xx = yy[kept], xx[kept]
+        clean[yy, xx] = np.maximum(dark[yy, xx] - own[xx], 0.0)
+
+
 def remove_rules(dark, rules, keep_mask, scale):
     """`dark` with a band along each rule filled from above and below. Returns (cleaned, band mask, bands, taken): `taken`
     says for each rule over how much of its length more ink was taken out than the rule itself holds (`_ink_taken`)."""
@@ -487,6 +518,7 @@ def remove_rules(dark, rules, keep_mask, scale):
             free = ~keep_mask[yy, xx]
             clean[yy[free], xx[free]] = fill[slot][ok][free]
             band_mask[yy, xx] = True
+        _take_rule_off_kept(clean, dark, mid, alone, keep_mask, scale.halo_reach)
         taken.append(_ink_taken(dark, clean, mid, scale.halo_reach))
     return clean, band_mask, bands, taken
 
@@ -590,11 +622,12 @@ def _spans(rows):
     return [(a, b) for a, b in out]
 
 
-def check_clean(line, dark, rules, row_scale=1.0, scale=None):
+def check_clean(line, dark, rules, row_scale=1.0, scale=None, keep_mask=None):
     """The tool checks its own work after the rules are out of a ruled page, with the two measures the owner's drawing test
     uses: (1) the paper's row profile is flat (the lightest fifth of each row, across the middle of the page, has nothing in
     it), and (2) along each rule, where it crossed bare paper, no pencil-dark run is left. Raises PortraitError naming the
-    rows (of the photograph, `row_scale` times the working rows) that still hold a rule."""
+    rows (of the photograph, `row_scale` times the working rows) that still hold a rule. What the recipe's `keep` marks is the
+    drawing's: not judged."""
     h, w = line.shape
     left = []
     c0, c1 = int(0.1 * w), int(0.9 * w)
@@ -619,6 +652,11 @@ def check_clean(line, dark, rules, row_scale=1.0, scale=None):
         if len(cols) < 20:
             continue
         mids = np.round(centre[cols]).astype(int)
+        if keep_mask is not None:
+            free = ~keep_mask[np.clip(mids, 0, h - 1), cols]
+            cols, mids = cols[free], mids[free]
+            if len(cols) < 20:
+                continue
         marks = np.max([line[np.clip(mids + o, 0, h - 1), cols] for o in (-1, 0, 1)], axis=0)
         bad = marks > RESIDUE_RUN
         if float(bad.mean()) > RESIDUE_SHARE:
@@ -629,6 +667,21 @@ def check_clean(line, dark, rules, row_scale=1.0, scale=None):
         more = " and %d more" % (len(spans) - 4) if len(spans) > 4 else ""
         raise PortraitError("clean", "rules remain at rows %s%s of the photograph (the rules may be too close together or too faint to take out; "
                             "plain paper, or a photograph with the page filling the frame, helps)" % (shown, more))
+
+
+def erase_weight(shape, rects):
+    """How much of each pixel the recipe's `erase` wipes, 0..1: all of it inside a rectangle, fading to nothing over
+    ERASE_FEATHER pixels outside it (a straight edge cut through pencil reads as a pale slit)."""
+    h, w = shape
+    weight = np.zeros(shape, dtype=np.float32)
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+    for x0, y0, x1, y1 in rects:
+        left, right = max(int(x0 * w), 0), int(np.ceil(x1 * w))
+        top, bottom = max(int(y0 * h), 0), int(np.ceil(y1 * h))
+        dx = np.maximum(np.maximum(left - xs, xs - (right - 1)), 0.0)
+        dy = np.maximum(np.maximum(top - ys, ys - (bottom - 1)), 0.0)
+        weight = np.maximum(weight, np.clip(1.0 - np.hypot(dx, dy) / ERASE_FEATHER, 0.0, 1.0))
+    return weight
 
 
 def clean_page(grey, recipe, row_scale=1.0):
@@ -658,12 +711,12 @@ def clean_page(grey, recipe, row_scale=1.0):
             (rules if (lifted - floor) / (ceiling - floor) > FAINT_RULE * LEVEL_NOISE else faint).append(coef)
         if rules:
             cleaned, band_mask, bands, taken = remove_rules(dark, rules, keep_mask, scale)
-    erase_mask = _rect_mask(dark.shape, recipe["erase"])
-    cleaned[erase_mask] = 0.0
+    if recipe["erase"]:
+        cleaned = cleaned * (1.0 - erase_weight(dark.shape, recipe["erase"]))
     line, used = levels(cleaned)
     if recipe["paper"] == "ruled":
         check_ink(taken)
-        check_clean(line, dark, rules, row_scale, scale)
+        check_clean(line, dark, rules, row_scale, scale, keep_mask)
     before = np.clip((np.clip((dark - used[0]) / (used[1] - used[0]), 0.0, 1.0) - LEVEL_NOISE) / (1.0 - LEVEL_NOISE), 0.0, 1.0).astype(np.float32)
     return {"flat": flat, "dark": dark, "rules": rules, "faint_rules": faint, "spacing": spacing, "taken": taken, "bands": bands,
             "band_mask": band_mask, "cleaned": cleaned, "line": line, "line_before": before}

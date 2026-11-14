@@ -367,6 +367,24 @@ class SketchToPortraitTest(unittest.TestCase):
             self.assertGreaterEqual(retained, 0.9, "%s keeps only %.0f%% of its darkness" % (name, 100 * retained))
         mole = stages["line"][int(MOLE[1] * h): int(MOLE[3] * h), int(MOLE[0] * w): int(MOLE[2] * w)]
         self.assertEqual(count_blobs(mole > 0.3), 1, "the mole is not one dark dot")
+        # no grey bar of rule left along any rule inside the bust (the mouth's rule is the one that had it): along a rule's middle
+        # the pencil's own darkness goes up and down; a bar is a run of grey that never reaches pencil
+        runs = grey_runs(stages, stages["line"])
+        self.assertLessEqual(max(runs), GREY_RUN_MOST, "a grey bar of %d px is left along a rule (the rules' runs: %s)" % (max(runs), runs))
+        # ... and the measure sees one: the same picture with a grey bar laid across the mouth along its rule
+        mouth = int(np.argmin([abs(float(np.polyval(coef, 0.52 * w - w / 2.0)) - 0.507 * h) for coef in stages["rules"]]))
+        barred = stages["line"].copy()
+        centre, _alone, _ = tool.rule_centre(stages["dark"], stages["rules"][mouth], w)
+        for x in range(int(0.47 * w), int(0.55 * w)):
+            y = int(round(centre[x]))
+            barred[y - 1: y + 2, x] = np.maximum(barred[y - 1: y + 2, x], 0.3)
+        self.assertGreater(grey_runs(stages, barred)[mouth], GREY_RUN_MOST, "a grey bar across the mouth is not seen by the check")
+        # the lower lip's smear that lay along that rule is kept: most of what lay on the rule over the rule's own darkness
+        bx0, by0, bx1, by1 = [int(v) for v in (LOWER_LIP[0] * w, LOWER_LIP[1] * h, LOWER_LIP[2] * w, LOWER_LIP[3] * h)]
+        level = float(np.median(stages["line_before"][stages["band_mask"]]))
+        excess = np.maximum(stages["line_before"][by0:by1, bx0:bx1] - level, 0.0)
+        kept = float(np.minimum(stages["line"][by0:by1, bx0:bx1], excess).sum() / max(excess.sum(), 1e-6))
+        self.assertGreaterEqual(kept, 0.5, "the lower lip keeps only %.0f%% of what lay on its rule" % (100 * kept))
 
 
 # Boxes on the owner's page (fractions of it) round the features the portrait must keep. Set from the drawing: the
@@ -380,6 +398,28 @@ OWNER_BOXES = {
     "feather": [0.800, 0.435, 0.985, 0.555],
 }
 MOLE = [0.628, 0.428, 0.655, 0.450]
+LOWER_LIP = [0.449, 0.5024, 0.5956, 0.5131]
+# The longest run of grey (never reaching pencil) allowed along a rule in the middle of the page, in working pixels: the
+# drawing's own strokes along rules come to 36 at the most, a rule's bar left across the mouth was 49.
+GREY_RUN_MOST = 42
+
+
+def grey_runs(stages, line):
+    """For each rule, the longest run (working pixels, over the middle 60% of the page) of columns where the line within a row of
+    the rule's middle is grey (over 0.08, under 0.5) and not pencil."""
+    h, w = line.shape
+    runs = []
+    for coef in stages["rules"]:
+        centre, _alone, _ = tool.rule_centre(stages["dark"], coef, w)
+        mids = np.round(centre).astype(int)
+        marks = np.max([line[np.clip(mids + o, 0, h - 1), np.arange(w)] for o in (-1, 0, 1)], axis=0)
+        grey = (marks > 0.08) & (marks <= 0.5)
+        best = current = 0
+        for x in range(int(0.2 * w), int(0.8 * w)):
+            current = current + 1 if grey[x] else 0
+            best = max(best, current)
+        runs.append(best)
+    return runs
 
 
 def count_blobs(mask):

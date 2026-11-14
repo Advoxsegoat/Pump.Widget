@@ -1,5 +1,5 @@
 {
- "notes": "Abarax, a bust in pencil on ruled paper (the page's rules run slightly curved: the tool finds them). crop: the bust with the top-knot at the top, the feather at the right and the V collar at the foot, padded with paper to the card's 116 x 160. erase: one pale wedge left of the mouth where a rule lay along smudged hatching. tints (restrained, from his palette: skin, his scarf's rose, a cool grey for the collar): the hair takes none, the bun, the pulled-back hair, the brows and the stubble are the pencil's own colour. Polygons are fractions of the card picture (stages/crop.png).",
+ "notes": "Abarax, a bust in pencil on ruled paper (the page's rules run slightly curved: the tool finds them). crop: the bust with the top-knot at the top, the feather at the right and the V collar at the foot, padded with paper to the card's 116 x 160. keep: the lower lip, a smear that lies along a rule (the tool takes the rule's own darkness off it and leaves the pencil). erase: a grey wedge on the bare paper left of the jaw where bridging joined the jaw's hatching to a stroke below the rule; its edge fades out. tints (restrained, from his palette: skin, his scarf's rose, a cool grey for the collar): the hair takes none, the bun, the pulled-back hair, the brows and the stubble are the pencil's own colour. Polygons are fractions of the card picture (stages/crop.png).",
  "paper": "ruled",
  "crop": [
   0.265,
@@ -9,13 +9,20 @@
  ],
  "erase": [
   [
-   0.3733,
-   0.5055,
-   0.4067,
-   0.5105
+   0.378,
+   0.5035,
+   0.4,
+   0.511
   ]
  ],
- "keep": [],
+ "keep": [
+  [
+   0.449,
+   0.5024,
+   0.5956,
+   0.5131
+  ]
+ ],
  "tints": [
   {
    "name": "skin",
