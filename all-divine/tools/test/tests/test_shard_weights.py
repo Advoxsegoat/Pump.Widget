@@ -1,4 +1,6 @@
 """Tests for tools/test/shard_weights.py: run as `python3 -I -m unittest discover -s tools/test/tests` from all-divine/."""
+import contextlib
+import io
 import os
 import sys
 import tempfile
@@ -63,6 +65,33 @@ class Weights(unittest.TestCase):
     def test_the_header_is_the_comment_lines_before_the_first_weight(self):
         old = "# one\n#\n# two\n\n575  a/test_x.gd   # render log\n# not header\n"
         self.assertEqual(shard_weights.header_of(old), "# one\n#\n# two\n\n")
+
+
+class RunKind(unittest.TestCase):
+    def test_a_log_says_what_kind_of_run_it_is_from_its_run_kind_line(self):
+        self.assertEqual(shard_weights.run_kind("2026-11-15T10:00:00Z RUN-KIND render\nPASS x\n"), "render")
+        self.assertEqual(shard_weights.run_kind("RUN-KIND headless\nFILE-SECONDS 85.0 bot/test_x.gd\n"), "headless")
+        self.assertIsNone(shard_weights.run_kind("FILE-SECONDS 85.0 bot/test_x.gd\n"), "a log from before the line says nothing")
+
+    def test_only_a_render_runs_log_is_taken(self):
+        with tempfile.TemporaryDirectory() as folder:
+            paths = {}
+            for name, text in (("render", "RUN-KIND render\nFILE-SECONDS 85.0 bot/test_x.gd\n"),
+                               ("headless", "RUN-KIND headless\nFILE-SECONDS 8.0 bot/test_x.gd\n"),
+                               ("bare", "FILE-SECONDS 8.0 bot/test_x.gd\n")):
+                paths[name] = os.path.join(folder, name + ".log")
+                with open(paths[name], "w") as handle:
+                    handle.write(text)
+            weights = os.path.join(folder, "weights.txt")
+            with open(weights, "w") as handle:
+                handle.write("# header\n")
+            self.assertEqual(shard_weights.main([paths["render"], "--tests", folder, "--weights", weights]), 0)
+            for name in ("headless", "bare"):
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr):
+                    self.assertEqual(shard_weights.main([paths["render"], paths[name], "--tests", folder, "--weights", weights]), 1)
+                self.assertIn("not a render run's log", stderr.getvalue())
+                self.assertIn(paths[name], stderr.getvalue())
 
 
 if __name__ == "__main__":

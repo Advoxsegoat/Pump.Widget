@@ -47,6 +47,7 @@ func _run(args: PackedStringArray) -> bool:
 			print("FAIL rendering method: expected %s, got %s" % [expect_method, method])
 			return false
 
+	print(TestRunner.kind_line(DisplayServer.get_name() == "headless"))
 	if files.is_empty():
 		files = TestRunner.discover("res://tests", include_render)
 	files = TestRunner.shard_for_run(files, shard.x, shard.y)

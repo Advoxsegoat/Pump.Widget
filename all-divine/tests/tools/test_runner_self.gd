@@ -183,7 +183,10 @@ func test_shard_argument_is_read_as_index_of_count() -> void:
 func test_a_run_names_each_files_seconds_in_a_line_a_script_can_read() -> void:
 	assert_eq(TestRunner.time_line(TestRunner.TESTS_ROOT + "bot/test_made_up.gd", 12.34), "FILE-SECONDS 12.3 bot/test_made_up.gd")
 	assert_eq(TestRunner.time_line(TestRunner.TESTS_ROOT + "test_top.gd", 0.04), "FILE-SECONDS 0.0 test_top.gd")
+	assert_eq(TestRunner.kind_line(true), "RUN-KIND headless")
+	assert_eq(TestRunner.kind_line(false), "RUN-KIND render")
 	var child := _run_in_child("res://tools/test/run.gd", ["--files=" + F + "fixture_pass.gd"])
+	assert_true(child.lines.has("RUN-KIND headless"), "a headless run says so: %s" % ["\n".join(child.lines)])
 	var found := PackedStringArray()
 	for line in child.lines:
 		if line.begins_with("FILE-SECONDS "):

@@ -10,7 +10,8 @@ it holds each slow file's seconds in a render shard: this turns the logs into it
 Prints the new file (or, with --write, replaces `--weights` with it). A file is taken at the longest time any log gives it. A
 file not in the logs keeps the weight it had; a file that no longer exists under --tests is dropped; a file at the default
 weight (5 s) or under is left out, since a file not named there weighs that. The header (the comment lines before the first
-weight) is kept as it was. Give it only render shards' logs: the headless job's times are an eighth of these.
+weight) is kept as it was. Give it only render shards' logs: the headless job's times are an eighth of these, so a log that is not a
+render run's (its RUN-KIND line says headless, or there is none) is refused, naming the file.
 """
 import argparse
 import math
@@ -22,6 +23,14 @@ import sys
 DEFAULT_WEIGHT = 5.0
 MEASURED = "measured in a render shard"
 _LINE = re.compile(r"FILE-SECONDS (\d+(?:\.\d+)?) (\S+)")
+#: The line a run prints once, first, saying what kind of run it is (tools/test/test_runner.gd, kind_line).
+_KIND = re.compile(r"RUN-KIND (headless|render)\b")
+
+
+def run_kind(text):
+    """What kind of run a log is of: "render", "headless", or None for a log with no RUN-KIND line (from before it)."""
+    match = _KIND.search(text)
+    return match.group(1) if match else None
 
 
 def read_log(text):
@@ -97,7 +106,12 @@ def main(argv):
     logs = []
     for path in args.logs:
         with open(path, encoding="utf-8", errors="replace") as handle:
-            logs.append(read_log(handle.read()))
+            text = handle.read()
+        if run_kind(text) != "render":
+            print("shard_weights: %s is not a render run's log (its RUN-KIND line says %s): the headless job's seconds are not a render shard's" % (
+                path, run_kind(text) or "nothing"), file=sys.stderr)
+            return 1
+        logs.append(read_log(text))
     if not any(logs):
         print("shard_weights: no FILE-SECONDS line in any log: not render shards' logs of a run with the times?", file=sys.stderr)
         return 1
