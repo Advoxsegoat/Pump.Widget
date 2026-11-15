@@ -72,3 +72,6 @@
 16   ui/test_skip_scene_row.gd   # headless x8
 83   actors/test_abarax_feather.gd   # render log
 40   actors/test_spring_reset.gd   # an estimate (three fights of 600 frames): not yet seen in a log
+150  render/test_story_shots.gd   # 118 s here in a filtered render run at load 4 to 6: not yet seen in a log
+80   tools/test_story_tools.gd   # it starts the two tools for real (45 s here headless): an estimate
+60   tools/test_tool_safety.gd   # it starts and kills the tools (35 s here headless): an estimate
