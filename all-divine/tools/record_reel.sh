@@ -10,7 +10,9 @@
 #
 # The Movie Maker records at the size the window has when the game starts, which a command-line --resolution does not
 # change under the project's fullscreen setting; so the run is given a temporary override.cfg (removed at the end)
-# that makes the window the 640x360 picture itself, and ffmpeg then scales that up 2x with nearest-neighbour.
+# that makes the window the 640x360 picture itself, and ffmpeg then scales that up 2x with nearest-neighbour. The file says
+# which run wrote it (tools/override_cfg.sh): a killed run's is removed by the next run of tools/godot.sh; an override.cfg of
+# the owner's own, or another run in this folder, makes this refuse (exit 4, one line) and nothing of the owner's is deleted.
 # The reel is not the player's game: it is run with --no-player-settings, so it is made on the default settings and
 # never reads the player's settings file.
 # REEL_FRAMES (default 780, about 26 s at 30 fps) is how long it records; REEL_STILLS is a space-separated list of
@@ -18,6 +20,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$ROOT/tools/override_cfg.sh"
 OUT="${1:-$ROOT/out/demo}"
 FRAMES="${REEL_FRAMES:-780}"
 STILLS="${REEL_STILLS:-2.5 4.1 6.9 8.3 9.5 10.7 11.3 17.2 21.0 22.5 24.6}"
@@ -29,9 +32,9 @@ TELL_CROP="${REEL_TELL_CROP:-256:144:150:88}"
 command -v ffmpeg >/dev/null || { echo "record_reel.sh: ffmpeg is needed" >&2; exit 1; }
 
 work="$(mktemp -d)"
-trap 'rm -rf "$work"; rm -f "$ROOT/override.cfg"' EXIT
+trap 'override_release; rm -rf "$work"' EXIT
+override_claim record_reel.sh || exit $?
 mkdir -p "$OUT"
-printf '[display]\nwindow/size/viewport_width=640\nwindow/size/viewport_height=360\nwindow/size/mode=0\n' > "$ROOT/override.cfg"
 
 "$ROOT/tools/godot.sh" --render --write-movie "$work/frame.png" --fixed-fps 30 --quit-after "$FRAMES" res://demo/demo_reel.tscn -- --no-player-settings
 
