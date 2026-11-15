@@ -761,6 +761,9 @@ func _go_round(actor: Actor, intent: Intent, delta: float) -> bool:
 		if _round_for > ROUND_GIVE_UP or there.distance_to(_round_at) > ROUND_MOVED:
 			_round_to = Vector2.INF
 			_round_path.clear()
+		elif _round_to != Vector2.INF and _goal_at(actor.get_world_3d().direct_space_state, here, actor.global_position.y, [actor.get_rid(), target.get_rid()]):
+			_round_to = Vector2.INF  # where he stands is already a place with a line and room to walk in: no need to go on
+			_round_path.clear()
 	if _round_to == Vector2.INF:
 		if _clear(actor, false):
 			return false
@@ -773,7 +776,7 @@ func _go_round(actor: Actor, intent: Intent, delta: float) -> bool:
 	if _plan != null:
 		_forget_plan(actor)
 	var way := _round_to - here
-	intent.move = way.normalized() * (JOG_PUSH if way.length() > WALK_WITHIN else WALK_PUSH)
+	intent.move = way.normalized() * (JOG_PUSH if way.length() > 0.6 else WALK_PUSH)
 	if _watch_blocked(actor, intent, delta):
 		_round_to = Vector2.INF
 		_round_path.clear()

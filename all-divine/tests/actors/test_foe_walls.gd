@@ -133,7 +133,7 @@ func _observe(run: Dictionary) -> void:
 			run["still_max"] = maxi(run["still_max"], run["still"][i])
 		else:
 			run["still"][i] = 0
-		if absf(foe.global_position.z - run["origin"].z) < 0.3 and absf(foe.global_position.x - run["origin"].x) < 1.0:
+		if absf(foe.global_position.z) < 0.2 and absf(foe.global_position.x - run["origin"].x) < 0.6:
 			in_door += 1
 	var dump := ""
 	for foe in foes:
