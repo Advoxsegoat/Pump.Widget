@@ -1006,10 +1006,12 @@ func test_every_piece_is_a_kenney_toon_piece_at_two_and_a_half_times() -> void:
 				continue
 			# A banner wears the neon colormap (the same shader with a glow of its own).
 			var neon: bool = node.scene_file_path.get_file().begins_with("banner")
-			var want := dresser.banner_material if neon else dresser.material
+			# A fence wears the dark iron (bars that read against a pale wall).
+			var iron: bool = node.scene_file_path.get_file().begins_with("fence") or (node is KitRun and String((node as KitRun).piece).begins_with("fence"))
+			var want := dresser.banner_material if neon else (dresser.fence_material if iron else dresser.material)
 			var ok: bool = material is ShaderMaterial and (material as ShaderMaterial).shader.resource_path == TOON_WORLD and material == want
 			var tex := (material as ShaderMaterial).get_shader_parameter(&"albedo_tex") as Texture2D if ok else null
-			ok = ok and tex != null and tex.resource_path == ("res://assets/env/textures/bilibara_neon_colormap.png" if neon else "res://assets/env/textures/bilibara_colormap.png")
+			ok = ok and tex != null and (iron or tex.resource_path == ("res://assets/env/textures/bilibara_neon_colormap.png" if neon else "res://assets/env/textures/bilibara_colormap.png"))
 			seen[region.get_path_to(node)] = true
 			if not ok:
 				not_toon.append(String(region.get_path_to(node)))
