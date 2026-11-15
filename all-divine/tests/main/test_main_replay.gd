@@ -112,18 +112,37 @@ func test_a_debug_key_pressed_while_recording_is_said_in_the_header_and_the_repl
 	assert_true(Main.replay_refusal(FILE).contains("debug key"), "and a replay of it is refused: %s" % Main.replay_refusal(FILE))
 
 
+func test_f10_while_recording_is_a_debug_key_and_the_replay_is_refused() -> void:
+	RenderingServer.render_loop_enabled = false
+	var main := _main()
+	main.start_recording(FILE)
+	await frames(5)
+	assert_false(main._recorder.recording().debug_keys, "no debug key yet")
+	var event := InputEventKey.new()
+	event.keycode = KEY_F10
+	event.physical_keycode = KEY_F10
+	event.pressed = true
+	main._unhandled_input(event)  # plays the fixture scene in the yard: a recording made through a scene cannot be replayed
+	await frames(3)
+	assert_eq(main.save_recording(), OK)
+	var rec := ResourceLoader.load(FILE, "", ResourceLoader.CACHE_MODE_IGNORE) as InputRecording
+	assert_true(rec.debug_keys, "the header says a debug key was pressed")
+	assert_true(Main.replay_refusal(FILE).contains("debug key"), "and a replay of it is refused with the existing line: %s" % Main.replay_refusal(FILE))
+	RenderingServer.render_loop_enabled = true
+
+
 func test_a_debug_key_the_pause_menu_ignored_is_not_a_debug_key_in_the_recording() -> void:
 	var main := _main()
 	main.start_recording(FILE)
 	await frames(3)
 	assert_true(Game.change(Game.State.PAUSE), "the game is paused")
-	for keycode in [KEY_F5, KEY_F6, KEY_F7, KEY_F8, KEY_F9]:
+	for keycode in [KEY_F5, KEY_F6, KEY_F7, KEY_F8, KEY_F9, KEY_F10]:
 		var event := InputEventKey.new()
 		event.keycode = keycode
 		event.physical_keycode = keycode
 		event.pressed = true
 		main._unhandled_input(event)
-	assert_false(main._recorder.recording().debug_keys, "F5 to F9 did nothing in the menu, so nothing is said of them")
+	assert_false(main._recorder.recording().debug_keys, "F5 to F10 did nothing in the menu, so nothing is said of them")
 	Game.change(Game.State.PLAY)
 	assert_false(main._recorder.recording().debug_keys, "and not later either")
 
