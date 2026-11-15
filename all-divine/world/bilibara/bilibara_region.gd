@@ -41,6 +41,7 @@ func _ready() -> void:
 	shadows.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	shadows.layers = Layers.RENDER_WORLD
 	shadows.top_level = true
+	shadows.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF  # placed afresh each drawn frame, from _process (see the header)
 	_holder.add_child(shadows)
 	set_process(true)
 

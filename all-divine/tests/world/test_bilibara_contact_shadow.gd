@@ -100,3 +100,14 @@ func test_the_training_yard_has_none() -> void:
 	await frames(3)
 	assert_true(a != null)
 	assert_true(region.get_node_or_null(^"ContactShadows") == null, "the yard has no contact shadows")
+
+
+# The project interpolates physics, and the ellipses are placed afresh in every drawn frame from _process: a MultiMesh set outside the physics step
+# warns "MultiMesh interpolation is being triggered from outside physics process" and the ellipse would trail its body by a tick. So the
+# instance takes no interpolation (its own mode is off, and nothing it is under turns it back on).
+func test_the_shadows_take_no_physics_interpolation() -> void:
+	var region := _stage(REGION)
+	await frames(2)
+	var shadows := region.get_node(^"ContactShadows/Shadows") as MultiMeshInstance3D
+	assert_eq(shadows.physics_interpolation_mode, Node.PHYSICS_INTERPOLATION_MODE_OFF, "the Shadows instance has physics interpolation off")
+	assert_false(shadows.is_physics_interpolated_and_enabled(), "and it is not interpolated in the tree")
