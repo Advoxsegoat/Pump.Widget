@@ -139,3 +139,27 @@ func test_a_row_with_much_text_takes_a_second_rows_height_and_the_layout_says_so
 	assert_eq(boxes[1].page, 1)
 	assert_eq(boxes[2].page, 2, "the next shot does not fit under it on page 1 (shot 2 holds rows 2 and 3, so the page is full)")
 	assert_eq(boxes[3].page, 2)
+
+
+func test_the_burn_in_names_the_shot_its_framing_move_frame_and_time() -> void:
+	var scene := _fixture()
+	assert_eq(StoryboardPage.ShotText.burn_in(scene, 90), "S2/4 MEDIUM DOLLY 2>3 f090 0:01.50\nSFX cloth_move")
+	assert_eq(StoryboardPage.ShotText.burn_in(scene, 95), "S2/4 MEDIUM DOLLY 2>3 f095 0:01.58\nSFX cloth_move")
+	assert_eq(StoryboardPage.ShotText.burn_in(scene, 0), "S1/4 WIDE PAN Abarax>foe stop f000 0:00.00")
+	assert_eq(StoryboardPage.ShotText.burn_in(scene, 190), "S3/4 CLOSE STATIC f190 0:03.16\nMUSIC fixture_sting\nSTAND-IN portrait: fixture_knuckle")
+	assert_eq(StoryboardPage.ShotText.burn_in(scene, 150 + 59), "S3/4 CLOSE STATIC f209 0:03.48\nMUSIC fixture_sting", "the line is down (54 frames): no stand-in on show")
+
+
+func test_the_burn_in_says_the_glides_and_when_a_cue_or_a_line_is_over() -> void:
+	var scene := _fixture()
+	assert_eq(StoryboardPage.ShotText.burn_in(scene, -5), "GLIDE IN")
+	assert_eq(StoryboardPage.ShotText.burn_in(scene, 270), "GLIDE OUT")
+	assert_eq(StoryboardPage.ShotText.burn_in(scene, 90 + 60), "S3/4 CLOSE STATIC f150 0:02.50\nMUSIC fixture_sting\nSTAND-IN portrait: fixture_knuckle", "S2's sound caption has gone by the next shot")
+	assert_eq(StoryboardPage.ShotText.burn_in(scene, 210 + 10), "S4/4 OVER SHOULDER STATIC f220 0:03.66", "the answer has no stand-in on it: Abarax has his drawing")
+
+
+func test_the_burn_in_lists_a_placeholder_clip_once_it_has_begun() -> void:
+	var scene := _fixture()
+	scene.shots[1].beats[2].placeholder = true   # guard_hold, at frame 14 of S2
+	assert_false(StoryboardPage.ShotText.burn_in(scene, 90 + 13).contains("PLACEHOLDER"), "not before its beat")
+	assert_true(StoryboardPage.ShotText.burn_in(scene, 90 + 14).contains("\nPLACEHOLDER guard_hold"), StoryboardPage.ShotText.burn_in(scene, 90 + 14))

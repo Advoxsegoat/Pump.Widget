@@ -62,6 +62,9 @@ class ShotText extends RefCounted:
 		"a small detail, very close",
 	]
 	const ZOOM_NAME := ["", "wide", "medium", "close", "insert"]
+	const BURN_FRAMING := ["WIDE", "MEDIUM", "CLOSE", "OVER SHOULDER", "INSERT"]
+	## A cue's caption stays up this many frames.
+	const CUE_SHOWN := 60
 	const MOVE_SHORT := ["STATIC", "PAN", "DOLLY", "CRANE", "ORBIT", "HANDHELD"]
 	const FPS := 60.0
 	const CHECKER := "res://story/shot_checker.gd"
@@ -117,6 +120,38 @@ class ShotText extends RefCounted:
 		for shot in scene.shots:
 			frames.append(shot.start + key_frame(shot, scene))
 		return frames
+
+	## The words burnt into the animatic at scene frame `frame` (counted from the first shot's first frame; negative in the glide
+	## in): row one names the shot, its framing and camera move, the frame and the time; the rows after it say what the
+	## video cannot (a sound or music cue, for a second after it; a clip that is not made yet; a line spoken over a stand-in
+	## portrait). The glides are only named.
+	static func burn_in(scene: SceneShots, frame: int) -> String:
+		if frame < 0:
+			return "GLIDE IN"
+		var index := scene.shot_at(frame)
+		if index < 0:
+			return "GLIDE OUT"
+		var shot := scene.shots[index]
+		var rows := PackedStringArray()
+		rows.append("%s/%d %s %s f%03d %s" % [shot.id, scene.shots.size(), BURN_FRAMING[shot.framing], _shorthand(scene, shot), frame, clock(frame)])
+		for cue in shot.cues:
+			var at := shot.start + cue.at
+			if frame >= at and frame < at + CUE_SHOWN:
+				rows.append("%s %s" % ["MUSIC" if cue.kind == CueEvent.Kind.MUSIC else "SFX", cue.id])
+		for beat in shot.beats:
+			if beat.placeholder and beat.clip != &"" and frame >= shot.start + beat.at:
+				rows.append("PLACEHOLDER %s" % beat.clip)
+		for line in shot.lines:
+			var from := shot.start + line.at
+			var speaker := _registry_fetch(&"speakers", line.speaker) as Speaker
+			if speaker != null and speaker.placeholder_exprs.has(line.expr) and frame >= from and frame < from + int(_shared().call("hold_of", line)):
+				rows.append("STAND-IN portrait: %s" % line.speaker)
+		return "\n".join(rows)
+
+	## `frame` frames (60 a second) as minutes, seconds and hundredths: 0:01.50.
+	static func clock(frame: int) -> String:
+		var hundredths := maxi(frame, 0) * 100 / 60
+		return "%d:%02d.%02d" % [hundredths / 6000, hundredths / 100 % 60, hundredths % 100]
 
 	## The name of a cast member, a mark or `name@start` as a person says it.
 	static func who(scene: SceneShots, id: StringName) -> String:
