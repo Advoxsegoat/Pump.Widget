@@ -66,7 +66,7 @@ func test_shards_split_the_files_between_them_and_miss_none() -> void:
 func _twelve() -> PackedStringArray:
 	var files := PackedStringArray()
 	for i in 12:
-		files.append("res://tests/x/test_%02d.gd" % i)
+		files.append("suite/x/test_%02d.gd" % i)  # not a res:// path: the path check reads every one written in a script
 	return files
 
 
