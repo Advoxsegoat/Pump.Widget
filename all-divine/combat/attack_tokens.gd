@@ -82,6 +82,14 @@ func reserve(attacker: Actor, target: Actor) -> void:
 		_reserved[attacker] = [target, 0.0, 0.0]
 
 
+## Whether some attacker's reservation holds `target`'s tokens back from the others now: those tokens are in use, not free.
+func is_reserved(target: Actor) -> bool:
+	for key: Variant in _reserved:
+		if is_instance_valid(key) and _reserved[key][0] == target and _reserved[key][1] >= RESERVE_AFTER:
+			return true
+	return false
+
+
 ## Gives up `attacker`'s reservation, if it has one.
 func unreserve(attacker: Actor) -> void:
 	_reserved.erase(attacker)
