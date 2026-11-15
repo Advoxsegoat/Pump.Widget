@@ -52,7 +52,7 @@ const SWITCHES: Array[StringName] = [
 @export var perilous_wave_radius := 1.8
 @export var heavy_wave_radius := 1.1
 @export var wave_seconds := 0.4
-@export var wave_color := Color("e8434f")
+@export var wave_color := Color("ff6f7a")
 ## The ring's thickness in metres, and how solid the disc inside it is (0 to 1).
 @export var wave_ring_width := 0.14
 @export_range(0.0, 1.0) var wave_fill_alpha := 0.16
