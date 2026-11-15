@@ -76,7 +76,7 @@ func run(host: Node, args: PackedStringArray) -> int:
 	var failed := false
 	for policy: CombatBot.Policy in asked["policies"]:
 		for seed_number: int in asked["seeds"]:
-			var result := await play(host, seed_number, policy, asked["frames"], asked["reaction"], asked["steering"], asked["until_round"])
+			var result := await _play(host, seed_number, policy, asked["frames"], asked["reaction"], asked["steering"], asked["until_round"])
 			print(result["summary"])
 			if asked["detail"]:
 				for line in result["foes"]:
@@ -93,9 +93,8 @@ func run(host: Node, args: PackedStringArray) -> int:
 	return 1 if failed else 0
 
 
-## One seed with one policy for `frames` physics frames, in this process: {summary, problems, replay, foes, attacks, findings, waves,
-## deaths, dealt, taken} (the last four are the run's numbers: waves cleared, deaths, HP dealt and taken).
-func play(host: Node, seed_number: int, policy: CombatBot.Policy, frames: int, reaction: int, steering := true, until_round := false) -> Dictionary:
+# One seed with one policy for `frames` physics frames: {summary, problems, replay}.
+func _play(host: Node, seed_number: int, policy: CombatBot.Policy, frames: int, reaction: int, steering := true, until_round := false) -> Dictionary:
 	Game.reset()
 	var game := BotWorld.make(host, seed_number)
 	var bot := CombatBot.new()
@@ -108,8 +107,7 @@ func play(host: Node, seed_number: int, policy: CombatBot.Policy, frames: int, r
 	while bot.frame < frames and not (until_round and bot.round_done_at >= 0):
 		await tree.physics_frame
 	bot.finish()
-	var result := {"summary": bot.summary(), "problems": bot.problems, "replay": bot.replay_path(), "finding_replay": bot.replay_path("finding"), "foes": bot.foe_lines(), "attacks": bot.attack_lines(), "findings": bot.findings,
-			"waves": bot.waves_cleared, "deaths": bot.deaths, "dealt": bot.damage_dealt, "taken": bot.damage_taken}
+	var result := {"summary": bot.summary(), "problems": bot.problems, "replay": bot.replay_path(), "finding_replay": bot.replay_path("finding"), "foes": bot.foe_lines(), "attacks": bot.attack_lines(), "findings": bot.findings}
 	bot.queue_free()
 	game.queue_free()
 	await tree.physics_frame
