@@ -284,13 +284,15 @@ func test_the_moment_is_no_more_than_ninety_frames_and_the_checker_agrees() -> v
 	assert_true(cam.director != null and cam.director.total_frames() == 90, "the Director plays it in 90 frames")
 
 
-# The dip never hides a blow: at the top the picture shows half the width it does in play, so a foe that can strike must still be
-# in it, whole. An attack is begun from at most the longest `max_range` of any brain (measured where the move lands), and the ring
-# of 3.5 m the ruling names is beyond that; a foe past that cannot begin a blow, and the pair itself takes none for its first ~64 frames.
-const STRIKE_RING := 3.5
+# The dip never hides a blow: at the top the picture shows half the width it does in play, so a foe that can strike must still be in
+# it, whole. An attack is begun from at most the longest `max_range` of any brain (measured where the move lands); the ring is that
+# plus MARGIN, round Abarax with the finisher's pair lying each of four ways (the pair's middle is half a metre from him, and when
+# he faces away from the camera it is on the far side of him, which leaves least picture on the near side: 3.05 m measured).
+# A foe with a longer reach, or a deeper dip, turns it red.
+const MARGIN := 0.05
 
 
-func test_the_dip_never_hides_a_foe_that_can_strike() -> void:
+func _longest_reach() -> float:
 	var longest := 0.0
 	var dir := DirAccess.open("res://data/brains")
 	for file in dir.get_files():
@@ -298,23 +300,107 @@ func test_the_dip_never_hides_a_foe_that_can_strike() -> void:
 			continue
 		for option: AttackOption in (load("res://data/brains/%s" % file) as BrainDef).attacks:
 			longest = maxf(longest, option.max_range)
-	assert_true(longest <= STRIKE_RING, "no brain begins an attack from further than %.2f m, the ring the picture must hold (%.2f)" % [STRIKE_RING, longest])
-	var parts := _stage()
-	Director.watch_moments(parts.player, parts.rig, parts.hud)
-	var ring: Array[Actor] = []
-	var n := 16
-	for k in n:
-		var a := TAU * float(k) / float(n)
-		var at := Vector3(sin(a), 0, cos(a)) * STRIKE_RING
-		ring.append(StoryStage.knuckle(parts.region, at, a + PI, "Ring%d" % k))
-	var guard := 0
-	while parts.rig.cine_weight < 1.0 and guard < 200:
+	return longest
+
+
+func test_the_dip_never_hides_a_foe_that_can_strike() -> void:
+	var ring_radius := _longest_reach() + MARGIN
+	for facing in [0.0, PI / 2.0, PI, -PI / 2.0]:
+		var parts := StoryStage.make(self, Vector3.ZERO, facing)
+		var player: Actor = parts.player
+		var forward := Basis(Vector3.UP, facing) * Vector3(0, 0, 1)
+		player.set_brain(ScriptBrain.new([{frames = 9}, {frames = 1, press = [&"palm"]}, {frames = 600}]))
+		var victim := StoryStage.knuckle(parts.region, forward, facing + PI, "Foe")
+		track(PostureBreaker.make(player, victim))
+		Director.watch_moments(player, parts.rig, parts.hud)
+		var ring: Array[Actor] = []
+		var n := 16
+		for k in n:
+			var a := TAU * float(k) / float(n)
+			ring.append(StoryStage.knuckle(parts.region, Vector3(sin(a), 0, cos(a)) * ring_radius, a + PI, "Ring%d" % k))
+		var guard := 0
+		while parts.rig.cine_weight < 1.0 and guard < 200:
+			await frames(1)
+			guard += 1
+		await frames(2)
+		assert_eq(parts.rig.cine_weight, 1.0, "facing %.0f: the dip is at its top" % rad_to_deg(facing))
+		for foe in ring:
+			for point: Vector3 in [foe.global_position, foe.chest_point(), foe.head_point()]:
+				var on_picture := StoryStage.screen_of(parts, point)
+				assert_true(on_picture.x >= 0.0 and on_picture.x <= 640.0 and on_picture.y >= 0.0 and on_picture.y <= 360.0,
+						"facing %.0f: %s at %.2f m is on the picture whole at the top of the dip (%s)" % [rad_to_deg(facing), foe.name, foe.global_position.distance_to(player.global_position), on_picture])
+		parts.stage.queue_free()
+		await frames(2)
+
+
+func test_a_real_grab_with_a_pair_plays_no_dip() -> void:
+	var parts := _quiet_stage()
+	var cam := Director.watch_moments(parts.player, parts.rig, parts.hud)
+	await frames(3)
+	var seen := []
+	parts.player.combat_moment.connect(func(kind: StringName) -> void: seen.append(kind))
+	assert_true(parts.foe.start_paired(parts.player, load("res://data/pairs/knuckle_grab.tres") as PairedMove), "the Knuckle takes hold of him")
+	var top := 0.0
+	for i in 60:
 		await frames(1)
-		guard += 1
-	await frames(2)
+		top = maxf(top, parts.rig.cine_weight)
+	assert_eq(seen, [&"grab"], "he heard a grab, with a pair")
+	assert_eq(top, 0.0, "and the camera never left the game's")
+	assert_true(cam.director == null, "no moment was made")
+
+
+func test_slow_motion_is_the_one_thing_that_changes_the_fight_and_is_off_by_default() -> void:
+	assert_eq((load("res://data/tuning/story.tres") as StoryTuning).moment_slow_frames, 0, "off in the data")
+	var traces := []
+	var slowed := []
+	for frames_of_slow in [0, 12]:
+		var parts := _stage()
+		var cam := Director.watch_moments(parts.player, parts.rig, parts.hud)
+		cam.tuning = cam.tuning.duplicate() as StoryTuning
+		cam.tuning.moment_slow_frames = frames_of_slow
+		var run := await _play(parts, 150)
+		traces.append(run.trace)
+		slowed.append(run.trace.filter(func(row: Array) -> bool: return row[0]).size())
+		parts.stage.queue_free()
+		await frames(2)
+	assert_eq(slowed[0], 0, "with 0 frames the slow-down never comes on")
+	assert_true(slowed[1] >= 5, "with 12 it comes on for the frames it asks (%d seen)" % slowed[1])
+	assert_true(traces[0] != traces[1], "and the fight is not the one it was: the knob changes the fight, which is why it is 0")
+	var again := _stage()
+	var cam_again := Director.watch_moments(again.player, again.rig, again.hud)
+	var plain := await _play(again, 150)
+	assert_true(plain.trace == traces[0], "with 0 the fight is the one a dip-less run has (the default changes nothing)")
+	assert_true(cam_again != null)
+
+
+func test_a_moment_leaves_a_hud_that_something_else_holds_alone() -> void:
+	var parts := _quiet_stage()
+	var cam := Director.watch_moments(parts.player, parts.rig, parts.hud)
+	await frames(3)
+	parts.hud.suppressed = true
+	parts.hud.scene_fade = 0.4
+	cam.moment(&"finisher", parts.foe)
+	for i in 100:
+		await frames(1)
+		assert_true(parts.hud.suppressed and parts.hud.scene_fade == 0.4, "frame %d: the Hud is as it was" % i)
+		if cam.director == null:
+			break
+	await frames(3)
+	assert_true(cam.director == null, "the moment is over")
+	assert_true(parts.hud.suppressed and parts.hud.scene_fade == 0.4, "and it left it as it found it, at the end too")
+	assert_eq(parts.stage.hud.get_children().filter(func(n: Node) -> bool: return n is CineOverlay).size(), 0, "no overlay")
+
+
+func test_a_game_reset_in_a_dip_ends_it_as_a_region_change_does() -> void:
+	var parts := _quiet_stage()
+	var cam := Director.watch_moments(parts.player, parts.rig, parts.hud)
+	await frames(3)
+	cam.moment(&"finisher", parts.foe)
+	await frames(40)
 	assert_eq(parts.rig.cine_weight, 1.0, "the dip is at its top")
-	for foe in ring:
-		for point: Vector3 in [foe.global_position, foe.chest_point(), foe.head_point()]:
-			var on_picture := StoryStage.screen_of(parts, point)
-			assert_true(on_picture.x >= 0.0 and on_picture.x <= 640.0 and on_picture.y >= 0.0 and on_picture.y <= 360.0,
-					"%s at %.2f m is on the picture whole at the top of the dip (%s)" % [foe.name, foe.global_position.distance_to(parts.player.global_position), on_picture])
+	Game.reset()  # the game goes back to BOOT
+	await frames(2)
+	assert_eq(parts.rig.cine_weight, 0.0, "a reset gives the camera back")
+	assert_true(cam.director == null and Director.moment_playing() == null, "and the dip is over")
+	await frames(10)
+	assert_eq(parts.rig.cine_weight, 0.0, "it stays given back")

@@ -423,7 +423,8 @@ func test_pressing_f10_while_a_scene_plays_or_when_paused_does_nothing() -> void
 	assert_true(Director.current() == null, "while a replay plays: nothing starts")
 	await frames(210)
 	assert_false(main._replayer.playing(), "the replay is over")
-	# the Bilibara stretch: the place check refuses the fixture there, and nothing is left behind
+	# the Bilibara stretch, at the Gate (the stretch's spawn has room for the fixture and plays it): the place check refuses it, and
+	# nothing is left behind
 	_press_key(KEY_F2)
 	await frames(3)
 	assert_eq(main.fixture_refusal(), "", "(where he comes in, the stretch has room for it)")
@@ -433,7 +434,7 @@ func test_pressing_f10_while_a_scene_plays_or_when_paused_does_nothing() -> void
 	assert_true(main.fixture_refusal().contains("Gate"), "at the Gate the stretch has no room for the fixture's marks: %s" % main.fixture_refusal())
 	_press_key(KEY_F10)
 	await frames(60)
-	assert_true(Director.current() == null, "in the Bilibara stretch, where the place check refuses it: nothing starts")
+	assert_true(Director.current() == null, "in the Bilibara stretch at the Gate, where the place check refuses it: nothing starts")
 	assert_eq(Game.state, Game.State.PLAY)
 	assert_eq(_actor_count(main), in_stretch, "no one was brought in")
 	assert_eq(_rig(main).cine_weight, 0.0)

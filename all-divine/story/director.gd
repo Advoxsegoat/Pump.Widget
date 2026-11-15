@@ -31,7 +31,8 @@ extends Node
 ## has no cast and no brains, waits for nothing, does not touch Game.state, the Hud or the world, and has no phases but the camera's
 ## (LEAD_IN while the dip comes in, PLAY while it holds, LEAD_OUT while it goes). The camera takes the pose its one shot solves to
 ## (`@pair`, the middle of the two fighters' chests, is its aim), the CameraRig's `cine_weight` is the dip's own curve (a way in, a
-## hold, a way out, over the scene's frames) and is exactly 0 when it is over. A second moment while one runs restarts it
+## hold, a way out, over the scene's frames; the scene's `lead_in` and `lead_out` are only a frame budget that the checker holds to 90,
+## the hold being the tuning's `moment_hold_share` of the shot, and the rest split between the way in and the way out) and is exactly 0 when it is over. A second moment while one runs restarts it
 ## (restart_moment) from the weight and the picture the camera shows. Nothing in a moment can be skipped, paused apart from the
 ## world's own pause, or seen: a scene refuses to begin while one runs (`moment_playing`).
 ##
@@ -753,6 +754,9 @@ func _pair_middle() -> Vector3:
 # aim eases from where the last moment's middle was; told to end early (the player turned the dips off), it goes out from where it is.
 func _moment_frame() -> void:
 	if phase == Phase.DONE:
+		return
+	if Game.state != Game.State.PLAY and Game.state != Game.State.PAUSE and not allow_any_state:
+		abort()  # a reset (or anything that takes the game out of play) ends a dip as a region change does
 		return
 	if _ending < 0 and may_go_on.is_valid() and not may_go_on.call():
 		_ending = frame
