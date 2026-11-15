@@ -3,8 +3,8 @@ extends TestCase
 ## marks, framed at each of the four whole-number zooms (and over the shoulder) by the game's own camera, with the bars all the
 ## way in and a line and its portrait showing. Two things are checked from the HUD viewport's own picture (640x360, what the
 ## overlay's queries say is what is drawn): the bars are exactly 44 rows of solid ink at the top and the bottom and nothing
-## else covers a row, the box sits where box_rect says with its white border, the portrait is the speaker's 48x48 picture
-## pixel for pixel, and the text is drawn. The pictures a person looks at are saved to out/story/: cine_<shot>_640.png (the
+## else covers a row, the box sits where box_rect says with its white border, the portrait card is not in that picture (it is
+## drawn in the window, above it: tests/render/test_portrait_card_draw.gd) but is in the window's, and the text is drawn. The pictures a person looks at are saved to out/story/: cine_<shot>_640.png (the
 ## window at 640x360, one picture pixel to a pixel) and cine_<shot>_1920.png (the window at 1920x1080, three to one).
 
 const MAIN := "res://main/main.tscn"
@@ -80,14 +80,16 @@ func _frame_with(shot: Shot, speaker_id: StringName, text: String, expr: StringN
 		await RenderingServer.frame_post_draw
 
 
-func _save(name: String, size: Vector2i) -> void:
+func _save(name: String, size: Vector2i) -> Image:
 	get_window().size = size
 	await get_tree().process_frame
 	for i in 3:
 		await RenderingServer.frame_post_draw
 	var path := ProjectSettings.globalize_path("res://").path_join(OUT).path_join(name)
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
-	assert_eq(get_viewport().get_texture().get_image().save_png(path), OK, "saved %s" % path)
+	var image := get_viewport().get_texture().get_image()
+	assert_eq(image.save_png(path), OK, "saved %s" % path)
+	return image
 
 
 func _near(a: Color, b: Color) -> bool:
@@ -130,20 +132,9 @@ func test_each_framing_is_drawn_with_the_bars_the_box_the_portrait_and_the_text(
 		assert_true(_near(hud.get_pixel(box.position.x + 4, box.end.y - 4), Color(Hud.INK, 1.0)), "%s: ink inside it" % key)
 		assert_true(hud.get_pixel(box.position.x - 1, box.position.y + 20).a < 0.05, "%s: nothing 1 px outside it" % key)
 		assert_eq(box.end.y, 356, "%s: its bottom is on row 356, 4 rows above the picture's bottom" % key)
-		# The portrait, pixel for pixel.
-		var face := overlay.portrait().get_image()
-		var at := overlay.portrait_rect().position
-		var wrong := 0
-		var checked := 0
-		for y in 48:
-			for x in 48:
-				var texel := face.get_pixel(x, y)
-				if texel.a > 0.99:
-					checked += 1
-					if not _near(hud.get_pixel(at.x + x, at.y + y), texel):
-						wrong += 1
-		assert_true(checked > 800, "%s: the portrait has pixels" % key)
-		assert_eq(wrong, 0, "%s: %d of %d portrait pixels are not the speaker's own" % [key, wrong, checked])
+		# The portrait card is not in the HUD's picture: above the box (in the world's rows) the picture is clear where the card is.
+		var card := overlay.portrait_rect()
+		assert_true(hud.get_pixel(card.position.x + card.size.x / 2, card.position.y + 20).a < 0.05, "%s: the HUD's own picture has no card in it" % key)
 		# The text: light pixels in its area (the font is anti-aliased, so few are the white itself).
 		var text := overlay.text_rect()
 		var white := 0
@@ -154,6 +145,11 @@ func test_each_framing_is_drawn_with_the_bars_the_box_the_portrait_and_the_text(
 					white += 1
 		assert_true(white > 25, "%s: the text is drawn (%d light pixels)" % [key, white])
 		for size in SIZES:
-			await _save("cine_%s_%d.png" % [key, size.x], size)
+			var window := await _save("cine_%s_%d.png" % [key, size.x], size)
+			# The window holds the card: its paper (a warm cream) fills the card's corner, where the world was.
+			var scale_k := PixelStage.scale_for(size)
+			var corner := PixelStage.layout(size).position + (card.position + Vector2i(3, 3)) * scale_k + Vector2i(scale_k, scale_k) / 2
+			var paper := window.get_pixelv(corner)
+			assert_true(paper.r > 0.82 and paper.g > 0.78 and paper.b > 0.62 and paper.r > paper.b, "%s at %d: the window shows the card's paper at its corner: %s" % [key, size.x, paper])
 		get_window().size = Vector2i(1920, 1080)
 		await get_tree().process_frame

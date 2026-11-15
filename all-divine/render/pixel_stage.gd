@@ -16,6 +16,12 @@ extends Control
 ## The HUD is a second viewport, `hud`, exactly the 640x360 picture (transparent), drawn by the child TextureRect `hud_view`
 ## on top of the world, at the same whole-number scale and in the same place, without the final material: no grade, no
 ## bloom, no vignette, and not shifted by `subpixel`, so every HUD pixel is a clean k x k block and its colours are its own.
+##
+## One thing is not on this grid: the dialogue box's PortraitCard (hud/portrait_card.gd), a pencil portrait that the CineOverlay
+## adds as a child of this node, after `hud_view`, while a line is up. It is drawn in the window at the picture's scale (this
+## node's `layout`) with linear filtering, so its line keeps its detail, and it is not in the Hud viewport's texture: a reader of
+## `hud.get_texture()` (a test, a screenshot tool) does not see it, and the window's own picture does. With no card up, and
+## outside the card's rectangle with one, the window is exactly the picture upscaled by a whole number.
 
 ## Size of the World viewport: the picture plus the margin on each side.
 const WORLD_SIZE := PixelSnap.INTERNAL + Vector2i(2, 2) * PixelSnap.MARGIN

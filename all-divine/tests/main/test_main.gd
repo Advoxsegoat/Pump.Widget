@@ -378,3 +378,130 @@ func test_f2_enters_the_stretch_the_menu_works_in_it_and_a_fight_runs_quietly() 
 	await frames(120)
 	assert_true(main.player.frame >= 100, "the fight ran its 120 frames (%d)" % main.player.frame)
 	assert_eq(main.region.scene_file_path, BILIBARA, "still in the stretch")
+
+
+# --- F10: the debug key that plays the fixture scene in the yard ---
+
+func _idle_recording(count: int) -> InputRecording:
+	var rec := InputRecording.new()
+	rec.region = YARD
+	for i in count:
+		rec.frames.append(InputRecording.idle())
+	rec.frame_count = count
+	return rec
+
+
+# The actors under `main`'s region and the player.
+func _actor_count(main: Main) -> int:
+	return get_tree().get_nodes_in_group(Actor.GROUP).filter(func(n: Node) -> bool: return main.is_ancestor_of(n)).size()
+
+
+func test_f10_plays_the_fixture_and_the_game_returns_to_play() -> void:
+	RenderingServer.render_loop_enabled = false  # no picture is looked at: a render run need not draw the scene's frames
+	StoryLog.forget_all()
+	Director.reset_spawn_counts()
+	var main := _main()
+	await frames(5)
+	var player := _player(main)
+	var before := _actor_count(main)
+	assert_true(Main.OWN_KEYS.has(KEY_F10), "F10 is the game's own key: the controls capture refuses it")
+	assert_eq(main.fixture_refusal(), "", "the yard has room for the fixture where Abarax stands")
+	_press_key(KEY_F10)
+	var director := Director.current()
+	assert_true(director != null, "F10 starts the fixture scene (%s)" % Director.last_refusal)
+	if director == null:
+		RenderingServer.render_loop_enabled = true
+		return
+	var ended := []
+	director.finished.connect(func(skipped: bool) -> void: ended.append(skipped))
+	var n := 0
+	while ended.is_empty() and n < 1200:
+		await frames(1)
+		n += 1
+	assert_eq(ended, [false], "the scene plays to its end (%d frames)" % n)
+	assert_eq(Game.state, Game.State.PLAY, "and the game is in PLAY again")
+	assert_true(player.brain is PlayerBrain, "Abarax has the player's hands back")
+	assert_eq(_rig(main).cine_weight, 0.0, "the camera is the game's")
+	assert_false(main.hud.suppressed, "and the Hud is shown")
+	await frames(3)
+	assert_true(Director.current() == null, "nothing plays on")
+	assert_eq(_actor_count(main), before + 1, "the Knuckle the scene brought in is left in the yard")
+	var brains := get_tree().get_nodes_in_group(Actor.GROUP).filter(func(a: Node) -> bool: return main.is_ancestor_of(a) and (a as Actor).brain is EnemyBrain)
+	assert_true(brains.size() >= 2, "and fights (it has an enemy's brain, as the wave's foe has)")
+	RenderingServer.render_loop_enabled = true
+
+
+func test_pressing_f10_while_a_scene_plays_or_when_paused_does_nothing() -> void:
+	RenderingServer.render_loop_enabled = false
+	StoryLog.forget_all()
+	Director.reset_spawn_counts()
+	var main := _main()
+	await frames(5)
+	var before := _actor_count(main)
+	Game.change(Game.State.PAUSE)
+	_press_key(KEY_F10)
+	assert_true(Director.current() == null, "paused: nothing starts")
+	Game.change(Game.State.PLAY)
+	await frames(2)
+	# a replay: the fight is the recording's
+	main.start_replay(_idle_recording(200))
+	await frames(2)
+	_press_key(KEY_F10)
+	assert_true(Director.current() == null, "while a replay plays: nothing starts")
+	await frames(210)
+	assert_false(main._replayer.playing(), "the replay is over")
+	# the Bilibara stretch, at the Gate (the stretch's spawn has room for the fixture and plays it): the place check refuses it, and
+	# nothing is left behind
+	_press_key(KEY_F2)
+	await frames(3)
+	assert_eq(main.fixture_refusal(), "", "(where he comes in, the stretch has room for it)")
+	_player(main).place(Transform3D(Basis.IDENTITY, _player(main).global_position + Vector3(0, 0, -9)))  # at the Gate
+	await frames(2)
+	var in_stretch := _actor_count(main)
+	assert_true(main.fixture_refusal().contains("Gate"), "at the Gate the stretch has no room for the fixture's marks: %s" % main.fixture_refusal())
+	_press_key(KEY_F10)
+	await frames(60)
+	assert_true(Director.current() == null, "in the Bilibara stretch at the Gate, where the place check refuses it: nothing starts")
+	assert_eq(Game.state, Game.State.PLAY)
+	assert_eq(_actor_count(main), in_stretch, "no one was brought in")
+	assert_eq(_rig(main).cine_weight, 0.0)
+	assert_false(main.hud.suppressed)
+	assert_true(_player(main).brain is PlayerBrain)
+	_press_key(KEY_F5)  # back to the yard
+	await frames(5)
+	before = _actor_count(main)
+	# while a scene plays
+	_press_key(KEY_F10)
+	var first := Director.current()
+	assert_true(first != null, "in the yard it plays (%s)" % Director.last_refusal)
+	if first == null:
+		RenderingServer.render_loop_enabled = true
+		return
+	await frames(40)
+	_press_key(KEY_F10)
+	assert_true(Director.current() == first, "a second F10 does not start another: the same scene plays")
+	assert_eq(_actor_count(main), before + 1, "and brought no second Knuckle")
+	first.abort()
+	await frames(3)
+	assert_eq(Game.state, Game.State.PLAY)
+	RenderingServer.render_loop_enabled = true
+
+
+func test_a_region_change_ends_a_dip_at_once_and_f10_does_nothing_in_one() -> void:
+	RenderingServer.render_loop_enabled = false
+	var main := _main()
+	await frames(5)
+	var cam := _rig(main).get_node(NodePath(MomentCam.NAME)) as MomentCam
+	assert_true(cam != null, "Main has made the finisher's camera dip")
+	cam.moment(&"finisher", main.arena().enemies()[0])
+	await frames(40)
+	assert_eq(_rig(main).cine_weight, 1.0, "the dip is at its top")
+	_press_key(KEY_F10)
+	assert_true(Director.current() == null, "F10 starts no scene in a dip")
+	assert_eq(Game.state, Game.State.PLAY)
+	_press_key(KEY_F5)  # the courtyard
+	assert_eq(_rig(main).cine_weight, 0.0, "a region change gives the camera back at once")
+	assert_true(Director.moment_playing() == null and cam.director == null, "and the dip is over")
+	await frames(5)
+	assert_eq(_rig(main).cine_weight, 0.0, "it stays given back")
+	RenderingServer.render_loop_enabled = true

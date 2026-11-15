@@ -672,8 +672,15 @@ func hold_end_pose(clip: StringName) -> void:
 		set_move_time(tree.get_animation(clip).length)
 
 
-## Fades the move layer out over `blend_out` seconds, back to locomotion. 0 or less is at once.
+## Fades the move layer out over `blend_out` seconds, back to locomotion. 0 or less is at once. What the layer shows fades as it
+## is: a crossfade between two moves that is still going (a move cut short by another, held by the hit-stop before it could finish
+## blending) is frozen into a one-key pose of what the last tick showed, as a new move would freeze it (play_move), so that no frame
+## plays more of a clip that was never fully on the body, nor lets the cut move go on playing.
 func stop_move(blend_out: float) -> void:
+	if _slot >= 0 and _layer > 0.0 and not is_equal_approx(_ab, _ab_goal):
+		_hold_pose(_slot)
+		_ab = float(_slot)
+		_ab_goal = _ab
 	_layer_goal = 0.0
 	_layer_time = blend_out
 	if blend_out <= 0.0:
