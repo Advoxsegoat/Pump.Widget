@@ -18,12 +18,20 @@ extends RefCounted
 ## and so is every body of its own team (ActorDef.team): blows land only on the other side. A hurtbox is mapped
 ## to its actor by its meta `actor`, which Actor._ready sets.
 ##
+## A wall stops a blow: a body the sweep found is struck only if no `world` collider cuts the line from the attacker's chest to
+## the hitbox's centre at that step, nor the line from there to the body's chest (_walled_off). The two lines are cast only for a
+## body the sweep found and the arc let in, never per step of an empty sweep. A body so stopped is not marked as hit, no event is
+## made and no sound: a later step of the same blow may still strike it (it steps out from behind the wall's end).
+##
 ## The hurtboxes are where the physics space has them, which is where they stood when the frame began: the
 ## engine hands a moved node's transform to the physics server once every node has run its frame. So every
 ## actor's scan in a frame finds the others where they stood at its start, whatever order the actors run in.
 
 ## Results asked of one query: far more bodies than a hand can touch at once.
 const MAX_RESULTS := 32
+## How far above its feet a body's chest is, for the two lines a wall may cut (see _walled_off): 1.1 m, what every fighter's
+## chest is near enough, and high enough to pass over a kerb or a low wall.
+const CHEST := 1.1
 ## The step for a shape that has no radius to go by (none of ours): 5 cm.
 const DEFAULT_STEP := 0.05
 
@@ -40,6 +48,7 @@ class Activation:
 
 var _active := {}  # hitbox id -> its Activation, while it is on
 var _unscanned_ended: Array[Activation] = []  # activations that ended before any scan, for the next scan
+var _ray: PhysicsRayQueryParameters3D  # the line asked of the world for a body found (_walled_off), made on first use
 var _found := {}  # each HitEvent of the last scan -> the Activation that made it (see forget)
 
 
@@ -125,10 +134,29 @@ func _sweep(actor: Actor, activation: Activation, space: PhysicsDirectSpaceState
 				continue
 			if not _in_arc(actor, target, activation.profile.arc_deg):
 				continue  # not struck: it may still turn into the arc while the blow is live
+			if _walled_off(actor, target, query.transform.origin, space):
+				continue  # not struck by this step: the world stands between
 			activation.hit[target] = true
 			var e := _event(actor, target, activation, query.transform.origin)
 			_found[e] = activation
 			events.append(e)
+
+
+# Whether the world cuts the line from `actor`'s chest to `point` (the hitbox's centre) or the line from `point` to `target`'s chest.
+# Neither body's own colliders are asked, and a line that starts inside a wall (an elbow in it) is not cut by that wall.
+func _walled_off(actor: Actor, target: Actor, point: Vector3, space: PhysicsDirectSpaceState3D) -> bool:
+	if _ray == null:
+		_ray = PhysicsRayQueryParameters3D.new()
+		_ray.collision_mask = Layers.WORLD
+	_ray.exclude = [actor.get_rid(), target.get_rid()]
+	var chest := Vector3.UP * CHEST
+	_ray.from = actor.global_position + chest
+	_ray.to = point
+	if not space.intersect_ray(_ray).is_empty():
+		return true
+	_ray.from = point
+	_ray.to = target.global_position + chest
+	return not space.intersect_ray(_ray).is_empty()
 
 
 func _event(actor: Actor, target: Actor, activation: Activation, point: Vector3) -> HitEvent:
