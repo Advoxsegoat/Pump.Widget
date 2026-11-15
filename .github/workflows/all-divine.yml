@@ -70,12 +70,16 @@ jobs:
       - name: Combat bot, the other policies
         run: tools/godot.sh -s res://tools/bot/run_bot.gd -- --seeds=1-2 --frames=3600 --policy=counter
 
+      # The sketch tool needs Pillow and numpy at the versions its portraits were made with. They go into a venv of
+      # this step's own: a plain pip install on a runner lands in the user's site folder, which the isolated mode
+      # the tests run in (-I) does not read.
       - name: Python tools' tests
         run: |
-          python3 -m pip install --quiet pillow==12.3.0 numpy==2.5.3
+          python3 -m venv "$RUNNER_TEMP/tools-venv"
+          "$RUNNER_TEMP/tools-venv/bin/python" -m pip install --quiet pillow==12.3.0 numpy==2.5.3
           python3 -I -m unittest discover -s tools/assets/tests
           python3 -I -m unittest discover -s tools/audio/tests
-          python3 -I -m unittest discover -s tools/portraits/tests
+          "$RUNNER_TEMP/tools-venv/bin/python" -I -m unittest discover -s tools/portraits/tests
 
   render:
     name: Tests (render, Compatibility, ${{ matrix.shard }} of 5)
