@@ -84,6 +84,8 @@ var body_inflate := 0.0
 var cadence := 1.0
 ## Springs to start afresh at the next tick (reset_springs).
 var _springs_reset := false
+## The ticks still to run the springs to rest on after a restart (_restart_springs).
+var _springs_settle := 0
 
 const MOVE_AB := &"parameters/move_ab/blend_amount"
 const MOVE_BLEND := &"parameters/move_blend/blend_amount"
@@ -732,10 +734,8 @@ func tick(delta: float) -> void:
 	_place_look_target()
 	_look_time += delta
 	_show_look()
-	if _springs_reset:
-		_springs_reset = false
-		for node in skeleton.find_children("*", "SpringBoneSimulator3D", false, false):
-			_restart_spring(node as SpringBoneSimulator3D)
+	if _springs_reset or _springs_settle > 0:
+		_restart_springs(delta)
 	# The skeleton would run its modifiers in an update deferred to the end of the frame. advance() gives
 	# them the delta, and the update is run here instead, so this tick's pose is done when tick returns.
 	# The deferred update then finds nothing left to do: running the update clears what it was asked for.
@@ -752,29 +752,88 @@ func reset_springs() -> void:
 	_springs_reset = true
 
 
-# Has `spring` forget its state by taking its settings away and giving them back: root and end bones, the extension of the end, and
-# the value (not a curve) of each setting's radius, stiffness, drag and gravity and its gravity's direction.
+# The most steps a restarted spring is taken through, out of sight, to come to rest (the scarf's takes about thirty).
+const SPRING_SETTLE_STEPS := 400
+# A restarted spring is at rest when none of its bones moved more than this (m) in a step.
+const SPRING_SETTLED := 0.00002
+# The ticks after a restart on which the springs are run to rest again: the engine starts a chain over from its rest pose once more
+# at the first update after the frame that restarted it (a deferred step of its own: seen, not documented), which would put it at the
+# rest pose in front of the player a frame late.
+const SPRING_SETTLE_TICKS := 3
+
+
+# On the tick after reset_springs (and for SPRING_SETTLE_TICKS ticks from then), runs every spring to rest at once against the pose
+# the skeleton has now, the other modifiers of the skeleton off for the steps (their own timers, the look-at's and the breathing's,
+# must not run on): so that the frame shown has the chains already hanging as gravity gives them for the body's present attitude, and
+# not standing at their rest pose and falling over it in front of the player (101 degrees in a frame after a revive, with the body
+# lying down). A tick the restart is due on also restarts them.
+func _restart_springs(delta: float) -> void:
+	var springs: Array[SpringBoneSimulator3D] = []
+	var others: Array[SkeletonModifier3D] = []
+	for child in skeleton.get_children():
+		if child is SpringBoneSimulator3D:
+			springs.append(child)
+		elif child is SkeletonModifier3D and (child as SkeletonModifier3D).active:
+			others.append(child)
+	if _springs_reset:
+		_springs_reset = false
+		_springs_settle = SPRING_SETTLE_TICKS
+		for spring in springs:
+			_restart_spring(spring)
+	_springs_settle -= 1
+	var ends: Array[int] = []
+	for spring in springs:
+		for i in spring.get_setting_count():
+			ends.append(skeleton.find_bone(spring.get_end_bone_name(i)))
+	if ends.is_empty():
+		return
+	for other in others:
+		other.active = false
+	var was: Array[Vector3] = []
+	was.resize(ends.size())
+	for step in SPRING_SETTLE_STEPS:
+		skeleton.advance(delta)
+		skeleton.notification(Skeleton3D.NOTIFICATION_UPDATE_SKELETON)  # the pose shown (_shown) is the one the springs gave
+		var moved := 0.0
+		for k in ends.size():
+			var at := _shown[ends[k]].origin
+			moved = maxf(moved, at.distance_to(was[k]))
+			was[k] = at
+		if step > 0 and moved < SPRING_SETTLED:
+			break
+	for other in others:
+		other.active = true
+
+
+# Has `spring` forget its state by taking its settings away and giving them back, every property of them and each joint's own. The
+# engine makes the joints of a setting anew with its defaults (a radius of 0.1, a stiffness of 1, no drag and no gravity) and honours
+# a joint's own values only while its setting is individual, so the joints are given theirs under that flag and it is put back.
 func _restart_spring(spring: SpringBoneSimulator3D) -> void:
-	var saved: Array[Dictionary] = []
-	for i in spring.get_setting_count():
-		saved.append({"root": spring.get_root_bone_name(i), "end": spring.get_end_bone_name(i), "extended": spring.is_end_bone_extended(i),
-				"direction": spring.get_end_bone_direction(i), "length": spring.get_end_bone_length(i), "radius": spring.get_radius(i),
-				"stiffness": spring.get_stiffness(i), "drag": spring.get_drag(i), "gravity": spring.get_gravity(i),
-				"gravity_direction": spring.get_gravity_direction(i)})
+	var settings: Array = []  # [name, value] of every property of the settings themselves, in the order the engine lists them
+	var joints: Array = []  # of every joint's
+	for property in spring.get_property_list():
+		var name := String(property["name"])
+		if not name.begins_with("settings/"):
+			continue
+		if name.contains("/joints/"):
+			if property["usage"] & PROPERTY_USAGE_EDITOR != 0:
+				joints.append([name, spring.get(name)])
+		elif property["usage"] & PROPERTY_USAGE_STORAGE != 0:
+			settings.append([name, spring.get(name)])
+	var count := spring.get_setting_count()
+	var individual: Array[bool] = []
+	for i in count:
+		individual.append(spring.is_config_individual(i))
 	spring.set_setting_count(0)
-	spring.set_setting_count(saved.size())
-	for i in saved.size():
-		var was := saved[i]
-		spring.set_root_bone_name(i, was["root"])
-		spring.set_end_bone_name(i, was["end"])
-		spring.set_extend_end_bone(i, was["extended"])
-		spring.set_end_bone_direction(i, was["direction"])
-		spring.set_end_bone_length(i, was["length"])
-		spring.set_radius(i, was["radius"])
-		spring.set_stiffness(i, was["stiffness"])
-		spring.set_drag(i, was["drag"])
-		spring.set_gravity(i, was["gravity"])
-		spring.set_gravity_direction(i, was["gravity_direction"])
+	spring.set_setting_count(count)
+	for entry in settings:
+		spring.set(entry[0], entry[1])
+	for i in count:
+		spring.set_individual_config(i, true)
+	for entry in joints:
+		spring.set(entry[0], entry[1])
+	for i in count:
+		spring.set_individual_config(i, individual[i])
 
 
 ## How much the move layer shows over locomotion: 0 is locomotion only, 1 is the move only.
