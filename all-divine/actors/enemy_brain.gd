@@ -64,6 +64,14 @@ const PRESS_SPEED := 1.2
 ## Task 14f: foes spread round their target. A foe with another within SPREAD_DEG (seen from the target) circles away from it, and
 ## one who waits (no token to be had) stands in the outer half of his band, a body's width clear of the attackers' ring.
 const SPREAD_DEG := 60.0
+## Seconds a holder who is in his band but not his range may be held up (blocked, no way round) before he gives his token to a ready foe
+## with a clear line to the target, and how long he rests after (he does not take it straight back).
+const HAND_OVER_AFTER := 0.75
+const HAND_OVER_REST := 0.5
+## How near the straight line from a foe to the target a body may be before the line is not clear, metres, and how near the target the
+## foe must be to be given a token.
+const CLEAR_LINE := 0.5
+const HAND_OVER_REACH := 4.0
 ## How far round, degrees, a foe's way in is swung away from a neighbour that close, and how near the ring (metres to go) that starts.
 const SPREAD_SWING := 25.0
 ## A neighbour this close to a foe's own line to the target is in his way: only then is his way in swung round him.
@@ -131,6 +139,8 @@ var _retreat_left := 0.0
 var _retreated := false  # it retreated since its HP last went below retreat_below
 var _feint_window := {}  # action -> whether the feint's window takes it (read from its clip once)
 var _charge_holds := {}  # action -> whether its moveset move has a charge_hold on it (read from its clip once)
+var _held_up := 0.0  # seconds it has gone on toward its range and got no nearer than it has been, for the hand-over
+var _nearest_yet := INF  # the nearest it has been to its target since it began to close in
 var _self: Actor  # its own actor, kept for _reangle (which is called from where only the clock is known)
 var _wind_ups := {}  # move id -> seconds to its first hitbox_on (read from its clip once)
 
@@ -424,6 +434,8 @@ func _waiting(actor: Actor) -> bool:
 
 
 func _reset_spacing() -> void:
+	_nearest_yet = INF
+	_held_up = 0.0
 	_swing = 0.0
 	_failing = 0.0
 	_best_error = INF
@@ -522,6 +534,17 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 		_drop_plan(actor)
 		return
 	_track_progress(maxf(distance - hi, lo - distance), delta)
+	if distance > hi and actor.frozen == 0:
+		if distance < _nearest_yet - PROGRESS:
+			_nearest_yet = distance
+			_held_up = 0.0
+		else:
+			_held_up += delta
+		if _held_up >= HAND_OVER_AFTER and distance <= def.preferred_range + def.range_tolerance and _hand_over(actor):
+			return
+	else:
+		_held_up = 0.0
+		_nearest_yet = INF
 	if distance > hi:
 		# Jogs in, braking to a walk over the last of it: from where slowing down to a walk at the tuning's decel only just
 		# takes it to the edge of the range (BRAKE_MARGIN before).
@@ -546,6 +569,54 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 		intent.move = (-to / distance).rotated(_swing) * WALK_PUSH
 	if _watch_blocked(actor, intent, delta):
 		_reangle()
+
+
+# Gives its token to a foe who can use it, if there is one: engaged, ready, within HAND_OVER_REACH of the target, with a clear line to it.
+# True if it did (it drops its plan and rests a while); false, and it keeps both, if nobody can.
+func _hand_over(actor: Actor) -> bool:
+	if not _plan.needs_token or def.ignores_tokens or _neighbour_angles(actor).is_empty():
+		return false
+	var taker := false
+	for node in actor.get_tree().get_nodes_in_group(Actor.GROUP):
+		var other := node as Actor
+		if other == null or other == actor or other.dead or not (other.brain is EnemyBrain):
+			continue
+		var brain := other.brain as EnemyBrain
+		if brain.target != target or brain.mode != Mode.ENGAGED or brain._plan != null or brain._rest > 0.0 or brain._backing or other.runner.busy() or other.frozen > 0:
+			continue
+		if _flat(other, target.global_position).length() > HAND_OVER_REACH or not brain._line_is_clear(other):
+			continue
+		var tokens := AttackTokens.of(other)
+		if tokens != null and tokens.holds(other):
+			continue
+		if brain.def.attacks.any(func(o: AttackOption) -> bool: return o.weight > 0.0 and brain._cooldowns.get(o, 0.0) <= 0.0):
+			taker = true
+			break
+	if not taker:
+		return false
+	_drop_plan(actor)
+	_rest = maxf(_rest, HAND_OVER_REST)
+	_held_up = 0.0
+	return true
+
+
+# Whether no body stands within CLEAR_LINE of the straight line from `actor` to its target (the target's own and its own excepted).
+func _line_is_clear(actor: Actor) -> bool:
+	var from := Vector2(actor.global_position.x, actor.global_position.z)
+	var to := Vector2(target.global_position.x, target.global_position.z)
+	var line := to - from
+	var length := line.length()
+	if length < 1e-3:
+		return true
+	for node in actor.get_tree().get_nodes_in_group(Actor.GROUP):
+		var other := node as Actor
+		if other == null or other == actor or other == target or other.dead:
+			continue
+		var at := Vector2(other.global_position.x, other.global_position.z) - from
+		var along := at.dot(line) / length
+		if along > 0.0 and along < length and absf(at.cross(line / length)) < CLEAR_LINE:
+			return false
+	return true
 
 
 # Presses the attack: the feint first, if it feints, else the option's action (held for a delayed swing). Its token is
