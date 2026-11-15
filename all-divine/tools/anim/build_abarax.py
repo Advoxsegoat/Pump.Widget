@@ -375,10 +375,10 @@ BUN_SCALE = 0.72
 BUN_PROFILE = ((0.034, 0.0), (0.038, 0.026), (0.054, 0.045), (0.063, 0.070), (0.057, 0.100), (0.037, 0.125))
 BUN_END = 0.135
 BUN_SEGMENTS = 10
-# The forelock: a thin strand with one curve, from the hairline toward the bridge of the nose, lifted a little off the brow toward its
+# The forelock: a short loose tuft at the hairline (it ran 7 cm down the brow and read as a scar), lifted a little off the brow toward its
 # end: (x, z, half width) along it.
-FORELOCK_PATH = ((0.016, 1.778, 0.0045), (0.026, 1.760, 0.0045), (0.028, 1.742, 0.0040), (0.020, 1.724, 0.0030),
-                 (0.008, 1.708, 0.0015))
+FORELOCK_PATH = ((0.016, 1.780, 0.0055), (0.024, 1.768, 0.0055), (0.027, 1.756, 0.0045), (0.022, 1.747, 0.0025),
+                 (0.016, 1.741, 0.0010))
 FORELOCK_RIDGE = 0.002
 TIE_AT = (0.30, -0.035, 1.762)  # a ray from here along -X finds his left temple, where the tie sits
 
@@ -556,12 +556,12 @@ def topknot(head, armature):
 
 
 def forelock(head, armature):
-    """One lock on the forehead, a ridged ribbon laid just off the head's front, and the tie at his left temple."""
+    """The tie at his left temple (the lock on the forehead that was here read as a mark and is not made: see FORELOCK_PATH)."""
     made = Made()
     head_only = {"Head": 1.0}
     tree = surface_tree([head])
     rows = []
-    for x, z, half in FORELOCK_PATH:
+    for x, z, half in ():  # no lock: at the game's size and at zoom 4 it read as a scar or a mark (FORELOCK_PATH stays for a better one)
         hit, normal, _, _ = tree.ray_cast(Vector((x, -0.3, z)), Vector((0.0, 1.0, 0.0)), 0.6)
         if hit is None:
             raise BuildError("found no forehead for the forelock")

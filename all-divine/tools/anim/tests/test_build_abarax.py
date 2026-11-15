@@ -46,7 +46,7 @@ SLOTS_BY_MESH = {
     "Abarax_Head": {0},
     "Abarax_Brows": {1},
     "Abarax_Topknot": {1},
-    "Abarax_Forelock": {1, 7},
+    "Abarax_Forelock": {7},
     "Abarax_Feather": {1, 8},
     "Abarax_EarRing": {8},
     "Abarax_Eyes": {2},
@@ -196,9 +196,8 @@ class BuildAbarax(unittest.TestCase):
         self.assertLess(high[0], -0.07, "the ring is on his right")
         self.assertTrue(1.60 < low[1] and high[1] < 1.72, "at the lobe")
         low, high = self.bounds("Abarax_Forelock")
-        self.assertLess(abs((low[0] + high[0]) / 2), 0.05, "the forelock is near the middle of the forehead")
-        self.assertGreater(high[2], 0.085, "in front of the skull")
-        self.assertLess(low[1], 1.745, "and falls toward the bridge of the nose")
+        self.assertGreater(low[0], 0.05, "what is left of the forelock part, the tie, is at his left temple")
+        self.assertLess(abs(high[2]), 0.12, "at the side of the head, not far from the face")
 
     def test_the_bun_is_a_knot_at_the_back_of_the_head(self):
         # The drawing's bun is tied at the back of the head and shows over the skull from the front. The points of
@@ -252,15 +251,12 @@ class BuildAbarax(unittest.TestCase):
         self.assertLessEqual(worst_side, 0.015, "the hair on the sides and nape stands off the skull")
         self.assertLessEqual(worst_top, 0.025, "and on top")
 
-    def test_the_forelock_is_a_thin_strand(self):
-        # A row of the ribbon is its points at one height; the temple tie (x > 0.05) is not part of it.
-        rows = {}
-        for p in self.positions("Abarax_Forelock"):
-            if p[0] < 0.05:
-                rows.setdefault(round(p[1], 4), []).append(p[0])
-        self.assertGreaterEqual(len(rows), 4, "the strand has its rows")
-        widest = max(max(xs) - min(xs) for xs in rows.values())
-        self.assertLessEqual(widest, 0.011, "no row of the lock is wider than 1.1 cm")
+    def test_there_is_no_strand_on_the_brow_only_the_temple_tie(self):
+        # The lock (thin, then a short tuft) read as a mark or a scar on his forehead in every picture: it stays in the portrait. The
+        # part keeps the small tie at his left temple.
+        brow = [p for p in self.positions("Abarax_Forelock") if p[0] < 0.05]
+        self.assertEqual(brow, [], f"{len(brow)} vertices of the forelock part are on the brow")
+        self.assertGreater(len(self.positions("Abarax_Forelock")), 0, "the tie is there")
 
     def test_the_new_parts_stay_small(self):
         new = sum(self.triangles_of(m) for m in ("Abarax_Forelock", "Abarax_Feather", "Abarax_EarRing"))

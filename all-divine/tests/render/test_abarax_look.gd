@@ -184,6 +184,35 @@ func test_the_pictures_for_the_owner() -> void:
 	shots.pose(def, 0)
 	var face := await shots.draw(4, -25.0)
 	_save(shots.head_crop(face, Vector2i(80, 60), 6, 0.0), "new_face_z4.png")
+	shots.pose(def, 0)
+	_save(shots.head_crop(await shots.draw(3, -25.0), Vector2i(80, 60), 6, 0.0), "new_face_z3.png")
+	# The feather through palm_cross while he turns at the rate a fight turns him (12 degrees a frame, the other way every 18), every two
+	# frames, cropped close.
+	shots.pose(def, 0)
+	var turning: Array[Image] = []
+	for f in range(0, 41):
+		shots.rig.rotation.y += deg_to_rad(12.0) * (1.0 if (f / 18) % 2 == 0 else -1.0)
+		shots.step(&"palm_cross", f)
+		if f % 2 == 0 and f >= 8:
+			turning.append(shots.head_crop(await shots.draw(3, -25.0), Vector2i(80, 60), 2))
+	var turn_sheet := Image.create(turning[0].get_width() * 8, turning[0].get_height() * 2, false, turning[0].get_format())
+	for i in mini(turning.size(), 16):
+		turn_sheet.blit_rect(turning[i], Rect2i(Vector2i.ZERO, turning[i].get_size()), Vector2i((i % 8) * turning[i].get_width(), (i / 8) * turning[i].get_height()))
+	_save(turn_sheet, "new_feather_palm_cross_turning.png")
+	# A revive: lying where the death left him, the springs restarted, then the get-up, every frame for ten frames, the scarf and the feather close.
+	shots.pose(def, 0)
+	shots.rig.hold_end_pose(&"death")
+	for i in 30:
+		shots.rig.tick(1.0 / 60.0)
+	shots.rig.reset_springs()
+	var revive: Array[Image] = []
+	for f in 10:
+		shots.step(&"getup", f)
+		revive.append(shots.head_crop(await shots.draw(2, -25.0), Vector2i(100, 80), 2, 0.0))
+	var revive_sheet := Image.create(revive[0].get_width() * 5, revive[0].get_height() * 2, false, revive[0].get_format())
+	for i in revive.size():
+		revive_sheet.blit_rect(revive[i], Rect2i(Vector2i.ZERO, revive[i].get_size()), Vector2i((i % 5) * revive[i].get_width(), (i / 5) * revive[i].get_height()))
+	_save(revive_sheet, "new_revive_strip.png")
 	# The feather through a dash-step and through the guard, every two frames, facing us, so that his left ear is on the right.
 	for clip in [&"dash_step", &"guard_hold"]:
 		var strip: Array[Image] = []
