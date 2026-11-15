@@ -36,6 +36,8 @@ const MAX_LINES := 3
 ## The shown text's size and the outline round it, as the Hud's.
 const FONT_SIZE := 8
 const OUTLINE := 3
+## The rows of the burn-in are this far apart.
+const BURN_LINE := FONT_SIZE + 3
 ## The text's distance from the box's edge, the gap between the card and the text (and the free area), the rows of text.
 const INSET := 8
 const GAP := 8
@@ -52,7 +54,7 @@ var letterbox := 0.0:
 	set(value):
 		letterbox = value
 		queue_redraw()
-## A small caption at the top left, for the animatic (the name of the shot, what a cue is).
+## A small caption at the top left, for the animatic (the name of the shot, what a cue is), a row to each line of the text.
 var burn_in := "":
 	set(value):
 		burn_in = value
@@ -288,6 +290,22 @@ func _stage() -> PixelStage:
 	return viewport.get_parent() as PixelStage if viewport is SubViewport else null
 
 
+## The burn-in's rows (it may have several, one to a line of the text); none when it is empty.
+func burn_in_rows() -> PackedStringArray:
+	return burn_in.split("\n") if burn_in != "" else PackedStringArray()
+
+
+## Where the burn-in is drawn, in picture pixels: at the top left, under the upper bar, a row to each line.
+func burn_in_rect() -> Rect2i:
+	var rows := burn_in_rows()
+	if rows.is_empty():
+		return Rect2i()
+	var widest := 0.0
+	for row in rows:
+		widest = maxf(widest, ThemeDB.fallback_font.get_string_size(row, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x)
+	return Rect2i(MARGIN, bar_height() + MARGIN, ceili(widest), rows.size() * BURN_LINE)
+
+
 func _exit_tree() -> void:
 	_drop_card()
 
@@ -341,10 +359,11 @@ func _draw() -> void:
 	for bar in bar_rects():
 		draw_rect(Rect2(bar), ink)
 	var font := ThemeDB.fallback_font
-	if burn_in != "":
-		var caption := Vector2(MARGIN, bar_height() + MARGIN + FONT_SIZE)
-		draw_string_outline(font, caption, burn_in, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, OUTLINE, Hud.INK)
-		draw_string(font, caption, burn_in, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, Hud.WHITE)
+	var burn := burn_in_rows()
+	for i in burn.size():
+		var caption := Vector2(MARGIN, bar_height() + MARGIN + FONT_SIZE + i * BURN_LINE)
+		draw_string_outline(font, caption, burn[i], HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, OUTLINE, Hud.INK)
+		draw_string(font, caption, burn[i], HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, Hud.WHITE)
 	if not _showing:
 		return
 	var box := box_rect()

@@ -49,6 +49,9 @@ const OPEN := Vector3(-1.25, 0.0, 2.0)
 ## Where Abarax stands: aside (toward the middle of the yard), or behind the foe.
 const ASIDE := Vector3(2.4, 0.0, 0.6)
 const BEHIND := Vector3(0.2, 0.0, -0.7)
+## Abarax's feather and knot hide a pixel or two more of a Knuckle standing behind him, so that its inside came to 19 pixels, not the 20 every
+## body has: in the case where he is in front he stands this much to the side, and the floor stays 20.
+const ABARAX_ASIDE_IN_FRONT := Vector3(-0.05, 0.0, 0.0)
 ## Each case: its name, where the foe's feet are, the way it faces (degrees about up: 0 faces the camera, 90 east, 315
 ## south-west), and where Abarax stands from it. The first of each facing is that facing's open ground. The wall cases
 ## stand between two of the wall's pilasters, clear of the banners that hang before it.
@@ -121,7 +124,7 @@ func test_two_rims_one_body_behind_the_other() -> void:
 	var foe: Actor = run["foe"]
 	var player := main.player
 	var at := _open_for(main, 0)
-	for case: Array in [["the Knuckle in front", foe, player, BEHIND], ["Abarax in front", player, foe, -BEHIND]]:
+	for case: Array in [["the Knuckle in front", foe, player, BEHIND], ["Abarax in front", player, foe, -BEHIND + ABARAX_ASIDE_IN_FRONT]]:
 		var front: Actor = case[1]
 		var back: Actor = case[2]
 		_put(foe, Transform3D(run["turn"] as Basis, at))

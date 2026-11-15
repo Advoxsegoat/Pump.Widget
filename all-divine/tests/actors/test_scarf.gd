@@ -90,8 +90,9 @@ static func _scarf_finite(r: Rig) -> bool:
 func test_rig_has_the_scarf_spring() -> void:
 	var r: Rig = track(load(RIG).instantiate())
 	var springs := r.skeleton.find_children("*", "SpringBoneSimulator3D", false, false)
-	assert_eq(springs.size(), 1)
+	assert_eq(springs.size(), 2, "the scarf's spring, and the feather's (tests/actors/test_abarax_portrait.gd)")
 	var spring := springs[0] as SpringBoneSimulator3D
+	assert_eq(spring.get_root_bone_name(0), "scarf_01", "the scarf's spring is the first")
 	assert_eq(spring.get_setting_count(), 1)
 	assert_eq(spring.get_root_bone_name(0), "scarf_01")
 	assert_eq(spring.get_end_bone_name(0), "scarf_04")
