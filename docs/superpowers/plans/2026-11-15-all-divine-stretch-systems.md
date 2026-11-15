@@ -4,7 +4,7 @@
 
 **Goal:** Turn the built Bilibara stretch into a level that can be played, lost and won: rose shrines to rest at, petals that drop and wait where Abarax fell, a save that keeps up with him, one shortcut loop, four kinds of foe standing where they should, one gank squad with a secret weakness, and a mini-boss whose fall opens the way on.
 
-**Architecture:** One node, `StretchRun`, is added under the stretch's region when it is entered; it owns the world's memory (`WorldMemory`), the petals, the encounters, the gates and the boss, and reads everything about the place from data (`data/stretch/*.tres`, `data/items/`, `data/squads/`, `data/bosses/`). Places are marker names and coordinates in that data, not code and not new layout lines (one exception, Task 5's toll gate). The save is a small JSON file written through a temporary file with a backup, never touched by a test, a recording, a replay or the bot. Foes are the six that exist, placed by data and given a few new, optional habits (home and leash, sleeping, squad hints) in `EnemyBrain`.
+**Architecture:** One node, `StretchRun`, is added under the stretch's region when it is entered; it owns the world's memory (`WorldMemory`), the petals, the encounters, the gates and the boss, and reads everything about the place from data (`data/stretch/*.tres`, `data/items/`, `data/squads/`, `data/bosses/`). Places are marker names and coordinates in that data, not code and not new layout lines: the layout and the built scene are not touched. The save is a small JSON file written through a temporary file with a backup, never touched by a test, a recording, a replay or the bot. Foes are the six that exist, placed by data and given a few new, optional habits (home and leash, sleeping, squad hints) in `EnemyBrain`.
 
 **Tech Stack:** Godot 4.7.2, typed GDScript, the project's own test runner (`tools/test.sh`), the Registry (`data/<kind>/`), the combat bot (`tools/bot`), the replay seam (`core/replay`).
 
@@ -24,7 +24,7 @@ Each line is my choice first, then the other way. Every number is data (named be
 8. **The gank squad is "the Hand's Pack":** three Knuckles of tier II on the Rack Walk (the long alley with the drying racks), with no attack-token limit: they spread round you, start their attacks one after another a beat apart, and chain. **Its secret weakness is the Rose Bell**, lying behind the stall bench in the far corner of the second shrine's alcove, where most people rest and leave. Pressing the item button (R, or X on the pad) with the Bell, with the Pack awake within 16 m, scatters it: they fall back for a few seconds and then fight as ordinary foes (two at a time) from then on, even after you die and rest. A posted notice at the Rack Walk's entrance and the Bell's own words hint at it (placeholder lines: the owner writes the real ones). Other way: the Bell must be rung every fight.
 9. **The mini-boss is "the Collector" (a working name):** the Hand's tithe-taker, "where the Hand collects" in the book's words. A Knuckle with a blade, a head taller (1.15 of the size), 300 HP and 140 posture, in three phases: his blade string; then the lunge (a perilous thrust, answered by the catch) and quicker feints; then the ground slam (a perilous low ring: hop it) and a blade that follows your dodges. He waits in the street's east end, in front of a toll gate that bars the Tanneries lane.
 10. **The shortcut:** the gate at the street's west end (beside the first shrine) is barred from the street side ("It will not lift from this side"); from the loop lane's side a latch lifts the bar. It joins the first shrine to the Rack Walk (about 30 m instead of 85 m). Other way: it opens by a key found in the stretch.
-11. **What the mini-boss's fall opens:** the toll gate across the lane's mouth (a low gate like the shortcut's, built in the layout). The yard beyond stays plain: First Knuckle's door is F5's.
+11. **What the mini-boss's fall opens:** the toll gate across the lane's mouth (a low slate gate like the shortcut's, put there by the run, not by the layout). The yard beyond stays plain: First Knuckle's door is F5's.
 
 ## Global Constraints
 
@@ -91,7 +91,7 @@ Conditions the tasks' main tests would not reach by themselves, most likely to h
 | `data/stretch/`, `data/items/`, `data/squads/`, `data/bosses/` | everything the place says, as resources |
 | `tests/support/stretch_ground.gd` | standing ground and the flood fill, shared by the tests |
 
-Modified (by addition): `main/main.gd`, `core/replay/{recorder,replayer}.gd`, `actors/enemy_brain.gd`, `actors/actor_def.gd` (`petals`), `tools/bot/{combat_bot,bot_watch,run_bot,bot_runner}.gd`, `tools/world` layout (`world/bilibara/layout.txt`, once), `tools/audio/make_sfx.py`, `ASSETS.md`.
+Modified (by addition): `main/main.gd`, `core/replay/{recorder,replayer}.gd`, `actors/enemy_brain.gd`, `actors/actor_def.gd` (`petals`), `tools/bot/{combat_bot,bot_watch,run_bot,bot_runner}.gd`, `tools/audio/make_sfx.py`, `ASSETS.md`.
 
 ---
 
@@ -191,7 +191,7 @@ func test_the_real_chain_has_one_step_fewer_than_the_version() -> void:
     - Timers count `Game.play_frames`; the run saves on the autosave tick only when something changed, and when it leaves the tree.
   - `class StretchHud extends Control` (a child of the `Hud`; `hud/stretch_hud.gd`): `var run: StretchRun`; `func bind(hud: Hud, run: StretchRun) -> void`; `func prompt_line() -> String` (the interactor's); draws the prompt line at the bottom centre (the HUD's fallback font, outlined in `Hud.INK`) and nothing while `hud.shown_alpha() <= 0`.
   - `InputRecorder.hash_of: Callable` and `InputReplayer.hash_of: Callable`: when valid, called for the hash instead of `arena.state_hash()` (nothing else about them changes).
-  - `Main`: `var stretch: StretchRun`, `var save_dir := SaveStore.PLAYER_DIR`, `var stretch_new_game := false`; `static func parse_stretch(args: PackedStringArray) -> String` (`""`, `"continue"` for `--stretch`, `"new"` for `--stretch=new`; anything else after `=` is `""`); `func enter_stretch(new_game := false) -> void`.
+  - `Main`: `var stretch: StretchRun`, `var save_dir := SaveStore.PLAYER_DIR`, `var stretch_start := ""` (a seam for tests and the bot, set before the node is ready: `""`, `"continue"` or `"new"`; `_ready` reads the user arguments only while it is empty); `static func parse_stretch(args: PackedStringArray) -> String` (`""`, `"continue"` for `--stretch`, `"new"` for `--stretch=new`; anything else after `=` is `""`); `func enter_stretch(new_game := false) -> void`.
   - `StretchGround` (`tests/support/stretch_ground.gd`): `static func stands(region: Region, point: Vector3) -> bool` (an `ik_surface` ray down meets y = 0 within 0.01 and a 0.35 m capsule at 0.5 m overlaps no `world` body); `static func reached(region: Region) -> Dictionary` (the flood fill from `Spawn`, 0.5 m cells, keyed by `Vector2i(round(x / 0.5), round(z / 0.5))`); `static func clearance(region: Region, point: Vector3) -> float` (the flat distance to the nearest `world` collider, found by rays at 16 angles, capped at 6 m).
 
 - [ ] **Step 1: Pin the yard before touching it.** With no code changed, write a scratchpad probe that starts `Main` through `BotWorld.make(host, 1)`, plays `CombatBot` (counter policy, seed 1, reaction 14) for 120 frames and prints `game.arena().state_hash()` and `recorder.recording().frames.hash()`. Put both numbers in `tests/replay/test_yard_hash_pin.gd` as `YARD_STATE_HASH` and `YARD_FRAMES_HASH`, with the test `test_the_yards_seeded_bot_fight_hashes_as_it_did_before_the_stretch_work` asserting a fresh run equals them. It passes now and must pass at the end of every task.
@@ -230,7 +230,7 @@ func test_parse_stretch_reads_the_three_forms() -> void:
 func test_f2_continues_the_saved_game_and_new_reads_and_writes_nothing() -> void:
 	# main.save_dir = "user://save_test/main"; a saved game with petals 5 and rest rose_b: enter_stretch() -> run.data.petals == 5 and the player at rose_b's respawn; enter_stretch(true) -> petals 0, rose_a, and the files byte for byte unchanged after 60 frames
 func test_the_yards_arena_never_begins_when_the_game_starts_in_the_stretch() -> void:
-	# a Main given `--stretch=new` in its user args (or its test seam): region is Bilibara, arena() null, no Enemy nodes anywhere
+	# a Main with `stretch_start = "new"` set before it is ready: region is Bilibara, arena() null, no Enemy nodes anywhere
 func test_leaving_the_stretch_saves_what_changed() -> void:
 	# enter, set_flag(&"x"), switch_region(): the file has x; the run is gone with the region
 func test_the_hud_follows_no_arena_and_has_a_stretch_hud_in_the_stretch_only() -> void:
@@ -248,9 +248,198 @@ func test_a_recording_made_in_the_stretch_is_refused_without_its_hash() -> void:
   - `shrine_glow.tscn` and `petal_burst.tscn`: pixel particles copied from `fx/hit_spark.tscn`'s setup, rose and gold, no light; `data/fx/petal_burst.tres` (`FxDef`, lifetime 0.8).
   - The cue: `make_sfx.py` gains `shrine_rest` (a low two-partial bell, 0.9 s, peak -12 dBFS, seeded like the others); run the tool, commit the WAV, add the `data/sounds/shrine_rest.tres` and the `ASSETS.md` row ("ours", made by `tools/audio/make_sfx.py`).
   - `InputRecorder`/`InputReplayer`: the two `arena.state_hash()` calls (recorder `close` and `_physics_process`, replayer `_physics_process`) go through one private helper that prefers `hash_of`.
-  - `Main`: `_ready` calls `parse_stretch` and, when it is not empty or when a `--replay` recording's `region` is `BILIBARA`, goes to the stretch (a new game for `new` and for a replay) instead of starting the yard's fight; `_enter_region` makes the `StretchRun` (a `SaveStore.new(save_dir)` and its read, or none for a new game), puts a `StretchHud` under the Hud, and gives the recorder and replayer `stretch.state_hash`; `enter_stretch(new_game)` replaces F2's call; the camera snap on `respawned` is the run's own (it finds the rig by group).
+  - `Main`: `_ready` takes `stretch_start` (else `parse_stretch` of the user arguments) and, when it is not empty or when a `--replay` recording's `region` is `BILIBARA`, goes to the stretch (a new game for `new` and for a replay) instead of starting the yard's fight; `_enter_region` makes the `StretchRun` (a `SaveStore.new(save_dir)` and its read, or none for a new game), puts a `StretchHud` under the Hud, and gives the recorder and replayer `stretch.state_hash`; `enter_stretch(new_game)` replaces F2's call; the camera snap on `respawned` is the run's own (it finds the rig by group).
 - [ ] **Step 5: Look at it.** In the scratchpad, render the game's camera at `ShrineSite_A` and `ShrineSite_B` with the shrines in (`tools/godot.sh --render`, 640 x 360), read both PNGs: the glow is seen on the slate and not hidden by the lamp pools; note what is too faint for the owner.
 - [ ] **Step 6: Run** the five filters again, `tools/test.sh --filter=tests/world`, `tools/test.sh --filter=tests/replay`, `tools/test.sh --filter=test_ledger`, then `tools/test.sh` and `tools/godot.sh -- --selftest` (exit 0). Expected: all pass, the pin included.
 - [ ] **Step 7: Commit.** STATE.md Done line: "F3 Task 2 (systems): `StretchRun` (the stretch's run: the world's memory, rest, respawn), two rose shrines (rest: bars full, respawn point set, foes back, saved), `Interactor`, a stretch HUD line, death three seconds from the last shrine, `-- --stretch[=new]` and F2, and a hash source for the recorder and replayer so a stretch session replays `as recorded`; the yard's hashes are pinned." Owner checklist item: "Rest at both shrines, die, and stand up at the one you last rested at: is a press and no kneeling the right amount? Is the rose glow seen at the window's size?"
+
+---
+
+### Task 3: Petals and the corpse run
+
+**Files:**
+- Create: `world/stretch/{petal_tuning,petals,petal_pile}.gd`, `fx/petal_pile.tscn`, `data/stretch/petals.tres`, `data/sounds/{petal_gain,petal_wilt}.tres`
+- Modify: `actors/actor_def.gd` (`petals`), `data/actors/{knuckle_1,knuckle_2,knuckle_3,knuckle_drummer,knuckle_blade,knuckle_heavy}.tres`, `world/stretch/{stretch_def,stretch_run}.gd`, `hud/stretch_hud.gd`, `tools/audio/make_sfx.py`, `ASSETS.md`
+- Test: `tests/world/test_petals.gd`, `tests/hud/test_stretch_hud.gd` (more), `tests/actors/test_actor_petals.gd`
+
+**Interfaces:**
+- Consumes: Task 2's `StretchRun` (`data`, `player`, `region`, `respawn`, `player_fell`, `save_now`, `world_reset`), `SaveData.petals`, `.pile`, `.deaths`; `ActorFx.show_fx`; `Sfx.play`; `StretchGround.stands`; `Hud.picture_point`.
+- Produces:
+  - `ActorDef.petals: int` (`@export var petals := 0`: what the foe gives when it falls). Values: `knuckle_1` 10, `knuckle_2` 20, `knuckle_3` 40, `knuckle_drummer` 30, `knuckle_blade` 30, `knuckle_heavy` 60; every other def 0.
+  - `class PetalTuning extends Resource` (kind `stretch`, id `petals`; `data/stretch/petals.tres`): `@export var drop_share := 1.0` (the share of carried petals left where he falls), `@export var wilt_seconds := 0.0` (0 = no clock), `@export var reach := 1.2` (metres: how near he comes to take them back). `StretchDef.petals: PetalTuning`.
+  - `class Petals extends RefCounted`: `func _init(data: SaveData, tuning: PetalTuning)`; `signal gained(amount: int)`, `signal dropped(amount: int, at: Vector3)`, `signal taken(amount: int)`, `signal wilted(amount: int)`; `func carried() -> int`; `func gain(amount: int) -> void` (ignores amounts below 1); `func fall_at(at: Vector3) -> void` (an old pile wilts first, `wilted`; then `floori(carried * drop_share)` of the carried petals become the pile at `at` if that is above 0, `dropped`; `data.deaths` goes up by one in every case); `func pile_at() -> Variant` (a `Vector3` or null); `func pile_amount() -> int`; `func take_back() -> int` (the pile joins the carried petals, `taken`, returns the amount; 0 with no pile); `func tick(frames := 1) -> void` (ages the pile; with `wilt_seconds` above 0 it wilts at that many play seconds).
+  - `class PetalPile extends Node3D` (`fx/petal_pile.tscn`: a slow rising column of pixel petals, rose and gold, no light, drawn on the world layer): `var amount: int`; freed by the run when the pile is taken or wilts.
+  - `StretchRun` gains: `var petals: Petals`; `func watch_foe(foe: Actor) -> void` (when `foe.died` is emitted, once, `petals.gain(foe.def.petals)` and the dirty mark); `func mark_dirty() -> void` (the autosave tick writes the file when it was marked); `var last_stand: Vector3` (the last point the player stood on the floor alive, kept every frame, `y` 0 in the stretch). On `player.died`: `petals.fall_at(last_stand)`, a `PetalPile` at the pile, `player_fell`, and `save_now()` that very frame. Each frame the player, alive and in `PLAY`, within `tuning.reach` (flat) of the pile takes it back: the cue `petal_gain`, a `petal_burst` on him, a save. A pile in the loaded `SaveData` is drawn again at start. The state hash includes carried petals, the pile, the deaths.
+  - `StretchHud` gains: `func petal_text() -> String` (the carried count as a plain number), `func gain_popup() -> String` ("+<n>" for 90 play frames after a gain, else ""), `func pile_marker() -> Dictionary` (`{}` with no pile; else `{point: Vector2i, arrow: bool}`: the pile's picture point from `Hud.picture_point(pile + Vector3.UP * 0.8)` when it is inside the picture inset by 6 px, otherwise that point clamped to the inset edge with `arrow` true); it draws the count at the top right in `Hud.GOLD` with a 5 x 5 rose diamond beside it, the popup under it, and the marker (a rose diamond, or a small arrow at the edge).
+  - Cues `petal_gain` (a soft rising two-note chime, 0.5 s) and `petal_wilt` (a falling one, 0.6 s) from `make_sfx.py`, peak -14 dBFS.
+
+- [ ] **Step 1: Write the failing tests.**
+
+```gdscript
+# tests/world/test_petals.gd   (the stretch with a started run, a store in user://save_test/petals; Abarax with the stretch's tuning)
+func test_a_death_leaves_all_the_carried_petals_where_he_fell() -> void:
+	# carried 120, die at (10, 0, 0): pile_amount() 120 within 0.01 m of that point, carried() 0, `dropped` once with (120, point), data.deaths 1, one PetalPile node there
+func test_no_petals_means_no_pile_and_the_death_is_still_counted() -> void:
+	# carried 0: pile_at() null, `dropped` never, deaths 1
+func test_walking_into_the_pile_takes_it_back_and_clears_it() -> void:
+	# after the respawn put him 1.1 m away: carried 120 on the next frame, `taken` once with 120, the PetalPile freed; at 1.3 m nothing is taken; dead, nothing is taken; in a pause, nothing
+func test_a_second_death_before_the_pile_is_reached_wilts_it_for_good() -> void:
+	# die at A with 120; respawn; kill two foes worth 10 and 20 (watch_foe); die at B: pile at B is 30, `wilted` once with 120, exactly one PetalPile, none at A
+func test_dying_with_none_carried_still_wilts_the_old_pile() -> void:
+func test_reaching_the_pile_then_dying_again_leaves_a_new_pile_of_everything() -> void:
+func test_a_foe_gives_its_defs_petals_once_when_it_falls() -> void:
+	# watch_foe on a knuckle_1: die() twice: carried 10 and `gained` once with 10
+func test_the_petal_values_are_the_decided_ones() -> void:
+	# knuckle_1 10, knuckle_2 20, knuckle_3 40, knuckle_drummer 30, knuckle_blade 30, knuckle_heavy 60, abarax 0
+func test_the_clock_is_off_by_default_and_wilts_the_pile_when_set() -> void:
+	# default tuning: 100000 frames later the pile is there; with wilt_seconds 2.0: wilted at 120 play frames, not at 119; a pause of 600 frames does not count
+func test_the_file_written_at_the_moment_of_death_has_the_pile_and_the_shrine() -> void:
+	# die with 120 carried, rested at rose_b: read the store that same frame: pile amount 120 at the point, rest_shrine rose_b, petals 0; a new run started from that read stands him at rose_b's respawn with the PetalPile drawn at the point and 0 carried; reaching it gives 120 (a quit in the three seconds loses nothing twice)
+func test_dying_in_the_air_leaves_the_pile_on_the_ground() -> void:
+	# die during a hop (the player's y above 0.3): the pile's y is 0 and StretchGround.stands(pile)
+func test_a_pile_is_standing_ground_wherever_he_falls() -> void:
+	# die at the 8 points next to a kerb, the gate board, the lane's mouth, a corner of the yard...: StretchGround.stands(pile) for each
+func test_petals_gained_are_saved_by_the_next_event_or_the_autosave() -> void:
+	# gain 20; no file change at once; after AUTOSAVE_FRAMES the file says 20; with nothing marked, no write (the file's modified time does not move)
+# tests/hud/test_stretch_hud.gd, added
+func test_petal_text_popup_and_marker() -> void:
+	# carried 120 -> "120"; a gain of 20 -> popup "+20", gone after 90 play frames; a pile on screen -> {point near picture_point, arrow false}; one off screen -> point within the 6 px inset, arrow true; no pile -> {}
+# tests/actors/test_actor_petals.gd
+func test_every_def_has_a_petals_value_and_only_enemies_give_any() -> void:
+```
+
+- [ ] **Step 2: Run** `tools/test.sh --filter=test_petals`, `--filter=test_stretch_hud`, `--filter=test_actor_petals`. Expected: FAIL (`Petals`, `PetalTuning`, `ActorDef.petals` do not exist).
+- [ ] **Step 3: Implement** as above. `Petals` holds no nodes and no clock of its own (the run ticks it with `Game.play_frames` deltas); the run owns the `PetalPile` node; the pickup check uses flat distance and the same gating as the interactor (alive, `PLAY`, no scene). Cues: `make_sfx.py`, WAVs, `data/sounds/*.tres`, `ASSETS.md` rows.
+- [ ] **Step 4: Look at it.** In the scratchpad, render the game camera with a pile on cobble, on tan earth and on slate (640 x 360) and read the PNGs: the column is seen on each ground, not hidden by a lamp's pool; note for the owner whether it is too faint.
+- [ ] **Step 5: Run** the three filters, `tools/test.sh --filter=tests/world`, `--filter=test_ledger`, `--filter=test_yard_hash_pin`, then `tools/test.sh`. Expected: all pass.
+- [ ] **Step 6: Commit.** STATE.md Done line: "F3 Task 3 (systems): petals and the corpse run: foes give petals when they fall (`ActorDef.petals`), a death leaves what he carries where he fell, one chance to touch the pile before a second death wilts it (`PetalTuning`: no clock unless set), the count and the pile's marker on the HUD, saved at death, at pickup and on the autosave tick." Owner checklist item: "Die with petals, then run for them; die once more on the way: do the petals wilt as you expect, and can you see where the pile lies from across the street?"
+
+---
+
+### Task 4: Foes placed as encounters
+
+**Files:**
+- Create: `world/stretch/{placement,encounter_def,encounter_host}.gd`, `data/stretch/enc_street_pair.tres`, `enc_street_watch.tres`, `enc_lane_south.tres`, `enc_lane_north.tres`, `enc_rack_keeper.tres`, `enc_loop_straggler.tres`
+- Modify: `actors/enemy_brain.gd` (home, leash, sleep, alarm), `world/stretch/{stretch_def,stretch_run}.gd`
+- Test: `tests/actors/test_enemy_brain_home.gd`, `tests/world/test_encounters.gd`
+
+**Interfaces:**
+- Consumes: Task 2's run (`world_reset`, `tokens`, `serial`, `player`), Task 3's `watch_foe`; `Actor` (`place`, `die`, `got_hit`), `EnemyBrain`, `BrainDef`, `Locomotion.yaw_of`, `Melee.end_pairs_of`, `CameraRig.GROUP`, `StretchGround`.
+- Produces:
+  - `EnemyBrain` (new, all inert at their defaults, so the yard's fights do not move): `signal engaged` (emitted once each time it goes from noticing to engaged); `signal arrived_home`; `var home: Variant = null` (a `Vector3` post, or none); `var leash := INF` (metres, flat, from `home`); `var asleep := false`; `func wake() -> void` (awake, with the notice already built: it engages on its next think if it has a target, which it turns to face); `func engage_now() -> void` (an alarm: straight to ENGAGED, no noticing); `func going_home() -> bool`. Rules: asleep, `think` returns an empty intent (no turning, no looking, no perceiving); past `leash` from `home` while not idle it stands down (`_go_idle`), then walks home at the jog, ignoring the target, for at most 8 s, and on arriving (within 0.6 m) emits `arrived_home` and is idle again.
+  - `class Placement extends Resource` (inline in an encounter): `@export var def: ActorDef`, `at: Vector3`, `facing_deg: float` (about +Y: 0 faces south, 90 east, 180 north, 270 west), `brain: BrainDef` (optional: handed to the foe in place of its def's), `brain_broken: BrainDef` (Task 6: handed instead once the encounter's squad is broken).
+  - `class EncounterDef extends Resource` (kind `stretch`): `@export var id: StringName`, `placements: Array[Placement]`, `spawn_radius := 30.0` and `despawn_radius := 44.0` (metres from the mean of the posts), `sleeping := false`, `wake_radius := 7.0`, `alarm := true` (one member engaging engages the rest), `leash := 24.0`, `gone_if: StringName` (a world flag that keeps it from ever standing). Tasks 6 and 7 add `squad` and `boss`. `StretchDef.encounters: Array[EncounterDef]`.
+  - `class EncounterHost extends Node` (child of the run, `name = "Encounters"`): `signal spawned(id: StringName, foes: Array[Actor])`, `signal despawned(id: StringName)`, `signal cleared(id: StringName)`; `func foes(id: StringName) -> Array[Actor]`; `func all_foes() -> Array[Actor]`; `func killed(id: StringName) -> PackedInt32Array` (the indices of the placements that fell since the last reset); `func reset_all() -> void` (every live foe is removed as `Arena.clear_foes` removes one: pairs ended through `Melee.end_pairs_of`, the player's move stopped if he was in one, his lock and the camera's lean let go, `remove_child` then `queue_free`; the killed lists are cleared; run on `world_reset`); `func hash_part() -> Array`. Every 15 play frames it streams: an encounter with no live foes whose centre is within `spawn_radius` of the player stands its placements that are not in `killed` and not `gone_if`-flagged; one whose foes are all unengaged and whose centre is beyond `despawn_radius` is removed (the killed stay killed). A foe is named `<encounter id>_<index>`, takes `spawn_count = run.serial` (then `run.serial += 1`), is placed at `at` facing `facing_deg`, is watched for petals (`run.watch_foe`), has `home = at` and `leash`, and is `asleep` when the encounter sleeps. A sleeper wakes (its encounter with it) when the player comes within `wake_radius` of any member or any member is hit; with `alarm`, a member's `engaged` calls `engage_now` on the rest.
+  - **Data (the plan's placements, x east, z south; `facing` as above):**
+
+| Encounter | Who | Posts (x, z) | Facing | Notes |
+|---|---|---|---|---|
+| `street_pair` | 2 x `knuckle_1` | (-14, -1.5), (-12, 2.0) | 270 | the street's first foes, 18 m from the first shrine |
+| `street_watch` | `knuckle_2`, `knuckle_1` | (3, 2.0), (5.5, -2.0) | 270 | before the Collector's end of the street |
+| `lane_south` | `knuckle_blade` | (27.5, -14) | 0 | in the lane, beyond the toll gate |
+| `lane_north` | `knuckle_drummer` | (27.5, -46) | 0 | `sleeping`, `wake_radius` 6; 14 m from the second shrine |
+| `rack_keeper` | `knuckle_heavy` | (8, -22.5) | 90 | the Rack Walk |
+| `loop_straggler` | `knuckle_1` | (-32.5, -14) | 180 | the loop lane, before the latch |
+
+  (the Pack is Task 6's, the Collector Task 7's.) Every `at` has y 0.
+
+- [ ] **Step 1: Write the failing tests.**
+
+```gdscript
+# tests/actors/test_enemy_brain_home.gd   (a bare Region with ground; a knuckle_1 with an EnemyBrain; the target an Actor with Brain.new())
+func test_an_asleep_foe_notices_nothing_and_wakes_into_the_fight() -> void:
+	# target 2 m ahead in plain sight, asleep: 120 frames later mode IDLE, position and facing unchanged, no presses; wake(): ENGAGED within 2 frames
+func test_a_foe_past_its_leash_gives_up_and_walks_home_and_ignores_the_target_on_the_way() -> void:
+	# home (0,0,0), leash 6; the target runs to 10 m; `going_home()` within 2 frames; no attack started while going home even with the target 1 m away; back within 0.6 m of home in (distance / 5.5 + 2) s; `arrived_home` once; then IDLE, and engages again when the target is in sight
+func test_the_walk_home_gives_up_after_eight_seconds() -> void:
+	# a foe walled off from home: going_home() false by 8.1 s, no error
+func test_engage_now_skips_the_noticing() -> void:
+	# IDLE, target behind it out of sight: engage_now(): ENGAGED on the next think; `engaged` once
+func test_the_signal_engaged_comes_once_per_engagement() -> void:
+func test_with_no_home_and_no_leash_nothing_is_different() -> void:
+	# the existing brain tests are the proof (run them); plus: a default brain never emits arrived_home, going_home() false
+# tests/world/test_encounters.gd   (the stretch region, a run, Abarax a child of the region with Brain.new())
+func test_the_encounter_data_loads_and_uses_only_the_existing_foes() -> void:
+	# six encounters by id above; every placement's def in {knuckle_1, knuckle_2, knuckle_blade, knuckle_drummer, knuckle_heavy} at this task; 4 archetypes (Knuckle, blade, Drummer, heavy)
+func test_the_posts_are_where_the_table_says() -> void:
+	# each placement's at within 1e-3 of the table, facing_deg equal
+func test_every_post_is_standing_ground_and_far_from_every_respawn() -> void:
+	# StretchGround.stands(post), StretchGround.clearance(post) >= 0.6, post in reached(region) (the toll gate is Task 5's: reached from a region with no gate boards), flat distance to every shrine's respawn >= 12 m, and no two posts of different encounters within 3 m
+func test_foes_stand_in_when_he_comes_near_and_out_when_he_goes_far() -> void:
+	# at 31 m from street_pair's centre: no foes after 30 frames; at 29 m: two within 15 frames, each at its post within 0.05 m and 1 degree of its facing; at 46 m, unengaged: none within 15 frames
+func test_a_foe_is_named_for_its_post_takes_the_serial_and_is_watched() -> void:
+	# names street_pair_0, street_pair_1; spawn_count 0 and 1 from a fresh serial; killing one pays 10 petals
+func test_the_killed_stay_dead_while_he_walks_about() -> void:
+	# kill street_pair_0, go beyond despawn_radius, come back: one foe (index 1) at its post, killed(id) == [0]
+func test_rest_and_death_bring_every_foe_back_healed() -> void:
+	# kill one, hurt the other; rest(rose_a): after the streaming tick two full-HP foes at their posts, killed(id) empty; the same after die + the three seconds
+func test_a_sleeper_wakes_by_nearness_by_a_blow_or_by_the_alarm() -> void:
+	# lane_north asleep: at 6.5 m for 120 frames nothing; at 5.9 m it engages; a fresh one hit from 10 m engages; with alarm, a member that engages engages the other (use street_pair, awake)
+func test_a_foe_that_leaves_its_leash_walks_home_and_is_healed() -> void:
+	# lure street_pair_0 past 24 m; arrived_home: hp == max, within 0.6 m of its post
+func test_the_dice_are_seeded_and_a_respawn_rolls_new_ones() -> void:
+	# two runs with start_seed(1) and the same walk: equal state_hash after 300 frames; start_seed(2) differs; a second spawn of the same post has a different spawn_count than the first
+func test_the_hash_includes_the_encounters() -> void:
+	# a killed foe, a despawned encounter each change state_hash
+func test_the_hud_shows_a_stretch_foes_bars_and_the_lock_finds_it() -> void:
+	# a foe hit by the player: Hud.foe_bars() has it (no arena needed); LockOn picks it within 3.5 m
+```
+
+- [ ] **Step 2: Run** `tools/test.sh --filter=test_enemy_brain_home` and `--filter=test_encounters`. Expected: FAIL (`home`, `asleep`, `wake`, `Placement`, `EncounterHost` do not exist).
+- [ ] **Step 3: Implement** the brain's additions first (the six brain tests), then the data classes and the host, then the six `.tres` files. The host's removal copies `Arena.clear_foes`'s steps (do not edit the arena: the yard is pinned); streaming and the despawn test use `Game.play_frames` so a pause stands them still.
+- [ ] **Step 4: Run** the two filters, then `tools/test.sh --filter=tests/actors` (the existing brain, ranges and token tests are the proof that nothing moved), `--filter=test_yard_hash_pin`, `tools/clip_check.gd` (unchanged: 67 moves, 7 actors OK or whatever the tree says before), then `tools/test.sh`. Expected: all pass.
+- [ ] **Step 5: Commit.** STATE.md Done line: "F3 Task 4 (systems): foes placed as encounters (`EncounterDef`, `Placement`, `EncounterHost`): they stand in as the player nears and out beyond, wake by sight, nearness, a blow or an alarm, walk home past their leash and are healed, come back on a rest or a death and stay dead otherwise; six encounters of the four kinds of foe in the street, the lane and the Rack Walk; `EnemyBrain` has a home, a leash, sleep and an alarm (inert by default)." Owner checklist item: "Walk the stretch with no fight in mind: does each foe stand where you would expect it, with room to see it coming, and does one that loses you walk home rather than vanish?"
+
+---
+
+### Task 5: Gates and the shortcut loop
+
+**Files:**
+- Create: `world/stretch/{gate_def,gate_door,latch}.gd`, `data/stretch/gate_shortcut.tres`, `data/stretch/gate_toll.tres`, `data/sounds/gate_unlatch.tres`
+- Modify: `world/stretch/{stretch_def,stretch_run}.gd`, `hud/stretch_hud.gd`, `tools/audio/make_sfx.py`, `ASSETS.md`, `tests/world/test_encounters.gd` (opens the gates before its flood fill)
+- Test: `tests/world/test_gates.gd`, `tests/world/test_shortcut_loop.gd`
+
+**Interfaces:**
+- Consumes: Task 2's `Interactable`, `StretchRun.set_flag`, `flag`, `world_changed`; the layout's `Gate` node (a `StaticBody3D` on `world` and `ik_surface`, the 0.6 m slate board at x -35..-30, z -5.5..-4.5) and the markers `GateFar` (-32.5, -6.5) and `GateNear` (-32.5, -3.5); `res://world/materials/slate.tres`; `Layers`.
+- Produces:
+  - `class GateDef extends Resource` (kind `stretch`): `@export var id: StringName`; `opens_on: StringName` (the world flag that opens it); `nodes: PackedStringArray` (existing nodes of the region it lowers, by name); `board: Rect2` (x, z, width, depth: when not empty the gate builds its own slate board here, 0.6 m high, a `StaticBody3D` named `<id>` on `world | ik_surface`, no rail, no posts); `drop := 1.3` (metres a board sinks); `latch_centre: Vector3` and `latch_radius := 3.0` (a gate with `latch_radius` above 0 has a latch); `open_side: Vector2` (the unit direction, x and z, from the gate toward the side it can be lifted from); `latch_prompt := "Lift the bar"` and `barred_prompt := "Barred from the other side"`. `StretchDef.gates: Array[GateDef]`.
+  - `class GateDoor extends Node` (one per gate, children of the run named `Gate_<id>`): `func open(animated := true) -> void` (the board's collision layer is 0 at once; it sinks `drop` over 45 play frames, then is hidden; unanimated it is open now); `func is_open() -> bool`; opened on `world_changed(opens_on)` and, with no animation, at start when the flag is already set.
+  - `class Latch extends Interactable`: `prompt` is `latch_prompt` on the open side and `barred_prompt` on the other; `interact` on the open side sets the gate's flag (the cue `gate_unlatch`) and on the other does nothing.
+  - `StretchRun.gates: Array[GateDoor]`; the `StretchHud` shows the barred prompt as it shows any prompt.
+  - **Data:** `gate_shortcut` (`opens_on` `shortcut_open`, `nodes` ["Gate"], no board, `latch_centre` (-32.5, 0, -5), `open_side` (0, -1), the loop lane's side); `gate_toll` (`opens_on` `collector_down`, `board` Rect2(25, -5.5, 5, 1.0), no latch: nothing lifts it but the flag).
+  - The cue `gate_unlatch` (a dry wooden clunk and a slide, 0.5 s, peak -14 dBFS).
+
+- [ ] **Step 1: Write the failing tests.**
+
+```gdscript
+# tests/world/test_gates.gd
+func test_the_gate_data_loads() -> void:
+	# gates shortcut and toll by id; flags shortcut_open and collector_down; the toll board is Rect2(25, -5.5, 5, 1.0)
+func test_a_gate_whose_flag_is_set_loads_open_and_one_without_loads_shut() -> void:
+	# data.flags {shortcut_open}: `Gate`'s collision_layer 0 and hidden at the first frame, the toll board shut (layer WORLD | IK_SURFACE, top at y 0.6); with no flags both shut
+func test_setting_the_flag_opens_a_gate_over_forty_five_frames_without_a_pop() -> void:
+	# collision layer 0 on the very frame; the board's y falls every frame by at most 0.04 m to -1.3 at frame 45, hidden after; is_open() true
+func test_the_latch_lifts_only_from_the_open_side() -> void:
+	# at GateFar: interactor.current is the latch, prompt "Lift the bar", one `interact` press sets shortcut_open, `world_changed` once; at GateNear: prompt "Barred from the other side", a press sets nothing
+func test_a_built_board_holds_a_shove_and_a_dash_step_until_its_flag() -> void:
+	# the toll board: shoved from the street for 3 s, the centre stays south of z = -5.0 + 0.35 + 0.05 and y < 0.05; with collector_down set and 60 frames, the same shove goes through to z < -8
+func test_an_open_gate_changes_the_walkable_set_by_no_more_than_the_gate_board() -> void:
+	# StretchGround.reached(region) with every gate open equals the plain scene's reached set plus the lane and everything past it (and nothing outside the seven places)
+func test_the_gates_survive_a_rest_a_death_and_a_load() -> void:
+	# open; rest; die + 3 s; a new run from the saved file: both still open as they were
+# tests/world/test_shortcut_loop.gd
+func test_the_shortcut_cuts_the_first_shrines_way_to_the_rack_walk() -> void:
+	# flood-fill path length (0.5 m cells, 4-neighbour, metres) from rose_a's respawn to RackWest with the toll gate open: shut shortcut >= 135 m, open <= 30 m
+func test_abarax_walks_the_loop_from_its_far_side_and_opens_the_gate() -> void:
+	# collector_down set; RouteBrain over LaneMid, RackEast, RackWest, GateFar (each leg within leg / 4 + 3 s, 0.6 m), then one `interact` press: shortcut_open set within 2 frames, and he walks GateFar -> GateNear through the gate (a leg of 3 m in under 3 s); the same walk shut stops at the board
+func test_after_it_is_open_the_first_shrine_to_the_rack_walk_is_a_short_walk() -> void:
+	# from rose_a's respawn over GateNear, GateFar, RackWest: RouteBrain done within 12 s
+```
+
+- [ ] **Step 2: Run** `tools/test.sh --filter=test_gates` and `--filter=test_shortcut_loop`. Expected: FAIL (`GateDef`, `GateDoor`, `Latch` do not exist).
+- [ ] **Step 3: Implement.** `GateDoor` finds the named nodes under the region; a built board uses `slate.tres` and a `BoxShape3D` of the rect by 0.6 m (the same box the layout's `Gate` is); `Latch` and the doors are made by the run from `def.gates`. Update the Task 4 flood-fill test to call `door.open(false)` on every gate first.
+- [ ] **Step 4: Look at it.** In the scratchpad, render the camera at `GateNear`, `GateFar` and the lane's mouth with the toll board shut and open; read the PNGs: the toll board reads as the shortcut's twin and hides no body behind it (the stretch plan's low-gate rule: nothing taller than 1.3 m).
+- [ ] **Step 5: Run** both filters, `tools/test.sh --filter=tests/world`, `--filter=test_ledger`, `--filter=test_yard_hash_pin`, then `tools/test.sh`.
+- [ ] **Step 6: Commit.** STATE.md Done line: "F3 Task 5 (systems): gates and the shortcut loop: `GateDef`/`GateDoor`/`Latch`; the street's west gate lifts from the loop lane's side only and joins the first shrine to the Rack Walk (about 24 m instead of 142 m); a slate toll board across the lane's mouth waits for the mini-boss's flag; open gates stay open through rest, death and load." Owner checklist item: "Walk the loop, lift the bar at the gate and run back to the shrine: is the shortcut a relief, and does the barred prompt from the street say enough?"
 
 ---
