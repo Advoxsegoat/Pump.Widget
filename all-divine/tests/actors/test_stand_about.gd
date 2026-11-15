@@ -503,6 +503,61 @@ func test_nobody_shivers_between_two_neighbours() -> void:
 	assert_true(tangent_bad.is_empty(), "no foe's speed round the target changes sign more than %d times in 60 frames (worst %d; %d of %d fights, first: %s)" % [TANGENT_LIMIT, worst_tangent, tangent_bad.size(), runs.size(), tangent_bad.slice(0, 3)])
 
 
+## Regression fixtures (Review of Task 14f): each records a fault once seen, in a named fight, and holds one of the changes that spread the foes
+## (reverting it turns the test red). They are fights at seeds 1 to 3 in one place, not claims that a rule holds in general.
+const FIXTURE_SEEDS := [1, 2, 3]
+const YARD_TRIO := ["knuckle_1", "knuckle_1", "knuckle_drummer"]
+const THREE_TIER_ONES := ["knuckle_1", "knuckle_1", "knuckle_1"]
+
+
+## Plays each of `kinds_list` at FIXTURE_SEEDS in `place` against a `mode` player for `frames_n`, and returns the runs.
+func _fixture(kinds_list: Array, place: String, mode: String, frames_n: int) -> Array[Dictionary]:
+	var runs: Array[Dictionary] = []
+	for kinds: Array in kinds_list:
+		for seed_value in FIXTURE_SEEDS:
+			var run := _fight(kinds, seed_value, Vector3(runs.size() * 50.0, 0, 0), mode, place)
+			run["label"] = "%s, player %s, %s, seed %d" % [place, mode, "yard trio" if kinds == YARD_TRIO else "three tier I", seed_value]
+			runs.append(run)
+	await _play(runs, frames_n)
+	return runs
+
+
+## Fixture: a player who backs away is attacked within 5 s. The yard's trio and three tier I, seeds 1-3: the first attack at frame 191 to 207
+## with the go-round and the hand-over; at 408 to 486 without either (one is enough to lose it).
+func test_regression_a_backing_player_is_attacked_within_five_seconds() -> void:
+	var runs: Array[Dictionary] = await _fixture([YARD_TRIO, THREE_TIER_ONES], "open", "back", 330)
+	var late: Array = []
+	for run in runs:
+		var begins: Array = run["begins"]
+		var first: int = begins[0][0] if not begins.is_empty() else 9999
+		if first > 300:
+			late.append("%s: %d" % [run["label"], first])
+	_free(runs)
+	assert_true(late.is_empty(), "the first attack on a player who backs away begins within 5 s (late: %s)" % [late])
+
+
+## Fixture: the foes who wait stand off. The yard's trio with the player's back to a wall and still, seeds 1-3: every two foes over 40 degrees
+## apart (seen from him) on 0.73 of the frames after the first 3 s with the waiters in the outer half of their band, 0.34 without.
+func test_regression_waiters_stand_off_at_a_wall() -> void:
+	var runs: Array[Dictionary] = await _fixture([YARD_TRIO], "wall", "still", 450)
+	var apart := 1.0
+	for run in runs:
+		apart = minf(apart, float(run["min_angle_frames"]) / maxf(run["frames_seen"], 1))
+	_free(runs)
+	assert_true(apart >= 0.5, "every two foes are over 40 degrees apart on at least half the frames after 3 s (least %.2f)" % apart)
+
+
+## Fixture: a blocked foe goes to the open side. The yard's trio and three tier I in a gate with the player circling, seeds 1-3: every two foes
+## over 40 degrees apart on 0.37 to 0.50 of the frames with the re-angle toward the wider gap, 0.00 to 0.14 with the fixed way.
+func test_regression_a_blocked_foe_goes_to_the_open_side_in_a_gate() -> void:
+	var runs: Array[Dictionary] = await _fixture([YARD_TRIO, THREE_TIER_ONES], "gate", "circle", 600)
+	var apart := 1.0
+	for run in runs:
+		apart = minf(apart, float(run["min_angle_frames"]) / maxf(run["frames_seen"], 1))
+	_free(runs)
+	assert_true(apart >= 0.25, "every two foes are over 40 degrees apart on at least a quarter of the frames after 3 s (least %.2f)" % apart)
+
+
 ## One foe alone: the same moves on the same frames as before the fix (every kind, a still and a circling Abarax, SIGNATURE_SEEDS seeds).
 const SIGNATURE_SEEDS := 2
 const SIGNATURE_FRAMES := 600
