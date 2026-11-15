@@ -74,6 +74,8 @@ F0 (Foundation) is built: a lit courtyard to walk in, with Abarax moving, dash-s
 
 - F3 Task 1 (stretch): the region builder's `ground`, `block`, `water`, `vat`, `fill`, `kit` commands and the `lamps ... world` and `curb` options (a stone, a name, a raise); a calm cobble, a cold tan-earth and a blue-grey snow texture and Bilibara's own colormap for the kit (`tools/art/make_textures.gd`); 17 more pieces of the Kenney kit; a block's pieces are drawn as a few MultiMeshes (`KitRun`, no run longer than 12.5 m) and coloured by `KitDresser`; the builder refuses masses that overlap and a solid block over walkable ground; old layouts build the same scenes.
 - F3 Task 2 (stretch): `world/bilibara/` (built from `layout.txt`) is a flat 1,906 m² place of seven walkable parts (court A, Rue Caillou, the Tanneries lane, the Rack Walk, the loop lane, alcove B, the 25 × 20 m yard) with a shut shortcut gate (a 0.6 m board in a posted frame with a rail) and every marker later lanes need; F2 enters it from the game. The walkable set is flood-filled and sealed (no pocket, no leak; shoves, throws, dash-steps and every enemy's lunge are held at every edge), the loop is walkable to the gate and the gate is a 144 m way round. Nothing low hides a fighter: the low walls are 0.6 m, and a body against one or against the gate has nothing above 0.4 m of him hidden (a render test measures the hidden share). It is a bare blockout: plain fronts, flat roofs, nothing south of the kerbs; Task 3 dresses it (`tools/test.sh`: 1470 passed, 0 failed).
+- F3 Task 3 (stretch): the backdrop and the dressed places: building fronts of the kit (stone frontage, wooden tannery works) on every tall edge, a ring of 84 roofs 15 m deep on three sides, the harbor to the south, the Lazyman's back, the gate with its posts, the drying yard with vats and racks, the yard's three barred doors and two vats; nothing stands between the camera and a body anywhere (a mesh-by-mesh sight-line test with no width exemption: no post, plinth or railing hides a fighter), snow lies in rounded drifts, the masses wear gable roofs, the yard has a stone fighting square with a border, and the picture never shows background from any of 99 camera points.
+- F3 Task 4 (stretch): the light is the book's cold snow-noon and the ground a fighter stands on is pale (trodden snow over cobbles, slate slabs of uneven size, stone, snow-dusted earth: 0.62 to 0.73 in the picture), every body darker than its ground by 0.14 or more at 26 measured positions and planted by a soft dark ellipse (one draw for all of them); grade `bilibara_noon`; roofs of shingles in two tones with a broken snow band, pink neon banners the only saturated hue, dark cold water, a warm glass on each of 18 lanterns (no light on the ground at noon); doors, shutters and timber darker than any head, so a head is never lost against a front; the grounds meet in ragged tongues (`fringe`, `toon_fringe`), no straight seam. **Nothing in the stretch holds a body**: a post against a wall is a wedge, and a body goes along posts, vats, corners and walls at its own speed and round a post or a vat it runs at dead on (held 15 frames at most where it was 145; foes too); `Actor` gains an opt-in `deflects` mark that only the stretch's solid things carry, so the training yard's fights are frame for frame as they were. **Every fight cue carries a dark edge** (the parry's and the heavy's rim, the perilous rim and wave, the hit spark, the dust puff) and reads on pale ground and in the yard: the yard's spark and wave, lost before on its dark ground, read now.
 
 ### Portraits
 
@@ -180,6 +182,18 @@ The Drummer, the blade Knuckle and the heavy Knuckle have their own list below. 
 10. The animatic (`tools/animatic.sh fixture_yard_entrance`, then `animatic.mp4`): is the line burnt in at the top left the right amount to read while it plays?
 11. Notes on a scene go in `scenes/story/<scene>/notes.md` under a heading `## Rev 2` (then 3, and so on); say them in chat and they are written there for you.
 
+## Owner checklist for the Bilibara stretch
+
+Press F2 in the game to enter it (F5 goes back to the yard).
+
+1. Walk Rue Caillou, the lane, the Rack Walk and the loop to the gate: does it look like the book's Bilibara (pink neon, stone, wood, snow), and does the picture ever end at a wall top?
+2. Does it read as a cold snow noon, and are the fighters the first thing you see everywhere?
+3. The fronts are dark at head height now (doors, shutters, the tannery's timber), so that a head is never lost against them: too dark for the book's pale town? The other way is paler fronts and a thicker outline round every fighter.
+4. Court A's slab ground and the ragged seams where two grounds meet: to your taste? The yard's border looks frosted up close.
+5. Run into a lantern post, a vat, a house corner: a bump and on you go, or does anything still hold you?
+6. Do you see the parry's blue rim (now with a dark edge) at once on the pale ground, and is the dark edge welcome in the training yard too?
+7. Does a lantern's small warm glass read as a lamp, or do you want warm pools on the ground at noon?
+
 ## Owner checklist for the portraits
 
 1. Abarax's portrait in a dialogue (`tools/test.sh --render --filter=test_portrait_card` writes `out/story/card_abarax_640.png` and `_1080.png`): is it your drawing as you want it shown: the mouth, the brows, the feather's light gold, the washes?
@@ -195,6 +209,12 @@ Anyone replays it with `-- --replay=<path>` on the same game version; a fight th
 
 ## Known limits / notes for later
 
+- **The stretch's gables are flat**: a roof's two planes differ by 0.02 to 0.12 (a gable reads as two by its shingles only) and the roof snow is paler than the ground in some views and not in others; the tones are per view because the same roof is hazed more from far (`out/shots/bilibara_roofs.txt` lists each view).
+- **A pocket still holds a body in the stretch**: a post beside a stall or a cart, the colonnade's end and the gate's curb stand in an inside corner, and a body pushed into one stands there as at any inside corner; a body run dead on at a flat wall stands at it.
+- **The stretch has not been seen with** the finisher's camera dip, the dialogue box, the HUD's bars over white roof snow, or a lying body; and `tests/render/test_bilibara_cues.gd` (162 cue pictures) is the suite's slowest render file by far.
+- **With three foes, one can dither at a lamp post for about a second**: the three-foe brain's go-round swing walks a foe into the pocket between a wall post's wedge and the front, where he creeps in bursts (`FOES_NOT_YET` in `tests/world/test_bilibara_sticky.gd`, which fails when it is cured). The brain does not know walls yet (Task 15c's ground).
+- **The stretch's snow is flat white**: `snow.png` clips to white in the stretch's light (the apron no body walks on, and the drifts), and the cold slate's joints clip in blue (`NOT_YET` in `tests/render/test_ground_pictures.gd`). A texture pass, with the dark fronts, once the owner has seen it.
+- **The rim's dark edge is the stretch's only** (`Rig.rim_ink_px`, given by the Bilibara region to every body in it and taken back when it leaves): a new pale region must ask for it the same way.
 - **F1's placeholders**: the voice layer is empty, there is no Flask, the sounds are synthesised, and the UAL2 clips are close but not tailored to the Open Hand.
 - **What the bot cannot tell you**: in two minutes it never met tier III or the heavy Knuckle at any reaction and the blade only twice; a `counter` player at 14 or 18 frames cannot clear the second wave in nine seeds of ten; its reaction is one number for every blow.
 - **The frame budget is loose yet**: a fight frame twice as dear still passes (the bounds are 4 ms and 8 ms against about 1.5 ms and 3 ms measured), a rare long stall (one frame in two hundred) is not bounded, and only the physics step is timed, not the HUD's or the renderer's work. The press-to-motion tests hold the spec's two frames where none is measured. Tighter bounds are the first fix after the demo.
@@ -296,7 +316,7 @@ all-divine/.tools/godot/Godot_v4.7.2-stable_linux.x86_64 --path all-divine
                                                # WASD or the left stick to move, Space/Shift (A) to dash-step (hop if still) and hold to
                                                # sprint, Q (LB) to guard, with a direction pressed while it is held: sway (A, D, W) or duck (S), left mouse (RB) to jab and again for the cross and the hook, right
                                                # mouse (RT) for the heavy palm, held to charge; F1 the controls list, F3 the debug overlay, F4 the
-                                               # screen look off and on, F5 the yard or the courtyard, F2 the Bilibara stretch (a blockout), F6 to F8 a tier I, II or III Knuckle,
+                                               # screen look off and on, F5 the yard or the courtyard, F2 the Bilibara stretch (dressed and lit), F6 to F8 a tier I, II or III Knuckle,
                                                # F9 resets the fight, Esc (Start) to pause
 ```
 
