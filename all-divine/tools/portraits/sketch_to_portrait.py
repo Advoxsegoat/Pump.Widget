@@ -16,12 +16,15 @@ line alone) and `tint.png` (the soft washes alone on the paper).
 
 The stages, in the order they run:
 
-  page     the page is looked at first: a photograph under 600 pixels on its short side, one more than a third dark, or one
-           with less than three quarters of it paper once the light is evened is not a pencil drawing on paper, and is refused.
+  page     the page is looked at first, and refused (exit 2, one line saying why) when it is under 600 pixels on its short side,
+           more than a third dark (too dark: it needs more light, when the page evened out is paper), with less than three quarters
+           of it paper once the light is evened (not a pencil drawing on paper: a photograph of a thing), or squared (graph) paper,
+           whose lines also run up the page.
   flat     the page's own brightness (the brightest thing near each pixel, smoothed) is divided out, so the shadow down one
            side and the grey cast go and the paper is white, the pencil dark.
-  rules    (paper "ruled" only) the spacing of the rules is the page's own rhythm (the rows at which its strips repeat), and
-           the finder's distances follow it. Every rule is found as a rule and not as "a horizontal dark thing": a rule is a
+  rules    (paper "ruled" only) the spacing of the rules is the page's own rhythm (the rows at which its strips repeat; the lag
+           found, its parts and its double are each scored against the page as a comb of rules, and the finest that scores as well
+           as the best is the spacing, so a half, a third or a double of it is not taken for it), and the finder's distances follow it. Every rule is found as a rule and not as "a horizontal dark thing": a rule is a
            thin dark line with paper above and below it for most of the page's width. The pixels that have paper above and
            below them are the evidence; a Hough vote over (tilt, height) finds each rule among them, and a fit that is bent
            by nothing but those pixels (the drawing's own lines have pencil next to them and are never evidence) follows
@@ -32,9 +35,11 @@ The stages, in the order they run:
            could cross it, so a stroke that crosses a rule is still one line; what is not on a rule is not touched. A
            rectangle of the recipe's `keep` is not touched at all (a stroke that lies along a rule); a rectangle of
            `erase` is wiped to paper (what is left over), its edge fading out over a few pixels. The levels then make paper nothing and the pencil's darkest
-           full. The tool then checks its own work, and refuses (exit 2, one line) when it took out more of a rule's length
-           than the rule holds ("the drawing was being erased") or when a rule remains ("rules remain at rows ...": the
-           paper's row profile is not flat, or a pencil-dark run is left along a rule on bare paper).
+           full. The tool then checks its own work, and refuses (exit 2, one line, naming the rows and columns of the photograph and
+           the `keep` that would hold the stroke) when a stroke of the drawing lies along a rule for 45 columns or more without
+           leaving it at both ends ("the drawing was being erased"), or when a rule remains ("rules remain at rows ...": the paper's
+           row profile is not flat between the first rule and the last, or a run of 15% of the page's width or more is left
+           along a rule on bare paper; ink that crosses a rule is not counted).
   crop     the recipe's `crop` of the page, padded with paper (never squashed) to the card's shape, 116 x 160, and
            made 464 x 640.
   tint     soft washes under the line, then the line over them in the card's ink, the line's darkness raised to the
