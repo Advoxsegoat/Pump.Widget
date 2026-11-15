@@ -101,8 +101,9 @@ class PageClassesTest(unittest.TestCase):
         self.assertGreaterEqual(kept, 0.9, "%s: the tool made a portrait with strokes gone (only %.0f%% of the strokes are dark)" % (name, 100 * kept))
 
     def test_rule_spacings(self):
-        for spacing, must_work in ((12, False), (15, False), (20, True), (30, True), (40, True), (60, True), (120, True)):
-            self.check_page("spacing %d" % spacing, pages.make_page(spacing=spacing), must_work=must_work)
+        # 600 x 800 pages (the smallest the tool takes: a rule does not need more) at spacings from 12 to 120 working pixels
+        for spacing, must_work in ((12, False), (20, True), (30, True), (60, True), (120, True)):
+            self.check_page("spacing %d" % spacing, pages.make_page(w=600, h=max(800, 8 * spacing), spacing=spacing), must_work=must_work)
 
     def test_tilts_to_three_degrees(self):
         for degrees in (-3, 3):

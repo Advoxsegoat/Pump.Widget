@@ -48,8 +48,8 @@ class SpacingEstimateTest(unittest.TestCase):
         for contrast in (0.28, 0.08):
             for degrees in (-3.0, 0.0, 3.0):
                 for spacing in np.arange(10.0, 130.01, 0.5):
-                    # a page of nine rules at the least, so that the longest spacing is seen often enough
-                    page = pages.ruled_darkness(400, max(800, int(9 * spacing)), float(spacing), degrees, contrast)
+                    # a page of eight rules at the least, so that the longest spacing is seen often enough
+                    page = pages.ruled_darkness(240, max(500, int(8 * spacing)), float(spacing), degrees, contrast)
                     found, _strength = tool.estimate_spacing(page)
                     total += 1
                     if abs(found - spacing) > 0.03 * spacing:

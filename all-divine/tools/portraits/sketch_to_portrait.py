@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Turns a photographed pencil drawing and a small recipe into the game's portrait pictures.
 
-    python3 -I tools/portraits/sketch_to_portrait.py --sketch <jpg> --recipe <json> --out <folder> [--only <expr>] [--stages <folder>]
-    python3 -I tools/portraits/sketch_to_portrait.py --init-recipe <jpg> --out <recipe.json>
+    tools/.venv/bin/python -I tools/portraits/sketch_to_portrait.py --sketch <jpg> --recipe <json> --out <folder> [--only <expr>] [--stages <folder>]
+    tools/.venv/bin/python -I tools/portraits/sketch_to_portrait.py --init-recipe <jpg> --out <recipe.json>
 
-The second form writes a first recipe for a new drawing by itself (the paper found, ruled or plain; the crop at the drawing's own
-bounds; no erase, no keep, no tints) and stops; the first form then makes an untinted portrait that is the drawing, cleaned.
+(That Python is the project's venv, made by `tools/setup.sh --portraits`; the tool says so, in one line, when it is run without Pillow
+and numpy.) The second form writes a first recipe for a new drawing by itself (the paper found, ruled or plain; the crop at the
+drawing's own bounds; the expression from the file's name, `<speaker>-<expression>-<date>.jpg`, else `neutral` with a note; no erase,
+no keep, no tints) and stops; the first form then makes an untinted portrait that is the drawing, cleaned.
 
 It writes `<expr>.png` (464 x 640, RGB, no alpha) for each expression of the recipe. With `--stages` it also writes each
 stage's picture for a person to look at: `flat.png` (the paper evened out), `rules.png` (the notebook's rules the tool
@@ -58,6 +60,7 @@ on stderr ("sketch_to_portrait: <stage>: <what>") when it cannot do its work.
 import argparse
 import json
 import os
+import re
 import sys
 
 try:
@@ -111,6 +114,9 @@ RULE_GAP = 1.6
 PAGE_LEAST = 600
 PAGE_DARK_MOST = 0.35
 PAGE_PAPER_LEAST = 0.75
+# Lines running up the page (squared paper) are a rhythm of the page's columns this strong and this dark (the comb's score: the paper's grain
+# is 0.003, a faint grid 0.04).
+SQUARED_LINES = 0.02
 # After the rules are out, the lightest fifth of a row of the page's middle is darker than this (levelled, 0..1) only where a
 # rule is left; so is a run along a rule over bare paper darker than RESIDUE_RUN.
 RESIDUE_ROW = 0.03
@@ -125,6 +131,9 @@ RESIDUE_BAND = 4
 # INK_COLUMN times the rule's own ink lies in its band and a row beyond; a run of INK_RUN_MOST such columns or more that does not
 # leave the rule at both ends is refused (gaps of INK_RUN_GAP columns or less close a run).
 INK_COLUMN = 2.0
+# ... and at least INK_EXCESS of ink more than the rule's own (about a stroke's worth: a faint rule is not a reason to count a stroke that
+# only grazes its band).
+INK_EXCESS = 0.9
 INK_RUN_MOST = 45
 INK_RUN_GAP = 3
 # Runs are looked for from this share of the page's width in from each edge.
@@ -146,6 +155,9 @@ INIT_CELL_INK = 6
 INIT_CELLS_LEAST = 12
 INIT_MARGIN = 0.04
 INIT_CARD = {"paper": "#efe6cc", "ink": "#2b2a30"}
+# The expressions a portrait can be (the game's), and the file name a drawing is given: <speaker>-<expression>-<date>.
+EXPRESSIONS = ("neutral", "smile", "serious", "angry", "sad", "surprise")
+FILE_NAME = re.compile(r"^[a-z][a-z0-9_]*-(?P<expression>[a-z]+)-\d{4}-\d{2}-\d{2}$")
 # Levelled darkness under this is not pencil.
 LEVEL_NOISE = 0.05
 # The most a rule's band is, in rows each side of its middle, and the least.
@@ -313,7 +325,14 @@ def _comb_score(profile, spacing):
 
 
 def estimate_spacing(dark):
-    """(rows between the page's rules, how strongly the page repeats at that spacing 0..1). The page is read in strips and each
+    """(rows between the page's rules, how strongly the page repeats at that spacing 0..1); see `_rhythm`."""
+    spacing, strength, _amplitude = _rhythm(dark)
+    return spacing, strength
+
+
+def _rhythm(dark):
+    """(rows between the page's rules, how strongly the page repeats at that spacing 0..1, how dark the rules are, as the comb's
+    score: 0 for a page with none, about 0.003 for the paper's grain). The page is read in strips and each
     strip's row profile is compared with itself shifted down: the shift at which they agree best, after the first where they
     disagree, is a spacing of the page's rhythm, but it may be a multiple of the rules' own (at some spacings the rules fall on
     whole rows only every second or third rule). So that lag, its sixth, fifth, ... half, and its double are each scored
@@ -343,7 +362,7 @@ def estimate_spacing(dark):
     scores = [float(np.mean([_comb_score(p, c) for p in profiles])) for c in candidates]
     best = max(scores)
     spacing = min(c for c, score in zip(candidates, scores) if score >= SPACING_SHARE * best)
-    return float(spacing), float(total[at])
+    return float(spacing), float(total[at]), float(best)
 
 
 def rule_evidence(dark, reach=RULE_REACH):
@@ -468,7 +487,22 @@ def _smooth_shift(cols, values, w):
     return np.polyval(fit, (np.arange(w) - w / 2.0) / w)
 
 
+_CENTRES = {}
+
+
 def rule_centre(dark, coef, w, reaches=CENTRE_REACHES):
+    """`_rule_centre`, kept for the page it was asked about (the rule removal and the check of its work ask for the same rules of the
+    same page; nothing changes what is returned)."""
+    key = (tuple(float(c) for c in coef), int(w), tuple(reaches))
+    kept = _CENTRES.get("page")
+    if kept is None or kept[0] is not dark:
+        kept = _CENTRES["page"] = (dark, {})
+    if key not in kept[1]:
+        kept[1][key] = _rule_centre(dark, coef, w, reaches)
+    return kept[1][key]
+
+
+def _rule_centre(dark, coef, w, reaches=CENTRE_REACHES):
     """Where a rule's middle is in each column: the fit, nudged to the line itself. The fit is a curve through the
     whole page and is a few rows out at its ends; the offset of the line from it is measured in the columns where the
     line stands alone (paper at both ends of the window) and carried across the columns where it does not, three times,
@@ -617,12 +651,20 @@ def remove_rules(dark, rules, keep_mask, scale):
     bands = []
     taken = []
     found = [rule_centre(dark, coef, w, scale.centre_reaches) for coef in rules]
-    owns = [_own_profile(dark, np.round(centre).astype(int), alone, keep_mask, scale.halo_reach) for centre, alone, _peak in found]
+    mids = [np.round(centre).astype(int) for centre, _alone, _peak in found]
+    # a rule's own profile is only wanted where a `keep` rectangle lies along it (nothing else uses it)
+    reach_rows = np.arange(-scale.halo_reach, scale.halo_reach + 1)
+    wanted = [bool(keep_mask[np.clip(mid[None, :] + reach_rows[:, None], 0, h - 1), xs[None, :]].any()) for mid in mids]
+    owns = [_own_profile(dark, mid, alone, keep_mask, scale.halo_reach) if want else None
+            for mid, (_centre, alone, _peak), want in zip(mids, found, wanted)]
     # a rule with no column of its own outside the `keep` rectangles (a stroke the whole width of it) is taken to be like the
     # others: what the rest of the rules hold, the middle of them
-    told = [o for o in owns if o is not None]
-    shared = np.median(np.stack([np.median(o, axis=1) for o in told]), axis=0) if told else None
-    for (centre, alone, peak), own in zip(found, owns):
+    shared = None
+    if any(want and own is None for want, own in zip(wanted, owns)):
+        told = [o for o in (own if own is not None else _own_profile(dark, mid, alone, keep_mask, scale.halo_reach)
+                            for own, mid, (_centre, alone, _peak) in zip(owns, mids, found)) if o is not None]
+        shared = np.median(np.stack([np.median(o, axis=1) for o in told]), axis=0) if told else None
+    for (centre, alone, peak), own, wanted_here in zip(found, owns, wanted):
         half = rule_half_width(dark, centre)
         bands.append(half)
         mid = np.round(centre).astype(int)
@@ -655,7 +697,7 @@ def remove_rules(dark, rules, keep_mask, scale):
             free = ~keep_mask[yy, xx]
             clean[yy[free], xx[free]] = fill[slot][ok][free]
             band_mask[yy, xx] = True
-        if own is None and shared is not None:
+        if own is None and shared is not None and wanted_here:
             own = np.tile(shared[:, None], (1, w))
         if own is not None:
             _take_rule_off_kept(clean, dark, mid, own, keep_mask, scale.halo_reach)
@@ -689,7 +731,7 @@ def _ink_taken(dark, clean, mid, reach, keep_mask, half):
     c0, c1 = int(0.1 * w), int(0.9 * w)
     own = float(np.percentile(held[c0:c1], 25))
     free = ~keep_mask[np.clip(mid, 0, h - 1), xs]
-    bad = (held > INK_COLUMN * own + 0.05) & free
+    bad = (held - own > max((INK_COLUMN - 1.0) * own, INK_EXCESS)) & free
     out = Taken(float(bad[c0:c1].mean()))
     r0, r1 = int(INK_EDGE * w), int((1.0 - INK_EDGE) * w)
     middle = bad[r0:r1]
@@ -769,14 +811,21 @@ def check_page(grey, paper_kind):
         raise PortraitError("page", "too small: %d x %d pixels (the short side is at least %d: photograph the whole page from nearer)" % (w, h, PAGE_LEAST))
     help_text = "try plain paper, the whole page in the photograph, even light"
     dark_share = float((grey < 0.3).mean())
-    if dark_share > PAGE_DARK_MOST:
-        raise PortraitError("page", "not a pencil drawing on paper: %.0f%% of the photograph is dark (at most %.0f%%); %s" % (
-            100 * dark_share, 100 * PAGE_DARK_MOST, help_text))
     flat = flatten(grey)
     paper_share = float((flat > 0.94).mean())
+    if dark_share > PAGE_DARK_MOST:
+        if paper_share >= PAGE_PAPER_LEAST:   # a page, evened out, is paper with a drawing on it: the photograph is only dark
+            raise PortraitError("page", "the photograph is too dark: %.0f%% of it is under-exposed (at most %.0f%%); it needs more light "
+                                        "(daylight, a lamp beside the page, no shadow across it)" % (100 * dark_share, 100 * PAGE_DARK_MOST))
+        raise PortraitError("page", "not a pencil drawing on paper: %.0f%% of the photograph is dark (at most %.0f%%); %s" % (
+            100 * dark_share, 100 * PAGE_DARK_MOST, help_text))
     if paper_share < PAGE_PAPER_LEAST:
         raise PortraitError("page", "not a pencil drawing on paper: only %.0f%% of it is paper (at least %.0f%%); %s" % (
             100 * paper_share, 100 * PAGE_PAPER_LEAST, help_text))
+    _spacing, strength, amplitude = _rhythm((1.0 - flat).T.copy())   # the same rhythm, for lines that run up the page
+    if strength >= SPACING_STRENGTH and amplitude >= SQUARED_LINES:
+        raise PortraitError("page", "this looks like squared (graph) paper, or paper with its lines running up the page: the tool takes the lines out of "
+                                    "plain paper (none) and ruled paper (across the page), not a grid; draw on plain or ruled paper, or turn the page so that its lines run across")
     return flat
 
 
@@ -1211,7 +1260,21 @@ def _drawing_bounds(line):
     return xs.min() * cell / w, ys.min() * cell / h, (xs.max() + 1) * cell / w, (ys.max() + 1) * cell / h
 
 
-def first_recipe(sketch):
+def expression_from_name(path):
+    """(the expression a drawing's file name gives, None) for `zara-smile-2026-12-02.jpg`; ("neutral", what to tell the owner) for a
+    name that does not follow <speaker>-<expression>-<date> and for an expression the game does not know."""
+    stem = os.path.splitext(os.path.basename(path))[0]
+    match = FILE_NAME.match(stem)
+    if match is None:
+        return "neutral", ("the file name '%s' does not follow <speaker>-<expression>-<date>, so the expression is 'neutral' "
+                           "(change it in the recipe if you drew another)" % os.path.basename(path))
+    if match.group("expression") not in EXPRESSIONS:
+        return "neutral", ("'%s' is not an expression of the game (%s) in <speaker>-<expression>-<date>, so the expression is 'neutral' "
+                           "(change it in the recipe if you drew another)" % (match.group("expression"), ", ".join(EXPRESSIONS)))
+    return match.group("expression"), None
+
+
+def first_recipe(sketch, expression="neutral"):
     """(a first recipe for a drawing, the stages of the page cleaned for it): the paper found (ruled or plain), the crop at the
     drawing's own bounds with a margin (the card pads it to its shape), no erase, no keep, no tints, the card's colours and line
     as Abarax's, `neutral`. The page is cleaned once to find where the pencil is, so a page the tool cannot handle is said here,
@@ -1233,14 +1296,14 @@ def first_recipe(sketch):
     recipe = {"notes": "A first recipe written by --init-recipe: the paper found, the crop at the drawing's own bounds, no erase, no keep, "
                        "no tints. Look at the picture, then add tints, keep and erase by hand.",
               "paper": paper, "crop": crop, "erase": [], "keep": [], "tints": [], "card": dict(INIT_CARD), "line_gain": 1.0,
-              "expressions": {"neutral": {}}}
+              "expressions": {expression: {}}}
     check_recipe(recipe)
     return recipe, stages
 
 
-def init_recipe(sketch, out_path):
+def init_recipe(sketch, out_path, expression="neutral"):
     """Writes `first_recipe`'s recipe for a drawing to `out_path` and returns it."""
-    recipe, _stages = first_recipe(sketch)
+    recipe, _stages = first_recipe(sketch, expression)
     with open(out_path, "w", encoding="utf-8") as handle:
         json.dump(recipe, handle, indent=1)
         handle.write("\n")
@@ -1258,9 +1321,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if args.init_recipe:
-            init_recipe(args.init_recipe, args.out)
-            print("sketch_to_portrait: wrote %s; now: python3 -I tools/portraits/sketch_to_portrait.py --sketch %s --recipe %s --out <folder>" % (
-                args.out, args.init_recipe, args.out))
+            expression, note = expression_from_name(args.init_recipe)
+            init_recipe(args.init_recipe, args.out, expression)
+            print("sketch_to_portrait: wrote %s (paper and crop found; the expression is '%s'%s); now: %s -I tools/portraits/sketch_to_portrait.py --sketch %s --recipe %s --out <folder>" % (
+                args.out, expression, " from the file name" if note is None else "", sys.executable, args.init_recipe, args.out))
+            if note is not None:
+                print("sketch_to_portrait: note: %s" % note)
             return 0
         if not (args.sketch and args.recipe):
             parser.error("--sketch and --recipe are needed (or --init-recipe <drawing> --out <recipe.json>)")

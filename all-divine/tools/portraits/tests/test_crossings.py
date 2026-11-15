@@ -51,10 +51,10 @@ def recipe():
 def crossing_page(width, phase):
     """A page with the rules moved down `phase` tenths of a spacing, an ellipse and a straight stroke at each angle, all `width` px."""
     first = 60.0 + phase * SPACING / 10.0
-    base = pages.make_page(w=W, h=H, spacing=SPACING, degrees=1.0, face=False, first=first)
+    rules = pages.rule_rows(W, H, SPACING, 1.0, first)
     extra = [(pages.polyline_ellipse(300, 300, 120, 180), width)]
     for angle, (x, rule) in STRAIGHT.items():
-        row = pages.rule_row_at(base, rule, x)
+        row = rules[rule][0] + rules[rule][1] * (x - W / 2.0)
         t = math.radians(angle)
         dx, dy = 70.0 * math.cos(t), 70.0 * math.sin(t)
         extra.append(([(x - dx, row - dy), (x + dx, row + dy)], width))
