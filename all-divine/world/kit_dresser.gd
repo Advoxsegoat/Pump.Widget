@@ -39,6 +39,11 @@ func _on_node_added(node: Node) -> void:
 		dress_piece(node, material, banner_material, fence_material)
 
 
+# A fence of pickets and rails (not a fence gate, which keeps the timber of the gate it is): bars.
+static func _is_bars(piece_file: String) -> bool:
+	return piece_file.begins_with("fence") and not piece_file.begins_with("fence-gate")
+
+
 ## Sets `material` on the meshes of every instanced piece of the kit (a scene from assets/env/kenney_town/) under `root`, and
 ## on every MultiMeshInstance3D of the group `kit_multimesh` (the builder's runs of one piece).
 static func dress(root: Node, kit_material: Material, banner: Material = null, fence: Material = null) -> void:
@@ -55,13 +60,13 @@ static func dress_piece(node: Node, kit_material: Material, banner: Material = n
 	if node is MultiMeshInstance3D and node.is_in_group(&"kit_multimesh"):
 		# A run the builder gave a material of its own (a roof) keeps it.
 		if (node as MultiMeshInstance3D).material_override == null:
-			var is_fence := fence != null and node is KitRun and String((node as KitRun).piece).begins_with("fence")
+			var is_fence := fence != null and node is KitRun and _is_bars(String((node as KitRun).piece))
 			(node as MultiMeshInstance3D).material_override = fence if is_fence else kit_material
 	elif node is Node3D and node.scene_file_path.begins_with("res://assets/env/kenney_town/"):
 		var wears := kit_material
 		if banner != null and node.scene_file_path.get_file().begins_with("banner"):
 			wears = banner
-		elif fence != null and node.scene_file_path.get_file().begins_with("fence"):
+		elif fence != null and _is_bars(node.scene_file_path.get_file()):
 			wears = fence
 		for mesh: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
 			mesh.material_override = wears

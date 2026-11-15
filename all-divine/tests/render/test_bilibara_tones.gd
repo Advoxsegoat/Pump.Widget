@@ -1,5 +1,5 @@
 extends TestCase
-## The tones of the town round the pale ground, in the final picture a player sees (xvfb, gl_compatibility, 1920 x 1080: graded, fogged,
+## The tones of the town round the pale ground, in the final picture a player sees (xvfb, gl_compatibility, 1280 x 720, the 640 x 360 picture at twice the size: graded, fogged,
 ## outlined): at the nine views and five more, with the fighters out of it, every pixel is put in a class by drawing the region again in flat
 ## colours (roofs, the fronts of each style of building, the ground a fighter walks on, the water, all else) and its luma is read from the real
 ## picture. Pooled over the views: the roofs' tiles are the darkest large shapes (0.25 to 0.45) and not paler than the ground; the snow on them
@@ -7,7 +7,7 @@ extends TestCase
 ## is a cold dark blue-grey, 0.15 under the ground; the numbers go to out/shots/bilibara_tones.txt.
 
 const MAIN := "res://main/main.tscn"
-const SIZE := Vector2i(1920, 1080)
+const SIZE := Vector2i(1280, 720)
 const OUT_TEXT := "out/shots/bilibara_tones.txt"
 const VIEWS: Array[String] = ["Spawn", "StreetEast", "LaneMid", "ShrineSite_B", "RackWest", "GateFar", "GateNear", "YardEntry", "YardCentre"]
 const EXTRA_VIEWS := {"LoopLane": Vector3(-32.5, 0.0, -12.5), "LaneNorth": Vector3(27.5, 0.0, -48.0), "StreetMid": Vector3(0.0, 0.0, 0.0), "RackColonnade": Vector3(-10.0, 0.0, -22.5), "Kerb": Vector3(0.0, 0.0, 4.5)}
@@ -152,7 +152,7 @@ func test_the_town_round_the_pale_ground_has_the_right_tones() -> void:
 		main.player.place(spots[view_name])
 		main.player.visible = false
 		main.camera_rig.snap_now()
-		await frames(12)
+		await frames(6)
 		for i in 4:
 			await RenderingServer.frame_post_draw
 		var shot := get_viewport().get_texture().get_image()
@@ -270,7 +270,7 @@ func test_no_lamp_lifts_the_ground_or_draws_a_hard_circle_on_a_wall() -> void:
 		main.player.place((region.find_child(view_name, true, false) as Marker3D).global_transform)
 		main.player.visible = false
 		main.camera_rig.snap_now()
-		await frames(12)
+		await frames(6)
 		for i in 4:
 			await RenderingServer.frame_post_draw
 		var on := get_viewport().get_texture().get_image()
@@ -318,7 +318,7 @@ func test_the_yard_doors_read_as_barred_from_the_north_view() -> void:
 	main.player.place(Transform3D(Basis(), Vector3(27.5, 0.0, -73.0)))
 	main.player.visible = false
 	main.camera_rig.snap_now()
-	await frames(12)
+	await frames(6)
 	for i in 4:
 		await RenderingServer.frame_post_draw
 	var shot := get_viewport().get_texture().get_image()
@@ -421,7 +421,7 @@ func test_a_gables_two_planes_differ_by_twenty_five_to_thirty_points() -> void:
 		main.player.place((region.find_child(view_name, true, false) as Marker3D).global_transform)
 		main.player.visible = false
 		main.camera_rig.snap_now()
-		await frames(12)
+		await frames(6)
 		for i in 4:
 			await RenderingServer.frame_post_draw
 		var shot := get_viewport().get_texture().get_image()

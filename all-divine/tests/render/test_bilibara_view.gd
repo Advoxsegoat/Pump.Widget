@@ -131,7 +131,7 @@ func test_nine_views_are_saved_for_a_person_to_look_at() -> void:
 		main.player.place(at)
 		foe.place(Transform3D(Basis(Vector3.UP, -PI / 2), at.origin + Vector3(2.0, 0.0, 0.0)))
 		main.camera_rig.snap_now()
-		await frames(12)
+		await frames(6)
 		for i in 4:
 			await RenderingServer.frame_post_draw
 		var full := main.stage.world.get_texture().get_image()
@@ -234,7 +234,7 @@ func test_no_flat_tone_on_a_roof_fills_more_than_six_percent_of_the_frame() -> v
 		main.player.place(at)
 		foe.place(Transform3D(Basis(Vector3.UP, -PI / 2), at.origin + Vector3(2.0, 0.0, 0.0)))
 		main.camera_rig.snap_now()
-		await frames(12)
+		await frames(6)
 		for i in 4:
 			await RenderingServer.frame_post_draw
 		var real := main.stage.world.get_texture().get_image().get_region(Rect2i(PixelSnap.MARGIN, PixelSnap.MARGIN, 640, 360))

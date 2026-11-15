@@ -1,6 +1,6 @@
 extends TestCase
 ## Bodies read on every ground (xvfb, gl_compatibility), the stretch a snow town at noon: its ground is pale and every body darker than it.
-## In the stretch at 1920 x 1080, the picture a player sees (graded, fogged and outlined), at each of 14 reference positions three bodies
+## In the stretch at 1280 x 720 (the 640 x 360 picture at twice the size), the picture a player sees (graded, fogged and outlined), at each of 14 reference positions three bodies
 ## stand in a row facing south: Abarax with a tier I Knuckle 2.4 m east and a tier III 2.4 m west, and then (Abarax hidden, the camera still
 ## on him) a Drummer with a heavy 2.4 m east and a blade Knuckle 2.4 m west: six bodies. For each body: the ground is the mean luma of a ring
 ## 3 to 8 pixels (of the 640 x 360 picture) outside its silhouette, off the other bodies; the body is the mean luma of its silhouette less the
@@ -18,7 +18,7 @@ const HEAVY := "res://data/actors/knuckle_heavy.tres"
 const BLADE := "res://data/actors/knuckle_blade.tres"
 const DRUMMER := "res://data/actors/knuckle_drummer.tres"
 const BODY_NAMES := {ABARAX: "Abarax", KNUCKLE_1: "tier I", KNUCKLE_3: "tier III", HEAVY: "heavy", BLADE: "blade", DRUMMER: "drummer"}
-const SIZE := Vector2i(1920, 1080)
+const SIZE := Vector2i(1280, 720)
 const OUT_TEXT := "out/shots/bilibara_readability.txt"
 const OUT_SHEET := "out/shots/bilibara_readability.png"
 ## The ground a fighter stands on is pale (trodden snow, pale slate, snow-dusted earth): 0.62 to 0.74 in the final picture.
@@ -160,16 +160,15 @@ func _ground_mask(main: Main, box: Rect2i) -> Dictionary:
 # ring. `ground` is the mean luma of the ring's pixels that are ground (see _ground_mask) and `all` of the whole ring (the fronts behind a body in a lane
 # too). `contact` is how much darker the ground in a strip under its feet is with the body there than without it (`empty` is the same picture with
 # every body gone): his shadows, the sun's and the ellipse under him, are all that differ.
-func _measure(main: Main, shot: Image, empty: Image, actor: Actor, bodies: Array[Actor]) -> Dictionary:
+func _box_of(main: Main, actor: Actor) -> Rect2i:
 	var feet := Vector2i(main.camera_rig.camera.unproject_position(actor.global_position).round()) + Vector2i(PixelSnap.MARGIN, PixelSnap.MARGIN)
-	var box := Rect2i(feet.x - 62, feet.y - 80, 124, 100).intersection(Rect2i(Vector2i.ZERO, main.stage.world.size))
-	var mine := await ShotMasks.silhouette(main, actor, box)
-	var others := {}
-	for other in bodies:
-		if other != actor:
-			for p: Vector2i in await ShotMasks.silhouette(main, other, box):
-				others[p] = true
-	var floor := await _ground_mask(main, box)
+	return Rect2i(feet.x - 62, feet.y - 80, 124, 100).intersection(Rect2i(Vector2i.ZERO, main.stage.world.size))
+
+
+# `mine`, `others` (the other bodies' silhouettes together) and `floor` (the ground of the whole picture) are made once for the row by _row.
+func _measure(main: Main, shot: Image, empty: Image, actor: Actor, mine: Dictionary, others: Dictionary, floor: Dictionary) -> Dictionary:
+	var feet := Vector2i(main.camera_rig.camera.unproject_position(actor.global_position).round()) + Vector2i(PixelSnap.MARGIN, PixelSnap.MARGIN)
+	var box := _box_of(main, actor)
 	var near := ShotMasks.grown(others, 3)
 	var inner := ShotMasks.eroded(mine, 1)
 	var ring_outer := ShotMasks.grown(mine, 8)
@@ -278,7 +277,7 @@ func _row(main: Main, at: Vector3, defs: Array[String], shot_out: Array) -> Dict
 		names.append(BODY_NAMES[defs[i]])
 	abarax.visible = defs[0] == ABARAX
 	main.camera_rig.snap_now()
-	await frames(20)
+	await frames(12)
 	for actor in bodies + [abarax]:
 		(actor as Actor).freeze(100000000)
 	main.camera_rig.snap_now()
@@ -300,9 +299,17 @@ func _row(main: Main, at: Vector3, defs: Array[String], shot_out: Array) -> Dict
 		actor.visible = was_visible[actor]
 	for i in 3:
 		await RenderingServer.frame_post_draw
+	var silhouettes: Array[Dictionary] = []
+	for i in 3:
+		silhouettes.append(await ShotMasks.silhouette(main, bodies[i], _box_of(main, bodies[i])))
+	var floor := await _ground_mask(main, Rect2i(Vector2i.ZERO, main.stage.world.size))
 	var result := {}
 	for i in 3:
-		result[names[i]] = await _measure(main, shot, empty, bodies[i], bodies)
+		var others := {}
+		for j in 3:
+			if j != i:
+				others.merge(silhouettes[j])
+		result[names[i]] = await _measure(main, shot, empty, bodies[i], silhouettes[i], others, floor)
 	if defs[0] == ABARAX:
 		result["Abarax"]["shirt"] = await _measure_shirt(main, shot, abarax, result["Abarax"].ground)
 	for actor in bodies:
@@ -335,8 +342,6 @@ func test_a_body_reads_on_every_ground_in_every_light() -> void:   # Review Focu
 	var shirts := PackedStringArray()
 	var shots: Array[Image] = []
 	for entry: Array in POSITIONS:
-		if OS.get_environment("BILIBARA_ONE") != "" and entry[0] != POSITIONS[int(OS.get_environment("BILIBARA_ONE"))][0]:
-			continue
 		var at := Vector3(entry[1], 0.0, entry[2])
 		var seen := {}
 		for defs: Array[String] in [ROW_ONE, ROW_TWO]:
