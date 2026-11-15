@@ -92,10 +92,16 @@ const SPREAD_REACH_MARGIN := 0.3
 ## would not: to the nearest place, by a way a body can walk (a search on a grid of ROUND_CELL cells, _plan_round), that has a line to the target
 ## for a body ROUND_PAD either side of it. He walks the way (ROUND_GIVE_UP seconds at most, or until the target has moved ROUND_MOVED), then
 ## goes on as ever. Two ends about as near (ROUND_EVEN_CELLS): the one with room (the open side, as Task 14f's way round a neighbour).
+## A swing round a neighbour is refused when a wall stands within ROOM_REACH (a stride) ahead on the way it takes a body ROOM_BODY wide, for NO_ROOM_FRAMES.
+const ROOM_REACH := 0.8
+const ROOM_BODY := 0.35
+const NO_ROOM_FRAMES := 30
 const ROUND_CELL := 0.6
 const ROUND_RADIUS := 10.0
 const ROUND_BODY := 0.35
 const ROUND_EVEN_CELLS := 2
+## A place within this many metres of where another foe stands or is going is crowded.
+const ROUND_CROWD := 0.9
 const ROUND_PAD := 0.3
 const ROUND_REACHED := 0.15
 const ROUND_GIVE_UP := 8.0
@@ -168,6 +174,8 @@ var _held_up := 0.0  # seconds it has gone on toward its range and got no nearer
 var _nearest_yet := INF  # the nearest it has been to its target since it began to close in
 var _round_to := Vector2.INF  # the waypoint he walks to for a line to his target (x, z), INF for none
 var _round_path: Array[Vector2] = []  # the points after _round_to
+var _no_room_until := -1  # the physics frame until which a swing round a neighbour is refused for want of room
+var _snagged := false  # blocked where a body could not walk the way in: _go_round plans a way though the line is clear
 var _round_at := Vector2.INF  # where the target stood when it was found
 var _round_for := 0.0  # seconds he has been going to it
 var _clear_frame := -1  # the physics frame of _clear_cache
@@ -389,6 +397,10 @@ func _track_progress(error: float, delta: float) -> void:
 
 # Tries another angle: the circling turns the other way and the heading swings REANGLE_DEG that way.
 func _reangle() -> void:
+	# Task 15c: stuck where the line is clear but a body cannot walk it (a wall's corner in the way): that is a wall, and he goes round it.
+	if _self != null and target != null and is_instance_valid(target) and not _goal_at(_self.get_world_3d().direct_space_state,
+			Vector2(_self.global_position.x, _self.global_position.z), _self.global_position.y, [_self.get_rid(), target.get_rid()]):
+		_snagged = true
 	var open := _open_side(_self) if _self != null else 0.0
 	_circle = open if open != 0.0 else -_circle
 	_swing = _circle * deg_to_rad(REANGLE_DEG)
@@ -640,7 +652,16 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 		var speed := actor.locomotion.speed
 		var braking := maxf(speed * speed - tuning.walk_speed * tuning.walk_speed, 0.0) / (2.0 * maxf(tuning.decel, 0.01))
 		var push := WALK_PUSH if distance - hi <= braking + BRAKE_MARGIN else JOG_PUSH
-		intent.move = (to / distance).rotated(_swing + _spread_swing(actor, distance - hi)) * push
+		var spread := _spread_swing(actor, distance - hi)
+		if spread != 0.0:
+			# A swing that would walk him into a wall he is against is no swing (Task 15c): it goes where there is room, and a refusal holds for
+			# NO_ROOM_FRAMES (at the edge of the room, the swing would otherwise be on and off with each step).
+			var frame := Engine.get_physics_frames()
+			if frame >= _no_room_until and not _has_room(actor, (to / distance).rotated(_swing + spread)):
+				_no_room_until = frame + NO_ROOM_FRAMES
+			if frame < _no_room_until:
+				spread = 0.0
+		intent.move = (to / distance).rotated(_swing + spread) * push
 	else:
 		# A back-up within the option's margin, at a walk. One chosen while still going faster than a walk (a jog in) brakes first,
 		# the stick at rest: a stick pushed the other way turns the body round at once at the speed it has (Locomotion), and it
@@ -765,8 +786,9 @@ func _go_round(actor: Actor, intent: Intent, delta: float) -> bool:
 			_round_to = Vector2.INF  # where he stands is already a place with a line and room to walk in: no need to go on
 			_round_path.clear()
 	if _round_to == Vector2.INF:
-		if _clear(actor, false):
+		if _clear(actor, false) and not _snagged:
 			return false
+		_snagged = false
 		_round_path = _plan_round(actor)
 		_round_at = there
 		_round_for = 0.0
@@ -812,6 +834,7 @@ func _plan_round(actor: Actor) -> Array[Vector2]:
 	var open := _open_side(actor)
 	var reach := int(ROUND_RADIUS / ROUND_CELL)
 	var tp := Vector2(target.global_position.x, target.global_position.z)
+	var crowd := _neighbour_spots(actor)
 	while head < queue.size():
 		var c := queue[head]
 		head += 1
@@ -823,6 +846,9 @@ func _plan_round(actor: Actor) -> Array[Vector2]:
 			first = d if first < 0 else first
 			var side := signf(perp.dot(at - start))
 			var cost := float(d) + (0.0 if open == 0.0 or side == open else float(ROUND_EVEN_CELLS))
+			for other in crowd:
+				if other.distance_to(at) < ROUND_CROWD:
+					cost += float(ROUND_EVEN_CELLS)  # a place a neighbour stands in or goes to: another, if one is about as near
 			if cost < best_cost:
 				best_cost = cost
 				best = c
@@ -859,6 +885,27 @@ func _plan_round(actor: Actor) -> Array[Vector2]:
 		legs.append(cells[j])
 		i = j
 	return legs
+
+
+# Where the other foes of this target stand, or are going (their waypoint's end).
+func _neighbour_spots(actor: Actor) -> Array[Vector2]:
+	var spots: Array[Vector2] = []
+	for node in actor.get_tree().get_nodes_in_group(Actor.GROUP):
+		var other := node as Actor
+		if other == null or other == actor or other.dead or not (other.brain is EnemyBrain) or (other.brain as EnemyBrain).target != target:
+			continue
+		spots.append(Vector2(other.global_position.x, other.global_position.z))
+		var going := other.brain as EnemyBrain
+		if going._round_to != Vector2.INF:
+			spots.append(going._round_path.back() if not going._round_path.is_empty() else going._round_to)
+	return spots
+
+
+# Whether a body can go a stride (ROOM_REACH) along `heading` (x, z) without meeting a `world` collider at knee height, ROOM_BODY wide.
+func _has_room(actor: Actor, heading: Vector2) -> bool:
+	var space := actor.get_world_3d().direct_space_state
+	var here := Vector2(actor.global_position.x, actor.global_position.z)
+	return _walkable(space, here, here + heading.normalized() * ROOM_REACH, actor.global_position.y, [actor.get_rid()], ROOM_BODY)
 
 
 # A cell already looked at (the diagonal check's neighbours may not have been): free only if known free.
