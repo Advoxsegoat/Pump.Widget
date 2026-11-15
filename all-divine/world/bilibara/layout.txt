@@ -190,12 +190,12 @@ piece wall-door 27.5 -73.98 90
 piece wall-door 35 -73.98 90
 # The doors are barred: two fences across each (pickets and rails, 1.9 m of them, ghosts a hair in front of the door's face, behind where a body stands),
 # in the town's dark timber, so that a door reads as a dark door with bars and not as an arch of plaster.
-piece fence 20 -74.72 90 y=0
-piece fence 20 -74.72 90 y=0.95
-piece fence 27.5 -74.72 90 y=0
-piece fence 27.5 -74.72 90 y=0.95
-piece fence 35 -74.72 90 y=0
-piece fence 35 -74.72 90 y=0.95
+piece fence 20 -73.65 90 y=0 ghost
+piece fence 20 -73.65 90 y=0.95 ghost
+piece fence 27.5 -73.65 90 y=0 ghost
+piece fence 27.5 -73.65 90 y=0.95 ghost
+piece fence 35 -73.65 90 y=0 ghost
+piece fence 35 -73.65 90 y=0.95 ghost
 piece banner-red 23.75 -73.925 90 y=0.8
 piece banner-red 31.25 -73.925 90 y=0.8
 piece banner-red 38.75 -73.925 90 y=0.8

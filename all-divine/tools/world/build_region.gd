@@ -74,6 +74,10 @@ const KITS := {
 const NEON := {
 	"bilibara": preload("res://world/materials/kenney_town_neon.tres"),
 }
+## The fences' material in a kit that has dark iron bars.
+const FENCES := {
+	"bilibara": preload("res://world/materials/kenney_town_iron.tres"),
+}
 ## How a piece collides, when not as a box round all of it: "none", "cylinder" (round all of it), "post" (a
 ## pole POST_RADIUS thick, its full height) or "trunk" (a tree's trunk, TRUNK_RADIUS by TRUNK_HEIGHT).
 const MODELS := {
@@ -742,6 +746,7 @@ class Builder extends "res://tools/world/region_nodes.gd":
 		dresser.name = "Kit"
 		dresser.material = KITS[_kit]
 		dresser.banner_material = NEON.get(_kit)
+		dresser.fence_material = FENCES.get(_kit)
 		_root.add_child(dresser)
 
 	# --- geometry ---

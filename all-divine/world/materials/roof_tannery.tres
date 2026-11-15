@@ -7,5 +7,5 @@
 resource_name = "roof_tannery"
 shader = ExtResource("1_roof")
 shader_parameter/albedo_tex = ExtResource("2_roof_tannery")
-shader_parameter/dark = 0.72
+shader_parameter/dark = 0.47
 shader_parameter/toward = Vector2(0.3, 0.95)

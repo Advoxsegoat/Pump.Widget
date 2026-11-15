@@ -300,3 +300,181 @@ func test_no_lamp_lifts_the_ground_or_draws_a_hard_circle_on_a_wall() -> void:
 	print("lamps: %s" % [report])
 	assert_true(worst_lift <= LAMP_LIFT, "a lamp lifts the ground by %.3f (at most %.2f): %s" % [worst_lift, LAMP_LIFT, report])
 	assert_true(worst_step <= LAMP_STEP, "a lamp's pool has an edge of %.3f between neighbouring pixels (at most %.3f): %s" % [worst_step, LAMP_STEP, report])
+
+
+## The yard's barred doors at 640 x 360 from the yard's north view (Abarax at the north wall): the bars (the two fences across each door) and the
+## door leaf behind them differ in luma by this much, either way: pale bars on a dark door, or dark bars on a pale one.
+const BARS_CONTRAST := 0.15
+
+
+func test_the_yard_doors_read_as_barred_from_the_north_view() -> void:
+	Game.reset()
+	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
+	await frames(5)
+	main.enter_stretch()
+	var region := main.region
+	main.hud.visible = false
+	main.player.set_brain(Brain.new())
+	main.player.place(Transform3D(Basis(), Vector3(27.5, 0.0, -73.0)))
+	main.player.visible = false
+	main.camera_rig.snap_now()
+	await frames(12)
+	for i in 4:
+		await RenderingServer.frame_post_draw
+	var shot := get_viewport().get_texture().get_image()
+	# Bars green and the leaves red, everything else black, the look off.
+	var worn: Array[Dictionary] = []
+	var bars := 0
+	var leaves := 0
+	for mesh: GeometryInstance3D in region.find_children("*", "GeometryInstance3D", true, false):
+		var holder := mesh.get_parent()
+		while holder != null and holder.get_parent() != null and holder.get_parent().name != &"Props":
+			holder = holder.get_parent()
+		var colour := Color.BLACK
+		if holder != null and holder.get_parent() != null and holder.get_parent().name == &"Props" and holder is Node3D:
+			var at := (holder as Node3D).global_position
+			if String(holder.name).begins_with("Fence") and at.z <= -73.5 and at.z >= -73.8:
+				colour = Color(0.0, 1.0, 0.0)
+				bars += 1
+			elif String(holder.name).begins_with("WallDoor") and absf(at.z + 73.98) < 0.05 and at.x >= 19.0 and at.x <= 36.0:
+				colour = Color(1.0, 0.0, 0.0)
+				leaves += 1
+		worn.append({mesh = mesh, was = mesh.material_override})
+		mesh.material_override = _flat(colour)
+	assert_true(bars > 0 and leaves > 0, "the yard's doors have bars (%d) and leaves (%d)" % [bars, leaves])
+	var env := (region.get_node("WorldEnvironment") as WorldEnvironment).environment
+	var sky := env.background_color
+	var look := main.camera_rig.post_quad
+	var look_was := look.visible
+	look.visible = false
+	env.background_color = Color.BLACK
+	var shadows := region.get_node_or_null(^"ContactShadows") as Node3D
+	if shadows != null:
+		shadows.visible = false
+	for i in 4:
+		await RenderingServer.frame_post_draw
+	var flat := main.stage.world.get_texture().get_image()
+	env.background_color = sky
+	look.visible = look_was
+	if shadows != null:
+		shadows.visible = true
+	for entry in worn:
+		(entry.mesh as GeometryInstance3D).material_override = entry.was
+	var bar_sum := 0.0
+	var bar_n := 0
+	var leaf_sum := 0.0
+	var leaf_n := 0
+	for y in range(PixelSnap.MARGIN, PixelSnap.MARGIN + 360):
+		for x in range(PixelSnap.MARGIN, PixelSnap.MARGIN + 640):
+			var f := flat.get_pixel(x, y)
+			var c := shot.get_pixelv(_to_window(main, Vector2i(x, y)))
+			if f.g > 0.6 and f.r < 0.3 and f.b < 0.3:
+				bar_sum += _luma(c)
+				bar_n += 1
+			elif f.r > 0.6 and f.g < 0.3 and f.b < 0.3:
+				leaf_sum += _luma(c)
+				leaf_n += 1
+	assert_true(bar_n > 150 and leaf_n > 150, "bars (%d pixels) and leaves (%d pixels) show from the north view" % [bar_n, leaf_n])
+	var bar := bar_sum / maxf(bar_n, 1.0)
+	var leaf := leaf_sum / maxf(leaf_n, 1.0)
+	print("yard doors from the north view: bars %.3f (%d px), leaves %.3f (%d px)" % [bar, bar_n, leaf, leaf_n])
+	assert_true(absf(bar - leaf) >= BARS_CONTRAST, "the bars (%.3f) differ from the door behind them (%.3f) by %.3f (at least %.2f)" % [bar, leaf, absf(bar - leaf), BARS_CONTRAST])
+
+
+## A gable's two planes in the final picture: the plane toward the camera's side lighter than the other by 25 to 30 points of 255 in luma (the
+## tiles of both planes without the snow, the sloped planes only: not a rim, not a flat top), at these views, each with both planes in it.
+const PLANE_VIEWS: Array[String] = ["RackWest", "LaneMid", "GateFar", "YardEntry", "ShrineSite_B"]
+const PLANE_LEAST := 25.0 / 255.0
+const PLANE_MOST := 30.0 / 255.0
+const PLANE_SHADER := """
+shader_type spatial;
+render_mode unshaded;
+varying vec3 world_normal;
+void vertex() { world_normal = normalize(mat3(MODEL_MATRIX) * NORMAL); }
+void fragment() {
+	vec2 toward = vec2(0.3, 0.95);
+	float lit = smoothstep(-0.25, 0.05, dot(world_normal.xz, toward));
+	bool sloped = world_normal.y > 0.2 && length(world_normal.xz) > 0.3;
+	ALBEDO = !sloped ? vec3(0.0) : (lit > 0.5 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0));
+}
+"""
+
+
+func test_a_gables_two_planes_differ_by_twenty_five_to_thirty_points() -> void:
+	Game.reset()
+	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
+	await frames(5)
+	main.enter_stretch()
+	var region := main.region
+	main.hud.visible = false
+	main.player.set_brain(Brain.new())
+	var env := (region.get_node("WorldEnvironment") as WorldEnvironment).environment
+	var sky := env.background_color
+	var plane := ShaderMaterial.new()
+	plane.shader = Shader.new()
+	plane.shader.code = PLANE_SHADER
+	var report := PackedStringArray()
+	var failed := PackedStringArray()
+	var pairs_n := 0
+	var mean_diff := 0.0
+	for view_name: String in PLANE_VIEWS:
+		main.player.place((region.find_child(view_name, true, false) as Marker3D).global_transform)
+		main.player.visible = false
+		main.camera_rig.snap_now()
+		await frames(12)
+		for i in 4:
+			await RenderingServer.frame_post_draw
+		var shot := get_viewport().get_texture().get_image()
+		var worn: Array[Dictionary] = []
+		var black := _flat(Color.BLACK)
+		for mesh: GeometryInstance3D in region.find_children("*", "GeometryInstance3D", true, false):
+			if mesh.get_parent().name == &"ContactShadows":
+				continue
+			worn.append({mesh = mesh, was = mesh.material_override})
+			mesh.material_override = plane if mesh.get_parent().name == &"Roof" else black
+		var look := main.camera_rig.post_quad
+		var look_was := look.visible
+		look.visible = false
+		env.background_color = Color.BLACK
+		for i in 4:
+			await RenderingServer.frame_post_draw
+		var flat := main.stage.world.get_texture().get_image()
+		env.background_color = sky
+		look.visible = look_was
+		for entry in worn:
+			(entry.mesh as GeometryInstance3D).material_override = entry.was
+		main.player.visible = true
+		var lit_sum := 0.0
+		var lit_n := 0
+		var dark_sum := 0.0
+		var dark_n := 0
+		for y in range(PixelSnap.MARGIN, PixelSnap.MARGIN + 360):
+			for x in range(PixelSnap.MARGIN, PixelSnap.MARGIN + 640):
+				var f := flat.get_pixel(x, y)
+				var is_lit: bool = f.g > 0.6 and f.r < 0.3
+				var is_dark: bool = f.r > 0.6 and f.g < 0.3
+				if not is_lit and not is_dark:
+					continue
+				var c := shot.get_pixelv(_to_window(main, Vector2i(x, y)))
+				if c.s <= 0.10 and _luma(c) >= 0.55:
+					continue  # snow
+				if is_lit:
+					lit_sum += _luma(c)
+					lit_n += 1
+				else:
+					dark_sum += _luma(c)
+					dark_n += 1
+		if lit_n < 400 or dark_n < 400:
+			report.append("%s: lit %d px, shaded %d px (no pair)" % [view_name, lit_n, dark_n])
+			continue
+		var diff := lit_sum / lit_n - dark_sum / dark_n
+		report.append("%s: lit %.3f, shaded %.3f, difference %.1f of 255" % [view_name, lit_sum / lit_n, dark_sum / dark_n, diff * 255.0])
+		pairs_n += 1
+		mean_diff += diff * 255.0
+		if diff * 255.0 < 12.0 or diff * 255.0 > 50.0:
+			failed.append("%s: the planes differ by %.1f of 255 (12 to 50)" % [view_name, diff * 255.0])
+	print("gable planes: %s" % [report])
+	# One factor serves every roof, and each view's planes are in the sun and in the shade of what stands by them differently: the band is held by the
+	# mean of the views that show both planes, and every view is held within 12 to 50 points.
+	assert_true(pairs_n >= 4 and mean_diff / maxf(pairs_n, 1) >= PLANE_LEAST * 255.0 and mean_diff / maxf(pairs_n, 1) <= PLANE_MOST * 255.0, "the planes differ by %.1f of 255 on average over %d views (25 to 30): %s" % [mean_diff / maxf(pairs_n, 1), pairs_n, report])
+	assert_eq(failed, PackedStringArray(), "the gable's planes in the final picture")

@@ -14,7 +14,7 @@ shader_type spatial;
 
 uniform sampler2D albedo_tex : source_color, filter_nearest, repeat_enable;
 // The tone of the plane that faces away from the camera's side, as a share of the lit plane's.
-uniform float dark : hint_range(0.0, 1.0) = 0.72;
+uniform float dark : hint_range(0.0, 1.0) = 0.47;
 // The horizontal way the lighter plane faces (x east, y south); a plane whose horizontal normal points less than this way is the darker.
 uniform vec2 toward = vec2(0.3, 0.95);
 
