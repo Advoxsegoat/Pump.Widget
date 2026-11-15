@@ -144,10 +144,33 @@ func _run_file(path: String, filter: String, report: TestReport) -> void:
 
 	var tree := Engine.get_main_loop() as SceneTree
 	tree.root.add_child(test_case)
+	_hand_on_the_keyboard(tree)
 	for method_name in names:
 		await _run_test(tree, test_case, path + "::" + method_name, method_name, report)
 	tree.root.remove_child(test_case)
 	test_case.free()
+
+
+## A file begins with the keyboard and mouse in hand, as a fresh game has them. The last device used is the Inputs autoload's
+## state and outlives a test: a file that ends on a pad's button would otherwise decide how the next file's player aims (a fight
+## "on the mouse" was recorded on the pad that way, once two such files shared a process with no key press between them). The
+## hand is put back the way a player does it, by pressing a key, one that nothing is bound to; nothing is sent when the keyboard
+## and mouse are in hand already.
+static func _hand_on_the_keyboard(tree: SceneTree) -> void:
+	# The autoload is reached by its node, never by its name: with `Inputs` named in this script (the runner loads it before the
+	# autoloads) every call on the autoload failed, in the tests too ("nonexistent function in base Node").
+	var inputs := tree.root.get_node_or_null(^"Inputs")
+	if inputs == null or not inputs.has_method(&"last_device"):
+		return
+	var devices: Dictionary = (inputs.get_script() as Script).get_script_constant_map().get("Device", {})
+	if int(inputs.call(&"last_device")) == int(devices.get("KEYBOARD_MOUSE", -1)):
+		return
+	for pressed: bool in [true, false]:
+		var key := InputEventKey.new()
+		key.keycode = KEY_F24
+		key.physical_keycode = KEY_F24
+		key.pressed = pressed
+		tree.root.push_input(key)
 
 
 func _run_test(tree: SceneTree, test_case: TestCase, id: String, method_name: String, report: TestReport) -> void:

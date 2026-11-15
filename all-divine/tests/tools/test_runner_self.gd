@@ -23,6 +23,16 @@ func test_counts_passes_failures_and_errors() -> void:
 	var crashed := _run_in_child(F + "run_crashes.gd", [])
 	assert_eq(crashed.code, 1, "\n".join(crashed.lines))
 
+# The last device used is the Inputs autoload's and outlives a test. A fight "on the mouse" (tests/replay/test_replay_aim.gd) was
+# recorded on the pad when tests/hud/test_hud.gd, which ends on a pad's button, ran before it in the same shard with no key press
+# between: the files had shared a process before only with others between them. A file begins as a fresh game does.
+func test_a_file_begins_with_the_keyboard_and_mouse_in_hand_whatever_the_file_before_it_touched() -> void:
+	var r: TestReport = await TestRunner.new().run_files([F + "fixture_pad_touch.gd", F + "fixture_device_at_start.gd"])
+	var failed := r.results.filter(func(x): return not x.message.is_empty())
+	assert_eq([r.passed, r.failed], [2, 0], "the second file finds the keyboard and mouse in hand: %s" % [failed])
+	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "and this file is left as it was found")
+
+
 func test_filter_selects_one_test() -> void:
 	var r: TestReport = await TestRunner.new().run_files([F + "fixture_pass.gd"], "fixture_pass.gd::test_a")
 	assert_eq([r.passed, r.failed], [1, 0])
