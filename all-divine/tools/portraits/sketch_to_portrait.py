@@ -69,15 +69,12 @@ except ImportError as _missing:
           "then run the tool as `tools/.venv/bin/python -I tools/portraits/sketch_to_portrait.py ...`" % (_missing.name or "them"), file=sys.stderr)
     sys.exit(2)
 
-# The card's picture, in pixels: four times the card's 116 x 160 picture pixels.
 CARD_PICTURE = (464, 640)
-# The page is worked on at this width (a larger photograph is brought down to it; a smaller one is not made larger).
 WORK_WIDTH = 900
 
 RECIPE_KEYS = {"paper", "crop", "erase", "keep", "tints", "card", "line_gain", "expressions", "notes"}
 TINT_KEYS = {"name", "colour", "polygon"}
 CARD_KEYS = {"paper", "ink"}
-# A crop is at least this share of the page each way.
 CROP_LEAST = 0.1
 
 # The lattice: the tilts looked for (rise per column; 0.105 is 6 degrees), the thinnest spacing (rows), the share of the best comb score that
@@ -124,7 +121,6 @@ INK_RUN_MOST = 25
 INK_RUN_GAP = 3
 INK_LOSS = 0.10
 INK_THROUGH = 0.2
-# Runs are looked for from this share of the page's width in from each edge.
 INK_EDGE = 0.03
 # A run is "continued" when pencil (darker than INK_PENCIL, at least INK_PENCIL_PIXELS pixels of it) lies within INK_END_ROWS rows of
 # the rule's band, in the INK_END_REACH columns past each end of it.
@@ -134,7 +130,6 @@ INK_PENCIL = 0.15
 INK_PENCIL_PIXELS = 4
 # A rule more than this many times as dark as the middle one of the other rules is a stroke of the drawing (see `check_rules_alike`).
 DARK_RULE = 1.6
-# An erase fades out over this many working pixels outside its rectangle.
 ERASE_FEATHER = 8.0
 # --init-recipe: a cell of 12 x 12 working pixels holds pencil when this many of its pixels are over INIT_PENCIL; fewer cells than
 # INIT_CELLS_LEAST is no drawing ; the crop gets INIT_MARGIN of the drawing's size on each side.
@@ -146,7 +141,6 @@ INIT_CARD = {"paper": "#efe6cc", "ink": "#2b2a30"}
 # The expressions a portrait can be (the game's), and the file name a drawing is given: <speaker>-<expression>-<date>.
 EXPRESSIONS = ("neutral", "smile", "serious", "angry", "sad", "surprise")
 FILE_NAME = re.compile(r"^[a-z][a-z0-9_]*-(?P<expression>[a-z]+)-\d{4}-\d{2}-\d{2}$")
-# Levelled darkness under this is not pencil.
 LEVEL_NOISE = 0.05
 # The most a rule's band is, in rows each side of its middle, and the least.
 BAND_MAX = 5
@@ -159,14 +153,12 @@ CENTRE_REACHES = (10, 6, 5)
 HALO_REACH = 9
 # A pixel darker than this many times the rule's halo there has pencil on it.
 HALO_COVER = 1.3
-# ... plus this much (the paper's grain).
 HALO_SLACK = 0.03
 # The rule's own darkness (its halo, and inside a `keep` the whole of its profile) is the middle of this many columns each side.
 KEEP_STRETCH = 100
 # How far along the rule a stroke may cross it, in columns per row of the band.
 BRIDGE_SLANT = 2.75
 BRIDGE_STEP = 0.25
-# Fainter than this (darkness, paper 0) is not a stroke across the band.
 BRIDGE_FLOOR = 0.08
 
 
