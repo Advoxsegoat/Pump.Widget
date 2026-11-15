@@ -74,6 +74,7 @@ F0 (Foundation) is built: a lit courtyard to walk in, with Abarax moving, dash-s
 ### Portraits
 
 - Portraits Task 1: Abarax's portrait is the owner's drawing. `tools/portraits/sketch_to_portrait.py` turns a photograph of a pencil drawing into a portrait of 464×640: it finds the notebook's rules and takes them out (bridging the strokes that cross them, keeping a stroke that lies along one where the recipe says `keep`), crops, and lays light washes under the line (`docs/art/owner/<drawing>.recipe.json`); a test holds the picture in the game equal, pixel for pixel, to what the tool makes from the owner's photograph and the recipe. It refuses a page it cannot handle with one line that says what would help, and `--init-recipe` writes a first recipe for a new drawing by itself (untinted). In the game a `PortraitCard` of 116×160 picture pixels stands at the dialogue box's left, drawn at the window's own resolution with a one-pixel frame; the text starts to its right; a shot that holds a line is framed in the picture's free area. A speaker with no drawing shows a plain card, and the story checker lists it as a stand-in (once for each scene, speaker and expression; `story_check --final` refuses it by name). The owner's photographs live in `docs/art/owner/` and are never edited (`tools/test.sh`: 1816 passed, 0 failed on the joined tree; the tool's own tests: 44).
+- Portraits Task 3: Abarax's model follows the owner's drawing. `tools/anim/build_abarax.py` builds him with the top-knot at the back of the crown, shaved sides, a clean forehead, a gold ring at his right ear and a barred feather behind his left ear on three bones of its own (72 bones; the 69 old ones and all 78 clips are unchanged, byte for byte, and so is every other model). The feather and the scarf swing on springs, with capsules for the skull, the left fist and the scarf, and pass through nothing on any frame of the two held fights. A place, a revive or a region change restarts the springs exactly as they were set and settles them out of sight, so nothing snaps: no spring bone turns more than 20 degrees on a first frame (a runner who is stopped is allowed 25: his own body's stop). The stubble and the mole are left to the portrait.
 
 ## Preview reel
 
@@ -159,6 +160,7 @@ F1 Combat core (spec §9). Its plan is written, awaiting the owner's review: [`d
 2. The pencil's weight: `out/story/card_line_gain_compare.png` shows the line as you drew it beside a little darker (`line_gain` 0.7 in the recipe). It is as drawn today; say if you want it darker.
 3. The card's place and size beside the box, and its thin frame: right, or should it be larger, or sit inside the box?
 4. A new drawing: `docs/art/owner/README.md`, "Adding a drawing" (photograph the whole page flat in even light; plain paper is easiest). Until a character is drawn their lines show a plain card.
+5. Abarax's model (the picture sent in chat; `tools/test.sh --render --filter=test_abarax_look` writes `out/shots/abarax/`): the knot at the back of the crown, the shaved sides and the ring: are they his? The feather stands up and out from behind his left ear (hanging as you drew it, it went into the scarf); at the game's size it is a few pixels and almost unseen from the side. Let it stand, or should it hang as drawn with the scarf worn lower?
 
 ## Filing a replay
 
@@ -167,6 +169,7 @@ Anyone replays it with `-- --replay=<path>` on the same game version; a fight th
 
 ## Known limits / notes for later
 
+- **Abarax's feather is a close-shot detail**: 0 to 3 pixels at the game's size. In a hard fight it can turn up to about 80 degrees in one frame and it clips the scarf on about three frames in twenty fights (a flinch); neither shows at that size. A tick that restarts the springs costs about 1 ms (once per place, revive or region change). For the art pass.
 - **The engine dies now and then in long bot runs** (signal 11, `propagate_notification` on `/root` from a thread: about 3 in 60 runs of one process, more on a loaded machine). `run_bot.gd` plays each seed in a Godot of its own and runs it again if it dies; worked round, not fixed.
 - **A bot fight does not read the cursor or the window**: the proof is the spy test (nothing reads the cursor while the bot plays). The window-and-mouse test beside it is a guard that a headless run cannot make fail today.
 - **A recording replays on the same game version only.** Another format is refused by its number; a fight that differs says at which frame.

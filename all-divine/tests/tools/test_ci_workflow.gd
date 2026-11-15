@@ -81,6 +81,36 @@ func test_the_render_job_runs_the_whole_suite_in_shards() -> void:
 	assert_true(job.has("      fail-fast: false"), "one shard failing does not stop the others")
 
 
+# test.sh stops a shard after TEST_TIMEOUT seconds: a guard against a hung test, not a budget. By the weights (seconds in a
+# render shard, tests/shard_weights.txt) no shard may come near it: when this fails, add a shard to the matrix and the run line,
+# or refresh the weights from CI's logs if they have gone stale.
+func test_no_render_shard_is_dealt_more_than_three_quarters_of_its_cap() -> void:
+	var job := _block(_lines(), "  render:", 2)
+	var count := 0
+	var cap := 0
+	for line in job:
+		var body := line.strip_edges()
+		if body.begins_with("run: tools/test.sh --render --shard=${{ matrix.shard }}/"):
+			count = body.get_slice("/", body.get_slice_count("/") - 1).to_int()
+		if body.begins_with("TEST_TIMEOUT:"):
+			cap = body.trim_prefix("TEST_TIMEOUT:").replace('"', "").strip_edges().to_int()
+	assert_true(count >= 2 and cap > 0, "the render job names its shards (%d) and its cap (%d s)" % [count, cap])
+	if count < 2 or cap <= 0:
+		return
+	var files := TestRunner.discover("res://tests", true)
+	var weights := TestRunner.read_weights(TestRunner.WEIGHTS)
+	var loads := PackedInt32Array()
+	for index in range(1, count + 1):
+		var total := 0.0
+		for path in TestRunner.shard_for_run(files, index, count):
+			total += float(weights.get(path, TestRunner.DEFAULT_WEIGHT))
+		loads.append(int(total))
+	var heaviest := 0
+	for load in loads:
+		heaviest = maxi(heaviest, load)
+	assert_true(heaviest * 4 <= cap * 3, "the heaviest of %d shards is dealt %d s of a cap of %d s (%s)" % [count, heaviest, cap, loads])
+
+
 func test_the_python_tools_step_installs_the_pinned_libraries_and_runs_the_portrait_tests() -> void:
 	# The sketch tool needs Pillow and numpy, which the runner's own Python may not have: the step installs them at the
 	# versions the tool was made with, before it runs the tool's tests. They go into a venv of the step's own, and the

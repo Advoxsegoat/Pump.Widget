@@ -73,7 +73,7 @@ func test_rig_has_the_planter_and_both_legs() -> void:
 		if child is SkeletonModifier3D:
 			names.append(child.get_class() if child.get_script() == null else (child.get_script() as Script).get_global_name())
 	assert_eq(names, PackedStringArray(["OrientationWarp", "Breathing", "HitReact", "FootPlanter", "TwoBoneIK3D",
-			"TwoBoneIK3D", "LookAtModifier3D", "LookAtModifier3D", "SpringBoneSimulator3D"]), "the modifiers, in the order they run")
+			"TwoBoneIK3D", "LookAtModifier3D", "LookAtModifier3D", "SpringBoneSimulator3D", "SpringBoneSimulator3D"]), "the modifiers, in the order they run (the scarf's spring, then the feather's)")
 	var legs := r.skeleton.find_children("*", "TwoBoneIK3D", false, false)
 	for i in legs.size():
 		var ik := legs[i] as TwoBoneIK3D

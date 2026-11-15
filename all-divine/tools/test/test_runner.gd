@@ -17,6 +17,9 @@ func run_files(paths: PackedStringArray, filter := "") -> TestReport:
 	return report
 
 
+const DEFAULT_WEIGHT := 5.0
+
+
 ## Every test_*.gd under `root`, sorted. Skips fixtures/, and render/ unless asked.
 static func discover(root := "res://tests", include_render := false) -> PackedStringArray:
 	var found := PackedStringArray()
@@ -25,17 +28,66 @@ static func discover(root := "res://tests", include_render := false) -> PackedSt
 	return found
 
 
-## The files of `files` that shard `index` of `count` runs (index from 1): every count-th file, so that a folder's
-## files, which sort together and are often slow together, are spread over the shards. The shards hold every file
-## between them and none twice. A shard that does not exist (index outside 1..count, count under 1) holds nothing.
-static func shard(files: PackedStringArray, index: int, count: int) -> PackedStringArray:
+## The files of `files` that shard `index` of `count` runs (index from 1). The shards hold every file between them and none
+## twice, each in the suite's own order. A shard that does not exist (index outside 1..count, count under 1) holds nothing.
+##
+## Without `weights`: every count-th file, so that a folder's files, which sort together, are spread over the shards.
+## With `weights` (a file's path to its seconds: read_weights; a file not named weighs DEFAULT_WEIGHT): the files are dealt
+## slowest first, each to the shard that holds the least so far, so the slow files are spread and the shards come out even
+## whatever the files are called. Ties go to the path that sorts first and to the lower shard: the same split every time.
+static func shard(files: PackedStringArray, index: int, count: int, weights := {}) -> PackedStringArray:
 	var part := PackedStringArray()
 	if count < 1 or index < 1 or index > count:
 		return part
-	for i in files.size():
-		if i % count == index - 1:
-			part.append(files[i])
+	if weights.is_empty():
+		for i in files.size():
+			if i % count == index - 1:
+				part.append(files[i])
+		return part
+	var order := Array(files)
+	order.sort_custom(func(a: String, b: String) -> bool:
+		var wa := float(weights.get(a, DEFAULT_WEIGHT))
+		var wb := float(weights.get(b, DEFAULT_WEIGHT))
+		return wa > wb if wa != wb else a < b)
+	var loads: Array[float] = []
+	loads.resize(count)
+	loads.fill(0.0)
+	var mine := {}
+	for path: String in order:
+		var least := 0
+		for k in range(1, count):
+			if loads[k] < loads[least]:
+				least = k
+		loads[least] += float(weights.get(path, DEFAULT_WEIGHT))
+		if least == index - 1:
+			mine[path] = true
+	for path in files:
+		if mine.has(path):
+			part.append(path)
 	return part
+
+
+const WEIGHTS := "res://tests/shard_weights.txt"
+
+
+## The split a run of the suite uses (tools/test/run.gd): by the weights in tests/shard_weights.txt.
+static func shard_for_run(files: PackedStringArray, index: int, count: int) -> PackedStringArray:
+	return shard(files, index, count, read_weights(WEIGHTS) if count > 1 else {})
+
+
+## The weights file (`tests/shard_weights.txt`) as a dictionary of a test file's res:// path to its seconds in a render shard
+## of CI. A line is `<seconds> <path under res://tests/>`; a `#` starts a comment; anything else is passed over. No file: no
+## weights (and `shard` deals the plain way).
+static func read_weights(path: String) -> Dictionary:
+	var weights := {}
+	if not FileAccess.file_exists(path):
+		return weights
+	for raw in FileAccess.get_file_as_string(path).split("\n"):
+		var words := raw.get_slice("#", 0).strip_edges().split(" ", false)
+		if words.size() != 2 or not words[0].is_valid_float() or words[0].to_float() <= 0.0:
+			continue
+		weights["res://tests/" + words[1]] = words[0].to_float()
+	return weights
 
 
 ## "2/3" as Vector2i(2, 3): shard 2 of 3. Vector2i.ZERO for anything that is not a shard that exists.
