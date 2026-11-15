@@ -133,8 +133,19 @@ func _observe(run: Dictionary) -> void:
 			run["still_max"] = maxi(run["still_max"], run["still"][i])
 		else:
 			run["still"][i] = 0
-		if absf(foe.global_position.z - run["origin"].z) < 0.5 and absf(foe.global_position.x - run["origin"].x) < 1.0:
+		if absf(foe.global_position.z - run["origin"].z) < 0.3 and absf(foe.global_position.x - run["origin"].x) < 1.0:
 			in_door += 1
+	var dump := ""
+	for foe in foes:
+		var b := foe.brain as EnemyBrain
+		dump += " [%.1f,%.1f m%d plan=%s rest=%.1f rt=%s hold=%s]" % [foe.global_position.x - run["origin"].x, foe.global_position.z, b.mode, b.plan().action if b.plan() != null else "-", b._rest, b._round_to, AttackTokens.of(foe).holds(foe)]
+	run["final"] = dump
+	if OS.get_environment("FOE_WALLS_TRACE") != "" and run["seed"] == int(OS.get_environment("FOE_WALLS_TRACE")) and now % 12 == 0 and now >= 12 and now <= 200:
+		var f := foes[mini(1, foes.size() - 1)]
+		var b1 := f.brain as EnemyBrain
+		print("TRACE %d pos=(%.2f,%.2f) rt=%s path=%s plan=%s rest=%.1f clear=%s blocked=%.2f speed=%.2f tokens=%d" % [now, f.global_position.x, f.global_position.z, b1._round_to, b1._round_path, b1.plan() != null, b1._rest, HitScanner.line_clear(f, run["player"]), b1._blocked, b1._speed, AttackTokens.of(f).count(run["player"])])
+	if now == 400:
+		run["snap"] = dump
 	run["door"] = in_door
 	run["door_max"] = maxi(run["door_max"], in_door)
 
@@ -266,8 +277,16 @@ func test_survey_for_the_report() -> void:
 	if OS.get_environment("FOE_WALLS_SURVEY") == "":
 		return
 	var out := ""
-	for place in ["wall1", "wall3", "wall6", "low", "kerb", "counter", "post", "door"]:
+	var places := OS.get_environment("FOE_WALLS_PLACES").split(",") if OS.get_environment("FOE_WALLS_PLACES") != "" else PackedStringArray(["wall1", "wall3", "wall6", "low", "kerb", "counter", "post", "door"])
+	for place in places:
 		var runs: Array[Dictionary] = await _fights(place, SEEDS, 1800, 3, place != "counter", PLAYER_AT if place != "post" else Vector3(0, 0, 1.0))
+		var names := {}
+		for run in runs:
+			for x: Array in run["no_line"]:
+				names[x[2]] = names.get(x[2], 0) + 1
+		out += "  final %s\n" % [runs.map(func(r: Dictionary) -> String: return r["snap"])]
+		out += "  firsts %s\n" % [runs.map(func(r: Dictionary) -> Array: return r["first"])]
+		out += "  no-line moves %s\n" % [names]
 		out += "%s: swings %d, no line %d, landed %d, last first-attack %d, last first-line %d, still %d, door_max %d\n" % [place, _sum(runs, "swings"), _sum(runs, "no_line"),
 				_sum(runs, "landed"), _slowest(runs, "first"), _slowest(runs, "line_at"), _worst(runs, "still_max"), _worst(runs, "door_max")]
 	var f := FileAccess.open(OS.get_environment("FOE_WALLS_SURVEY"), FileAccess.WRITE)

@@ -88,6 +88,18 @@ const SPREAD_REACH := 1.5
 ## Once swinging round a neighbour, a foe goes on until he is this much (metres) further from his range than SPREAD_REACH: the swing walks him
 ## away from it (against a wall, a step back each frame), and without the margin that step alone switched the swing off and on again.
 const SPREAD_REACH_MARGIN := 0.3
+## Task 15c: a foe begins an attack only when the world will not stop it (HitScanner.line_clear), and when it would, goes round to where it
+## would not: to the nearest place, by a way a body can walk (a search on a grid of ROUND_CELL cells, _plan_round), that has a line to the target
+## for a body ROUND_PAD either side of it. He walks the way (ROUND_GIVE_UP seconds at most, or until the target has moved ROUND_MOVED), then
+## goes on as ever. Two ends about as near (ROUND_EVEN_CELLS): the one with room (the open side, as Task 14f's way round a neighbour).
+const ROUND_CELL := 0.6
+const ROUND_RADIUS := 10.0
+const ROUND_BODY := 0.35
+const ROUND_EVEN_CELLS := 2
+const ROUND_PAD := 0.3
+const ROUND_REACHED := 0.15
+const ROUND_GIVE_UP := 8.0
+const ROUND_MOVED := 1.0
 ## How much further than an attack's back_up_margin (metres) a back-up may go before the attack is given up.
 const BACK_UP_SPARE := 0.1
 ## How far beyond a warped blow's strike_distance and MoveRunner.MAX_WARP the target may stand when it lands and the combo
@@ -154,6 +166,12 @@ var _spreading := false  # swinging round a neighbour on the way in (see _spread
 var _even := false  # between two neighbours at even gaps: standing his ground (see _away_from_neighbour)
 var _held_up := 0.0  # seconds it has gone on toward its range and got no nearer than it has been, for the hand-over
 var _nearest_yet := INF  # the nearest it has been to its target since it began to close in
+var _round_to := Vector2.INF  # the waypoint he walks to for a line to his target (x, z), INF for none
+var _round_path: Array[Vector2] = []  # the points after _round_to
+var _round_at := Vector2.INF  # where the target stood when it was found
+var _round_for := 0.0  # seconds he has been going to it
+var _clear_frame := -1  # the physics frame of _clear_cache
+var _clear_cache: Array = [null, null]  # whether the line is clear for a blow that is not low, and for a low one, this frame
 var _self: Actor  # its own actor, kept for _reangle (which is called from where only the clock is known)
 var _wind_ups := {}  # move id -> seconds to its first hitbox_on (read from its clip once)
 
@@ -209,6 +227,8 @@ func think(actor: Actor, delta: float) -> Intent:
 	if actor.runner.busy():
 		return intent
 	_rest -= delta
+	if _go_round(actor, intent, delta):
+		return intent
 	if _plan == null and _rest <= 0.0:
 		_choose(actor)
 	if _plan != null:
@@ -525,6 +545,8 @@ func _watch_blocked(actor: Actor, intent: Intent, delta: float) -> bool:
 func _choose(actor: Actor) -> void:
 	if target.paired_with != null or def.attacks.is_empty():
 		return
+	if not _clear(actor, false) and not (_has_low(actor) and _clear(actor, true)):
+		return  # the world would stop it: no plan, and no token taken (see _go_round)
 	var token := def.ignores_tokens
 	if not token and def.attacks.any(func(o: AttackOption) -> bool: return o.needs_token):
 		token = AttackTokens.take_for(actor, target)
@@ -540,6 +562,8 @@ func _choose(actor: Actor) -> void:
 			continue  # a big attack waits until the tokens it needs are free
 		if not on_menu(option, distance):
 			continue
+		if not _clear(actor, _is_low(actor, option)):
+			continue  # a low sweep across a low wall, or a hook over a counter, would be stopped
 		open.append(option)
 		total += option.weight
 	if open.is_empty():
@@ -672,6 +696,8 @@ func _line_is_clear(actor: Actor) -> bool:
 	var length := line.length()
 	if length < 1e-3:
 		return true
+	if not HitScanner.line_clear(actor, target):
+		return false  # a wall between: he could not use the token
 	for node in actor.get_tree().get_nodes_in_group(Actor.GROUP):
 		var other := node as Actor
 		if other == null or other == actor or other == target or other.dead:
@@ -683,9 +709,190 @@ func _line_is_clear(actor: Actor) -> bool:
 	return true
 
 
+# --- Task 15c: no swing at a wall ---
+
+# Whether the world lets a blow through to the target from here this frame (HitScanner.line_clear), asked once a frame per kind.
+func _clear(actor: Actor, low: bool) -> bool:
+	var frame := Engine.get_physics_frames()
+	if frame != _clear_frame:
+		_clear_frame = frame
+		_clear_cache = [null, null]
+	var i := 1 if low else 0
+	if _clear_cache[i] == null:
+		_clear_cache[i] = HitScanner.line_clear(actor, target, low)
+	return _clear_cache[i]
+
+
+# Whether `option`'s first move has a low blow (a sweep: HitProfile.Height.LOW).
+func _is_low(actor: Actor, option: AttackOption) -> bool:
+	var id: StringName = actor.def.moveset.get(option.action, &"")
+	if id == &"" or not Registry.ids(&"moves").has(String(id)):
+		return false
+	var move := Registry.fetch(&"moves", id) as MoveData
+	return move != null and move.hits.values().any(func(p: HitProfile) -> bool: return p.height == HitProfile.Height.LOW)
+
+
+func _has_low(actor: Actor) -> bool:
+	return def.attacks.any(func(o: AttackOption) -> bool: return _is_low(actor, o))
+
+
+# The plan is off, its token is back, and nothing else changes (no cooldown, no rest: nothing was thrown).
+func _forget_plan(actor: Actor) -> void:
+	_plan = null
+	_presses.clear()
+	_give_back(actor)
+	_reset_spacing()
+
+
+# With no line to the target within sight he goes to where he has one, instead of circling, closing in or standing at the wall. True while
+# he does (his plan is off and his token back: he cannot attack from here). Without a way found (no place within ROUND_RADIUS has a line he can
+# walk to) he plays as before, and _choose and _fire still refuse a swing at the wall.
+func _go_round(actor: Actor, intent: Intent, delta: float) -> bool:
+	var here := Vector2(actor.global_position.x, actor.global_position.z)
+	var there := Vector2(target.global_position.x, target.global_position.z)
+	if here.distance_to(there) > def.sight_range:
+		_round_to = Vector2.INF
+		_round_path.clear()
+		return false
+	if _round_to != Vector2.INF:
+		_round_for += delta
+		if here.distance_to(_round_to) < ROUND_REACHED:
+			_round_to = _round_path.pop_front() if not _round_path.is_empty() else Vector2.INF
+		if _round_for > ROUND_GIVE_UP or there.distance_to(_round_at) > ROUND_MOVED:
+			_round_to = Vector2.INF
+			_round_path.clear()
+	if _round_to == Vector2.INF:
+		if _clear(actor, false):
+			return false
+		_round_path = _plan_round(actor)
+		_round_at = there
+		_round_for = 0.0
+		if _round_path.is_empty():
+			return false
+		_round_to = _round_path.pop_front()
+	if _plan != null:
+		_forget_plan(actor)
+	var way := _round_to - here
+	intent.move = way.normalized() * (JOG_PUSH if way.length() > WALK_WITHIN else WALK_PUSH)
+	if _watch_blocked(actor, intent, delta):
+		_round_to = Vector2.INF
+		_round_path.clear()
+	return true
+
+
+# The points to walk through to a place with a line to the target: a breadth-first search over a grid of ROUND_CELL cells round him, a cell
+# free where a ball of ROUND_BODY (a body) touches no `world` collider, a goal a cell from which a body ROUND_PAD either side of its middle
+# has a line (HitScanner.clear_between). The nearest goals are taken (those within ROUND_EVEN_CELLS of the first), the one on the open side
+# (_open_side) if the two sides are about as near. The way is smoothed to the fewest straight legs a body can walk. Empty if there is none.
+func _plan_round(actor: Actor) -> Array[Vector2]:
+	var space := actor.get_world_3d().direct_space_state
+	var start := Vector2(actor.global_position.x, actor.global_position.z)
+	var y := actor.global_position.y
+	var along := Vector2(target.global_position.x, target.global_position.z) - start
+	if along.length() < 0.1:
+		return []
+	var perp := along.normalized().rotated(PI * 0.5)  # circling with _circle = 1 goes this way
+	var exclude: Array[RID] = [actor.get_rid(), target.get_rid()]
+	var ball := SphereShape3D.new()
+	ball.radius = ROUND_BODY
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = ball
+	query.collision_mask = Layers.WORLD
+	var free := {Vector2i.ZERO: true}
+	var depth := {Vector2i.ZERO: 0}
+	var parent := {}
+	var queue: Array[Vector2i] = [Vector2i.ZERO]
+	var head := 0
+	var first := -1
+	var best_cost := INF
+	var best := Vector2i.ZERO
+	var open := _open_side(actor)
+	var reach := int(ROUND_RADIUS / ROUND_CELL)
+	var tp := Vector2(target.global_position.x, target.global_position.z)
+	while head < queue.size():
+		var c := queue[head]
+		head += 1
+		var d: int = depth[c]
+		if first >= 0 and d > first + ROUND_EVEN_CELLS:
+			break
+		var at := start + Vector2(c) * ROUND_CELL
+		if c != Vector2i.ZERO and at.distance_to(tp) >= 0.8 and _goal_at(space, at, y, exclude):
+			first = d if first < 0 else first
+			var side := signf(perp.dot(at - start))
+			var cost := float(d) + (0.0 if open == 0.0 or side == open else float(ROUND_EVEN_CELLS))
+			if cost < best_cost:
+				best_cost = cost
+				best = c
+			continue
+		for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
+			var n: Vector2i = c + step
+			if depth.has(n) or maxi(absi(n.x), absi(n.y)) > reach:
+				continue
+			if not free.has(n):
+				var pos := start + Vector2(n) * ROUND_CELL
+				query.transform = Transform3D(Basis(), Vector3(pos.x, y + 0.5, pos.y))
+				free[n] = space.intersect_shape(query, 1).is_empty()
+			if not free[n]:
+				continue
+			if step.x != 0 and step.y != 0 and not (_free_cell(free, c + Vector2i(step.x, 0)) and _free_cell(free, c + Vector2i(0, step.y))):
+				continue  # no cutting a corner
+			depth[n] = d + 1
+			parent[n] = c
+			queue.append(n)
+	if best_cost == INF:
+		return []
+	var cells: Array[Vector2] = []
+	var c := best
+	while c != Vector2i.ZERO:
+		cells.push_front(start + Vector2(c) * ROUND_CELL)
+		c = parent[c]
+	cells.push_front(start)
+	var legs: Array[Vector2] = []
+	var i := 0
+	while i < cells.size() - 1:
+		var j := cells.size() - 1
+		while j > i + 1 and not _walkable(space, cells[i], cells[j], y, exclude):
+			j -= 1
+		legs.append(cells[j])
+		i = j
+	return legs
+
+
+# A cell already looked at (the diagonal check's neighbours may not have been): free only if known free.
+static func _free_cell(free: Dictionary, cell: Vector2i) -> bool:
+	return free.get(cell, false)
+
+
+# Whether a body standing at `at` (x, z) would have a line to the target, with ROUND_PAD of room either side of it.
+func _goal_at(space: PhysicsDirectSpaceState3D, at: Vector2, y: float, exclude: Array[RID]) -> bool:
+	var feet := Vector3(at.x, y, at.y)
+	var to := Vector2(target.global_position.x, target.global_position.z) - at
+	var side := to.normalized().rotated(PI * 0.5) * ROUND_PAD
+	for pad: float in [0.0, -1.0, 1.0]:
+		if not HitScanner.clear_between(space, feet + Vector3(side.x, 0.0, side.y) * pad, target, exclude):
+			return false
+	# and the way in from there is one a body can walk (the line is clear for a ray; a corner's end face is not for a body)
+	var in_line := to.normalized()
+	return to.length() < 0.8 or _walkable(space, at, at + in_line * (to.length() - 0.8), y, exclude, ROUND_BODY + 0.1)
+
+
+# Whether a body can walk the straight way from `a` to `b` (x, z): no `world` collider in the way at knee height for its width.
+func _walkable(space: PhysicsDirectSpaceState3D, a: Vector2, b: Vector2, y: float, exclude: Array[RID], room := ROUND_BODY) -> bool:
+	var side := (b - a).normalized().rotated(PI * 0.5) * room
+	for pad: float in [0.0, -1.0, 1.0]:
+		var from := Vector3(a.x + side.x * pad, y + 0.5, a.y + side.y * pad)
+		var to := Vector3(b.x + side.x * pad, y + 0.5, b.y + side.y * pad)
+		if not space.intersect_ray(PhysicsRayQueryParameters3D.create(from, to, Layers.WORLD, exclude)).is_empty():
+			return false
+	return true
+
+
 # Presses the attack: the feint first, if it feints, else the option's action (held for a delayed swing). Its token is
 # taken again (an attacker that holds one keeps it, for TIMEOUT more); with none to be had, the attack is off.
 func _fire(actor: Actor, intent: Intent) -> void:
+	if not _clear(actor, _is_low(actor, _plan)):
+		_forget_plan(actor)  # the line was cut between the choice and the press: no swing at a wall
+		return
 	if _plan.needs_token and not def.ignores_tokens and not AttackTokens.take_for(actor, target, _plan.tokens):
 		_drop_plan(actor)
 		return
@@ -717,7 +924,11 @@ func _follow_through(actor: Actor, intent: Intent) -> void:
 	if not actor.runner.busy():
 		_finish(actor)
 		return
+	# A blow already begun is not cancelled (it plays out, and the world stops it if it must): only the next one of the combo waits for a line.
 	if not _presses.is_empty() and actor.runner.window.has(_presses[0]):
+		if not _clear(actor, false):
+			_presses.clear()
+			return
 		if not _within_warp(actor, StringName(actor.runner.window[_presses[0]])):
 			_presses.clear()  # the target is out of the next blow's reach: the combo ends rather than swing at air
 			return
