@@ -4,7 +4,8 @@ extends TestCase
 ## edge (the lock's lean and the look-ahead at their most), a 642 x 362 picture over a magenta background has no pixel of it: a
 ## wall top, a gap in the ring and the end of the water all show as magenta. And nine views are saved for a person to look at, each
 ## with Abarax and a tier I Knuckle in it as the game draws them (out/shots/bilibara/<name>.png at 640 x 360, and <name>_x3.png at
-## 1920 x 1080: the way a 1080p screen shows it), none over the plan's draw-call limit.
+## 1920 x 1080: the way a 1080p screen shows it), none over the draw-call limit, which is for the two bodies of the pictures: with eight bodies in the view
+## (Abarax and seven foes) the counts are printed beside it and held to the plan's 450.
 
 const BILIBARA := "res://world/bilibara/bilibara.tscn"
 const MAIN := "res://main/main.tscn"
@@ -20,8 +21,11 @@ const GRID_Z := Vector2i(-165, 25)
 const SPACING := 5.0
 ## The picture is 640 x 360 plus a pixel's margin all round, as the game's world image is.
 const PICTURE := Vector2i(642, 362)
-## Most draw calls in a view: the first review's limit for the stretch.
+## Most draw calls in a view with two bodies in it (Abarax and a foe): the first review's limit for the stretch. Each body costs about twenty calls (its
+## rig's meshes and its rim and outline passes); the contact shadows are one call however many there are.
 const MOST_DRAWS := 220
+## The plan's most draw calls in any frame, for the same views with eight bodies in them.
+const MOST_DRAWS_EIGHT := 450
 const LEAST_COLOURS := 40
 const VIEWS: Array[String] = ["Spawn", "StreetEast", "LaneMid", "ShrineSite_B", "RackWest", "GateFar", "GateNear", "YardEntry", "YardCentre"]
 
@@ -153,6 +157,31 @@ func test_nine_views_are_saved_for_a_person_to_look_at() -> void:
 		worst = maxi(worst, draws)
 		print("bilibara view %s: %d draw calls" % [marker_name, draws])
 		assert_true(draws > 0 and draws <= MOST_DRAWS, "%s: %d draw calls (at most %d)" % [marker_name, draws, MOST_DRAWS])
+	# The same views with eight bodies in them: six more foes in a ring about Abarax.
+	var crowd: Array[Actor] = []
+	for i in 6:
+		var more := (load("res://actors/actor.tscn") as PackedScene).instantiate() as Actor
+		more.def = load(FOE) as ActorDef
+		more.set_brain(Brain.new())
+		region.add_child(more)
+		crowd.append(more)
+	var lines := PackedStringArray()
+	var worst_eight := 0
+	for marker_name in VIEWS:
+		var at := (region.find_child(marker_name, true, false) as Marker3D).global_transform
+		main.player.place(at)
+		foe.place(Transform3D(Basis(Vector3.UP, -PI / 2), at.origin + Vector3(2.0, 0.0, 0.0)))
+		for i in crowd.size():
+			crowd[i].place(Transform3D(Basis(Vector3.UP, -PI / 2), at.origin + Vector3(1.5, 0.0, 0.0).rotated(Vector3.UP, TAU * (i + 1) / 7.0 + 0.4)))
+		main.camera_rig.snap_now()
+		await frames(6)
+		for i in 4:
+			await RenderingServer.frame_post_draw
+		var draws := RenderingServer.viewport_get_render_info(main.stage.world.get_viewport_rid(), RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME)
+		worst_eight = maxi(worst_eight, draws)
+		lines.append("%s: %d draw calls with eight bodies" % [marker_name, draws])
+		assert_true(draws > 0 and draws <= MOST_DRAWS_EIGHT, "%s: %d draw calls with eight bodies (at most %d)" % [marker_name, draws, MOST_DRAWS_EIGHT])
+	print("bilibara views with eight bodies: %s (worst %d, with two: %d)" % ["; ".join(lines), worst_eight, worst])
 
 
 ## Where the tone test looks besides the nine views: the loop lane (a roof fills its left third), and the lane's north end.
