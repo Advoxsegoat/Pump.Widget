@@ -628,7 +628,7 @@ def _own_profile(dark, mid, alone, keep_mask, halo_reach):
     beside = np.zeros_like(core)
     beside[1:] |= core[:-1]
     beside[:-1] |= core[1:]
-    return np.where(beside & ~core, np.maximum(smooth, 0.75 * smooth.max(axis=0)[None, :]), smooth), align
+    return smooth, align, np.where(beside & ~core, np.maximum(smooth, 0.75 * smooth.max(axis=0)[None, :]), smooth)
 
 
 def _take_rule_off_kept(clean, dark, mid, own, keep_mask, halo_reach):
@@ -636,7 +636,7 @@ def _take_rule_off_kept(clean, dark, mid, own, keep_mask, halo_reach):
     profile and alignment, `_own_profile`) comes off where the pixel is the rule's alone; a pixel clearly darker than the rule is the stroke's."""
     h, w = dark.shape
     xs = np.arange(w)
-    profile, align = own
+    profile, align, wide = own
     offs = np.arange(-halo_reach, halo_reach + 1)
     for o in offs:
         y = mid + o
@@ -646,10 +646,10 @@ def _take_rule_off_kept(clean, dark, mid, own, keep_mask, halo_reach):
         yy, xx = yy[kept], xx[kept]
         slot = np.clip(o - align[xx] + halo_reach, 0, len(offs) - 1)
         value = dark[yy, xx]
-        local = profile[slot, xx]
+        local, local_wide = profile[slot, xx], wide[slot, xx]
         # the rule alone goes; pencil over the rule hides it, and the rule's share of what is seen there (paper, then the rule, then the pencil,
         # each darkening what is under it) is taken off the same way, so a stroke along a rule is one even stroke, as it was drawn
-        clean[yy, xx] = np.where(value <= HALO_COVER * local + HALO_SLACK, np.maximum(value - local, 0.0), (value - local) / (1.0 - local))
+        clean[yy, xx] = np.where(value <= HALO_COVER * local_wide + HALO_SLACK, np.maximum(value - local_wide, 0.0), (value - local) / (1.0 - local))
 
 
 def remove_rules(dark, rules, keep_mask, scale):
@@ -671,7 +671,7 @@ def remove_rules(dark, rules, keep_mask, scale):
     if any(want and own is None for want, own in zip(wanted, owns)):
         told = [o for o in (own if own is not None else _own_profile(dark, mid, alone, keep_mask, scale.halo_reach)
                             for own, mid, (_c, alone, _p) in zip(owns, mids, found)) if o is not None]
-        shared = np.median(np.stack([np.median(o[0], axis=1) for o in told]), axis=0) if told else None
+        shared = [np.median(np.stack([np.median(o[k], axis=1) for o in told]), axis=0) for k in (0, 2)] if told else None
     for (centre, alone, peak), own, wanted_here in zip(found, owns, wanted):
         half = rule_half_width(dark, centre)
         bands.append(half)
@@ -706,7 +706,7 @@ def remove_rules(dark, rules, keep_mask, scale):
             clean[yy[free], xx[free]] = fill[slot][ok][free]
             band_mask[yy, xx] = True
         if wanted_here:
-            own = own if own is not None else (None if shared is None else (np.tile(shared[:, None], (1, w)), np.zeros(w, dtype=int)))
+            own = own if own is not None else (None if shared is None else (np.tile(shared[0][:, None], (1, w)), np.zeros(w, dtype=int), np.tile(shared[1][:, None], (1, w))))
             if own is not None:
                 _take_rule_off_kept(clean, dark, mid, own, keep_mask, scale.halo_reach)
         taken.extend(_ink_taken(dark, clean, mid, scale.halo_reach, keep_mask, half))
