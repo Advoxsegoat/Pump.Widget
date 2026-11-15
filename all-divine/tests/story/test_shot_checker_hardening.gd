@@ -27,8 +27,24 @@ func _wipe(dir: String) -> void:
 	DirAccess.remove_absolute(dir)
 
 
+# The fixture with Knuckle's line said by Abarax: the fixture's own speaker has no drawing yet, and the stand-in that lists is the
+# portrait tests' business (tests/hud/test_portrait_card.gd), not this file's.
 func _fixture() -> SceneShots:
-	return (load(FOLDER + "/shots.tres") as SceneShots).duplicate_deep()
+	var scene := (load(FOLDER + "/shots.tres") as SceneShots).duplicate_deep()
+	for shot in scene.shots:
+		for line in shot.lines:
+			if line.speaker == &"fixture_knuckle":
+				line.speaker = &"abarax"
+	return scene
+
+
+# `lines` without the stand-in lines (the fixture's own speaker has no drawing yet; the portrait tests own that rule).
+func _without_stand_ins(lines: PackedStringArray) -> PackedStringArray:
+	var kept := PackedStringArray()
+	for line in lines:
+		if not line.contains("is a stand-in"):
+			kept.append(line)
+	return kept
 
 
 func _check(scene: SceneShots, folder := "") -> PackedStringArray:
@@ -130,7 +146,7 @@ func test_every_enum_is_range_checked_and_nothing_crashes() -> void:
 func test_a_key_the_class_does_not_have_is_a_problem_with_the_name_it_probably_meant() -> void:
 	var dir := _folder_with(func(text: String) -> String:
 		return text.replace("kind = 1\nstatus = 0", "kindd = 1\nstatus = 0").replace("lead_in = 30", "lead_inn = 30").replace("aim_height = 1.5", "aim_heigth = 1.5"))
-	var lines := ShotChecker.new().check_folder(dir)
+	var lines := _without_stand_ins(ShotChecker.new().check_folder(dir))
 	var text := "\n".join(lines)
 	assert_eq(lines.size(), 3, text)
 	assert_true(text.contains("'kindd' is not a field of SceneShots (did you mean 'kind'?)"), text)
@@ -218,7 +234,7 @@ func test_the_legal_layouts_of_an_array_pass() -> void:
 		for layout in ["spread", "untyped"]:
 			var dir := _folder_with(func(text: String) -> String:
 				return _spread(text, field, "") if layout == "spread" else _untyped(text, field, ""))
-			var lines := ShotChecker.new().check_folder(dir)
+			var lines := _without_stand_ins(ShotChecker.new().check_folder(dir))
 			assert_eq(lines, PackedStringArray(), "%s written %s" % [field, layout])
 			_wipe(TEMP)
 

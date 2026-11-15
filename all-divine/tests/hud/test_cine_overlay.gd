@@ -150,17 +150,17 @@ func test_every_fixture_line_fits_in_three_lines_of_the_box() -> void:
 	assert_eq(joined.replace(" ", ""), "onetwothree", "wrapping loses no letter")
 
 
-func test_the_portrait_is_the_speakers_expression_at_48_by_48() -> void:
+func test_the_portrait_is_the_speakers_card_for_the_expression() -> void:
 	overlay.show_line(abarax, "Hmph.", &"angry", 60)
-	assert_true(overlay.portrait() == abarax.portraits[&"angry"], "the angry portrait")
-	assert_eq(overlay.portrait_rect().size, Vector2i(48, 48), "drawn at 48 by 48, not scaled")
-	assert_eq(overlay.portrait().get_size(), Vector2(48, 48))
-	assert_true(overlay.box_rect().encloses(overlay.portrait_rect()), "inside the box")
-	assert_eq(overlay.portrait_rect().position.x - overlay.box_rect().position.x, 8, "8 px in from the box's left")
-	assert_eq(overlay.portrait_rect().position.y - overlay.box_rect().position.y, 8, "and 8 px down")
+	assert_true(overlay.portrait() == abarax.card(&"angry"), "the angry card (Abarax's, which is his neutral drawing until the owner draws it)")
+	assert_eq(overlay.portrait_rect().size, Vector2i(116, 160), "drawn at 116 by 160 picture pixels")
+	assert_eq(overlay.portrait().get_size(), Vector2(464, 640), "from a picture four times as large")
+	assert_eq(overlay.portrait_rect().position.x - overlay.box_rect().position.x, 6, "6 px in from the box's left")
+	assert_eq(overlay.box_rect().end.y - overlay.portrait_rect().end.y, 2, "2 px above the box's bottom")
+	assert_true(overlay.portrait_rect().position.y < overlay.box_rect().position.y, "rising above the box")
 	assert_false(overlay.portrait_rect().intersects(overlay.text_rect()), "the text is beside it")
 	overlay.show_line(knuckle, "Hm.", &"no_such_face", 60)
-	assert_true(overlay.portrait() == knuckle.portraits[&"neutral"], "an expression the speaker lacks is neutral")
+	assert_true(overlay.portrait() == Speaker.blank_card(), "a speaker with no drawing shows the blank card")
 	overlay.close()
 	assert_true(overlay.portrait() == null, "no line, no portrait")
 
