@@ -29,10 +29,14 @@ extends SceneTree
 ##   lantern X Z [shadow] [ghost] [y=Y] [wall=n|e|s|w]  a lantern with its lamp (see lamps): a solid post, or `ghost` (no collider: where no
 ##                                      body can reach, on a low wall's top at y=Y); a post that stands against a wall (the way `wall=` says)
 ##                                      is a wedge a body slides off, wider than the pole and standing out 0.2 m from the wall, not a cylinder
+##   fringe X0 Z0 X1 Z1 STONE FROM [seed=N]   a ragged fringe of STONE laid on the ground over the rect, seen only: STONE reaches out from
+##                                      the rect's edge FROM (n, e, s or w: the seam it lies on) into the ground beside it, in slabs and tongues of uneven
+##                                      length, so that two grounds do not meet in a straight line
 ##   deflect                            every solid body of the layout deflects (see Actor): a body that runs at one goes along it at its own
 ##                                      speed, and a body that runs dead on at a post (a slim body), or at a point (a corner), goes round the side it is offset to
 ##   guard X0 Z0 X1 Z1 H [name=NAME]    an unseen solid box H high (world only): the body of a colonnade's pillars
-##   lamps COLOUR RANGE ENERGY UP [world]   every lantern's lamp; `world`: it lights the world and not the bodies
+##   lamps COLOUR RANGE ENERGY UP [world] [glass]   every lantern's lamp; `world`: it lights the world and not the bodies; `glass`: each lantern has a
+##                                      small warm glass pane on its lamp's housing too (the lamp's colour toward white), the lamp when ENERGY is 0
 ##   marker NAME X Z [YAW]  /  poi NAME X Z UP    a Marker3D, and one to glance at
 ##   sun PITCH YAW COLOUR ENERGY [ortho]  the DirectionalLight3D, with shadows (`ortho`: one orthogonal shadow map, not four splits:
 ##                                      each shadow-casting mesh is then drawn once into it, not up to four times)
@@ -102,6 +106,15 @@ const MODELS := {
 	"chimney": "none",
 	"pillar-wood": "post",
 }
+## A fringe lies this far above the ground it is laid on (the ground's plates are 1 m thick with their tops at y = 0).
+const FRINGE_RAISE := 0.006
+const FRINGE_SHADER := preload("res://render/shaders/toon_fringe.gdshader")
+## The lanterns' warm glass: a ball this big, this far up the lamp (the housing's front, toward the camera) and out from the post's axis, in the
+## lamp's colour taken this share of the way to white.
+const GLASS_RADIUS := 0.09
+const GLASS_UP := 0.1
+const GLASS_OUT := 0.2
+const GLASS_WHITE := 0.4
 const POST_RADIUS := 0.27
 ## A post against a wall (`lantern ... wall=n`): its collider is a wedge on the wall, WEDGE_HALF either side of the post's middle and
 ## WEDGE_DEPTH out from the wall, which stands POST_WALL_GAP from the post's middle. A body's centre then stays outside the pole's
@@ -185,6 +198,7 @@ class Builder extends "res://tools/world/region_nodes.gd":
 	var _kit := ""  # the `kit` line's name, and the line it was on
 	var _kit_line := 0
 	var _feet := 0  # of `ik_surface` alone
+	var _glass_material: StandardMaterial3D  # the lanterns' warm glass, made once
 	var _deflects := false  # a `deflect` line: the solid bodies carry the Actor's mark (see _mark_deflecting)
 	var _posts: Array[StaticBody3D] = []  # the posts' bodies (slim ones)
 
@@ -308,13 +322,15 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				elif n.size() == 4:
 					BLOCKS.drift(self, Vector2(n[0], n[1]), Vector2(n[2], n[3]), raise, seed_value)
 			"lamps":
-				var world := args.size() == 5 and args[4] == "world"
-				if args.size() != 4 and not world:
-					problem("lamps needs COLOUR RANGE ENERGY UP [world]")
+				var extras := Array(args.slice(4))
+				var world := extras.has("world")
+				var glass := extras.has("glass")
+				if args.size() < 4 or args.size() > 6 or extras.any(func(a: String) -> bool: return a != "world" and a != "glass") or extras.size() != (1 if world else 0) + (1 if glass else 0):
+					problem("lamps needs COLOUR RANGE ENERGY UP [world] [glass]")
 					return
 				var n := _numbers(args.slice(1, 4), 3, 3)
 				if _is_colour(args[0]) and n.size() == 3:
-					_lamp = {colour = Color(args[0]), range = n[0], energy = n[1], up = n[2], world = world}
+					_lamp = {colour = Color(args[0]), range = n[0], energy = n[1], up = n[2], world = world, glass = glass}
 			"lantern":
 				var lantern_words := PackedStringArray(Array(args).filter(func(a: String) -> bool: return a != "shadow" and a != "ghost" and not a.begins_with("y=") and not a.begins_with("wall=")))
 				var raise: Variant = _y_option(args)
@@ -325,6 +341,24 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				elif n.size() == 2:
 					_lantern(Vector2(n[0], n[1]), args.has("shadow"), args.has("ghost"), raise if raise != null else 0.0,
 							WAYS[String(walls[0]).trim_prefix("wall=")] if walls.size() == 1 else Vector2.ZERO)
+			"fringe":
+				var fringe_seed := 1
+				var fringe_words := PackedStringArray()
+				for word in args:
+					if word.begins_with("seed="):
+						if not word.trim_prefix("seed=").is_valid_int():
+							problem("fringe: '%s' is not a seed" % word)
+							return
+						fringe_seed = word.trim_prefix("seed=").to_int()
+					else:
+						fringe_words.append(word)
+				var fringe_n: Array[float] = []
+				if fringe_words.size() == 6:
+					fringe_n = _numbers(fringe_words.slice(0, 4), 4, 4)
+				if fringe_words.size() != 6 or fringe_n.size() != 4 or not STONES.has(fringe_words[4]) or not WAYS.has(fringe_words[5]):
+					problem("fringe needs X0 Z0 X1 Z1 STONE FROM [seed=N], the stone one of %s and FROM n, e, s or w" % ", ".join(STONES.keys()))
+				else:
+					_fringe(_rect(fringe_n), STONES[fringe_words[4]], fringe_words[5], fringe_seed)
 			"deflect":
 				if not args.is_empty() or _deflects:
 					problem("deflect is one line, with nothing after it")
@@ -632,6 +666,8 @@ class Builder extends "res://tools/world/region_nodes.gd":
 		if _lamp.world:
 			lamp.light_cull_mask = LAYERS.RENDER_WORLD
 		holder.add_child(lamp)
+		if _lamp.glass:
+			_glass(holder)
 
 	func _marker(marker_name: String, at: Vector2, up: float, yaw: float, poi: bool) -> void:
 		var marker := Marker3D.new()
@@ -797,6 +833,70 @@ class Builder extends "res://tools/world/region_nodes.gd":
 			if (terrace.rect as Rect2).grow(0.001).has_point(at):
 				height = maxf(height, terrace.height)
 		return height
+
+	# A fringe of `stone` over `rect` on the seam at its `from` edge (a WAYS letter): a flat quad a little above the ground, drawn by toon_fringe,
+	# its UV the metres along the seam and the metres out from it. Seen only (no collider, no shadow), under Fringes.
+	func _fringe(rect: Rect2, stone: Material, from: String, seed_value: int) -> void:
+		var material := stone as ShaderMaterial
+		var texture: Variant = material.get_shader_parameter(&"albedo_tex") if material != null else null
+		if texture == null or rect.size.x <= 0.0 or rect.size.y <= 0.0:
+			problem("fringe needs a rect with an area and a stone with a texture")
+			return
+		var depth := rect.size.y if from == "n" or from == "s" else rect.size.x
+		var shader_material := ShaderMaterial.new()
+		shader_material.shader = FRINGE_SHADER
+		shader_material.set_shader_parameter(&"albedo_tex", texture)
+		shader_material.set_shader_parameter(&"texels_per_metre", material.get_shader_parameter(&"texels_per_metre"))
+		shader_material.set_shader_parameter(&"depth", depth)
+		shader_material.set_shader_parameter(&"seed", float(seed_value))
+		var corners := [rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)]
+		var uvs := PackedVector2Array()
+		for corner: Vector2 in corners:
+			var along := corner.x - rect.position.x if from == "n" or from == "s" else corner.y - rect.position.y
+			var across := 0.0
+			match from:
+				"n": across = corner.y - rect.position.y
+				"s": across = rect.end.y - corner.y
+				"w": across = corner.x - rect.position.x
+				_: across = rect.end.x - corner.x
+			uvs.append(Vector2(along, across))
+		var y := _ground(rect.get_center()) + FRINGE_RAISE
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([Vector3(corners[0].x, y, corners[0].y), Vector3(corners[1].x, y, corners[1].y), Vector3(corners[2].x, y, corners[2].y), Vector3(corners[3].x, y, corners[3].y)])
+		arrays[Mesh.ARRAY_NORMAL] = PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP])
+		arrays[Mesh.ARRAY_TEX_UV] = uvs
+		arrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 2, 1, 0, 3, 2])
+		var mesh := ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var instance := MeshInstance3D.new()
+		instance.name = unique_name("Fringe")
+		instance.mesh = mesh
+		instance.material_override = shader_material
+		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		group_node("Fringes").add_child(instance)
+
+	# The lantern's warm glass: a small pane (a ball a fifth of a metre across) on the front of the lamp's housing, drawn as it is (unshaded) in the
+	# lamp's colour taken a good way toward white: a warm light that is paler than the neon and brighter than anything round it. It is
+	# the lamp when the lamp itself gives no light (at noon).
+	func _glass(holder: Node3D) -> void:
+		if _glass_material == null:
+			_glass_material = StandardMaterial3D.new()
+			_glass_material.resource_name = "lantern_glass"
+			_glass_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			_glass_material.albedo_color = (_lamp.colour as Color).lerp(Color.WHITE, GLASS_WHITE)
+		var ball := SphereMesh.new()
+		ball.radius = GLASS_RADIUS
+		ball.height = GLASS_RADIUS * 2.0
+		ball.radial_segments = 8
+		ball.rings = 4
+		var pane := MeshInstance3D.new()
+		pane.name = "Glass"
+		pane.mesh = ball
+		pane.material_override = _glass_material
+		pane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		pane.position = Vector3(0.0, _lamp.up + GLASS_UP, GLASS_OUT)
+		holder.add_child(pane)
 
 	# The wedge of a post against a wall (`wall` is the way to the wall, a WAYS unit): a convex prism, its base in the wall.
 	func _wedge(holder: Node3D, height: float, wall: Vector2) -> void:

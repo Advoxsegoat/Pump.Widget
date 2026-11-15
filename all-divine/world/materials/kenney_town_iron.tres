@@ -5,7 +5,7 @@
 [sub_resource type="Gradient" id="kenney_town_iron_colour"]
 interpolation_mode = 1
 offsets = PackedFloat32Array(0)
-colors = PackedColorArray(0.17, 0.16, 0.18, 1)
+colors = PackedColorArray(0.09, 0.085, 0.1, 1)
 
 [sub_resource type="GradientTexture2D" id="kenney_town_iron"]
 gradient = SubResource("kenney_town_iron_colour")

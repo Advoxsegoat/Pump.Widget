@@ -99,6 +99,21 @@ ground 27.5 -60 40 -55 tan_earth name=YardPlateSouth
 # (T2, T3, T6, T7), under a sloping or a high roof where nothing walkable lies north of them in the line of sight; the yard's flanks two.
 # frontage: stone fronts with shops and shutters (the street's north row, the court, the Lazyman's back); tannery: wooden works. ---
 # The Lazyman's back and the court's west cap, the street's north row (the lane mouth is x 25..30) and the lane's east flank
+# The seams where two grounds meet are not straight: one ground reaches into the other in slabs and tongues of uneven length (no run of
+# a seam's edge is straight for more than half a metre). Court A's slate into the street, the street into the lane's mouth, the alcove's
+# slate into the lane; the yard's tan margins into its border, and its stone square into the border. (Under a kerb, the gate's, a seam
+# is hidden and has none.)
+fringe -30 -5 -29.1 5 slate_cold w seed=1
+fringe 25 -5.9 30 -5 cobble s seed=2
+fringe 29.1 -37.5 30 -30 slate_pale e seed=3
+fringe 21.25 -70 33.75 -69.6 tan_earth n seed=4
+fringe 21.25 -60.4 33.75 -60 tan_earth s seed=5
+fringe 21.25 -69.6 21.65 -60.4 tan_earth w seed=6
+fringe 33.35 -69.6 33.75 -60.4 tan_earth e seed=7
+fringe 22.25 -69.4 32.75 -69 flagstone_cold s seed=8
+fringe 22.25 -61 32.75 -60.6 flagstone_cold n seed=9
+fringe 21.85 -69 22.25 -61 flagstone_cold e seed=10
+fringe 32.75 -69 33.15 -61 flagstone_cold w seed=11
 block -40 -25 -35 -5 3 frontage gable solid
 block -30 -10 25 -5 3 frontage gable solid
 block 30 -20 32.5 -5 3 frontage gable solid
@@ -130,7 +145,7 @@ curb 32.5 -55 40 -54.6 0.3 slate
 
 # --- The gate: the shortcut, shut. A 0.6 m board in the slot between the Lazyman's back and the street's row, on world and
 # ik_surface (a curb is both); Task 3 dresses it. A pillar post at each of its ends and at the yard's mouth. ---
-curb -35 -5.5 -30 -4.5 0.6 slate name=Gate
+curb -35 -5.5 -30 -4.5 0.6 slate_pale name=Gate
 # (No rail across the tops of the posts: at 2.4 m it crossed the heads of fighters standing north of the gate, seen from the camera. The gate is the
 # board, the two picket gates before it and the pilasters.)
 # Bollards (0.65 m, 0.4 square) at the low walls' north ends at the yard's mouth: nothing a fighter can stand behind.
@@ -398,7 +413,7 @@ row fence 40.85 -73.75 40.85 -56.25 180
 # ground is open, on the top of a low wall (ghost: nobody reaches it; the wall's fences are not before a body, see the notes there), 4.1 m up
 # from the ground to the lamp. A post on the ground is solid, a slim round post a fighter slides round. Two lamps cast shadows, at the shrine
 # sites 80 m apart (ShrineLampA in court A, ShrineLampB in alcove B). Where these differ from the plan's coordinates: the report lists them.
-lamps #ffb98a 6 0.025 3.45 world
+lamps #ffb98a 6 0 3.45 world glass
 lantern -36.1 -4.13 shadow wall=n
 lantern -28.5 -4.7 wall=n
 lantern -20 -4.72 wall=n

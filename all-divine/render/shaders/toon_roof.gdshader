@@ -7,14 +7,14 @@
 // slope. (Found from the world position and the plane's normal, not from the mesh's own axes.)
 //
 // Two planes of one roof differ in tone: the plane that faces the camera's side (south, or east when the ridge runs north to south) keeps
-// the picture's colours, the plane that faces away from it is `dark` of them, in the shading too, so a gable reads as two planes and a flat
+// the picture's colours, the plane that faces away from it is `dark` of them (its snow is not), so a gable reads as two planes and a flat
 // roof's top (which faces up, not aside) is the lighter. Lit as toon_world is: three steps below and above 0.15 and 0.55 of N.L, the sun's
 // lowest step everywhere, a lamp a pool.
 shader_type spatial;
 
 uniform sampler2D albedo_tex : source_color, filter_nearest, repeat_enable;
 // The tone of the plane that faces away from the camera's side, as a share of the lit plane's.
-uniform float dark : hint_range(0.0, 1.0) = 0.47;
+uniform float dark : hint_range(0.0, 1.0) = 0.8;
 // The horizontal way the lighter plane faces (x east, y south); a plane whose horizontal normal points less than this way is the darker.
 uniform vec2 toward = vec2(0.3, 0.95);
 
@@ -46,7 +46,16 @@ void fragment() {
 	vec2 side = world_normal.xz;
 	float lit = smoothstep(-0.25, 0.05, dot(side, toward));
 	float tone = mix(dark, 1.0, lit);
-	ALBEDO = picture * tone;
+	// Snow is one tone on both planes and in every light (a snow band that goes dark on the plane in the shade is a dark band on a dark roof, and a
+	// white one on the lit plane is the strongest edge in the picture): it is not lit at all, but its own colour.
+	bool snowy = max(max(picture.r, picture.g), picture.b) > 0.55 && max(max(picture.r, picture.g), picture.b) - min(min(picture.r, picture.g), picture.b) < 0.06;
+	if (snowy) {
+		// Lit by nothing (the sun, the ambient and the fill all multiply the albedo): one tone on both planes, in every light.
+		ALBEDO = vec3(0.0);
+		EMISSION = picture;
+	} else {
+		ALBEDO = picture * tone;
+	}
 }
 
 void light() {

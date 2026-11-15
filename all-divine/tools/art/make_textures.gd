@@ -55,11 +55,16 @@ const TRODDEN_SETTS := 0.25
 ## showing through in patches (whole blotches, about one in eight): packed earth in tracks and patches, not a brown field.
 const EARTHS: Array[Color] = [Color8(174, 169, 161), Color8(171, 165, 158), Color8(167, 162, 155)]
 const TAN := Color8(150, 139, 125)
-## The share of blotches that are tan.
-const TAN_SHARE := 0.12
+## The share of blotches that are tan: one in twelve, in large patches whose edge is soft (four texels of the way between the tan and the earth beside it).
+const TAN_SHARE := 0.08
 const EARTH_SEED := 17
-const BLOTCH_MIN := 4
-const BLOTCH_MAX := 8
+const BLOTCH_MIN := 8
+const BLOTCH_MAX := 20
+## How many texels a tan patch's soft edge is.
+const SOFT_EDGE := 4
+## The earth's tile is 20 m a side (640 texels): the picture shows 20 m of ground across, so no pattern of it repeats in a picture (a 2 m tile
+## showed the same blotches in rows 64 pixels apart: wallpaper).
+const EARTH_SIZE := 20 * TEXELS_PER_METRE
 ## Snow (the drifts, off the ground a fighter walks on): the palest ground of the stretch, a cold near-white, with a tenth of its texels in a
 ## bluer shadow tone, in soft clumps of two to five texels.
 const SNOWS: Array[Color] = [Color8(238, 242, 248), Color8(224, 230, 240)]
@@ -89,40 +94,47 @@ func _initialize() -> void:
 ## (speckled with the next grey up or down), set in MORTAR. It tiles seamlessly: the rows and the stones in
 ## each row wrap around the tile's edges. The same seeded random numbers (FLAGSTONE_SEED) make the same tile.
 static func flagstone() -> Image:
+	var grey := _slabs(FLAGSTONE_SEED, FLAGSTONE_SIZE, ROW_MIN, ROW_MAX, STONE_MIN, STONE_MAX, STONES.size(), SPECKLE)
+	var bytes := PackedByteArray()
+	bytes.resize(FLAGSTONE_SIZE * FLAGSTONE_SIZE * 3)
+	for i in FLAGSTONE_SIZE * FLAGSTONE_SIZE:
+		var c := MORTAR if grey[i] < 0 else STONES[grey[i]]
+		bytes[i * 3] = c.r8
+		bytes[i * 3 + 1] = c.g8
+		bytes[i * 3 + 2] = c.b8
+	return Image.create_from_data(FLAGSTONE_SIZE, FLAGSTONE_SIZE, false, Image.FORMAT_RGB8, bytes)
+
+
+# A size x size tile of stones laid in rows (see flagstone), each texel the index of its stone's tone (of `tones`) or -1 for a joint: rows
+# `row_min` to `row_max` texels high, stones `stone_min` to `stone_max` long, each row's joints somewhere else, `speckle` the share of a stone's
+# texels in the next tone up or down. The same seeded random numbers make the same tile.
+static func _slabs(seed_value: int, size: int, row_min: int, row_max: int, stone_min: int, stone_max: int, tones: int, speckle: float) -> PackedInt32Array:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = FLAGSTONE_SEED
-	var size := FLAGSTONE_SIZE
-	# Each texel's colour: an index into STONES, or -1 for mortar.
+	rng.seed = seed_value
+	# Each texel's colour: an index into the tones, or -1 for mortar.
 	var grey := PackedInt32Array()
 	grey.resize(size * size)
 	grey.fill(-1)
 	var y0 := 0
-	for height in _split(rng, size, ROW_MIN, ROW_MAX):
+	for height in _split(rng, size, row_min, row_max):
 		# Each row's joints start somewhere else, so no joint lines up with the row above's.
 		var x0 := rng.randi_range(0, size - 1)
 		var last := -1
-		for length in _split(rng, size, STONE_MIN, STONE_MAX):
-			var g := rng.randi_range(0, STONES.size() - 1)
+		for length in _split(rng, size, stone_min, stone_max):
+			var g := rng.randi_range(0, tones - 1)
 			if g == last:
-				g = (g + 1 + rng.randi_range(0, STONES.size() - 2)) % STONES.size()
+				g = (g + 1 + rng.randi_range(0, tones - 2)) % tones
 			last = g
 			# The stone, less its mortar: its last column and its row's last line.
 			for dy in height - 1:
 				for dx in length - 1:
 					var speckled := g
-					if rng.randf() < SPECKLE:
-						speckled = clampi(g + (1 if rng.randf() < 0.5 else -1), 0, STONES.size() - 1)
+					if rng.randf() < speckle:
+						speckled = clampi(g + (1 if rng.randf() < 0.5 else -1), 0, tones - 1)
 					grey[(y0 + dy) * size + (x0 + dx) % size] = speckled
 			x0 += length
 		y0 += height
-	var bytes := PackedByteArray()
-	bytes.resize(size * size * 3)
-	for i in size * size:
-		var c := MORTAR if grey[i] < 0 else STONES[grey[i]]
-		bytes[i * 3] = c.r8
-		bytes[i * 3 + 1] = c.g8
-		bytes[i * 3 + 2] = c.b8
-	return Image.create_from_data(size, size, false, Image.FORMAT_RGB8, bytes)
+	return grey
 
 
 ## The training yard's kerb: a 2 m tile of two kerbstones, each a metre long and one of the two SLATES (speckled with
@@ -218,9 +230,11 @@ static func cobble() -> Image:
 static func tan_earth() -> Image:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = EARTH_SEED
-	var size := FLAGSTONE_SIZE
+	var size := EARTH_SIZE
 	var colours: Array[Color] = []
 	colours.resize(size * size)
+	var base: Array[Color] = []  # the earth under a tan blotch: what its edge softens toward
+	base.resize(size * size)
 	var rows := _split(rng, size, BLOTCH_MIN, BLOTCH_MAX)
 	# The bands start half a blotch before row 0, so that the last row meets the first inside one band.
 	var y0 := -(rows[0] >> 1)
@@ -239,10 +253,26 @@ static func tan_earth() -> Image:
 			for dy in height:
 				for dx in length:
 					colours[posmod(y0 + dy, size) * size + posmod(x0 + dx, size)] = TAN if tan else EARTHS[e]
+					base[posmod(y0 + dy, size) * size + posmod(x0 + dx, size)] = EARTHS[e]
 			x0 += length
 		above = earths
 		y0 += height
-	return _image(colours, size)
+	# A soft edge: the earth texels one to four texels from a tan one go four fifths, three fifths, two fifths and a fifth of the way to the tan,
+	# so that no two neighbouring texels of the patch differ by more than 0.05 in luma (two earths differ by 0.03 themselves).
+	var softened := colours.duplicate()
+	for y in size:
+		for x in size:
+			var i := y * size + x
+			if colours[i] == TAN:
+				continue
+			var nearest := SOFT_EDGE + 1
+			for dy in range(-SOFT_EDGE, SOFT_EDGE + 1):
+				for dx in range(-SOFT_EDGE, SOFT_EDGE + 1):
+					if colours[posmod(y + dy, size) * size + posmod(x + dx, size)] == TAN:
+						nearest = mini(nearest, maxi(absi(dy), absi(dx)))
+			if nearest <= SOFT_EDGE:
+				softened[i] = base[i].lerp(TAN, 1.0 - nearest / float(SOFT_EDGE + 1))
+	return _image(softened, size)
 
 
 ## Snow: a 2 m tile of a cold light blue-grey with SNOW_SHADOW of its texels in a bluer tone, in clumps of CLUMP_MIN to
@@ -286,8 +316,13 @@ static func snow() -> Image:
 ## The stretch's court and alcove slate: the training yard's kerbstones (slate()) redrawn pale and cold, stone for stone (the same
 ## shapes, each of slate()'s colours replaced by its cold one), so that the ground under the fighters is pale (see the readability test).
 ## slate() itself is unchanged.
-const SLATE_COLD_STONES: Array[Color] = [Color8(147, 147, 147), Color8(150, 150, 150)]
-const SLATE_COLD_JOINT := Color8(117, 119, 122)
+## The court's slate is laid in slabs of uneven size (0.45 to 0.75 m by 0.7 to 1.4 m, in rows), five cool greys of which the last is the darker slab
+## (one slab in five), with a soft grain, the joints a cool grey and a little trodden snow lying in them (the yard's flagstone is laid the same way).
+const SLATE_COLD_SIZE := 2 * TEXELS_PER_METRE
+const SLATE_COLD_SEED := 31
+const SLATE_COLD_TONES: Array[Color] = [Color8(163, 165, 169), Color8(169, 171, 175), Color8(175, 177, 181), Color8(181, 183, 186), Color8(149, 152, 157)]
+const SLATE_COLD_JOINT := Color8(130, 134, 140)
+const SLATE_COLD_SNOW := Color8(198, 203, 210)
 ## The alcove's slate is half in the shade of the works beside it: the same slate a hand paler (1.08 of the court's), so that its ground is in
 ## the readability band in the shade as the court's is in the sun.
 const SLATE_PALE_STONES: Array[Color] = [Color8(166, 166, 166), Color8(170, 170, 170)]
@@ -311,13 +346,13 @@ const ROOF_UNDER := 0.78
 const ROOF_EAVE_TEXELS := 5
 const ROOF_EAVE := 0.55
 ## The slate-blue of the stone fronts' roofs and the brown-red of the tannery works': two tones each.
-const ROOF_SLATE: Array[Color] = [Color8(74, 88, 114), Color8(86, 101, 130)]
-const ROOF_TANNERY: Array[Color] = [Color8(104, 70, 64), Color8(118, 80, 72)]
+const ROOF_SLATE: Array[Color] = [Color8(91, 108, 139), Color8(106, 124, 158)]
+const ROOF_TANNERY: Array[Color] = [Color8(147, 100, 91), Color8(164, 113, 101)]
 const ROOF_SLATE_SEED := 23
 const ROOF_TANNERY_SEED := 29
 ## Snow on a roof: lit, and in the shade of its own edge; neutral, a hair cool, never blue.
-const ROOF_SNOW_LIT := Color8(224, 226, 228)
-const ROOF_SNOW_SHADE := Color8(178, 180, 184)
+const ROOF_SNOW_LIT := Color8(214, 217, 219)
+const ROOF_SNOW_SHADE := Color8(204, 207, 210)
 
 
 static func roof(tones: Array[Color], seed_value: int) -> Image:
@@ -409,7 +444,65 @@ static func bilibara_neon_colour(c: Color) -> Color:
 
 
 static func slate_cold() -> Image:
-	return _recoloured(slate(), SLATES + [SLATE_JOINT], SLATE_COLD_STONES + [SLATE_COLD_JOINT])
+	var size := SLATE_COLD_SIZE
+	var grey := _slabs(SLATE_COLD_SEED, size, 14, 24, 22, 44, SLATE_COLD_TONES.size(), 0.0)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = SLATE_COLD_SEED + 1
+	var grain := _soft_noise(rng, size, 8)
+	var snow := _soft_noise(rng, size, 6)
+	var colours: Array[Color] = []
+	for y in size:
+		for x in size:
+			var i := y * size + x
+			var c: Color
+			if grey[i] < 0:
+				# A joint: a cool grey shape, with a little trodden snow lying in it here and there.
+				c = SLATE_COLD_SNOW if snow[i] > 0.72 else SLATE_COLD_JOINT
+			else:
+				# A slab: its tone and a soft grain (slow waves and a very little noise, neighbours within 0.02).
+				var shade := (grain[i] - 0.5) * 0.045 + (rng.randf() - 0.5) * 0.012
+				c = SLATE_COLD_TONES[grey[i]]
+				c = Color(c.r + shade, c.g + shade, c.b + shade)
+			colours.append(c)
+	# Snow lies in runs, never as a lone pale texel (that reads as static): a snow texel with no snow beside it is joint again.
+	var checked := colours.duplicate()
+	for y in size:
+		for x in size:
+			if checked[y * size + x] != SLATE_COLD_SNOW:
+				continue
+			var company := 0
+			for dy in range(-1, 2):
+				for dx in range(-1, 2):
+					if (dx != 0 or dy != 0) and checked[posmod(y + dy, size) * size + posmod(x + dx, size)] == SLATE_COLD_SNOW:
+						company += 1
+			if company == 0:
+				colours[y * size + x] = SLATE_COLD_JOINT
+	return _image(colours, size)
+
+
+# A size x size field of smooth noise from 0 to 1, tiling, from random values on a grid `cell` texels apart, blended between (smoothstep).
+static func _soft_noise(rng: RandomNumberGenerator, size: int, cell: int) -> PackedFloat32Array:
+	@warning_ignore("integer_division")
+	var n := size / cell
+	var lattice := PackedFloat32Array()
+	for i in n * n:
+		lattice.append(rng.randf())
+	var out := PackedFloat32Array()
+	out.resize(size * size)
+	for y in size:
+		for x in size:
+			var gx := float(x) / cell
+			var gy := float(y) / cell
+			var x0 := floori(gx)
+			var y0 := floori(gy)
+			var fx := smoothstep(0.0, 1.0, gx - x0)
+			var fy := smoothstep(0.0, 1.0, gy - y0)
+			var v00 := lattice[posmod(y0, n) * n + posmod(x0, n)]
+			var v10 := lattice[posmod(y0, n) * n + posmod(x0 + 1, n)]
+			var v01 := lattice[posmod(y0 + 1, n) * n + posmod(x0, n)]
+			var v11 := lattice[posmod(y0 + 1, n) * n + posmod(x0 + 1, n)]
+			out[y * size + x] = lerpf(lerpf(v00, v10, fx), lerpf(v01, v11, fx), fy)
+	return out
 
 
 static func slate_pale() -> Image:
@@ -473,10 +566,10 @@ static func bilibara_colour(c: Color) -> Color:
 	if h >= 0.93 or h < 0.02:
 		return Color.from_hsv(0.77, 0.31, 0.10 + 0.17 * v)
 	if h < 0.12:
-		# Boards, doors and the tannery's walls: brown wood, dark. Trim and shutters: a dull rose-gold, darker than the plaster they sit in.
+		# Boards, doors and the tannery's walls: brown wood, dark. Trim and shutters: a dull rose-gold, darker than the plaster they sit in (and than any head: the heads' tones are 0.28 to 0.55, the darkest a tier III's, and a door or a shutter behind a head must not be within 0.08 of one: so under 0.16 here).
 		if v < 0.66:
-			return Color.from_hsv(0.07, 0.38, 0.14 + 0.45 * v)
-		return Color.from_hsv(0.04, 0.30, clampf(0.40 + 0.5 * (v - 0.70), 0.38, 0.48))
+			return Color.from_hsv(0.07, 0.38, 0.04 + 0.18 * v)
+		return Color.from_hsv(0.04, 0.30, clampf(0.12 + 0.4 * (v - 0.70), 0.11, 0.16))
 	if h < 0.445:
 		return Color.from_hsv(0.40, 0.25, 0.20 + 0.30 * v)
 	if h < 0.55 or s >= 0.35:

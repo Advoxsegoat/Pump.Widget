@@ -1577,8 +1577,8 @@ func test_lamps_light_the_world_only_and_are_warm_and_few() -> void:
 		assert_true(lamp.get_parent() != null and lamp.get_parent().get_parent() == posts, "a lamp sits in a lantern (%s)" % lamp.get_path())
 		assert_eq(lamp.light_color.to_html(false), "ffb98a", "a warm lamp")
 		assert_near(lamp.omni_range, 6.0, 1e-6, "range 6")
-		# At noon a warm pool on pale ground is a faint tint, not a bright disc: no lamp lifts the ground under it by more than 0.06.
-		assert_near(lamp.light_energy, 0.025, 1e-6, "energy 0.025")
+		# At noon a lamp lights nothing: a pool on pale ground is a ring on a sheet of paper (court A's two ghost rings). The warm glass on the lantern is the lamp.
+		assert_near(lamp.light_energy, 0.0, 1e-6, "energy 0: no light on the ground from a lamp at noon")
 		assert_eq(lamp.light_cull_mask, Layers.RENDER_WORLD, "a lamp lights the world and not the bodies")
 		if lamp.shadow_enabled:
 			shadowed.append(lamp)
@@ -1742,3 +1742,62 @@ func test_no_piece_crosses_a_head_at_the_gates_spots() -> void:
 					if box.intersects_segment(head, head + to_camera):
 						crossing.append("%s over (%.2f, %.2f) at %.2f m" % [entry.name, spot[0] + dx, spot[1], h])
 	assert_eq(crossing.slice(0, 6), PackedStringArray(), "nothing crosses a head at the gate (%d crossings)" % crossing.size())
+
+
+# --- The seams: no two grounds meet in a straight line ---
+
+# Where two plates of different ground meet in the open, one reaches into the other as a ragged fringe (build_region's `fringe`, drawn by toon_fringe: each
+# 0.5 m of the seam it reaches out a different way, low in one cell and high in the next, so no run of its edge is straight for more than half a metre).
+# Found from the built scene, not the layout: every pair of walkable plates of different stone that share an edge, each seam (but under a kerb or a wall, which hide
+# it) is laid with fringes along the whole of its length.
+func test_no_two_grounds_meet_in_a_straight_line() -> void:
+	var region := _region()
+	if region == null:
+		return
+	await frames(2)
+	var plates: Array[Dictionary] = []
+	for body: StaticBody3D in region.get_node("Walkable").get_children():
+		var shape := body.get_node("Shape") as CollisionShape3D if body.has_node("Shape") else body.find_children("*", "CollisionShape3D", true, false)[0] as CollisionShape3D
+		var size := (shape.shape as BoxShape3D).size
+		var centre := shape.global_position
+		var mesh := body.find_children("*", "MeshInstance3D", true, false)
+		plates.append({rect = Rect2(centre.x - size.x / 2.0, centre.z - size.z / 2.0, size.x, size.z), stone = (mesh[0] as MeshInstance3D).material_override.resource_name if not mesh.is_empty() else "", name = body.name})
+	var fringes: Array[AABB] = []
+	var holder := region.get_node_or_null("Fringes")
+	for fringe: MeshInstance3D in (holder.get_children() if holder != null else []):
+		fringes.append(fringe.global_transform * fringe.mesh.get_aabb())
+	var hiders: Array[AABB] = []
+	for body: StaticBody3D in region.find_children("*", "StaticBody3D", true, false):
+		if body.get_parent().name == &"Walkable":
+			continue
+		for shape: CollisionShape3D in body.find_children("*", "CollisionShape3D", true, false):
+			if shape.shape is BoxShape3D:
+				var box := shape.shape as BoxShape3D
+				hiders.append(AABB(shape.global_position - box.size / 2.0, box.size))
+	var joins := 0
+	var bare := PackedStringArray()
+	for i in plates.size():
+		for j in range(i + 1, plates.size()):
+			var a: Rect2 = plates[i].rect
+			var b: Rect2 = plates[j].rect
+			if plates[i].stone == plates[j].stone or plates[i].stone.is_empty() or plates[j].stone.is_empty():
+				continue
+			var seam := a.intersection(b.grow(0.001))
+			var points: Array[Vector3] = []
+			if (seam.size.x < 0.01 and seam.size.y > 0.01) or (seam.size.y < 0.01 and seam.size.x > 0.01):
+				var along := seam.size.y if seam.size.x < seam.size.y else seam.size.x
+				var steps := int(along / 0.25)
+				for k in steps + 1:
+					var t := (k + 0.5) / (steps + 1)
+					points.append(Vector3(seam.position.x + (0.0 if seam.size.x > 0.01 else 0.0) + (seam.size.x * t if seam.size.x > seam.size.y else seam.size.x / 2.0), 0.0,
+							seam.position.y + (seam.size.y * t if seam.size.y > seam.size.x else seam.size.y / 2.0)))
+			if points.is_empty():
+				continue
+			joins += 1
+			for point in points:
+				var hidden := hiders.any(func(box: AABB) -> bool: return box.grow(0.05).has_point(point + Vector3(0.0, box.position.y + 0.01 - 0.0, 0.0)) or (box.grow(0.05).has_point(Vector3(point.x, box.position.y + box.size.y / 2.0, point.z)) and box.size.y <= 3.0 and box.position.y >= -0.01))
+				var covered := fringes.any(func(box: AABB) -> bool: return box.grow(0.02).has_point(Vector3(point.x, box.position.y, point.z)))
+				if not hidden and not covered:
+					bare.append("%s | %s at (%.2f, %.2f)" % [plates[i].name, plates[j].name, point.x, point.z])
+	assert_true(joins >= 12, "the joins of two grounds are found (%d)" % joins)
+	assert_eq(bare.slice(0, 6), PackedStringArray(), "every seam of two grounds in the open is laid with a fringe along its whole length (%d bare points)" % bare.size())

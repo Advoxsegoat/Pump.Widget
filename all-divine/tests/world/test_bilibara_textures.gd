@@ -145,41 +145,71 @@ func test_cobble_is_made_the_same_every_time_and_has_its_material() -> void:
 
 
 # The texel changes between column `a` and column `b` (and likewise rows): how many rows differ.
-func _column_changes(img: Image, a: int, b: int) -> int:
+func _column_changes(img: Image, a: int, b: int, rows := 64) -> int:
 	var n := 0
-	for y in 64:
+	for y in rows:
 		n += int(img.get_pixel(a, y) != img.get_pixel(b, y))
 	return n
 
 
-func _row_changes(img: Image, a: int, b: int) -> int:
+func _row_changes(img: Image, a: int, b: int, columns := 64) -> int:
 	var n := 0
-	for x in 64:
+	for x in columns:
 		n += int(img.get_pixel(x, a) != img.get_pixel(x, b))
 	return n
 
 
-func test_tan_earth_is_three_pale_greys_with_tan_patches_that_wrap() -> void:
+func test_tan_earth_is_three_pale_greys_with_soft_tan_patches_that_wrap_and_no_pattern_repeats_in_a_picture() -> void:
 	var img := MAKE_TEXTURES.tan_earth()
-	assert_eq(img.get_size(), Vector2i(64, 64), "64 x 64 texels")
+	var size := img.get_width()
+	assert_eq(img.get_size(), Vector2i(640, 640), "640 x 640 texels: 20 m, as wide as a picture shows (a 2 m tile repeated its blotches in rows 64 pixels apart)")
 	var counts := _colours(img)
-	assert_eq(counts.size(), 4, "three pale greys and a tan: %s" % [counts.keys()])
 	for earth: Color in MAKE_TEXTURES.EARTHS:
 		var key := earth.to_html(false)
 		assert_true(earth.s <= 0.10 and earth.v >= 0.55, "%s is a pale grey (trodden snow)" % key)
-		assert_true(counts.get(key, 0) > 4096 / 12, "%s covers %d texels" % [key, counts.get(key, 0)])
+		assert_true(counts.get(key, 0) > size * size / 12, "%s covers %d texels" % [key, counts.get(key, 0)])
 	var tan: Color = MAKE_TEXTURES.TAN
 	assert_true(tan.r > tan.g and tan.g > tan.b and tan.s >= 0.12 and tan.s <= 0.30, "the tan is a warm grey-tan, not a brown (%s: saturation %.2f)" % [tan.to_html(false), tan.s])
 	var patches: int = counts.get(tan.to_html(false), 0)
-	assert_true(patches >= 4096 * 0.08 and patches <= 4096 * 0.35, "tan patches cover %d of 4096 texels (8%% to 35%%)" % patches)
+	assert_true(patches >= size * size * 0.05 and patches <= size * size * 0.12, "tan covers %d of %d texels (5%% to 12%%: fewer and larger patches)" % [patches, size * size])
+	# Soft: no two neighbouring texels of the tile differ by more than 0.05 in luma, tan and its edge included.
+	var worst := 0.0
+	for y in size:
+		for x in size:
+			var here := img.get_pixel(x, y)
+			for step: Vector2i in [Vector2i(1, 0), Vector2i(0, 1)]:
+				var other := img.get_pixel(posmod(x + step.x, size), posmod(y + step.y, size))
+				worst = maxf(worst, absf((0.2126 * here.r + 0.7152 * here.g + 0.0722 * here.b) - (0.2126 * other.r + 0.7152 * other.g + 0.0722 * other.b)))
+	assert_true(worst <= 0.05 + 1e-6, "the patches' edges are soft: neighbouring texels differ by at most %.3f" % worst)
+	# The tile is not its own copy shifted by a metre or two (the ground of a picture would show the same blotches again): the luma's
+	# correlation with itself at the shifts of the old 2 m tile (64 texels) and its multiples, along and across.
+	var luma := PackedFloat32Array()
+	var mean := 0.0
+	for y in size:
+		for x in size:
+			var c := img.get_pixel(x, y)
+			luma.append(0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b)
+			mean += luma[-1]
+	mean /= size * size
+	var variance := 0.0
+	for v in luma:
+		variance += (v - mean) * (v - mean)
+	for shift in [64, 128, 192, 256]:
+		for along in [Vector2i(shift, 0), Vector2i(0, shift)]:
+			var sum := 0.0
+			for y in range(0, size, 2):
+				for x in range(0, size, 2):
+					sum += (luma[y * size + x] - mean) * (luma[posmod(y + along.y, size) * size + posmod(x + along.x, size)] - mean)
+			var correlation := sum / (variance / 4.0)
+			assert_true(correlation < 0.6, "the tile correlates %.2f with itself shifted %s texels (under 0.6)" % [correlation, along])
 	# The seam is no busier than the tile's inside.
 	var inner_columns := 0
 	var inner_rows := 0
-	for i in 63:
-		inner_columns += _column_changes(img, i, i + 1)
-		inner_rows += _row_changes(img, i, i + 1)
-	assert_true(_column_changes(img, 63, 0) <= 1.5 * inner_columns / 63.0, "the seam between columns 63 and 0 has %d changes (average %.1f)" % [_column_changes(img, 63, 0), inner_columns / 63.0])
-	assert_true(_row_changes(img, 63, 0) <= 1.5 * inner_rows / 63.0, "the seam between rows 63 and 0 has %d changes (average %.1f)" % [_row_changes(img, 63, 0), inner_rows / 63.0])
+	for i in size - 1:
+		inner_columns += _column_changes(img, i, i + 1, size)
+		inner_rows += _row_changes(img, i, i + 1, size)
+	assert_true(_column_changes(img, size - 1, 0, size) <= 1.5 * inner_columns / float(size - 1), "the seam between the last column and the first has %d changes (average %.1f)" % [_column_changes(img, size - 1, 0, size), inner_columns / float(size - 1)])
+	assert_true(_row_changes(img, size - 1, 0, size) <= 1.5 * inner_rows / float(size - 1), "the seam between the last row and the first has %d changes (average %.1f)" % [_row_changes(img, size - 1, 0, size), inner_rows / float(size - 1)])
 
 
 func test_tan_earth_is_made_the_same_every_time_and_has_its_material() -> void:
@@ -274,7 +304,7 @@ func _kit_colormap() -> Image:
 
 # The kit's colormap drawn in Bilibara's colours: every one of its colours (1,900-odd, swatches and their shading) is
 # given a colour, none loud: saturation at most 0.40, value at most 0.76. Roofs are slate-indigo, plaster a cold stone of
-# value 0.50 to 0.66, timber and trim a dull rose-gold, boards dark wood.
+# value 0.50 to 0.66, timber and trim a dark rose-gold (0.10 to 0.18: a door or a shutter behind a head must not be within 0.08 of one of the heads' tones, 0.28 to 0.55), boards dark wood.
 func test_bilibara_colormap_gives_every_kit_colour_a_quiet_one() -> void:
 	var kit := _kit_colormap()
 	var made := MAKE_TEXTURES.bilibara_colormap()
@@ -302,7 +332,7 @@ func test_bilibara_colormap_gives_every_kit_colour_a_quiet_one() -> void:
 	assert_true(roof_red.v <= 0.32 and roof_red.b > roof_red.g, "the pink roof is a dark plum-indigo (%s)" % roof_red.to_html(false))
 	assert_true(plaster.v >= 0.66 and plaster.v <= 0.72 and plaster.b >= plaster.r, "plaster is a cold stone (%s)" % plaster.to_html(false))
 	assert_true(shade.v >= 0.45 and shade.v < plaster.v, "and its shade a little darker (%s)" % shade.to_html(false))
-	assert_true(trim.r > trim.g and trim.g > trim.b and trim.v >= 0.40 and trim.v <= 0.66, "trim is a dull rose-gold (%s)" % trim.to_html(false))
+	assert_true(trim.r > trim.g and trim.g > trim.b and trim.v >= 0.10 and trim.v <= 0.18, "trim is a dark rose-gold, darker than any head (%s)" % trim.to_html(false))
 	assert_true(board.v <= 0.46 and board.r >= board.b, "boards are dark wood (%s)" % board.to_html(false))
 
 
@@ -338,9 +368,8 @@ func test_the_training_yards_stones_are_unchanged_pixel_for_pixel() -> void:
 	_same_as_committed(MAKE_TEXTURES.slate, "slate")
 
 
-func test_the_cold_stones_are_the_yards_stones_redrawn_pale_stone_for_stone() -> void:
+func test_the_pale_stones_are_the_yards_stones_redrawn_pale_stone_for_stone() -> void:
 	var pairs := [
-		["slate_cold", MAKE_TEXTURES.slate_cold, MAKE_TEXTURES.slate, MAKE_TEXTURES.SLATES + [MAKE_TEXTURES.SLATE_JOINT], MAKE_TEXTURES.SLATE_COLD_STONES + [MAKE_TEXTURES.SLATE_COLD_JOINT]],
 		["slate_pale", MAKE_TEXTURES.slate_pale, MAKE_TEXTURES.slate, MAKE_TEXTURES.SLATES + [MAKE_TEXTURES.SLATE_JOINT], MAKE_TEXTURES.SLATE_PALE_STONES + [MAKE_TEXTURES.SLATE_PALE_JOINT]],
 		["flagstone_cold", MAKE_TEXTURES.flagstone_cold, MAKE_TEXTURES.flagstone, MAKE_TEXTURES.STONES + [MAKE_TEXTURES.MORTAR], MAKE_TEXTURES.FLAGSTONE_COLD_STONES + [MAKE_TEXTURES.FLAGSTONE_COLD_MORTAR]],
 	]
@@ -571,7 +600,7 @@ func test_wood_reads_brown_and_trim_and_doors_are_darker_than_the_plaster_they_s
 		assert_true(wood.v <= 0.46 and wood.v < shade.v - 0.10, "%s is darker than the plaster's shade (%.2f against %.2f)" % [hex, wood.v, shade.v])
 	for hex: String in ["cc8665", "b87758", "c27f5f"]:
 		var trim: Color = find.call(hex)
-		assert_true(trim.v <= shade.v - 0.04 and trim.v >= 0.40, "%s (trim, shutters) is darker than the plaster's shade (%.2f against %.2f)" % [hex, trim.v, shade.v])
+		assert_true(trim.v <= shade.v - 0.04 and trim.v >= 0.10 and trim.v <= 0.18, "%s (trim, shutters) is darker than the plaster's shade and than any head (%.2f against %.2f)" % [hex, trim.v, shade.v])
 	assert_true(plaster.v >= 0.66, "and the plaster is still pale")
 
 
@@ -608,3 +637,69 @@ func test_the_banners_are_hot_pink_and_glow() -> void:
 	if committed != null:
 		committed.convert(neon.get_format())
 		assert_eq(committed.get_data(), neon.get_data(), "the committed neon colormap is what make_textures makes")
+
+
+# --- Court A's slate: slabs of uneven size, a soft grain, cool joints with a little snow in them ---
+
+func test_slate_cold_is_slabs_of_uneven_size_some_darker_in_cool_joints_with_trodden_snow() -> void:
+	var img := MAKE_TEXTURES.slate_cold()
+	assert_eq(img.get_size(), Vector2i(64, 64), "a 2 m tile")
+	var joint: Color = MAKE_TEXTURES.SLATE_COLD_JOINT
+	var snow: Color = MAKE_TEXTURES.SLATE_COLD_SNOW
+	assert_true(joint.b >= joint.r and joint.v >= 0.40 and joint.v <= 0.55, "the joint is a cool grey (%s)" % joint.to_html(false))
+	var tones: Array[Color] = MAKE_TEXTURES.SLATE_COLD_TONES
+	var luma := func(c: Color) -> float: return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+	# A texel is a slab's when it is within the grain of one of the tones; a joint's when it is the joint or the snow (a joint is a shape of one
+	# texel's width, the snow in it the pale part).
+	var slab := 0
+	var dark := 0
+	var in_joint := 0
+	var snowy := 0
+	for y in 64:
+		for x in 64:
+			var c := img.get_pixel(x, y)
+			if c.to_html(false) == joint.to_html(false):
+				in_joint += 1
+			elif c.to_html(false) == snow.to_html(false):
+				in_joint += 1
+				snowy += 1
+			else:
+				slab += 1
+				if absf(luma.call(c) - luma.call(tones[tones.size() - 1])) < 0.03:
+					dark += 1
+	assert_true(in_joint >= 64 * 64 * 0.05 and in_joint <= 64 * 64 * 0.20, "%d joint texels" % in_joint)
+	assert_true(snowy >= in_joint * 0.05 and snowy <= in_joint * 0.40, "snow lies in %d of %d joint texels" % [snowy, in_joint])
+	assert_true(dark >= slab * 0.10 and dark <= slab * 0.35, "%d of %d slab texels are a darker slab's" % [dark, slab])
+	# Slabs of uneven size: the runs between joints along the rows are of at least four lengths, and the rows' heights of at least three.
+	var lengths := {}
+	for y in 64:
+		var run := 0
+		for x in 128:
+			var c := img.get_pixel(x % 64, y)
+			if c.to_html(false) == joint.to_html(false) or c.to_html(false) == snow.to_html(false):
+				if run > 8 and x >= 64:
+					lengths[run] = true
+				run = 0
+			else:
+				run += 1
+	assert_true(lengths.size() >= 4, "slabs of at least four lengths: %s" % [lengths.keys()])
+	var heights := {}
+	for x in 64:
+		var run := 0
+		for y in 128:
+			var c := img.get_pixel(x, y % 64)
+			if c.to_html(false) == joint.to_html(false) or c.to_html(false) == snow.to_html(false):
+				if run > 8 and y >= 64:
+					heights[run] = true
+				run = 0
+			else:
+				run += 1
+	assert_true(heights.size() >= 3, "rows of at least three heights: %s" % [heights.keys()])
+	# The mean: the court's ground comes into the readability band (0.62 to 0.74 in the picture) at the gate too, in the front's shade.
+	var sum := 0.0
+	for y in 64:
+		for x in 64:
+			sum += luma.call(img.get_pixel(x, y))
+	assert_true(sum / 4096.0 >= 0.605 and sum / 4096.0 <= 0.66, "mean luma %.3f (0.605 to 0.66)" % (sum / 4096.0))
+	_same_as_committed(MAKE_TEXTURES.slate_cold, "slate_cold")
+	_ground_material("slate_cold")

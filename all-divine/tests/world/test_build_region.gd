@@ -999,3 +999,53 @@ func test_a_deflect_line_marks_the_solid_bodies() -> void:
 		assert_false(body.has_meta(&"deflects"), "with no deflect line nothing is marked")
 	assert_eq(_build("deflect\ndeflect\n").problems.size(), 1, "two deflect lines are a problem")
 	assert_eq(_build("deflect now\n").problems.size(), 1, "and a deflect with words after it")
+
+
+# A `glass` word on the lamps line gives each lantern a small warm pane on its lamp's housing (unshaded, the lamp's colour toward white), the lamp when it
+# gives no light; a lamp with no energy still builds. Without the word nothing is added (the older regions are as they were).
+func test_lamps_glass_is_a_small_warm_unshaded_pane_on_each_lantern() -> void:
+	var built := _build("lamps #ffb98a 6 0 3.45 world glass\nlantern 0 0\nlantern 4 0 ghost y=0.65\n")
+	assert_eq(built.problems, PackedStringArray())
+	var panes := (built.root as Node).find_children("Glass", "MeshInstance3D", true, false)
+	assert_eq(panes.size(), 2, "a pane on each lantern, ghost or solid")
+	var pane := panes[0] as MeshInstance3D
+	var material := pane.material_override as StandardMaterial3D
+	assert_eq(material.shading_mode, BaseMaterial3D.SHADING_MODE_UNSHADED, "drawn as it is")
+	var colour := material.albedo_color
+	assert_true(colour.v >= 0.99 and colour.s >= 0.15 and colour.s <= 0.40 and colour.r > colour.g and colour.g > colour.b, "warm and paler than a neon (%s: saturation %.2f)" % [colour.to_html(false), colour.s])
+	assert_true((pane.mesh as SphereMesh).radius <= 0.1, "a few pixels, not a lamp")
+	assert_near(pane.position.y, 3.45 + 0.1, 1e-6, "on the lamp's housing")
+	var lamp := (built.root as Node).find_children("Lamp", "OmniLight3D", true, false)[0] as OmniLight3D
+	assert_near(lamp.light_energy, 0.0, 1e-9, "the lamp itself gives no light")
+	var plain := _build("lamps #ffb98a 6 0.5 3.45 world\nlantern 0 0\n")
+	assert_eq((plain.root as Node).find_children("Glass", "MeshInstance3D", true, false).size(), 0, "no glass without the word")
+	for bad in ["lamps #ffb98a 6 0 3.45 glass glass", "lamps #ffb98a 6 0 3.45 pane", "lamps #ffb98a 6 0 3.45 world world"]:
+		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)
+
+
+# A `fringe` is a flat quad of one stone laid on the ground over a rect, its edge FROM on the seam: seen only, no collider, no shadow, its UV the
+# metres along the seam and out from it, drawn by toon_fringe with the stone's own texture.
+func test_a_fringe_is_a_flat_seen_only_quad_with_uv_along_and_out_from_the_seam() -> void:
+	var built := _build("ground 0 0 10 10 cobble\nfringe 1 2 6 3 slate_cold n seed=5\n")
+	assert_eq(built.problems, PackedStringArray())
+	var fringes := (built.root as Node).get_node("Fringes").get_children()
+	assert_eq(fringes.size(), 1, "one fringe")
+	var fringe := fringes[0] as MeshInstance3D
+	assert_eq(fringe.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "it casts no shadow")
+	var material := fringe.material_override as ShaderMaterial
+	assert_eq(material.shader.resource_path, "res://render/shaders/toon_fringe.gdshader", "drawn by toon_fringe")
+	assert_eq(material.get_shader_parameter(&"albedo_tex"), (load("res://world/materials/slate_cold.tres") as ShaderMaterial).get_shader_parameter(&"albedo_tex"), "with the stone's texture")
+	assert_near(float(material.get_shader_parameter(&"depth")), 1.0, 1e-6, "as deep as the rect is across")
+	var arrays := (fringe.mesh as ArrayMesh).surface_get_arrays(0)
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	for i in 4:
+		assert_near(uvs[i].x, vertices[i].x - 1.0, 1e-6, "UV.x runs along the seam in metres")
+		assert_near(uvs[i].y, vertices[i].z - 2.0, 1e-6, "and UV.y out from the north edge")
+		assert_true(vertices[i].y > 0.0 and vertices[i].y < 0.05, "a hair over the ground")
+	assert_eq(_bodies(built.root).filter(func(b: StaticBody3D) -> bool: return b.get_parent().name == &"Fringes").size(), 0, "no collider")
+	var south := _build("ground 0 0 10 10 cobble\nfringe 1 2 6 3 slate_cold s\n")
+	var uv_south := ((((south.root as Node).get_node("Fringes").get_child(0) as MeshInstance3D).mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_TEX_UV] as PackedVector2Array)
+	assert_near(uv_south[0].y, 1.0, 1e-6, "from the south edge the north corners are a metre out")
+	for bad in ["fringe 1 2 6 3 slate_cold", "fringe 1 2 6 3 marble n", "fringe 1 2 6 3 slate_cold x", "fringe 1 2 1 3 slate_cold n", "fringe 1 2 6 3 slate_cold n seed=x"]:
+		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)
