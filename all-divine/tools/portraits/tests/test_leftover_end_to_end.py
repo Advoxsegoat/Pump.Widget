@@ -31,7 +31,7 @@ def run_main(args):
     return code, err.getvalue()
 
 
-def leaves_the_rules(dark, rules, keep_mask, scale, contrasts):
+def leaves_the_rules(dark, rules, keep_mask, scale):
     """What `remove_rules` returns when it takes nothing out."""
     return dark.copy(), np.zeros(dark.shape, dtype=bool), [1] * len(rules), [tool.Taken() for _ in rules]
 

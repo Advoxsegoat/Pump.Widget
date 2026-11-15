@@ -18,32 +18,23 @@ line alone) and `tint.png` (the soft washes alone on the paper).
 
 The stages, in the order they run:
 
-  page     the page is looked at first, and refused (exit 2, one line saying why) when it is under 600 pixels on its short side,
-           more than a third dark (too dark: it needs more light, when the page evened out is paper), with less than three quarters
-           of its middle paper once the light is evened and thin lines are looked past (not a pencil drawing on paper: a photograph of
-           a thing), or squared (graph) paper, whose lines also run up the page.
-  flat     the page's own brightness (the brightest thing near each pixel, smoothed) is divided out, so the shadow down one
-           side and the grey cast go and the paper is white, the pencil dark.
-  rules    (paper "ruled" only) a ruled page is ONE LATTICE: one tilt, one spacing, one phase. The tilt is the one at which the thin dark
-           lines with paper each side line up in rows; the spacing is the finest at which the rows between are bare and every row it
-           names is a line (a half, a third or a double of it is not taken for it); the phase is where they stand. Every lattice row that lies
-           on the page is a rule and is treated as one, however faint: none is skipped. Each is then followed across the page, curve and
-           all, from where the lattice puts it. No lattice, or fewer than three rules, is an error: "rules: none found".
-  clean    a narrow band along each rule is filled from the pencil above and below it, along every direction a stroke could cross it, so
-           a stroke that crosses a rule is still one line; what is not on a rule is not touched. A rectangle of the recipe's `keep`
-           is not touched except for the rule's own darkness, measured outside every `keep` (a stroke that lies along a rule); a rectangle
-           of `erase` is wiped to paper, its edge fading out over a few pixels. The levels then make paper nothing and the pencil's darkest
-           full.
-  check    the finished picture is measured by a road of its own, that does not use the rules the finder found: (1) any straight line left
-           across the paper, at any row and any angle within 6 degrees of level (the picture's thin ink, sheared along each slope, covers
-           more than 60% of the width of some row), refuses with its rows and the `keep` that would hold it if it is a stroke of the
-           drawing; (2) any stroke along a rule that lost more than a tenth of its ink to the rule's removal (a column of the rule's band
-           holding more than twice a rule's own ink, for 15 columns or more, that does not run on past both its ends) refuses with the
-           `keep` that holds it. Every refusal is exit 2, one line, and what to do about it.
-  crop     the recipe's `crop` of the page, padded with paper (never squashed) to the card's shape, 116 x 160, and
-           made 464 x 640.
-  tint     soft washes under the line, then the line over them in the card's ink, the line's darkness raised to the
-           recipe's `line_gain`.
+  page     refused (exit 2, one line saying why) when under 600 pixels on its short side, more than a third dark (too dark: it needs more
+           light), with less than three quarters of its middle paper once the light is evened and thin lines are looked past (a photograph
+           of a thing), or squared (graph) paper.
+  flat     the page's own brightness is divided out, so a shadow and a grey cast go: the paper is white, the pencil dark.
+  rules    (paper "ruled" only) a ruled page is ONE LATTICE: one tilt (where the thin dark lines with paper each side line up in rows), one
+           spacing (the finest at which every row it names is a line: not a half, a third or a double) and one phase. Every lattice row on
+           the page is a rule and is treated as one, however faint (but a lattice the levels would make nothing is left alone); each is
+           followed across the page, curve and all, from where the last put it. No lattice, or fewer than three rules: "rules: none found".
+  clean    a narrow band along each rule is filled from the pencil above and below it, along every direction a stroke could cross it; what
+           is not on a rule is not touched. In a `keep` rectangle only the rule's own darkness comes off; an `erase` rectangle is wiped to
+           paper, fading out over a few pixels. The levels then make paper nothing and the pencil's darkest full.
+  check    the finished picture is measured by a road that does not use the rules the finder found: (1) a straight line left across the
+           paper, at any row and angle within 6 degrees of level (thin ink covering more than 38% of the width of a sheared row), and (2) a
+           stroke along a rule that lost more than a tenth of its ink to the rule's removal (25 columns or more, not running on past both
+           ends) each refuse, exit 2, with their rows and the `keep` that would hold them if they are strokes of the drawing.
+  crop     the recipe's `crop` of the page, padded with paper (never squashed) to the card's shape, made 464 x 640.
+  tint     soft washes under the line, then the line over them in the card's ink, its darkness raised to the recipe's `line_gain`.
 
 The recipe (JSON), whose keys are exactly these, every one written out (an unknown key and a missing key are each an error that
 names it, "recipe: ..."):
@@ -631,7 +622,13 @@ def _own_profile(dark, mid, alone, keep_mask, halo_reach):
     align = np.round(np.interp(xs, good, _running_median(darkest.astype(np.float64), 15))).astype(int)
     slots = np.clip(np.arange(len(offs))[None, :] + align[good][:, None], 0, len(offs) - 1)
     aligned = np.take_along_axis(lifted, slots, axis=1)
-    return np.stack([np.interp(xs, good, _running_median(aligned[:, slot], KEEP_STRETCH)) for slot in range(len(offs))]), align
+    smooth = np.stack([np.interp(xs, good, _running_median(aligned[:, slot], KEEP_STRETCH)) for slot in range(len(offs))])
+    # the rule's own rows may be a row off from one column to the next: a row next to a row of the rule's core is the rule's, as far as the core
+    core = smooth >= 0.5 * smooth.max(axis=0)[None, :]
+    beside = np.zeros_like(core)
+    beside[1:] |= core[:-1]
+    beside[:-1] |= core[1:]
+    return np.where(beside & ~core, np.maximum(smooth, 0.75 * smooth.max(axis=0)[None, :]), smooth), align
 
 
 def _take_rule_off_kept(clean, dark, mid, own, keep_mask, halo_reach):
