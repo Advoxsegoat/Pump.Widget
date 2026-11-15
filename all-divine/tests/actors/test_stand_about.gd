@@ -352,7 +352,7 @@ func _measure(kinds: Array, seeds: Array) -> Dictionary:
 	var fight_frames := FIGHT_FRAMES if forced else SUITE_FRAMES
 	var cache_key := "%s %s" % [kinds, seeds]
 	if _measured.has(cache_key):
-		return _measured[cache_key]  # the same fights, played once for the file (the spacing test reads three tier I from here)
+		return _measured[cache_key]  # the same fights, played once for the file
 	var runs: Array[Dictionary] = []
 	for mode in ["still", "circle", "back"]:
 		for i in seeds.size():
@@ -423,8 +423,20 @@ func _check(kinds: Array) -> void:
 	assert_true(m["flips"] <= 4, "%s: nobody swings left and right across a holder's line more than four times a second (most in a second: %d)" % [shown, m["flips"]])
 
 
+## Three tier I on a still Abarax also carry the spacing and stickiness rules (one set of fights serves both): spread round him (the smallest
+## angle between two foes, from him, over 40 degrees on 80% of the frames after the first 3 s), no waiter inside 1.5 m for more than 30 frames
+## at a stretch, and no foe dithering between moving and still (more than four toggles a second for more than a second).
 func test_three_tier_ones() -> void:
 	await _check(["knuckle_1", "knuckle_1", "knuckle_1"])
+	var seeds := _seeds()
+	var m: Dictionary = await _measure(["knuckle_1", "knuckle_1", "knuckle_1"], seeds)
+	if _not_yet("spacing", "spacing"):
+		if OS.get_environment("STAND_ABOUT_SEEDS") != "":
+			_stale_check("spacing", "spacing", m["spacing"] >= 0.8, seeds.size())
+	else:
+		assert_true(m["spacing"] >= 0.8, "the smallest angle between two foes is over 40 degrees on at least 80%% of the frames (worst fight %.2f, seed %d)" % [m["spacing"], m["spacing_seed"]])
+	assert_true(m["near"] <= 30, "no waiter stands inside 1.5 m for more than 30 frames at a stretch (longest %d)" % m["near"])
+	assert_true(m["dither"] <= 60, "no foe toggles between moving and still more than four times a second for more than a second (longest %d frames)" % m["dither"])
 
 
 func test_three_tier_twos() -> void:
@@ -455,28 +467,15 @@ func test_a_heavy_and_two_tier_ones() -> void:
 	await _check(["knuckle_heavy", "knuckle_1", "knuckle_1"])
 
 
-## Spacing and stickiness, three tier I on a still Abarax for 20 s: spread round him (the smallest angle between two foes, from him,
-## over 40 degrees on 80% of the frames after the first 3 s), no waiter inside 1.5 m for more than 30 frames at a stretch, and no
-## foe dithering between moving and still (more than four toggles a second for more than a second).
-func test_three_foes_spread_round_the_player_and_do_not_dither() -> void:
-	var seeds := _seeds()
-	var m: Dictionary = await _measure(["knuckle_1", "knuckle_1", "knuckle_1"], seeds)
-	if _not_yet("spacing", "spacing"):
-		if OS.get_environment("STAND_ABOUT_SEEDS") != "":
-			_stale_check("spacing", "spacing", m["spacing"] >= 0.8, seeds.size())
-	else:
-		assert_true(m["spacing"] >= 0.8, "the smallest angle between two foes is over 40 degrees on at least 80%% of the frames (worst fight %.2f, seed %d)" % [m["spacing"], m["spacing_seed"]])
-	assert_true(m["near"] <= 30, "no waiter stands inside 1.5 m for more than 30 frames at a stretch (longest %d)" % m["near"])
-	assert_true(m["dither"] <= 60, "no foe toggles between moving and still more than four times a second for more than a second (longest %d frames)" % m["dither"])
-
-
 ## Nobody shivers (Review of Task 14f): a foe waiting between two neighbours used to be pushed away from whichever was nearer, and each
 ## 1.7 cm step changed which, so his way round flipped on every frame and his legs shook. In fights of three (the yard's trio) and of five
 ## tier I, in the open, with the player's back to a wall, in a corner, in a gate and beside barrels, the player still, circling and backing
 ## away: a foe's `_circle` changes sign at most twice in any 60 frames, and so does the sign of his speed round the target.
 const SHIVER_LIMIT := 2
 const SHIVER_FRAMES := 1200  # (a gate with five foes began to shiver at frame 865)
-## What the suite plays of it (every place, size and player behind STAND_ABOUT_SEEDS): [place, foes, player], in fewer frames.
+## What the suite plays of it (every place, size and player behind STAND_ABOUT_SEEDS): [place, foes, player], in fewer frames. The gate with five
+## foes and a circling player holds the three things that keep a holder's legs still against the gate's wall: the margins at the swing's reach
+## and at LINE_DEG, and the swing's grading between two neighbours (without the grading the strafe angle flips 47 to 59 times in 60 frames).
 const SHIVER_IN_SUITE := [["wall", 5, "still"], ["open", 5, "circle"], ["gate", 3, "circle"], ["gate", 5, "circle"]]
 const SHIVER_FRAMES_SUITE := 480
 ## The speed round the target is also moved by a body that pushes him or a wall he slides on (his way round does not change, yet the sign
