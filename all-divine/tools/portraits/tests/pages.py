@@ -165,7 +165,7 @@ def ruled_darkness(w, h, spacing, degrees, contrast, seed=0):
     return dark + _NOISE[key]
 
 
-def whole_page_photo(megapixels, page_mm, rule_mm, seed=5, degrees=0.8, contrast=0.22, design=None):
+def whole_page_photo(megapixels, page_mm, rule_mm, seed=5, degrees=0.8, contrast=0.22, design=None, desk=0.30, rule_thick_mm=0.25, shade_from_left=True):
     """A whole-page photograph of a ruled notebook (a made one): the picture is portrait, 3:4; the page is 0.9 of its width, on a
     dark desk, a shadow down one side, rules `rule_mm` apart (None: plain paper) from 30 mm down, the page `page_mm` wide (a 216 mm or 148 mm page is
     279 or 210 mm tall), and a face-sized scribble across the middle of it, its lines as wide as a soft pencil's (0.5 mm).
@@ -180,11 +180,11 @@ def whole_page_photo(megapixels, page_mm, rule_mm, seed=5, degrees=0.8, contrast
     xs = np.arange(w, dtype=np.float32)[None, :]
     on_rows = (ys >= y0) & (ys < y0 + page_h)
     on_cols = (xs >= x0) & (xs < x0 + 0.9 * w)
-    shade = np.clip(0.5 + 0.5 * (xs - x0) / (0.5 * w), 0.0, 1.0)
-    grey = np.where(on_rows & on_cols, 0.82 * (0.6 + 0.4 * shade), 0.30).astype(np.float32)
+    shade = np.clip(0.5 + 0.5 * ((xs - x0) if shade_from_left else (x0 + 0.9 * w - xs)) / (0.5 * w), 0.0, 1.0)
+    grey = np.where(on_rows & on_cols, 0.82 * (0.6 + 0.4 * shade), desk).astype(np.float32)
     rules = Image.new("L", (w, h), 0)
     draw = ImageDraw.Draw(rules)
-    thick = max(1, int(round(0.25 * px_mm)))
+    thick = max(1, int(round(rule_thick_mm * px_mm)))
     slope = math.tan(math.radians(degrees))
     row = y0 + 30.0 * px_mm
     while rule_mm and row < y0 + page_h - 8.0 * px_mm:
@@ -199,3 +199,73 @@ def whole_page_photo(megapixels, page_mm, rule_mm, seed=5, degrees=0.8, contrast
     grey *= np.float32(1.0) - np.float32(0.6) * (stroke_mask > 0)
     grey += np.random.default_rng(seed).standard_normal((h, w), dtype=np.float32) * np.float32(0.004)
     return np.clip(grey, 0.0, 1.0, out=grey), rule_mask, stroke_mask
+
+
+# ---------------------------------------------------------------------------------------------- the reviewer's pages
+# A second family of made pages (a doodle of ovals, strokes and hatching on a drawn page with notebook rules, 600 x 800), the kind a
+# review of the tool made: the spacing, the tilt (as a slope: 0.052 is 3 degrees), the rules' contrast and the rule phase are
+# the page's name, `sp90_t52_c28` being spacing 90, tilt +0.052, contrast 0.28.
+
+def _doodle_on(draw, w, h, ink=30, extra=None):
+    s = w / 600.0
+    th = max(2, int(round(3 * s)))
+    draw.ellipse([w * 0.28, h * 0.20, w * 0.72, h * 0.58], outline=ink, width=th)
+    draw.ellipse([w * 0.40, h * 0.08, w * 0.60, h * 0.20], outline=ink, width=th)
+    pts = []
+    for i in range(60):
+        a = 2 * math.pi * i / 60
+        x, y = math.cos(a) * w * 0.12, math.sin(a) * h * 0.05
+        c, sn = math.cos(0.6), math.sin(0.6)
+        pts.append((w * 0.72 + x * c - y * sn, h * 0.68 + x * sn + y * c))
+    draw.line(pts + [pts[0]], fill=ink, width=th)
+    draw.line([(w * 0.30, h * 0.36), (w * 0.50, h * 0.375), (w * 0.70, h * 0.36)], fill=ink, width=th + 1)
+    draw.line([(w * 0.34, h * 0.47), (w * 0.52, h * 0.46), (w * 0.66, h * 0.48)], fill=ink, width=th)
+    for i in range(9):
+        x = w * (0.20 + 0.035 * i)
+        draw.line([(x, h * 0.72), (x + w * 0.05, h * 0.82)], fill=ink, width=max(1, th - 1))
+    draw.line([(w * 0.35, h * 0.88), (w * 0.42, h * 0.86), (w * 0.48, h * 0.90), (w * 0.55, h * 0.87)], fill=ink, width=th)
+    if extra:
+        extra(draw, w, h)
+
+
+def reviewer_page(w=600, h=800, spacing=40.0, tilt=0.0, contrast=0.28, phase=0.0, shadow="left", noise=0.008, seed=1, rules=True, extra=None):
+    """(the page as a PIL grey image, the rows of its rules at the left edge). `extra(draw, w, h)` draws more strokes (grey 30)."""
+    rng = np.random.default_rng(seed)
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    img = np.ones((h, w), np.float32) * 0.86
+    sh = {"left": xx / (0.25 * w), "right": (w - xx) / (0.25 * w), "top": yy / (0.25 * h), "bottom": (h - yy) / (0.25 * h)}.get(shadow)
+    if sh is not None:
+        img *= 0.55 + 0.45 * np.clip(sh, 0, 1)
+    im = Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8))
+    draw = ImageDraw.Draw(im)
+    rows = []
+    if rules:
+        y = phase % spacing + spacing
+        while y < h - spacing / 2:
+            rows.append(y)
+            draw.line([(0, y - tilt * w / 2), (w, y + tilt * w / 2)], fill=int(255 * 0.86 * (1 - contrast)), width=2)
+            y += spacing
+    _doodle_on(draw, w, h, 30, extra)
+    a = np.asarray(im, np.float32) / 255 + rng.normal(0, noise, (h, w)).astype(np.float32)
+    return Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8)), rows
+
+
+def reviewer_truth(w=600, h=800, extra=None):
+    """The doodle alone, as a mask of its pencil (True)."""
+    im = Image.new("L", (w, h), 255)
+    _doodle_on(ImageDraw.Draw(im), w, h, 0, extra)
+    return np.asarray(im) < 200
+
+
+def reviewer_jobs():
+    """{page name: the keyword arguments of `reviewer_page`}: 23 spacings (working pixels) from 10 to 130, each at three of six
+    combinations of tilt (0, +3, -3 degrees) and rule contrast (0.28, 0.08), at rule phases and seeds that vary."""
+    spacings = [10, 12, 14, 16, 18.8, 20, 22.5, 25.5, 28, 30, 33, 37.5, 42, 47, 53, 60, 68, 78, 90, 100, 110, 120, 130]
+    combos = [(0, .28), (0.052, .28), (-0.052, .28), (0, .08), (0.052, .08), (-0.052, .08)]
+    out = {}
+    for i, s in enumerate(spacings):
+        for j in range(3):
+            tilt, contrast = combos[(i + j) % 6]
+            out["sp%s_t%d_c%d" % (s, int(tilt * 1000), int(contrast * 100))] = dict(
+                spacing=float(s), tilt=tilt, contrast=contrast, phase=(i * 7.3 + j * 11.1) % s, seed=i * 3 + j + 1)
+    return out
