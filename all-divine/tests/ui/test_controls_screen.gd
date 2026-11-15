@@ -25,7 +25,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
-	for code in [KEY_F, KEY_F10, KEY_ESCAPE, KEY_ENTER, KEY_G]:
+	for code in [KEY_F, KEY_F12, KEY_ESCAPE, KEY_ENTER, KEY_G]:
 		_release_key(code)
 	_rest_sticks()
 	Game.reset()
@@ -589,8 +589,8 @@ func test_the_games_own_keys_cannot_be_bound() -> void:
 		_send(menu, _k(KEY_ESCAPE))
 	assert_eq(_table(), _defaults(), "nothing was bound")
 	_start(menu, "Palm")
-	_send(menu, _k(KEY_F10))
-	assert_eq(ControlsList.shown(&"palm", false), "F10", "F10 is free")
+	_send(menu, _k(KEY_F12))
+	assert_eq(ControlsList.shown(&"palm", false), "F12", "F12 is free (F10 is Main's: the loop above refused it)")
 	var alt_enter := _k(KEY_ENTER)
 	alt_enter.alt_pressed = true
 	_start(menu, "Lock on")
@@ -632,9 +632,9 @@ func test_menu_rebound_still_opens_and_closes_the_menu() -> void:
 	menu.press(C.CHOOSE)
 	assert_eq(menu.page, MenuPages.CONTROLS)
 	_start_in_main(menu, "Menu / back")
-	_window_key(KEY_F10)
-	_window_key(KEY_F10, false)
-	assert_eq(ControlsList.shown(&"menu", false), "F10")
+	_window_key(KEY_F12)
+	_window_key(KEY_F12, false)
+	assert_eq(ControlsList.shown(&"menu", false), "F12")
 	assert_false(menu.capturing())
 	menu.press(C.BACK)
 	menu.press(C.BACK)
@@ -644,21 +644,21 @@ func test_menu_rebound_still_opens_and_closes_the_menu() -> void:
 	_window_key(KEY_ESCAPE, false)
 	assert_eq(Game.state, Game.State.PLAY, "Esc no longer opens the menu")
 	await frames(3)
-	_window_key(KEY_F10)
-	_window_key(KEY_F10, false)
-	assert_eq(Game.state, Game.State.PAUSE, "F10 opens it")
+	_window_key(KEY_F12)
+	_window_key(KEY_F12, false)
+	assert_eq(Game.state, Game.State.PAUSE, "F12 opens it")
 	await frames(2)
 	_window_key(KEY_ESCAPE)
 	_window_key(KEY_ESCAPE, false)
 	assert_eq(Game.state, Game.State.PLAY, "and Esc still backs out inside the menu (here, resumes)")
 	await frames(6)
-	_window_key(KEY_F10)
-	_window_key(KEY_F10, false)
+	_window_key(KEY_F12)
+	_window_key(KEY_F12, false)
 	assert_eq(Game.state, Game.State.PAUSE)
 	await frames(2)
-	_window_key(KEY_F10)
-	_window_key(KEY_F10, false)
-	assert_eq(Game.state, Game.State.PLAY, "F10 closes it")
+	_window_key(KEY_F12)
+	_window_key(KEY_F12, false)
+	assert_eq(Game.state, Game.State.PLAY, "F12 closes it")
 
 
 func _start_in_main(menu: Menu, label: String) -> void:
@@ -669,10 +669,10 @@ func _start_in_main(menu: Menu, label: String) -> void:
 
 func test_esc_and_start_always_go_back_whatever_menu_is_bound_to() -> void:
 	var nav := MenuNav.new()
-	Bindings.apply({&"menu": [_b(JOY_BUTTON_X), _k(KEY_F10)] as Array[InputEvent]})
+	Bindings.apply({&"menu": [_b(JOY_BUTTON_X), _k(KEY_F12)] as Array[InputEvent]})
 	assert_eq(nav.command(_k(KEY_ESCAPE)), C.BACK)
 	assert_eq(nav.command(_b(JOY_BUTTON_START)), C.BACK, "Start goes back though it is no longer the menu button")
-	assert_eq(nav.command(_k(KEY_F10)), C.BACK)
+	assert_eq(nav.command(_k(KEY_F12)), C.BACK)
 	assert_eq(nav.command(_b(JOY_BUTTON_X)), C.BACK)
 	Bindings.apply({&"menu": [] as Array[InputEvent]})
 	assert_eq(nav.command(_k(KEY_ESCAPE)), C.BACK, "with nothing bound")
@@ -682,13 +682,13 @@ func test_esc_and_start_always_go_back_whatever_menu_is_bound_to() -> void:
 func test_the_last_key_of_the_menu_button_cannot_be_taken_from_it() -> void:
 	var menu := _controls()
 	_start(menu, "Menu / back")
-	_send(menu, _k(KEY_F10))
-	# Target left has no key: binding it to F10 would take the menu button's only key away, so it is refused.
+	_send(menu, _k(KEY_F12))
+	# Target left has no key: binding it to F12 would take the menu button's only key away, so it is refused.
 	_start(menu, "Target left")
-	_send(menu, _k(KEY_F10))
+	_send(menu, _k(KEY_F12))
 	assert_true(menu.capturing(), "refused, still waiting")
 	assert_eq(menu.footer(), "That is Menu / back's only key.")
-	assert_eq(ControlsList.shown(&"menu", false), "F10", "the menu button keeps it")
+	assert_eq(ControlsList.shown(&"menu", false), "F12", "the menu button keeps it")
 	_send(menu, _k(KEY_ESCAPE))
 	var pad := _controls(true)
 	_start(pad, "Menu / back", true)
@@ -1035,8 +1035,8 @@ func test_a_pad_button_is_ignored_by_a_keyboard_capture_and_the_menu_button_need
 			_send(m, _b(JOY_BUTTON_Y))
 			assert_eq(ControlsList.shown(&"menu", true), "Y", "a button binds")
 		else:
-			_send(m, _k(KEY_F10))
-			assert_eq(ControlsList.shown(&"menu", false), "F10")
+			_send(m, _k(KEY_F12))
+			assert_eq(ControlsList.shown(&"menu", false), "F12")
 	# An action that is not a button still binds a stick.
 	var ok := _controls(true)
 	_start(ok, "Lock on", true)
@@ -1085,7 +1085,7 @@ func test_not_bound_is_dim() -> void:
 func test_the_walk_of_captures_never_leaves_an_action_without_the_key_it_had() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 777
-	var keys := [KEY_F, KEY_G, KEY_Z, KEY_X, KEY_Q, KEY_E, KEY_W, KEY_A, KEY_S, KEY_D, KEY_SPACE, KEY_SHIFT, KEY_TAB, KEY_F10, KEY_1, KEY_2, KEY_R]
+	var keys := [KEY_F, KEY_G, KEY_Z, KEY_X, KEY_Q, KEY_E, KEY_W, KEY_A, KEY_S, KEY_D, KEY_SPACE, KEY_SHIFT, KEY_TAB, KEY_F12, KEY_1, KEY_2, KEY_R]
 	var labels: Array = ControlsList.ACTION_ROWS.map(func(r: Array) -> String: return r[1])
 	var menu := _controls()
 	var lost := []
