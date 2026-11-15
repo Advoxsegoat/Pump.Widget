@@ -170,7 +170,9 @@ func test_two_rims_one_body_behind_the_other() -> void:
 		assert_true(over_back[0] >= 10, "%s: its rim shows over the body behind it (%d pixels)" % [case[0], over_back[0]])
 		assert_eq(over_front[1], 0, "%s: the rim of the body behind is never drawn over it" % case[0])
 		for i in 2:
-			assert_true(inside[i].size() >= 20, "%s: body %d has an inside (%d pixels)" % [case[0], i, inside[i].size()])
+			# The body behind has its inside to measure against: 15 pixels or more (20 before Abarax had a feather and a knot, which hide
+			# a pixel or two more of a Knuckle standing behind him).
+			assert_true(inside[i].size() >= 15, "%s: body %d has an inside (%d pixels)" % [case[0], i, inside[i].size()])
 			assert_true(float(own_inside[i]) <= MAX_INTERIOR_CHANGED * inside[i].size(), "%s: %d of the %d pixels inside body %d are its own rim's" % [case[0], own_inside[i], inside[i].size(), i])
 		assert_eq(other, 0, "%s: every lit pixel is one rim's colour or the other's: none is drawn twice or mixed" % case[0])
 	_save()
