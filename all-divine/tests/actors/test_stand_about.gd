@@ -16,7 +16,14 @@ const FIRST_OF_FIGHT := 180
 const FIRST_WITHIN := 360
 const AFTER_FREE := 180
 const MEAN_EVERY := 150
-const ANGLES := {1: [0.0], 2: [-40.0, 40.0], 3: [-60.0, 0.0, 60.0]}
+## Where the foes start, in degrees round the player (2.5 m out), by place and number of foes.
+const PLACES := {
+	"open": {1: [0.0], 2: [-40.0, 40.0], 3: [-60.0, 0.0, 60.0], 5: [-120.0, -60.0, 0.0, 60.0, 120.0]},
+	"wall": {3: [-60.0, 0.0, 60.0], 5: [-80.0, -40.0, 0.0, 40.0, 80.0]},
+	"corner": {3: [10.0, 45.0, 80.0], 5: [10.0, 30.0, 50.0, 70.0, 85.0]},
+	"gate": {3: [-50.0, 0.0, 50.0], 5: [-70.0, -35.0, 0.0, 35.0, 70.0]},
+	"barrels": {3: [-60.0, 0.0, 60.0], 5: [-100.0, -50.0, 0.0, 50.0, 100.0]},
+}
 ## The seeds are 1 to SEEDS in order, never chosen to pass; STAND_ABOUT_SEEDS=N plays 1 to N (twenty for the report) and also runs the
 ## trios the suite leaves out.
 const SEEDS := 3
@@ -39,6 +46,48 @@ static func _seeds() -> Array:
 	return range(1, (int(named) if named.is_valid_int() else SEEDS) + 1)
 
 
+## Walls round the player at the origin: his back to a wall, in a corner, in a gate (a gap in a long wall), beside four barrels.
+static func _walls(arena: Node3D, place: String) -> void:
+	match place:
+		"wall":
+			TestArena.wall(arena, Vector3(0, 1.5, -1.2), Vector3(20, 3, 1.0))
+		"corner":
+			TestArena.wall(arena, Vector3(0, 1.5, -1.2), Vector3(20, 3, 1.0))
+			TestArena.wall(arena, Vector3(-1.2, 1.5, 0), Vector3(1.0, 3, 20))
+		"gate":
+			TestArena.wall(arena, Vector3(-6.0, 1.5, 0), Vector3(10, 3, 0.8))
+			TestArena.wall(arena, Vector3(6.0, 1.5, 0), Vector3(10, 3, 0.8))
+		"barrels":
+			for at in [Vector3(-0.9, 0.5, -0.4), Vector3(-0.9, 0.5, 0.5), Vector3(0.1, 0.5, -1.0), Vector3(1.0, 0.5, -0.9)]:
+				TestArena.wall(arena, at, Vector3(0.8, 1.0, 0.8))
+
+
+## A player who backs away from the foes' middle at a walk, along the edge of the 11 m round him (a still one is the default Brain's silence).
+class Backer extends Brain:
+	var origin := Vector3.ZERO
+
+	func think(actor: Actor, _delta: float) -> Intent:
+		var intent := Intent.new()
+		var middle := Vector2.ZERO
+		var n := 0
+		for node in actor.get_tree().get_nodes_in_group(Actor.GROUP):
+			var o := node as Actor
+			if o != null and o != actor and not o.dead and o.def.team == ActorDef.Team.ENEMY and o.get_parent() == actor.get_parent():
+				middle += Vector2(o.global_position.x, o.global_position.z)
+				n += 1
+		if n == 0:
+			return intent
+		middle /= n
+		var here := Vector2(actor.global_position.x, actor.global_position.z)
+		var away := here - middle
+		var dir := away.normalized() if away.length() > 0.01 else Vector2(0, 1)
+		if (here - Vector2(origin.x, origin.z)).length() > 11.0:
+			dir = dir.rotated(PI * 0.5)
+		intent.move = dir * 0.5
+		intent.face_target = Vector3(middle.x, 0, middle.y)
+		return intent
+
+
 ## A circling player's brain (a still one is the default Brain's silence).
 class Circler extends Brain:
 	var foe: Actor
@@ -55,24 +104,30 @@ class Circler extends Brain:
 		return intent
 
 
-## One fight in its own arena at `origin`: foes of `kinds` (one id each) on a still or circling Abarax. The run keeps what the
-## rules measure, filled by _play.
-func _fight(kinds: Array, seed_value: int, origin: Vector3, circles := false) -> Dictionary:
+## One fight in its own arena at `origin`: foes of `kinds` (one id each) on a still, circling or backing-away Abarax (`mode`: still,
+## circle, back), in an open place or against walls (PLACES). The run keeps what the rules measure, filled by _play.
+func _fight(kinds: Array, seed_value: int, origin: Vector3, mode := "still", place := "open") -> Dictionary:
 	var n := kinds.size()
 	var arena := TestArena.make(self)
 	arena.position = origin
 	arena.add_child(AttackTokens.new())
-	var brain: Brain = Circler.new() if circles else Brain.new()
+	_walls(arena, place)
+	var brain: Brain = Circler.new() if mode == "circle" else Brain.new()
+	if mode == "back":
+		var backer := Backer.new()
+		backer.origin = origin
+		brain = backer
 	var a := TestArena.spawn(arena, Duel.def(ActorDef.Team.PLAYER, 5.0), brain, Vector3.ZERO, "A")
 	a.place(Transform3D(Basis(Vector3.UP, 0.0), origin))
 	var run := {"arena": arena, "a": a, "foes": [] as Array[Actor], "frame": 0, "seed": seed_value,
 		"begins": [] as Array,  # [frame, foe index] of every attack begun (the first move of a blow after a frame of none)
 		"was": [] as Array, "ready_at": [], "free_at": [], "hold": [], "hold_max": 0, "free_run": 0, "free_max": 0,
 		"attacking": 0, "min_angle_frames": 0, "frames_seen": 0, "near_run": [], "near_max": 0, "toggles": [], "moving": [],
-		"toggle_hist": [], "dither_frames": 0, "side": [], "side_hist": [], "flip_max": 0}
+		"toggle_hist": [], "dither_frames": 0, "side": [], "side_hist": [], "flip_max": 0,
+		"circle": [], "circle_hist": [], "tangent": [], "tangent_hist": [], "last_at": [], "last_player": origin, "shiver_circle": 0, "shiver_tangent": 0}
 	for i in n:
 		var def := load("res://data/actors/%s.tres" % kinds[i]) as ActorDef
-		var ang := deg_to_rad(ANGLES[n][i])
+		var ang := deg_to_rad(PLACES[place][n][i])
 		var at := Vector3(sin(ang) * 2.5, 0, cos(ang) * 2.5)
 		var foe := TestArena.spawn(arena, def, EnemyBrain.new(def.brain, seed_value * 7 + i), at, "Foe%d" % (i + 1))
 		foe.place(Transform3D(Basis(Vector3.UP, atan2(-at.x, -at.z)), origin + at))
@@ -85,7 +140,12 @@ func _fight(kinds: Array, seed_value: int, origin: Vector3, circles := false) ->
 		run["toggle_hist"].append([])
 		run["side"].append(0.0)
 		run["side_hist"].append([])
-	if circles:
+		run["circle"].append(0.0)
+		run["circle_hist"].append([])
+		run["tangent"].append(0.0)
+		run["tangent_hist"].append([])
+		run["last_at"].append(foe.global_position)
+	if mode == "circle":
 		(brain as Circler).foe = (run["foes"] as Array[Actor])[0]
 	return run
 
@@ -113,6 +173,14 @@ func _play(runs: Array[Dictionary], frames_n: int) -> void:
 		await frames(1)
 		for run in runs:
 			_observe(run)
+
+
+## Adds `flip` (1 or 0) to the last 60 frames of `hist` and returns how many of them there are.
+static func _in_window(hist: Array, flip: int) -> int:
+	hist.append(flip)
+	if hist.size() > 60:
+		hist.pop_front()
+	return hist.reduce(func(t: int, x: int) -> int: return t + x, 0)
 
 
 func _observe(run: Dictionary) -> void:
@@ -163,6 +231,23 @@ func _observe(run: Dictionary) -> void:
 		if hist.size() > 60:
 			hist.pop_front()
 		run["moving"][i] = moving
+		# the shiver: the way he circles, and the way he goes round the target, changing sign (counted in windows of 60 frames)
+		var circle: float = b._circle
+		var circle_flip := 1 if run["circle"][i] != 0.0 and circle != run["circle"][i] else 0
+		run["circle"][i] = circle
+		run["shiver_circle"] = maxi(run["shiver_circle"], _in_window(run["circle_hist"][i], circle_flip))
+		var step := _flat(run["last_at"][i], foe.global_position) - _flat(run["last_player"], a.global_position)  # his step, from the target's own
+		run["last_at"][i] = foe.global_position
+		var rel := _flat(a.global_position, foe.global_position)
+		var tangent_flip := 0
+		if rel.length() > 0.01 and step.length() > 0.004:
+			var tangential := rel.normalized().rotated(PI * 0.5).dot(step) * 60.0
+			if absf(tangential) > TANGENT_MIN and b.plan() == null:  # a foe closing in to throw is going where his blow is, not shaking
+				tangent_flip = 1 if run["tangent"][i] != 0.0 and signf(tangential) != run["tangent"][i] else 0
+				run["tangent"][i] = signf(tangential)
+		run["shiver_tangent"] = maxi(run["shiver_tangent"], _in_window(run["tangent_hist"][i], tangent_flip))
+		if i == foes.size() - 1:
+			run["last_player"] = a.global_position
 	# left-right oscillation across a token holder's line: the side (seen from the target) a foe is on of the holder he is within 30 degrees of
 	for i in foes.size():
 		var side := 0.0
@@ -317,6 +402,60 @@ func test_three_foes_spread_round_the_player_and_do_not_dither() -> void:
 	assert_true(dither <= 60, "no foe toggles between moving and still more than four times a second for more than a second (longest %d frames)" % dither)
 
 
+## Nobody shivers (Review of Task 14f): a foe waiting between two neighbours used to be pushed away from whichever was nearer, and each
+## 1.7 cm step changed which, so his way round flipped on every frame and his legs shook. In fights of three (the yard's trio) and of five
+## tier I, in the open, with the player's back to a wall, in a corner, in a gate and beside barrels, the player still, circling and backing
+## away: a foe's `_circle` changes sign at most twice in any 60 frames, and so does the sign of his speed round the target.
+const SHIVER_LIMIT := 2
+const SHIVER_FRAMES := 600
+## What the suite plays of it (every place, size and player behind STAND_ABOUT_SEEDS): [place, foes, player], in fewer frames.
+const SHIVER_IN_SUITE := [["wall", 5, "still"], ["open", 5, "circle"], ["open", 3, "back"], ["gate", 3, "circle"]]
+const SHIVER_FRAMES_SUITE := 450
+## The speed round the target is also moved by a body that pushes him or a wall he slides on (his way round does not change, yet the sign
+## does: seen at three), so its bound is 4; his way round (the brain's own choice) is held to 2.
+const TANGENT_LIMIT := 4
+## A step round the target counts as one way or the other from this speed (m/s): the shiver was 1.0 each way, a player pushed about by a foe adds 0.4 to 0.8 of noise.
+const TANGENT_MIN := 0.8
+const SHIVER_TRIOS := [["knuckle_1", "knuckle_1", "knuckle_drummer"], ["knuckle_1", "knuckle_1", "knuckle_1", "knuckle_1", "knuckle_1"]]
+
+
+func test_nobody_shivers_between_two_neighbours() -> void:
+	var forced := OS.get_environment("STAND_ABOUT_SEEDS") != ""
+	var cases: Array = []
+	for place in ["open", "wall", "corner", "gate", "barrels"]:
+		for kinds: Array in SHIVER_TRIOS:
+			for mode in ["still", "circle", "back"]:
+				if forced or SHIVER_IN_SUITE.has([place, kinds.size(), mode]):
+					cases.append([place, kinds, mode])
+	var runs: Array[Dictionary] = []
+	var seeds := _seeds()
+	for c: Array in cases:
+		for seed_value in seeds:
+			var run := _fight(c[1], seed_value, Vector3(runs.size() * 50.0, 0, 0), c[2], c[0])
+			run["label"] = "%s, %d foes, player %s, seed %d" % [c[0], c[1].size(), c[2], seed_value]
+			runs.append(run)
+	await _play(runs, SHIVER_FRAMES if forced else SHIVER_FRAMES_SUITE)
+	var circle_bad: Array = []
+	var tangent_bad: Array = []
+	var worst_circle := 0
+	var worst_tangent := 0
+	for run in runs:
+		worst_circle = maxi(worst_circle, run["shiver_circle"])
+		worst_tangent = maxi(worst_tangent, run["shiver_tangent"])
+		if run["shiver_circle"] > SHIVER_LIMIT:
+			circle_bad.append("%s: %d" % [run["label"], run["shiver_circle"]])
+		if run["shiver_tangent"] > TANGENT_LIMIT:
+			tangent_bad.append("%s: %d" % [run["label"], run["shiver_tangent"]])
+	if OS.get_environment("SHIVER_LIST") != "":
+		for run in runs:
+			print("shiver %s: circle %d tangent %d" % [run["label"], run["shiver_circle"], run["shiver_tangent"]])
+	_free(runs)
+	if forced:
+		print("shiver: %d fights, most circle flips in 60 frames %d, most tangential flips %d" % [runs.size(), worst_circle, worst_tangent])
+	assert_true(circle_bad.is_empty(), "no foe's way round changes sign more than %d times in 60 frames (worst %d; %d of %d fights, first: %s)" % [SHIVER_LIMIT, worst_circle, circle_bad.size(), runs.size(), circle_bad.slice(0, 3)])
+	assert_true(tangent_bad.is_empty(), "no foe's speed round the target changes sign more than %d times in 60 frames (worst %d; %d of %d fights, first: %s)" % [TANGENT_LIMIT, worst_tangent, tangent_bad.size(), runs.size(), tangent_bad.slice(0, 3)])
+
+
 ## One foe alone: the same moves on the same frames as before the fix (every kind, a still and a circling Abarax, SIGNATURE_SEEDS seeds).
 const SIGNATURE_SEEDS := 2
 const SIGNATURE_FRAMES := 600
@@ -329,9 +468,9 @@ func test_one_foe_alone_plays_as_before() -> void:
 	var seen: Array = []
 	var k := 0
 	for kind in SIGNATURE_KINDS:
-		for circles in [false, true]:
+		for mode in ["still", "circle"]:
 			for s in SIGNATURE_SEEDS:
-				var run := _fight([kind], s + 1, Vector3(k * 50.0, 0, 0), circles)
+				var run := _fight([kind], s + 1, Vector3(k * 50.0, 0, 0), mode)
 				var log := []
 				seen.append(log)
 				for foe: Actor in run["foes"]:

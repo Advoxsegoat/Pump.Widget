@@ -64,6 +64,10 @@ const PRESS_SPEED := 1.2
 ## Task 14f: foes spread round their target. A foe with another within SPREAD_DEG (seen from the target) circles away from it, and
 ## one who waits (no token to be had) stands in the outer half of his band, a body's width clear of the attackers' ring.
 const SPREAD_DEG := 60.0
+## A foe with a neighbour within SPREAD_DEG on both sides, the two gaps within EVEN_DEG of each other, stands his ground (he does not circle,
+## which would be to choose between two equals on every frame); he goes on again when they differ by EVEN_DEG plus EVEN_MARGIN.
+const EVEN_DEG := 10.0
+const EVEN_MARGIN := 10.0
 ## Seconds a holder who is in his band but not his range may be held up (blocked, no way round) before he gives his token to a ready foe
 ## with a clear line to the target, and how long he rests after (he does not take it straight back).
 const HAND_OVER_AFTER := 0.75
@@ -139,6 +143,7 @@ var _retreat_left := 0.0
 var _retreated := false  # it retreated since its HP last went below retreat_below
 var _feint_window := {}  # action -> whether the feint's window takes it (read from its clip once)
 var _charge_holds := {}  # action -> whether its moveset move has a charge_hold on it (read from its clip once)
+var _even := false  # between two neighbours at even gaps: standing his ground (see _away_from_neighbour)
 var _held_up := 0.0  # seconds it has gone on toward its range and got no nearer than it has been, for the hand-over
 var _nearest_yet := INF  # the nearest it has been to its target since it began to close in
 var _self: Actor  # its own actor, kept for _reangle (which is called from where only the clock is known)
@@ -318,8 +323,15 @@ func _space(actor: Actor, intent: Intent, delta: float) -> void:
 		var away := _away_from_neighbour(actor)
 		if away != 0.0:
 			_circle = away
+		elif _even:
+			# between two equals: no way round, only his distance (straight out if he is nearer than the waiters' band)
+			intent.move = toward * ease * def.circle_speed
+			_blocked = 0.0
+			return
 		intent.move = (toward.rotated(_circle * PI * 0.5) + toward * ease).normalized() * def.circle_speed
-		if _watch_blocked(actor, intent, delta):
+		# Blocked circling turns the other way, unless a neighbour decides the way (he would put it back on the next frame, and the foe
+		# would flip twice for nothing).
+		if _watch_blocked(actor, intent, delta) and away == 0.0:
 			_circle = -_circle
 		return
 	_settling = true  # out of its range: it goes back to preferred_range itself, not to the edge of its range
@@ -411,31 +423,56 @@ func _circle_for(actor: Actor, bearing_sign: float) -> float:
 	return bearing_sign * turns if turns != 0.0 else _circle
 
 
-# 0, or the `_circle` that takes it away from its nearest neighbour when that one is within SPREAD_DEG.
+# 0, or the `_circle` that takes it away from its nearest neighbour when that one is within SPREAD_DEG. Between two neighbours, both within
+# SPREAD_DEG and at gaps within EVEN_DEG of each other, it is 0 and `_even` is set: pushed away from whichever is nearer, a foe between equals
+# would change his mind on every step (a shiver), so he stands his ground until the gaps differ by EVEN_DEG + EVEN_MARGIN.
 func _away_from_neighbour(actor: Actor, within := SPREAD_DEG) -> float:
 	var nearest := 360.0
 	var sign_of := 0.0
+	var positive := 360.0
+	var negative := 360.0
 	for angle in _neighbour_angles(actor):
 		if absf(angle) < nearest:
 			nearest = absf(angle)
 			sign_of = signf(angle)
+		if angle >= 0.0:
+			positive = minf(positive, angle)
+		else:
+			negative = minf(negative, -angle)
+	# Both neighbours near (a margin past SPREAD_DEG too: a neighbour at the very edge of it would be in and out on alternate frames).
+	if positive < within + EVEN_MARGIN and negative < within + EVEN_MARGIN:
+		var gap := absf(positive - negative)
+		_even = gap < EVEN_DEG or (_even and gap < EVEN_DEG + EVEN_MARGIN)
+		if _even:
+			return 0.0
+	else:
+		_even = false
 	if nearest >= within or sign_of == 0.0:
 		return 0.0
 	return _circle_for(actor, -sign_of)
 
 
 # How far (radians) its way in is swung to keep off a neighbour who stands within SPREAD_DEG of its bearing: nothing far out, SPREAD_SWING
-# near the ring. It goes in beside him, not in a queue behind him.
+# near the ring. It goes in beside him, not in a queue behind him. Between two neighbours the swing grows with how much nearer one is than the
+# other (nothing at even gaps, all of it at EVEN_DEG + EVEN_MARGIN), so that it is not a switch that a step in either direction throws.
 func _spread_swing(actor: Actor, still_to_go: float) -> float:
 	if still_to_go > SPREAD_REACH:
 		return 0.0
-	var nearest := 360.0
+	var positive := 360.0
+	var negative := 360.0
 	for angle in _neighbour_angles(actor):
-		nearest = minf(nearest, absf(angle))
-	var away := _away_from_neighbour(actor)
-	if away == 0.0:
+		if angle >= 0.0:
+			positive = minf(positive, angle)
+		else:
+			negative = minf(negative, -angle)
+	var nearest := minf(positive, negative)
+	if nearest >= SPREAD_DEG:
 		return 0.0
-	return away * deg_to_rad(SPREAD_SWING_CLOSE if nearest < LINE_DEG else SPREAD_SWING)
+	var scale := 1.0
+	if positive < SPREAD_DEG + EVEN_MARGIN and negative < SPREAD_DEG + EVEN_MARGIN:
+		scale = clampf(absf(positive - negative) / (EVEN_DEG + EVEN_MARGIN), 0.0, 1.0)
+	var away := _circle_for(actor, -1.0 if positive < negative else 1.0)
+	return away * deg_to_rad(SPREAD_SWING_CLOSE if nearest < LINE_DEG else SPREAD_SWING) * scale
 
 
 # Whether it waits for its turn: no token for it to take (both are held by others).
