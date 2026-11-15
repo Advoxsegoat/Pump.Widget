@@ -81,7 +81,13 @@ const SPREAD_SWING := 25.0
 ## A neighbour this close to a foe's own line to the target is in his way: only then is his way in swung round him.
 const LINE_DEG := 30.0
 const SPREAD_SWING_CLOSE := 75.0
+## Once a neighbour is that close to his line, he stays "close" until the neighbour is this many degrees further off: the swing itself moves the
+## bearings by about a degree a frame, and at the edge of LINE_DEG the swing was switching between its two sizes on every frame.
+const LINE_MARGIN := 8.0
 const SPREAD_REACH := 1.5
+## Once swinging round a neighbour, a foe goes on until he is this much (metres) further from his range than SPREAD_REACH: the swing walks him
+## away from it (against a wall, a step back each frame), and without the margin that step alone switched the swing off and on again.
+const SPREAD_REACH_MARGIN := 0.3
 ## How much further than an attack's back_up_margin (metres) a back-up may go before the attack is given up.
 const BACK_UP_SPARE := 0.1
 ## How far beyond a warped blow's strike_distance and MoveRunner.MAX_WARP the target may stand when it lands and the combo
@@ -143,6 +149,8 @@ var _retreat_left := 0.0
 var _retreated := false  # it retreated since its HP last went below retreat_below
 var _feint_window := {}  # action -> whether the feint's window takes it (read from its clip once)
 var _charge_holds := {}  # action -> whether its moveset move has a charge_hold on it (read from its clip once)
+var _in_line := false  # a neighbour stands within LINE_DEG of his line, so the swing is the close one (see _spread_swing)
+var _spreading := false  # swinging round a neighbour on the way in (see _spread_swing)
 var _even := false  # between two neighbours at even gaps: standing his ground (see _away_from_neighbour)
 var _held_up := 0.0  # seconds it has gone on toward its range and got no nearer than it has been, for the hand-over
 var _nearest_yet := INF  # the nearest it has been to its target since it began to close in
@@ -456,7 +464,9 @@ func _away_from_neighbour(actor: Actor, within := SPREAD_DEG) -> float:
 # near the ring. It goes in beside him, not in a queue behind him. Between two neighbours the swing grows with how much nearer one is than the
 # other (nothing at even gaps, all of it at EVEN_DEG + EVEN_MARGIN), so that it is not a switch that a step in either direction throws.
 func _spread_swing(actor: Actor, still_to_go: float) -> float:
-	if still_to_go > SPREAD_REACH:
+	if still_to_go > SPREAD_REACH + (SPREAD_REACH_MARGIN if _spreading else 0.0):
+		_spreading = false
+		_in_line = false
 		return 0.0
 	var positive := 360.0
 	var negative := 360.0
@@ -467,12 +477,16 @@ func _spread_swing(actor: Actor, still_to_go: float) -> float:
 			negative = minf(negative, -angle)
 	var nearest := minf(positive, negative)
 	if nearest >= SPREAD_DEG:
+		_spreading = false
+		_in_line = false
 		return 0.0
+	_spreading = true
 	var scale := 1.0
 	if positive < SPREAD_DEG + EVEN_MARGIN and negative < SPREAD_DEG + EVEN_MARGIN:
 		scale = clampf(absf(positive - negative) / (EVEN_DEG + EVEN_MARGIN), 0.0, 1.0)
 	var away := _circle_for(actor, -1.0 if positive < negative else 1.0)
-	return away * deg_to_rad(SPREAD_SWING_CLOSE if nearest < LINE_DEG else SPREAD_SWING) * scale
+	_in_line = nearest < LINE_DEG or (_in_line and nearest < LINE_DEG + LINE_MARGIN)
+	return away * deg_to_rad(SPREAD_SWING_CLOSE if _in_line else SPREAD_SWING) * scale
 
 
 # Whether it waits for its turn: no token for it to take (both are held by others).

@@ -144,7 +144,8 @@ func _fight(kinds: Array, seed_value: int, origin: Vector3, mode := "still", pla
 		"was": [] as Array, "ready_at": [], "free_at": [], "hold": [], "hold_max": 0, "still": [], "still_max": 0, "mode": mode, "free_run": 0, "free_max": 0,
 		"attacking": 0, "min_angle_frames": 0, "frames_seen": 0, "near_run": [], "near_max": 0, "toggles": [], "moving": [],
 		"toggle_hist": [], "dither_frames": 0, "side": [], "side_hist": [], "flip_max": 0,
-		"circle": [], "circle_hist": [], "tangent": [], "tangent_hist": [], "last_at": [], "last_player": origin, "shiver_circle": 0, "shiver_tangent": 0}
+		"circle": [], "circle_hist": [], "tangent": [], "tangent_hist": [], "last_at": [], "last_player": origin, "shiver_circle": 0, "shiver_tangent": 0,
+		"warp": [], "warp_hist": [], "shiver_warp": 0, "tangent_all": [], "tangent_all_hist": [], "shiver_tangent_all": 0}
 	for i in n:
 		var def := load("res://data/actors/%s.tres" % kinds[i]) as ActorDef
 		var ang := deg_to_rad(PLACES[place][n][i])
@@ -165,6 +166,10 @@ func _fight(kinds: Array, seed_value: int, origin: Vector3, mode := "still", pla
 		run["tangent"].append(0.0)
 		run["tangent_hist"].append([])
 		run["last_at"].append(foe.global_position)
+		run["warp"].append(0.0)
+		run["warp_hist"].append([])
+		run["tangent_all"].append(0.0)
+		run["tangent_all_hist"].append([])
 	if mode == "circle":
 		(brain as Circler).foe = (run["foes"] as Array[Actor])[0]
 	return run
@@ -271,12 +276,25 @@ func _observe(run: Dictionary) -> void:
 		run["last_at"][i] = foe.global_position
 		var rel := _flat(a.global_position, foe.global_position)
 		var tangent_flip := 0
+		var tangent_all_flip := 0
 		if rel.length() > 0.01 and step.length() > 0.004:
 			var tangential := rel.normalized().rotated(PI * 0.5).dot(step) * 60.0
+			if absf(tangential) > TANGENT_MIN:  # every foe, a holder with a plan too
+				tangent_all_flip = 1 if run["tangent_all"][i] != 0.0 and signf(tangential) != run["tangent_all"][i] else 0
+				run["tangent_all"][i] = signf(tangential)
 			if absf(tangential) > TANGENT_MIN and b.plan() == null:  # a foe closing in to throw is going where his blow is, not shaking
 				tangent_flip = 1 if run["tangent"][i] != 0.0 and signf(tangential) != run["tangent"][i] else 0
 				run["tangent"][i] = signf(tangential)
 		run["shiver_tangent"] = maxi(run["shiver_tangent"], _in_window(run["tangent_hist"][i], tangent_flip))
+		run["shiver_tangent_all"] = maxi(run["shiver_tangent_all"], _in_window(run["tangent_all_hist"][i], tangent_all_flip))
+		# the legs: the strafe angle the rig is given jumping over 90 degrees from the frame before (a foe pressing a wall alternates it)
+		var warp_now := rad_to_deg(foe.rig.warp.angle) if foe.rig.warp != null else 0.0
+		var warp_before: float = run["warp"][i]
+		var warp_flip := 1 if now > 120 and absf(warp_now) > 45.0 and absf(warp_before) > 45.0 and absf(rad_to_deg(angle_difference(deg_to_rad(warp_now), deg_to_rad(warp_before)))) > 90.0 else 0
+		run["warp"][i] = warp_now
+		run["shiver_warp"] = maxi(run["shiver_warp"], _in_window(run["warp_hist"][i], warp_flip))
+		if run["shiver_warp"] > SHIVER_LIMIT and not run.has("warp_over_at"):
+			run["warp_over_at"] = now
 		if i == foes.size() - 1:
 			run["last_player"] = a.global_position
 	# left-right oscillation across a token holder's line: the side (seen from the target) a foe is on of the holder he is within 30 degrees of
@@ -454,10 +472,10 @@ func test_three_foes_spread_round_the_player_and_do_not_dither() -> void:
 ## tier I, in the open, with the player's back to a wall, in a corner, in a gate and beside barrels, the player still, circling and backing
 ## away: a foe's `_circle` changes sign at most twice in any 60 frames, and so does the sign of his speed round the target.
 const SHIVER_LIMIT := 2
-const SHIVER_FRAMES := 600
+const SHIVER_FRAMES := 1200  # (a gate with five foes began to shiver at frame 865)
 ## What the suite plays of it (every place, size and player behind STAND_ABOUT_SEEDS): [place, foes, player], in fewer frames.
-const SHIVER_IN_SUITE := [["wall", 5, "still"], ["open", 5, "circle"], ["gate", 3, "circle"]]
-const SHIVER_FRAMES_SUITE := 360
+const SHIVER_IN_SUITE := [["wall", 5, "still"], ["open", 5, "circle"], ["gate", 3, "circle"], ["gate", 5, "circle"]]
+const SHIVER_FRAMES_SUITE := 480
 ## The speed round the target is also moved by a body that pushes him or a wall he slides on (his way round does not change, yet the sign
 ## does: seen at three), so its bound is 4; his way round (the brain's own choice) is held to 2.
 const TANGENT_LIMIT := 4
@@ -486,7 +504,17 @@ func test_nobody_shivers_between_two_neighbours() -> void:
 	var tangent_bad: Array = []
 	var worst_circle := 0
 	var worst_tangent := 0
+	var worst_warp := 0
+	var worst_all := 0
+	var warp_bad: Array = []
+	var all_bad: Array = []
 	for run in runs:
+		worst_warp = maxi(worst_warp, run["shiver_warp"])
+		worst_all = maxi(worst_all, run["shiver_tangent_all"])
+		if run["shiver_warp"] > SHIVER_LIMIT:
+			warp_bad.append("%s: %d" % [run["label"], run["shiver_warp"]])
+		if run["shiver_tangent_all"] > TANGENT_LIMIT:
+			all_bad.append("%s: %d" % [run["label"], run["shiver_tangent_all"]])
 		worst_circle = maxi(worst_circle, run["shiver_circle"])
 		worst_tangent = maxi(worst_tangent, run["shiver_tangent"])
 		if run["shiver_circle"] > SHIVER_LIMIT:
@@ -495,12 +523,15 @@ func test_nobody_shivers_between_two_neighbours() -> void:
 			tangent_bad.append("%s: %d" % [run["label"], run["shiver_tangent"]])
 	if OS.get_environment("SHIVER_LIST") != "":
 		for run in runs:
-			print("shiver %s: circle %d tangent %d" % [run["label"], run["shiver_circle"], run["shiver_tangent"]])
+			print("shiver %s: circle %d tangent %d warp %d (over at %s) tangent with plan %d" % [run["label"], run["shiver_circle"], run["shiver_tangent"], run["shiver_warp"], run.get("warp_over_at", "-"), run["shiver_tangent_all"]])
 	_free(runs)
 	if forced:
 		print("shiver: %d fights, most circle flips in 60 frames %d, most tangential flips %d" % [runs.size(), worst_circle, worst_tangent])
 	assert_true(circle_bad.is_empty(), "no foe's way round changes sign more than %d times in 60 frames (worst %d; %d of %d fights, first: %s)" % [SHIVER_LIMIT, worst_circle, circle_bad.size(), runs.size(), circle_bad.slice(0, 3)])
 	assert_true(tangent_bad.is_empty(), "no foe's speed round the target changes sign more than %d times in 60 frames (worst %d; %d of %d fights, first: %s)" % [TANGENT_LIMIT, worst_tangent, tangent_bad.size(), runs.size(), tangent_bad.slice(0, 3)])
+	# a holder with a blow planned counts too: pressed against a gate's wall by a swing round a neighbour, his legs alternated every frame
+	assert_true(warp_bad.is_empty(), "no foe's legs (the strafe angle the rig is given) jump more than 90 degrees more than %d times in 60 frames, a holder with a plan too (worst %d; %d of %d fights, first: %s)" % [SHIVER_LIMIT, worst_warp, warp_bad.size(), runs.size(), warp_bad.slice(0, 3)])
+	assert_true(all_bad.is_empty(), "no foe's speed round the target, a holder with a plan too, changes sign more than %d times in 60 frames (worst %d; %d of %d fights, first: %s)" % [TANGENT_LIMIT, worst_all, all_bad.size(), runs.size(), all_bad.slice(0, 3)])
 
 
 ## Regression fixtures (Review of Task 14f): each records a fault once seen, in a named fight, and holds one of the changes that spread the foes
