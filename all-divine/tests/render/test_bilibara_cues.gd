@@ -178,8 +178,8 @@ func _cues_at(main: Main, foe: Actor, at: Vector3, out: Array) -> void:
 	var body := await _body(main, foe, without)
 	# What moves in the picture of itself (the water, a banner) is not the cue: the pixels two pictures of the same moment apart differ in.
 	var seen: Array[Image] = [without]
-	for k in 3:
-		for i in 2:
+	for k in 6:
+		for i in 3:
 			await RenderingServer.frame_post_draw
 		seen.append(_world(main))
 	var noise := {}
