@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Installs the pinned toolchain for all-divine/. Safe to run again.
-#   tools/setup.sh [--templates] [--bpy]
+#   tools/setup.sh [--templates] [--bpy] [--portraits]
 #     (default)    Godot into .tools/godot/, checked against SHA512-SUMS.txt
 #     --templates  export templates into ~/.local/share/godot/export_templates/4.7.2.stable/
 #     --bpy        tools/.venv (Python 3.13) with bpy==5.2.3
+#     --portraits  tools/.venv (made, or added to) with the pinned Pillow and numpy that tools/portraits/sketch_to_portrait.py
+#                  needs, and how to run the tool; on its own it leaves Godot alone. The tool runs with that Python
+#                  (tools/.venv/bin/python -I ...): a plain `pip install` goes to the user's site folder, which `python3 -I`
+#                  does not read.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -17,6 +21,9 @@ BIN_ZIP="${BIN_NAME}.zip"
 TEMPLATES_TPZ="Godot_v${TAG}_export_templates.tpz"
 BPY_VERSION="5.2.3"
 PYTHON_VERSION="3.13"
+# The libraries the portraits were made with (the same pins as the CI workflow's Python step).
+PILLOW_VERSION="12.3.0"
+NUMPY_VERSION="2.5.3"
 
 CACHE="$ROOT/.cache/godot"
 GODOT_DIR="$ROOT/.tools/godot"
@@ -26,13 +33,18 @@ VENV="$ROOT/tools/.venv"
 
 want_templates=0
 want_bpy=0
+want_portraits=0
+want_godot=1
 for arg in "$@"; do
 	case "$arg" in
 		--templates) want_templates=1 ;;
 		--bpy) want_bpy=1 ;;
-		*) echo "setup.sh: unknown argument '$arg' (use --templates and/or --bpy)" >&2; exit 2 ;;
+		--portraits) want_portraits=1 ;;
+		*) echo "setup.sh: unknown argument '$arg' (use --templates, --bpy and/or --portraits)" >&2; exit 2 ;;
 	esac
 done
+# --portraits on its own is for the person who only draws: it does not fetch Godot.
+if [ "$want_portraits" = 1 ] && [ "$want_templates" = 0 ] && [ "$want_bpy" = 0 ]; then want_godot=0; fi
 
 die() { echo "setup.sh: $*" >&2; exit 1; }
 
@@ -112,7 +124,31 @@ install_bpy() {
 	echo "bpy ${BPY_VERSION} ready in $VENV"
 }
 
-install_godot
+# install_portraits: the venv (made here, or the one --bpy made, added to) holds the pinned Pillow and numpy.
+install_portraits() {
+	local python_bin="$VENV/bin/python"
+	if [ ! -x "$python_bin" ]; then
+		if command -v uv >/dev/null 2>&1; then
+			uv venv --python "$PYTHON_VERSION" "$VENV"
+		else
+			command -v python3 >/dev/null 2>&1 || die "python3 is needed to make tools/.venv (https://www.python.org/downloads/)"
+			python3 -m venv "$VENV" || die "python3 could not make tools/.venv (on Debian or Ubuntu: apt install python3-venv)"
+		fi
+	fi
+	if command -v uv >/dev/null 2>&1; then
+		uv pip install --python "$python_bin" "pillow==${PILLOW_VERSION}" "numpy==${NUMPY_VERSION}"
+	else
+		"$python_bin" -m pip --version >/dev/null 2>&1 || "$python_bin" -m ensurepip --upgrade
+		"$python_bin" -m pip install --quiet "pillow==${PILLOW_VERSION}" "numpy==${NUMPY_VERSION}"
+	fi
+	"$python_bin" -c "import PIL, numpy" || die "Pillow and numpy did not import from $VENV"
+	echo "Pillow ${PILLOW_VERSION} and numpy ${NUMPY_VERSION} ready in $VENV"
+	echo "Run the tool with that Python, from the all-divine folder:"
+	echo "  tools/.venv/bin/python -I tools/portraits/sketch_to_portrait.py --init-recipe <photo.jpg> --out <recipe.json>"
+}
+
+if [ "$want_godot" = 1 ]; then install_godot; fi
 if [ "$want_templates" = 1 ]; then install_templates; fi
 if [ "$want_bpy" = 1 ]; then install_bpy; fi
-echo "Godot $(installed_version) ready"
+if [ "$want_portraits" = 1 ]; then install_portraits; fi
+if [ "$want_godot" = 1 ]; then echo "Godot $(installed_version) ready"; fi

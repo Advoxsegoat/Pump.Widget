@@ -60,9 +60,15 @@ import json
 import os
 import sys
 
-import numpy as np
-from numpy.lib.stride_tricks import sliding_window_view
-from PIL import Image, ImageDraw, ImageFilter
+try:
+    import numpy as np
+    from numpy.lib.stride_tricks import sliding_window_view
+    from PIL import Image, ImageDraw, ImageFilter
+except ImportError as _missing:
+    # One line and exit 2, not a traceback: a plain `pip install` goes to the user's site folder, which `python3 -I` does not read.
+    print("sketch_to_portrait: this tool needs Pillow and numpy and this Python has not got %s: from the all-divine folder run `tools/setup.sh --portraits`, "
+          "then run the tool as `tools/.venv/bin/python -I tools/portraits/sketch_to_portrait.py ...`" % (_missing.name or "them"), file=sys.stderr)
+    sys.exit(2)
 
 # The card's picture, in pixels: four times the card's 116 x 160 picture pixels.
 CARD_PICTURE = (464, 640)

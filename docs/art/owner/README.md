@@ -37,19 +37,25 @@ them out, as it did for Abarax). A drawing in soft pencil on a clean page gives 
 character; the expression is one of `neutral`, `smile`, `serious`, `angry`, `sad`, `surprise`. Your photograph is never
 edited by anything.
 
+**Once, before the first drawing.** From the `all-divine` folder of the project run `tools/setup.sh --portraits`. It makes (or adds
+to) the project's own Python in `tools/.venv` and puts the two libraries the tool needs into it, at the versions the pictures
+were made with. The tool must be run with that Python (`tools/.venv/bin/python`), not with the computer's `python3`: a plain
+`pip install` puts the libraries where `python3 -I` does not look. If you forget, the tool says so in one line and tells you this.
+
 **The two commands.** From the `all-divine` folder of the project:
 
-1. `python3 -I tools/portraits/sketch_to_portrait.py --init-recipe ../docs/art/owner/<file>.jpg --out ../docs/art/owner/<file>.recipe.json`
-   looks at your photograph and writes a first recipe by itself: whether the paper is ruled or plain, and where the drawing
-   is. It adds no colour. If it cannot handle the photograph it says so in one line and what would help (plain paper, the
-   whole page in the photograph, even light).
-2. `python3 -I tools/portraits/sketch_to_portrait.py --sketch ../docs/art/owner/<file>.jpg --recipe ../docs/art/owner/<file>.recipe.json --out assets/portraits/<speaker>`
+1. `tools/.venv/bin/python -I tools/portraits/sketch_to_portrait.py --init-recipe ../docs/art/owner/<file>.jpg --out ../docs/art/owner/<file>.recipe.json`
+   looks at your photograph and writes a first recipe by itself: whether the paper is ruled or plain, where the drawing
+   is, and which expression it is (read from the file's name; a name that does not follow the pattern, or an expression it does
+   not know, gives `neutral` and says so). It adds no colour. If it cannot handle the photograph it says so in one line and what
+   would help (plain or ruled paper, the whole page in the photograph, even light).
+2. `tools/.venv/bin/python -I tools/portraits/sketch_to_portrait.py --sketch ../docs/art/owner/<file>.jpg --recipe ../docs/art/owner/<file>.recipe.json --out assets/portraits/<speaker>`
    makes the portrait: your drawing, cleaned, with no tint. To see each step, add `--stages <a folder>`.
 
 Open the picture it made. The washes of colour, a stroke that lies along one of the notebook's rules, and anything left over
 are then added to the recipe by hand, looking at the result (the header of
 `tools/portraits/sketch_to_portrait.py` lists every setting); Claude can do that with you. The recipe's `expressions` names
-the picture it makes: change `neutral` in it to the expression you drew.
+the picture it makes (taken from the file's name): change it there if it is not the expression you drew.
 
 **What happens to a speaker with no drawing yet.** Their dialogue shows a plain cream card with a grey head-and-shoulders
 shape, and the story checker lists that line as a stand-in (the final check refuses a scene that has one). The moment their
