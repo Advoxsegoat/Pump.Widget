@@ -49,6 +49,9 @@ const OPEN := Vector3(-1.25, 0.0, 2.0)
 ## Where Abarax stands: aside (toward the middle of the yard), or behind the foe.
 const ASIDE := Vector3(2.4, 0.0, 0.6)
 const BEHIND := Vector3(0.2, 0.0, -0.7)
+## Abarax's feather and knot hide a pixel or two more of a Knuckle standing behind him, so that its inside came to 19 pixels, not the 20 every
+## body has: in the case where he is in front he stands this much to the side, and the floor stays 20.
+const ABARAX_ASIDE_IN_FRONT := Vector3(-0.05, 0.0, 0.0)
 ## Each case: its name, where the foe's feet are, the way it faces (degrees about up: 0 faces the camera, 90 east, 315
 ## south-west), and where Abarax stands from it. The first of each facing is that facing's open ground. The wall cases
 ## stand between two of the wall's pilasters, clear of the banners that hang before it.
@@ -121,7 +124,7 @@ func test_two_rims_one_body_behind_the_other() -> void:
 	var foe: Actor = run["foe"]
 	var player := main.player
 	var at := _open_for(main, 0)
-	for case: Array in [["the Knuckle in front", foe, player, BEHIND], ["Abarax in front", player, foe, -BEHIND]]:
+	for case: Array in [["the Knuckle in front", foe, player, BEHIND], ["Abarax in front", player, foe, -BEHIND + ABARAX_ASIDE_IN_FRONT]]:
 		var front: Actor = case[1]
 		var back: Actor = case[2]
 		_put(foe, Transform3D(run["turn"] as Basis, at))
@@ -170,9 +173,7 @@ func test_two_rims_one_body_behind_the_other() -> void:
 		assert_true(over_back[0] >= 10, "%s: its rim shows over the body behind it (%d pixels)" % [case[0], over_back[0]])
 		assert_eq(over_front[1], 0, "%s: the rim of the body behind is never drawn over it" % case[0])
 		for i in 2:
-			# The body behind has its inside to measure against: 15 pixels or more (20 before Abarax had a feather and a knot, which hide
-			# a pixel or two more of a Knuckle standing behind him).
-			assert_true(inside[i].size() >= 15, "%s: body %d has an inside (%d pixels)" % [case[0], i, inside[i].size()])
+			assert_true(inside[i].size() >= 20, "%s: body %d has an inside (%d pixels)" % [case[0], i, inside[i].size()])
 			assert_true(float(own_inside[i]) <= MAX_INTERIOR_CHANGED * inside[i].size(), "%s: %d of the %d pixels inside body %d are its own rim's" % [case[0], own_inside[i], inside[i].size(), i])
 		assert_eq(other, 0, "%s: every lit pixel is one rim's colour or the other's: none is drawn twice or mixed" % case[0])
 	_save()
