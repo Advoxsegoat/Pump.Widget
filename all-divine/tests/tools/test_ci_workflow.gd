@@ -43,6 +43,17 @@ func test_the_headless_job_also_plays_the_counter_policy() -> void:
 		assert_true(bot[0].contains("--policy=counter"), bot[0])
 
 
+func test_the_headless_job_plays_one_seed_of_the_masher() -> void:
+	# A player who only mashes must not crash the game or soft-lock a fight: the bot's `mash` policy presses sway and palm all
+	# the time. One short seed is enough to see it (its numbers are in notes/f1-feel.md).
+	var steps := _steps(_block(_lines(), "  test:", 2))
+	var bot: Array = Array(steps).filter(func(text: String) -> bool: return text.contains("name: Combat bot, the masher"))
+	assert_eq(bot.size(), 1, "a third bot step, for the masher")
+	if bot.size() == 1:
+		assert_true(bot[0].contains("run_bot.gd -- --seeds=1 --frames=3600 --policy=mash"), "one seed, 3,600 frames, the mash policy: %s" % bot[0])
+		assert_false(bot[0].contains("--reaction"), "at the bot's default reaction: %s" % bot[0])
+
+
 func test_the_builds_are_uploaded_before_the_linux_build_runs() -> void:
 	var steps := _steps(_block(_lines(), "  export:", 2))
 	var uploads: Array[int] = []
@@ -129,6 +140,7 @@ func test_the_python_tools_step_installs_the_pinned_libraries_and_runs_the_portr
 	assert_true(install >= 0, "the step installs pillow==12.3.0 and numpy==2.5.3 into the venv")
 	assert_true(portraits >= 0, "the step runs the portrait tests with the venv's Python, isolated")
 	assert_true(venv < install and install < portraits, "the venv is made, then the libraries are installed, then the portrait tests run")
+	assert_true(found.contains("python3 -I -m unittest discover -s tools/test/tests"), "the step runs the tests of the shard-weights tool")
 	assert_false(found.contains("\n          python3 -m pip install"), "nothing is installed into the runner's own Python (the isolated tests could not see it)")
 
 
