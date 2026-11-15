@@ -27,7 +27,7 @@ func test_the_text_for_each_fixture_shot_names_framing_move_action_line_sound_an
 		"1.00 s long   ·   2.50 s to 3.50 s   (frames 150 to 210)",
 		"ACTION: A line",
 		"CAMERA: Close (one person or detail filling the picture), looking at Abarax. The camera holds still. It cuts in from the last shot.",
-		"SAYS: Fixture Knuckle (Gold Tooth's look): \"Fixture line one.\" (at the start, on screen 0.90 s)  [STAND-IN: a plain card, the portrait is not drawn yet]",
+		"SAYS: Fixture Knuckle (Gold Tooth's look): \"Fixture line one.\" (at the start, on screen 0.90 s)  [STAND-IN: the portrait of Fixture Knuckle (Gold Tooth's look) is not drawn yet, so a plain card shows]",
 		"MUSIC: fixture_sting starts (at the start)",
 		"FOCUS: sharp on Abarax",
 	]))

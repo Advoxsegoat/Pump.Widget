@@ -87,7 +87,7 @@ class ShotText extends RefCounted:
 		for beat in shot.beats:
 			out.append("DOES: " + _beat_sentence(scene, beat))
 		for line in shot.lines:
-			out.append("SAYS: " + _line_sentence(line))
+			out.append("SAYS: " + _line_sentence(scene, line))
 		for cue in shot.cues:
 			out.append(_cue_sentence(scene, cue))
 		if shot.focus != &"":
@@ -248,17 +248,49 @@ class ShotText extends RefCounted:
 			text += "  [PLACEHOLDER: this clip is not made yet, so %s just stands]" % actor
 		return text
 
-	static func _line_sentence(line: DialogueLine) -> String:
-		var speaker := _registry_fetch(&"speakers", line.speaker) as Speaker
-		var name := speaker.display_name if speaker != null else String(line.speaker)
+	static func _line_sentence(scene: SceneShots, line: DialogueLine) -> String:
+		var speaker := speaker_of(line.speaker)
 		var hold := int(_shared().call("hold_of", line))
-		var text := "%s: \"%s\" (%s, on screen %s)" % [name, line.text, _when(line.at), _secs(hold)]
+		var text := "%s: \"%s\" (%s, on screen %s)" % [speaker_name(line.speaker, speaker), line.text, _when(line.at), _secs(hold)]
 		if speaker != null and speaker.placeholder_exprs.has(line.expr):
-			if speaker.portraits.is_empty():
-				text += "  [STAND-IN: a plain card, the portrait is not drawn yet]"
-			else:
-				text += "  [STAND-IN: this look is not drawn yet, the neutral drawing shows]"
+			text += "  [STAND-IN: %s]" % portrait_sentence(scene, line.speaker, line.expr, speaker)
 		return text
+
+	## The speaker as a row names them: the speaker's own name, the id only when the Registry has no such speaker.
+	static func speaker_name(id: StringName, speaker: Speaker) -> String:
+		return speaker.display_name if speaker != null else String(id)
+
+	## The speaker `id`: the Registry's, or `lookup`'s (a Callable taking the id) when one is given.
+	static func speaker_of(id: StringName, lookup := Callable()) -> Speaker:
+		if lookup.is_valid():
+			return lookup.call(id) as Speaker
+		return _registry_fetch(&"speakers", id) as Speaker
+
+	## The stand-in expressions of the speaker `id` that a line of the scene uses, each once.
+	static func stand_in_looks(scene: SceneShots, id: StringName, lookup := Callable()) -> PackedStringArray:
+		var speaker := speaker_of(id, lookup)
+		var looks := PackedStringArray()
+		if speaker == null:
+			return looks
+		for shot in scene.shots:
+			for line in shot.lines:
+				if line.speaker == id and speaker.placeholder_exprs.has(line.expr) and not looks.has(String(line.expr)):
+					looks.append(String(line.expr))
+		return looks
+
+	## "the portrait of Fixture Knuckle is not drawn yet, so a plain card shows" (the expression is named only when the scene
+	## uses more than one stand-in expression of this speaker).
+	static func portrait_sentence(scene: SceneShots, id: StringName, expr: StringName, speaker: Speaker, lookup := Callable()) -> String:
+		var of := "the portrait of %s" % speaker_name(id, speaker)
+		if stand_in_looks(scene, id, lookup).size() > 1:
+			of = "the '%s' portrait of %s" % [expr, speaker_name(id, speaker)]
+		return "%s is not drawn yet, so %s shows" % [of, "a plain card" if speaker.portraits.is_empty() else "the neutral drawing"]
+
+	## Whether a cast member is shown by the body of another character (a Knuckle's, say, for Noella): a spawned or named actor
+	## whose def is not its own, as far as the names say: the def's id does not begin with the actor's name (the Knuckle's
+	## `knuckle` is made from `knuckle_1`; `noella` from `knuckle_2` is a stand-in). The player is always his own.
+	static func stand_in_model(entry: CastEntry) -> bool:
+		return entry.source != CastEntry.Source.LIVE_PLAYER and entry.def != null and not String(entry.def.id).begins_with(String(entry.actor))
 
 	static func _cue_sentence(scene: SceneShots, cue: CueEvent) -> String:
 		if cue.kind == CueEvent.Kind.MUSIC:
@@ -416,7 +448,6 @@ static func wrap_text(text: String, width: int, size: int, font: Font) -> Packed
 
 # ---- the tool: drawing the pages ----
 
-const CHECKER_PATH := "res://story/shot_checker.gd"
 const SCRIPT := "res://tools/story/storyboard_page.gd"
 const USAGE := "usage: tools/godot.sh --render -s res://tools/story/storyboard_page.gd -- --scene=<id> --out=<dir>"
 const TITLE_BIG := 26
@@ -469,7 +500,7 @@ func _run(args: PackedStringArray) -> int:
 			return 1
 		textures.append(ImageTexture.create_from_image(image))
 	ShotText._registry_fetch(&"speakers", &"abarax")   # (makes sure the Registry has scanned: a script run with -s starts before it has)
-	var standins := _standins(scene)
+	var standins := stand_ins(scene)
 	var head := header_blocks(scene, standins)
 	var spans := row_spans(scene)
 	var boxes := layout(scene.shots.size(), spans, maxi(HEAD, header_height(head)))
@@ -515,23 +546,64 @@ func _usage() -> int:
 	return 2
 
 
-# The lines of the checker about stand-ins and clips not made yet, "S3: fixture_knuckle's portrait ..." (the checker is loaded
-# when it is needed: it reads the Registry autoload, which this file may not name).
-func _standins(scene: SceneShots) -> PackedStringArray:
-	var found := PackedStringArray()
-	var checker: RefCounted = (load(CHECKER_PATH) as GDScript).new()
-	for line: String in checker.call("check", scene):
-		if checker.call("is_placeholder", line):
-			var colon := line.find(": ")
-			var where := line.substr(0, colon)
-			var shot := where.get_slice("/", 1) if where.contains("/") else ""
-			var text := line.substr(colon + 2).trim_prefix("placeholder: ")
-			found.append("%s: %s" % [shot, text] if shot != "" else text)
+## Everything in the scene that is not final yet, once each, with the shot it first appears in: [{kind, shot, text}] in the order
+## of the shots. kind is "portrait" (a line of a speaker whose drawing is a stand-in), "clip" (a beat marked placeholder), "model"
+## (a cast member shown by another character's body: ShotText.stand_in_model) or "sound" (a sound cue with no recording).
+## `speakers` (a Callable from a speaker's id to its Speaker) and `has_sound` (from a sound's id to whether it is recorded)
+## stand in for the Registry, which a test does not want to change.
+static func stand_ins(scene: SceneShots, speakers := Callable(), has_sound := Callable()) -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	var seen := {}
+	for i in scene.shots.size():
+		var shot := scene.shots[i]
+		var name := String(shot.id) if shot.id != &"" else "shot %d" % (i + 1)
+		for beat in shot.beats:
+			var clip_key := "clip/%s/%s" % [beat.actor, beat.clip]
+			if beat.placeholder and beat.clip != &"" and not seen.has(clip_key):
+				seen[clip_key] = true
+				var who := ShotText.who(scene, beat.actor)
+				found.append({kind = "clip", shot = name, text = "%s's clip '%s' is not made yet, so %s just stands" % [who, beat.clip, who]})
+		for line in shot.lines:
+			var speaker := ShotText.speaker_of(line.speaker, speakers)
+			var look_key := "portrait/%s/%s" % [line.speaker, line.expr]
+			if speaker != null and speaker.placeholder_exprs.has(line.expr) and not seen.has(look_key):
+				seen[look_key] = true
+				var sentence := ShotText.portrait_sentence(scene, line.speaker, line.expr, speaker, speakers)
+				found.append({kind = "portrait", shot = name, text = sentence.substr(0, 1).to_upper() + sentence.substr(1)})
+		for cue in shot.cues:
+			var sound_key := "sound/%s" % cue.id
+			if cue.kind == CueEvent.Kind.SOUND and cue.id != &"" and not seen.has(sound_key) and not _recorded(cue.id, has_sound):
+				seen[sound_key] = true
+				found.append({kind = "sound", shot = name, text = "The sound '%s' has no recording yet" % cue.id})
+		for entry in scene.cast:
+			var model_key := "model/%s" % entry.actor
+			if not seen.has(model_key) and ShotText.stand_in_model(entry) and _appears(entry, shot):
+				seen[model_key] = true
+				found.append({kind = "model", shot = name, text = "%s is shown by a stand-in model (%s)" % [ShotText.who(scene, entry.actor), String(entry.def.id).replace("_", " ")]})
 	return found
 
 
+# Whether the sound `id` has a recording: `has_sound` says when it is given, else the Registry's cue has a stream.
+static func _recorded(id: StringName, has_sound: Callable) -> bool:
+	if has_sound.is_valid():
+		return has_sound.call(id)
+	var cue := ShotText._registry_fetch(&"sounds", id) as SoundCue
+	return cue != null and not cue.streams.is_empty()
+
+
+# Whether `entry`'s actor is in `shot`: a beat of his, a line of his speaker's, or the camera looking at him.
+static func _appears(entry: CastEntry, shot: Shot) -> bool:
+	for beat in shot.beats:
+		if beat.actor == entry.actor:
+			return true
+	for line in shot.lines:
+		if entry.speaker != &"" and line.speaker == entry.speaker:
+			return true
+	return [shot.aim, shot.aim_to, shot.focus, shot.focus_to, shot.over_shoulder].has(entry.actor)
+
+
 ## The header of the first page, as blocks (see blocks_of): the title, the facts, the stand-in band.
-static func header_blocks(scene: SceneShots, standins: PackedStringArray) -> Dictionary:
+static func header_blocks(scene: SceneShots, standins: Array[Dictionary]) -> Dictionary:
 	var font := ThemeDB.fallback_font
 	var column := PAGE_WIDTH - 2 * MARGIN
 	var facts: Array[PackedStringArray] = []
@@ -552,8 +624,8 @@ static func header_blocks(scene: SceneShots, standins: PackedStringArray) -> Dic
 		band.append("No stand-ins or placeholders: every clip and portrait in this scene is real.")
 	else:
 		band.append("NOT FINAL: %d stand-in%s or placeholder%s in this scene. Each is marked on its row too." % [standins.size(), "" if standins.size() == 1 else "s", "" if standins.size() == 1 else "s"])
-		for line in standins:
-			band.append_array(wrap_text("• " + line, column - 24, FONT_SIZE, font))
+		for found in standins:
+			band.append_array(wrap_text("• %s: %s" % [found.shot, found.text], column - 24, FONT_SIZE, font))
 	return {title = title, facts = facts, band = band, good = standins.is_empty()}
 
 
