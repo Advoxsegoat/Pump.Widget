@@ -443,3 +443,225 @@ func test_after_it_is_open_the_first_shrine_to_the_rack_walk_is_a_short_walk() -
 - [ ] **Step 6: Commit.** STATE.md Done line: "F3 Task 5 (systems): gates and the shortcut loop: `GateDef`/`GateDoor`/`Latch`; the street's west gate lifts from the loop lane's side only and joins the first shrine to the Rack Walk (about 24 m instead of 142 m); a slate toll board across the lane's mouth waits for the mini-boss's flag; open gates stay open through rest, death and load." Owner checklist item: "Walk the loop, lift the bar at the gate and run back to the shrine: is the shortcut a relief, and does the barred prompt from the street say enough?"
 
 ---
+
+### Task 6: The Hand's Pack, the Rose Bell and the notice
+
+**Files:**
+- Create: `world/stretch/{squad_def,squad,item_def,note_def,item_place,item_pickup,note_post}.gd`, `fx/interest_glint.tscn`, `data/squads/hands_pack.tres`, `data/items/rose_bell.tres`, `data/brains/pack_knuckle_2.tres`, `data/stretch/enc_hands_pack.tres`, `data/stretch/note_rack.tres`, `data/sounds/rose_bell.tres`
+- Modify: `actors/enemy_brain.gd`, `core/save/save_data.gd` (`has_item`, `add_item`), `world/stretch/{encounter_def,encounter_host,stretch_def,stretch_run}.gd`, `hud/stretch_hud.gd`, `tools/audio/make_sfx.py`, `ASSETS.md`
+- Test: `tests/actors/test_enemy_brain_squad.gd`, `tests/world/test_pack.gd`, `tests/world/test_items_notes.gd`
+
+**Interfaces:**
+- Consumes: Task 4's `EncounterHost`, `Placement` (`brain`, `brain_broken`), `EncounterDef`; Task 2's `Interactable`, `Interactor`, `StretchRun.set_flag`, `flag`; `BrainDef.ignores_tokens`; `Registry` kind `items`; `ActorFx.show_fx`; `Inputs.pressed_this_frame`.
+- Produces:
+  - `EnemyBrain` (inert at their defaults): `var flank_angle := NAN` (the world yaw in radians, 0 = south, of the spot on the circle round its target where it stands: while engaged and not planning an attack it walks to `target + Vector2(sin a, cos a) * preferred_range`, the jog when more than 3 m off, the walk within, and circles as before once within 0.5 m); `var commit_at := -1` (a `Game.play_frames` count: from then on it chooses an attack whatever its rest, once, then it is -1 again); `signal attack_chosen` (emitted once each time it chooses a plan); `func scatter(frames: int) -> void` (it stands down, clears `flank_angle` and `commit_at`, and is RETREATING for at least `frames` physics frames, then fights again as its def says).
+  - `class SquadDef extends Resource` (kind `squads`): `@export var id: StringName`, `title: String`, `flank_spread_deg := 240.0`, `chain_gap_frames := 36`, `weakness: StringName` (the item that breaks it), `broken_flag: StringName`, `scatter_frames := 240`, `ring_radius := 16.0`, `hint_notes: PackedStringArray` (ids of the notes that point at the weakness). `EncounterDef.squad: SquadDef`.
+  - `class Squad extends Node` (a child of the host while its encounter stands and is not broken): `signal broken`; `func attach(members: Array[Actor], def: SquadDef, run: StretchRun) -> void`; `func awake() -> bool` (any member engaged); `func near(point: Vector3) -> bool` (any live member within `ring_radius`, flat); `func scatter() -> void` (every live member `scatter(def.scatter_frames)`, its brain's `def` set to its placement's `brain_broken` or its actor def's own, a `petal_burst` on each, `run.set_flag(def.broken_flag)`, `broken`). Each physics frame while a member is engaged: the living members, sorted by name, take `flank_angle` slots `base + (k - (n-1)/2) * spread/(max(n-1, 1))` where `base` is the yaw of the line from the target to the members' centre; the first member to emit `attack_chosen` while no chain runs sets `commit_at = now + i * chain_gap_frames` on the others in order of distance to the target (i = 1, 2, ...), and no new chain starts for `n * chain_gap_frames + 30` frames.
+  - `class ItemDef extends Resource` (kind `items`): `@export var id: StringName`, `title: String`, `words: PackedStringArray` (what the player reads), `placeholder := true`, `use: Use` (`enum Use { NONE, RING_BELL }`), `cue: StringName`.
+  - `class NoteDef extends Resource` (kind `stretch`): `@export var id: StringName`, `at: Vector3`, `lines: PackedStringArray`, `placeholder := true`, `radius := 1.6`, `prompt := "Read"`. `class ItemPlace extends Resource`: `@export var item: ItemDef`, `at: Vector3`, `flag: StringName` (`taken:<id>`), `radius := 1.5`, `prompt := "Take"`. `StretchDef.items: Array[ItemPlace]`, `StretchDef.notes: Array[NoteDef]`.
+  - `class ItemPickup extends Interactable` and `class NotePost extends Interactable` (a pale pixel glint marks each; no model): the pickup, unless its flag is set, adds the item (`SaveData.add_item`), sets the flag, and shows its title and words; the post shows its lines in the HUD.
+  - `SaveData.has_item(id: StringName) -> bool`, `SaveData.add_item(id: StringName, count := 1) -> void`.
+  - `StretchRun.use_item(id: StringName) -> bool`: an item with `Use.RING_BELL`: its cue plays, and every `Squad` of the host that is awake and `near` the player scatters if `id == def.weakness`; true when the item is held. Each frame a press of `item` (the same gating as the interactor) uses the first held item that has a use: with the Bell, the Bell.
+  - `StretchHud.line(text: String) -> void` (a line above the prompt for 120 play frames), `show_note(lines: PackedStringArray) -> void` (up to 3 lines, kept until the player is 3 m from where he read it, 6 play seconds pass, or he reads again), `note_lines() -> PackedStringArray`, `line_text() -> String`.
+  - **Data** (the plan's first values; every line of words is a placeholder for the owner to write):
+    - `pack_knuckle_2`: `knuckle_2`'s brain with `ignores_tokens = true`, `attack_rest` 0.5.
+    - `enc_hands_pack` (id `hands_pack`): three `knuckle_2` at (-18, -22.5), (-22, -21.5), (-24, -23.5), facing 90, `brain` = `pack_knuckle_2`, `brain_broken` empty (their def's own brain: tokens apply), `alarm`, `leash` 30; squad `hands_pack` (title "the Hand's Pack", weakness `rose_bell`, broken flag `pack_broken`, hint note `note_rack`).
+    - `rose_bell`: title "Rose Bell", words ["A small rose-gold bell.", "Its ring keeps no time."] (placeholder), `use` RING_BELL, cue `rose_bell` (a clear bell, a long soft tail, 1.2 s, peak -12 dBFS).
+    - the Bell's `ItemPlace`: at (36.8, 0, -36.8), flag `taken:rose_bell`: the far corner of the second shrine's alcove, behind the stall bench. This is a first value: if `StretchGround.stands` or the bench's collision refuses it, move it by 0.5 m toward (35.5, -36.2), never loosen the test.
+    - `note_rack` (a notice at the Rack Walk's entrance, at (21, 0, -21.0)): lines ["POSTED: The Pack keeps the yard's time.", "A bell kept where the lamp is lit", "breaks it."] (placeholder).
+
+- [ ] **Step 1: Write the failing tests.**
+
+```gdscript
+# tests/actors/test_enemy_brain_squad.gd   (a bare region; a knuckle_2 with an EnemyBrain; a still target)
+func test_a_flank_angle_walks_it_to_that_side_of_its_target() -> void:
+	# flank_angle = PI / 2 (east of the target), engaged: within 4 s it stands within 0.6 m of target + (preferred_range, 0)
+func test_commit_at_makes_it_choose_whatever_its_rest() -> void:
+	# _rest long: commit_at = play_frames + 5: a plan within 6 frames, `attack_chosen` once, commit_at back to -1
+func test_scatter_stands_it_down_and_it_fights_again_after() -> void:
+	# mid-plan: scatter(120): no plan, RETREATING for >= 120 frames, moving away, then engaged again
+func test_the_defaults_change_nothing() -> void:
+	# flank_angle is NAN and commit_at -1 on a new brain; the existing brain tests are the proof
+# tests/world/test_pack.gd   (the stretch region, a run; and, for the open-floor fights, the training yard with the same squad attached)
+func test_the_pack_data_is_a_squad_of_three_tier_ii_knuckles_without_tokens() -> void:
+	# three placements of knuckle_2 at the three posts, brain ignores_tokens true, brain_broken null; squad weakness &"rose_bell" is in Registry kind items; hint note exists and names the lamp
+func test_a_plain_tier_ii_takes_tokens_and_a_pack_member_does_not() -> void:
+	# the def's own brain ignores_tokens false; the pack brain true
+func test_an_engaged_pack_spreads_round_him() -> void:
+	# in the yard, Abarax standing (untouchable: hp 100000), the three engaged: after 300 frames the angles of the three round him, sorted, have every gap in [50, 200] degrees
+func test_the_pack_commits_together_a_beat_apart_and_ordinary_foes_do_not() -> void:
+	# five seeds x 900 frames: with the squad, in at least 3 seeds all three are in an attack at once on some frame; the same three with the plain brain and AttackTokens never have more than 2 in an attack on any frame of the five seeds; the three attack starts of a chain fall within 2 x 36 + 120 frames
+func test_the_bell_scatters_a_pack_that_is_awake_and_near_and_it_stays_scattered() -> void:
+	# Bell held, pack engaged within 16 m, one `item` press: `broken` once, flag pack_broken set (world_changed once), every member RETREATING within 2 frames, flank_angle NAN, ignores_tokens false after; 300 frames later across five seeds never three attacking at once
+func test_the_bell_does_nothing_out_of_range_or_with_the_pack_asleep_or_unheld() -> void:
+	# 17 m: no scatter, cue still plays; not engaged: none; no Bell in the data: no cue, no effect
+func test_a_broken_pack_comes_back_as_ordinary_foes_after_a_rest_a_death_and_a_load() -> void:
+	# with pack_broken set: rest, stream in: three members whose brains ignore_tokens false and no Squad node; the same from a run started on the saved file
+func test_the_pack_posts_are_standing_ground_in_the_rack_walk_and_clear_of_the_notice() -> void:
+	# StretchGround.stands for the three; each inside Rect2(-35, -25, 60, 5); the notice 20 m or more east of the nearest
+# tests/world/test_items_notes.gd
+func test_the_bell_is_taken_once_and_the_save_keeps_it() -> void:
+	# at (36.8, 0, -36.8) the prompt is "Take"; one press: items {rose_bell: 1}, flag taken:rose_bell, HUD line "Rose Bell", words shown; a second press nothing; after a rest and a death the pickup is not there again; a run from the saved file has_item(&"rose_bell")
+func test_the_notice_shows_its_lines_and_goes_when_he_walks_away() -> void:
+	# prompt "Read"; a press: note_lines() the three lines; 3.1 m away on the next frame: gone; 6 s: gone
+func test_pressing_item_with_nothing_held_does_nothing() -> void:
+func test_the_bell_and_the_notice_are_standing_ground_and_the_bell_is_off_the_path() -> void:
+	# StretchGround.stands(bell), flat distance from the lane's centre line (x 27.5) >= 8 m and from either shrine's plinth <= 5 m; the notice on the Rack Walk
+func test_every_line_a_player_reads_is_marked_a_placeholder() -> void:
+	# every ItemDef.words and NoteDef.lines in the data has placeholder true (the owner's words come later)
+func test_the_hint_chain_is_whole() -> void:
+	# the squad's hint note exists, its lines mention "bell" (case-insensitively), the weakness item has an ItemPlace, and that place is reachable (with the gates open)
+```
+
+- [ ] **Step 2: Run** `tools/test.sh --filter=test_enemy_brain_squad`, `--filter=test_pack`, `--filter=test_items_notes`. Expected: FAIL (`flank_angle`, `Squad`, `ItemDef` do not exist).
+- [ ] **Step 3: Implement** the brain's four additions first, then the data classes, `Squad`, the pickup and post, `use_item`, the HUD lines, the data files and the cue (`make_sfx.py`, WAV, `data/sounds`, `ASSETS.md`). The host makes a `Squad` only for an encounter with a `squad` whose `broken_flag` is not set, and hands members `brain_broken` (else their def's own) when it is.
+- [ ] **Step 4: Look at it.** In the scratchpad, render the camera on the Rack Walk with the Pack engaged round Abarax, and at the Bell's corner and the notice: the three read as three (their hoods), the glints are seen at 640 x 360. Note for the owner whether the Pack in a 5 m alley is a surround or a queue.
+- [ ] **Step 5: Run** the three filters, `tools/test.sh --filter=tests/actors`, `--filter=tests/world`, `tools/clip_check.gd`, `--filter=test_ledger`, `--filter=test_yard_hash_pin`, then `tools/test.sh`.
+- [ ] **Step 6: Commit.** STATE.md Done line: "F3 Task 6 (systems): the Hand's Pack, a gank squad (`SquadDef`, `Squad`: no tokens, spread round the player, one attack chaining into the next a beat apart) and its secret weakness, the Rose Bell (`ItemDef`, `ItemPlace`: behind the stall bench in the second shrine's alcove; the item button rings it and scatters an awake Pack within 16 m for good, `pack_broken`), a posted notice that hints at it (`NoteDef`); every line of words is a placeholder." Owner checklist items: "Fight the Pack with no Bell: brutal but readable? Find the Bell, ring it, fight them again: is the difference the one you wanted? Did the notice and the Bell's words lead you to it, or is the hint too faint or too plain? (Write the real words.)"
+
+---
+
+### Task 7: The Collector, mini-boss of the stretch
+
+**Files:**
+- Create: `world/stretch/{boss_phase,boss_def,boss_fight}.gd`, `data/actors/collector.tres`, `data/palettes/collector.tres`, `data/brains/collector_1.tres`, `data/brains/collector_2.tres`, `data/brains/collector_3.tres`, `data/bosses/collector.tres`, `data/stretch/enc_collector.tres`
+- Modify: `world/stretch/{encounter_def,encounter_host,stretch_run}.gd`, `hud/stretch_hud.gd`, `main/main.gd` (the entrance seam)
+- Test: `tests/actors/test_collector.gd`, `tests/world/test_collector_fight.gd`, `tests/render/test_collector_look.gd`
+
+**Interfaces:**
+- Consumes: Task 4's host (`gone_if`, `Placement`, `leash`, `arrived_home`, `watch_foe`), Task 5's `collector_down` gate, Task 3's petals; `EnemyBrain.def`, `rest_for`, `Rig.hold_aura(color, level)`, `Sfx.play`, `ActorDef` (`moveset`, `max_posture`, `poise`, `model_scale`), the existing moves (`blade_cut`, `blade_backcut`, `blade_chop`, `blade_lunge`, `heavy_slam`, `knuckle_feint`), `PostureBreaker`, `Director.play`.
+- Produces:
+  - `data/actors/collector.tres` (id `collector`, ENEMY): the blade Knuckle's rig and locomotion clips (`blade_idle`, `blade_walk`, `blade_jog`, `blade_sprint`), reactions and `Knuckle_Pauldron` hidden as `knuckle_blade.tres` has them, `model_scale` 1.15, `max_hp` 300, `max_posture` 140, `max_stamina` 100, `poise` 18, `petals` 400, a palette of his own (`data/palettes/collector.tres`: a dark crimson coat and brass, darker than the blade Knuckle's teal and lighter than tier III's black, its slots checked by the existing palette tests), `moveset`: `palm` `blade_cut` (into `blade_backcut`), `gift` `blade_chop`, `heavy` `blade_lunge`, `dodge` `knuckle_feint`, `interact` `heavy_slam`; `required_clips` as the blade Knuckle's. Its moves are the ones those names already are: no new clip.
+  - Three brains (`BrainDef`, first values the owner tunes):
+    - `collector_1` (100% to 65%): `palm` weight 1.0 (max_range 2.0), `gift` weight 0.5 (max_range 2.1), `preferred_range` 2.6, `attack_rest` 0.7, `feint_chance` 0.2.
+    - `collector_2` (65% to 30%): adds `heavy` (the lunge: min_range 1.7, max_range 2.5, weight 0.35, cooldown 3.0), `attack_rest` 0.5, `feint_chance` 0.3, `delay_chance` 0.4 (`delay_frames` 6 to 10), `extend_combo_chance` 0.3.
+    - `collector_3` (below 30%): adds `interact` (the slam: max_range 1.8, weight 0.5, cooldown 5.0, `tokens` 0: no other foe begins an attack on his target while it is thrown), `attack_rest` 0.4, `track_dodges` true, `delay_chance` 0.5.
+  - `class BossPhase extends Resource`: `@export var from_share: float` (the HP share at or below which it begins; 1.0 for the first), `brain: BrainDef`, `beat_frames := 72` (the standing beat at a change), `rim: Color`, `cue: StringName` (`perilous_sting`). Data: phases at 1.0, 0.65 and 0.30; rims white-gold, then rose, then rose.
+  - `class BossDef extends Resource` (kind `bosses`, id `collector`): `@export var id: StringName`, `title: String` ("The Collector", a working name), `phases: Array[BossPhase]`, `arena: Rect2` (x, z, width, depth: Rect2(8, -5, 24.5, 10), the street's east end), `flag_down: StringName` (`collector_down`), `entrance_scene: StringName` (empty), `wake_radius := 12.0`. `EncounterDef.boss: BossDef`.
+  - `class BossFight extends Node` (a child of the host while his encounter stands): `signal phase_changed(index: int)`, `signal entrance_requested(scene_id: StringName)`; `func attach(foe: Actor, def: BossDef, run: StretchRun) -> void`; `var phase := 0`. Each physics frame: the phase is the deepest `from_share` the foe's HP share has reached and never goes back; on a change the brain takes the phase's `BrainDef`, and once his move is over he stands for `beat_frames` (`rest_for`) with the rim held (`Rig.hold_aura`) and the cue sounding; on `arrived_home` (he gave up the chase and was healed) the phase is 0 again; on his death the flag `flag_down` is set (`StretchRun.set_flag`: the toll gate opens, the file is saved) and his petals are paid as any foe's. When the player first comes within `wake_radius` of him and `entrance_scene` is not empty, `entrance_requested` is emitted once for that standing of the encounter.
+  - `data/stretch/enc_collector.tres` (id `collector`): one placement, `collector` at (24, 0, 0), facing 270, `sleeping` true, `wake_radius` 12, `alarm` false, `leash` 18, `gone_if` `collector_down`, `boss` = `bosses/collector`. `Main` connects `entrance_requested` to `play_entrance(scene_id)` (which calls `Director.play(scene_id, self)`; a variable `scene_player: Callable` lets a test stand in for it).
+  - `StretchHud.boss_bar() -> Dictionary`: `{}` unless a boss foe is engaged; else `{title, hp: float 0..1, posture: float 0..1}`; drawn as a wide thin bar at the bottom centre (HP in `Hud.ROSE`, posture in `Hud.POSTURE`, his title above it in the HUD's font), gone with him.
+
+- [ ] **Step 1: Write the failing tests.**
+
+```gdscript
+# tests/actors/test_collector.gd
+func test_the_collectors_numbers_are_the_decided_ones() -> void:
+	# collector.tres: ENEMY, id &"collector", max_hp 300, max_posture 140, poise 18, model_scale 1.15, petals 400; every moveset move exists in the Registry; his palette's id is &"collector" and differs from the blade Knuckle's
+func test_his_moves_pass_the_clip_checker_with_tells_and_perilous_marks() -> void:
+	# ClipChecker over the def: no problems; blade_lunge and heavy_slam are perilous (HitProfile) and each has a `tell` mark
+func test_each_phases_attacks_are_in_his_moveset_and_phase_by_phase_the_menu_grows() -> void:
+	# every AttackOption.action of collector_1..3 is a key of moveset; option counts 2, 3, 4 (palm, gift / + heavy / + interact); only phase 3 has track_dodges; the slam holds all tokens (tokens 0)
+func test_the_existing_range_and_coverage_tests_pick_him_up() -> void:
+	# tests/actors/test_enemy_brain.gd and test_coverage run over data/brains and data/actors: they pass with the three brains and the def in the tree (run them; this test asserts the three brains are found by Registry kind brains)
+func test_his_finisher_lands_and_he_survives_it() -> void:
+	# posture broken with PostureBreaker, Abarax's palm: the finisher pair plays, every blow lands within 0.08 m of his head or chest, hp falls by 40 to 60 and he lives
+# tests/world/test_collector_fight.gd   (the stretch, a run, Abarax with the bot's hands or Brain.new())
+func test_he_waits_asleep_and_wakes_when_the_player_comes_within_twelve_metres() -> void:
+	# at 12.5 m for 120 frames nothing; at 11.5 m engaged; he is at (24, 0, 0) facing 270 within 0.05 m and 1 degree before that
+func test_the_phases_come_at_the_hp_shares_and_never_go_back() -> void:
+	# hp to 64%: phase 1 within 2 frames, his brain.def is collector_2; 29%: phase 2 and collector_3; hp back to 100%: still 2; `phase_changed` emitted with 1 then 2
+func test_a_phase_change_shows_waits_for_the_blow_to_end_and_gives_a_beat() -> void:
+	# crossing 65% in the middle of a blow: the blow plays out; then his rim is held (aura_held true, colour the phase's), the cue sounds once, and he starts no attack for 72 frames
+func test_leaving_the_arena_far_enough_resets_him_whole() -> void:
+	# engaged at phase 1 with 150 HP; the player runs west to x -20: he goes home (going_home), arrives, hp 300, phase 0, brain.def collector_1; toll gate shut; no flag
+func test_dying_to_him_leaves_nothing_half_done() -> void:
+	# the player dies in phase 2; after the three seconds a new Collector stands asleep at his post with 300 HP, phase 0, the toll gate shut, collector_down unset, the petals of the death as Task 3 says
+func test_a_pause_and_a_region_change_in_the_middle_leave_no_half_state() -> void:
+	# pause 300 frames and resume: the fight is where it was; switch_region() mid-fight: the file has no collector_down and no phase; a new entry to the stretch finds him whole
+func test_his_fall_opens_the_toll_gate_sets_the_flag_pays_and_saves_and_he_never_returns() -> void:
+	# kill him: collector_down set once (world_changed once), the toll board's collision 0 on that frame and sunk by 45 frames, carried petals +400, the store has the flag; rest, die, a load: no encounter `collector`, the gate open
+func test_the_street_arena_is_clear_and_inside_the_walkable_street() -> void:
+	# Rect2(8, -5, 24.5, 10) inside the street plates; his post standing ground; no other encounter's post inside it; the lane mouth (x 25..30, z -5) on its north side
+func test_the_boss_bar_follows_the_fight() -> void:
+	# boss_bar() is {} before he engages, {title "The Collector", hp 1.0, posture 1.0} on engaging, hp 0.5 at 150 HP, {} once he is dead
+func test_the_entrance_seam_fires_once_with_a_scene_and_never_without_one() -> void:
+	# empty entrance_scene: `entrance_requested` never; with &"fixture_yard_entrance" set: once when he wakes, not again on the same standing; Main.scene_player is called once with it
+# tests/render/test_collector_look.gd   (--render)
+func test_he_reads_beside_abarax_and_a_tier_iii_on_the_cobble() -> void:
+	# a 640 x 360 shot on the street's cobble of the three side by side: his silhouette (ShotMasks.silhouette) is >= the tier III's area; the mean luminance of his body pixels differs from the cobble beside him by at least the tier III's difference (measured first, written in the test); written to out/shots/collector/side_by_side.png
+```
+
+- [ ] **Step 2: Run** `tools/test.sh --filter=test_collector` and `--filter=test_collector_fight`. Expected: FAIL (the def, brains, `BossDef` and `BossFight` do not exist).
+- [ ] **Step 3: Implement.** Data first (the def, the palette, the three brains), checked by `tools/godot.sh -s res://tools/clip_check.gd` and the actor tests; then the three classes, the host's boss hook (a `BossFight` made for an encounter with `boss`), the HUD bar, `Main`'s seam. The palette is `knuckle_heavy`'s as a starting point with the coat and hood slots changed; the render test arbitrates.
+- [ ] **Step 4: Look at it.** In the scratchpad, make a contact sheet of the Collector (`tools/godot.sh --render -s res://tools/sheets/contact_sheet.gd -- --def res://data/actors/collector.tres --out out/sheets/collector.png`) and strips of his three attacks and his phase beats from the game camera; read each PNG: the blade is seen at 1.15, the lunge and the slam tell and wear the rose, the slam does not show a sword where a fist should be (if it does, give him the blade moves only in phase 3 and say so for the owner). Record in the commit what was wrong and fixed.
+- [ ] **Step 5: Run** the filters above, `tools/test.sh --filter=tests/actors`, `--filter=tests/world`, `tools/test.sh --render --filter=test_collector_look`, `tools/clip_check.gd`, `--filter=test_yard_hash_pin`, then `tools/test.sh`.
+- [ ] **Step 6: Commit.** STATE.md Done line: "F3 Task 7 (systems): the Collector, the stretch's mini-boss (a working name): 300 HP and 140 posture of his own, three phases built from the blade Knuckle's cut, chop and lunge and the heavy's slam (the lunge and the slam perilous), a standing beat and a rose rim at each change, leash and full reset, a boss bar, the toll gate opening on his fall and staying open; the entrance is a seam (`BossDef.entrance_scene`, `entrance_requested`)." Owner checklist items: "Fight the Collector three or four times: do the phases read, is the lunge's catch and the slam's hop learnable, is 300 HP and 140 posture a fight of the right length? Is the street's east end a good room for it? What should the first meeting with him look like (the entrance is waiting for a scene)?"
+
+---
+
+### Task 8: A level that can be played through, and its checker
+
+**Files:**
+- Create: `tools/bot/stretch_route.gd`, `tools/stretch_check.gd`, `tools/stretch/stretch_check_job.gd`
+- Modify: `tools/bot/{combat_bot,bot_watch,bot_world,bot_runner,run_bot}.gd`, `.github/workflows/all-divine.yml` (the bot step: read it and `tests/tools/test_ci_workflow.gd` first), `tests/shard_weights.txt`, `STATE.md`
+- Test: `tests/bot/test_stretch_bot.gd`, `tests/world/test_stretch_walkthrough.gd`, `tests/tools/test_stretch_check.gd`
+
+**Interfaces:**
+- Consumes: everything above; `CombatBot` (`begin`, `_foes`, `_move`, the recorder), `BotWatch`, `BotWorld`, `RouteBrain`, `StretchGround`, `Main.stretch_start`.
+- Produces:
+  - `BotWorld.make_stretch(host: Node, seed: int) -> Main`: `StretchRun.start_seed(seed)`, `Game.reset()`, a `Main` with `stretch_start = "new"` added under `host` (ready: the stretch is on, nothing of the player's save is touched).
+  - `class StretchRoute extends RefCounted` (`tools/bot/stretch_route.gd`): `static func objectives(run: StretchRun) -> Array[Dictionary]`, in this order, each `{at: Vector3, press: StringName, done_if: StringName}`: `shrine:rose_a` at rose_a's plinth, press `interact`; `collector_down` at the arena's centre (20, 0, 0), no press; `shrine:rose_b` at rose_b's respawn, press `interact`; `taken:rose_bell` at the Bell's place, press `interact`; `pack_broken` at (-4, 0, -22.5), press `item`; `shortcut_open` at GateFar, press `interact`. `static func path(run: StretchRun, from: Vector3, to: Vector3) -> Array[Vector3]`: waypoints through a graph of the markers and shrine points (`Spawn`, `StreetEast`, the lane mouth, `LaneMid`, `RackEast`, `RackWest`, `GateFar`, both shrines' respawns) with its edges listed in the file, a breadth-first path from the nearest waypoint with a clear straight line (a 0.35 m capsule sweep).
+  - `CombatBot` gains: `var route_run: StretchRun` and `func begin_stretch(player: Actor, run: StretchRun, seed_value: int, how: Policy = Policy.MIXED) -> void` (as `begin` with no arena: the recorder's `hash_of` is `run.state_hash`, the bot's `watch.bounds` is Rect2(-44, -78, 90, 86), deaths are counted and play on from the respawn); with a `route_run`, when no foe is on the field (a foe counts only while awake, in the tree and within `FIGHT_WITHIN` = 12 m of the player) the bot walks the first objective whose `done_if` flag is unset along `StretchRoute.path`, presses its `press` once on arrival and waits up to 120 frames for the flag; with a foe on the field it fights as it does today. With no `route_run` nothing changes (the yard's recordings keep their hashes).
+  - `BotWatch.engage_within := INF` (a foe is counted toward `engage_frames` only while within this many metres of the player; the stretch sets 12), and asleep brains are not counted; `BotWatch.bounds_of_stretch(run) -> Rect2`.
+  - `run_bot.gd --stretch` (`--seeds`, `--frames`, `--policy` as before): plays each seed from a new game through `BotWorld.make_stretch` and prints one line: objectives done (by flag), deaths, petals carried and lost, the frame of each flag, problems.
+  - `tools/stretch_check.gd` (exit 0 `stretch_check: N encounters, M items, K notes OK` or each problem and exit 1; 2 for a file it cannot use): over the loaded stretch with every gate open: every encounter post, shrine point, item place and note is standing ground and reached; no post within 12 m of a respawn; every gate's flag is set by something (a latch, a boss, a squad, a pickup or a shrine); every squad's weakness has a pickup and a hint note that mentions it; every `gone_if` flag has a setter; no two encounters share an id; every `ItemDef` and `NoteDef` is listed as a placeholder while `placeholder` is true (`NOT FINAL: <n> lines of words` after the OK line, not an error).
+
+- [ ] **Step 1: Write the failing tests.**
+
+```gdscript
+# tests/world/test_stretch_walkthrough.gd   (headless; the player is made untouchable: max_hp 1.0e6, refilled; the bot with its route)
+func test_an_untouchable_bot_plays_the_whole_stretch_in_one_go() -> void:
+	# from a new game, StretchRoute objectives, <= 30000 frames: every flag set in order shrine:rose_a, collector_down, shrine:rose_b, taken:rose_bell, pack_broken, shortcut_open; every encounter cleared at least once (host cleared signals) incl. the Pack scattered and the Collector down; the player's items {rose_bell: 1}; carried petals >= 10+10+20+10+30+30+60+20*3 ... (the sum of every fallen foe's def.petals, exactly); no problem line from BotWatch
+func test_the_file_that_run_wrote_holds_what_it_did() -> void:
+	# a store in user://save_test/walk: after the walk the saved file's flags are the six above, rest_shrine rose_b, items {rose_bell: 1}; a new run from it stands at rose_b with the gates open and the Collector not standing
+func test_the_same_seed_plays_the_same_walk() -> void:
+	# two runs of seed 1 for 6000 frames: equal state_hash at the end and equal recorded frames hash; seed 2 differs
+# tests/bot/test_stretch_bot.gd
+func test_a_mortal_bot_dies_respawns_loses_and_regains_petals_without_a_problem() -> void:
+	# seed 1, policy counter, 7200 frames, the Collector made 1.5x as hard as data is not allowed: the data as it is; no problem lines; if it died, the respawn put it at a shrine and the next objective was walked again; deaths counted
+func test_the_bot_leaves_the_yard_alone() -> void:
+	# CombatBot with no route_run: the yard's recordings hash as before (test_yard_hash_pin and the existing bot tests are the proof; this one re-runs the pin through begin())
+func test_a_stretch_recording_replays_as_recorded() -> void:
+	# the 3000-frame bot recording of seed 3 written to user://save_test/bot.tres, replayed through Main with --stretch=new semantics: "as recorded"; the player's save folder unchanged
+func test_watch_counts_a_foe_toward_engaging_only_near_the_player() -> void:
+	# BotWatch.engage_within 12: an idle foe 30 m away for 2000 frames is no problem; one 8 m away that never engages for 901 frames is
+func test_run_bot_stretch_prints_a_line_a_seed_and_exits_zero_without_problems() -> void:
+# tests/tools/test_stretch_check.gd
+func test_the_shipped_stretch_is_clean() -> void:
+	# run the checker over the data: OK line with 7 encounters (street_pair, street_watch, lane_south, lane_north, rack_keeper, loop_straggler, hands_pack) plus collector = 8, 1 item, 1 note; exit 0
+func test_it_refuses_each_fault_a_fixture_has() -> void:
+	# fixtures built in code: a post in a wall; a post 8 m from a respawn; a gate whose flag nothing sets; a squad whose weakness has no pickup; a hint note that never mentions the item; a duplicate encounter id; each is named in one line and exit 1
+func test_it_lists_the_placeholders_and_never_says_ok_after_an_error_of_its_own() -> void:
+```
+
+- [ ] **Step 2: Run** `tools/test.sh --filter=test_stretch_walkthrough`, `--filter=test_stretch_bot`, `--filter=test_stretch_check`. Expected: FAIL (`StretchRoute`, `BotWorld.make_stretch`, `begin_stretch`, the checker do not exist).
+- [ ] **Step 3: Implement** the route and the bot's stretch mode first (the walkthrough test is the one that finds what the other tasks got wrong: fix those in their own files and say so in the commit), then `BotWatch`, `run_bot --stretch`, the checker. If a foe or gate makes the walkthrough impossible, the data (a post, a leash, a radius) changes, never the test.
+- [ ] **Step 4: Add the CI step and the weights.** Read the workflow's bot step and `tests/tools/test_ci_workflow.gd`; add `run_bot.gd --stretch --seeds=1,2 --frames=5400 --policy=counter` beside the yard's runs and the checker run beside the story checker, and make the workflow test hold them. Add `tests/shard_weights.txt` lines for `world/test_stretch_walkthrough.gd`, `bot/test_stretch_bot.gd`, `world/test_collector_fight.gd`, `world/test_pack.gd`, `world/test_encounters.gd` (their times in a filtered run, times two).
+- [ ] **Step 5: Run** the three filters, `tools/godot.sh -s res://tools/stretch_check.gd`, `tools/godot.sh -s res://tools/bot/run_bot.gd -- --stretch --seeds=1,2 --frames=5400 --policy=counter`, `tools/test.sh`, then `TEST_TIMEOUT=3600 tools/test.sh --render` once for the whole suite. Expected: all pass; the checker prints `stretch_check: 8 encounters, 1 items, 1 notes OK` and the `NOT FINAL` line.
+- [ ] **Step 6: STATE.md.** Add the Done lines of Tasks 1 to 8 as the tasks gave them, a "The stretch's systems" heading with the run's own paragraph (`StretchRun`, the save and where it lives, `-- --stretch[=new]`, F2), the owner's checklist ("Owner checklist for the stretch's systems": every item the tasks gave, plus: delete `user://save/save.json` by hand and start again: is it a new game without a word? Kill the game in the middle of a rest and start: is the backup used?), the commands (`tools/godot.sh -s res://tools/stretch_check.gd`, `run_bot.gd --stretch`, `-- --stretch`, `-- --stretch=new`) under How to run, and under Known limits: no kneel clip, no Flask, placeholder words, the Collector's entrance is a seam, `BossDef`'s numbers are first values.
+- [ ] **Step 7: Commit.** STATE.md Done line: "F3 Task 8 (systems): a level that plays through: a bot with a route (`StretchRoute`) plays the stretch from a new game, an untouchable one to the end (every flag, every encounter, the Pack scattered, the Collector down, the loop open) and a mortal one through deaths and respawns with no problem; `tools/stretch_check.gd` checks the data (standing ground, distances, every flag has a setter, the weakness is placed and hinted) and lists the placeholders; CI runs both."
+
+---
+
+## Self-review
+
+**Spec coverage** (F3 and the sections it draws on):
+- Rose shrines, rest, respawn point: Task 2. Levelling and skills: not planned (seam: `rested`).
+- Petals dropped by foes, counted on the HUD, left where the player dies, one chance: Task 3.
+- Death back to the last shrine, foes reset: Tasks 2 (death, respawn) and 4 (the foes' reset on `world_reset`).
+- Saving automatic and continuous, a backup, a version for migration: Task 1 (the file) and Tasks 2, 3, 5, 6, 7 (what triggers a save: rest, flags, death, pickup, autosave tick, exit).
+- A shortcut loop opened from the far side: Task 5.
+- Three to four enemy types placed as encounters (where, what wakes them, how far they chase, how they reset): Task 4.
+- One gank squad ignoring tokens (commits together, flanks, chains) and its secret weakness (hidden item, hinted by a line and the item's words): Task 6.
+- The mini-boss (phases from existing clips, his own posture, a perilous attack, his arena, what opens): Task 7.
+- Section 8's headless tests, the bot and replay, CI: Tasks 1 to 8; the bot and a scripted walk prove play-through in Task 8.
+- Out of scope said in the plan: First Knuckle and the yard as his arena, attributes, levels, equipment, the Flask, found skills, travel between shrines, cutscenes (a seam only), new art.
+
+**Step scan:** every step names its files, signature and test; bodies appear nowhere; steps that say "implement as above" point at the Interfaces block, which carries the exact names, types and values.
+
+**Type consistency:** `StretchRun` members used later (`serial`, `tokens`, `data`, `player`, `set_flag`, `flag`, `world_changed`, `world_reset`, `respawned`, `watch_foe`, `mark_dirty`, `use_item`, `gates`, `petals`) are defined where first needed (Tasks 2, 3, 5, 6) and used under those names; `EncounterDef.squad` and `.boss` are added by Tasks 6 and 7 as Task 4 says; `Placement.brain_broken` is defined in Task 4 and used in Task 6; `GateDoor.open(animated)` is used by Tasks 4 (the flood fill), 5, 7 and 8; `StretchGround` (Task 2) is used by Tasks 2 to 8; flag names (`shrine:<id>`, `taken:rose_bell`, `shortcut_open`, `collector_down`, `pack_broken`) are the same in data, tests and the route.
+
+**Review Focus:** each of the five has its test: 1 in Task 1 (`test_nothing_usable_reads_as_null_and_never_errors`, the newer-version, edited and cut-short tests), 2 in Task 3 (second death, none carried, the file at the moment of death), 3 in Task 7 (reset, dying, pause and region change, the loaded fall), 4 in Tasks 3 and 4 and the checker of Task 8 (standing ground, 12 m from respawns), 5 in Task 2 (`test_a_stretch_session_replays_as_recorded_and_leaves_the_players_save_alone`, the yard pin) and Task 8 (the bot's recording replays).
+
+**Proportion:** the plan is a little over twice the spec's length, in line with the F1 and stretch plans it follows; code appears only as test signatures and interfaces.
