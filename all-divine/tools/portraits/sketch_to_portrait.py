@@ -619,16 +619,16 @@ def _own_profile(dark, mid, alone, keep_mask, halo_reach):
     lifted = np.clip(profile[good] - base[:, None], 0.0, None)
     near = np.abs(offs) <= 3
     darkest = offs[near][np.argmax(lifted[:, near], axis=1)]
-    align = np.round(np.interp(xs, good, _running_median(darkest.astype(np.float64), 15))).astype(int)
+    align = np.round(np.interp(xs, good, _running_median(darkest.astype(np.float64), KEEP_STRETCH))).astype(int)
     slots = np.clip(np.arange(len(offs))[None, :] + align[good][:, None], 0, len(offs) - 1)
     aligned = np.take_along_axis(lifted, slots, axis=1)
     smooth = np.stack([np.interp(xs, good, _running_median(aligned[:, slot], KEEP_STRETCH)) for slot in range(len(offs))])
     # the rule's own rows may be a row off from one column to the next: a row next to a row of the rule's core is the rule's, as far as the core
     core = smooth >= 0.5 * smooth.max(axis=0)[None, :]
-    beside = np.zeros_like(core)
-    beside[1:] |= core[:-1]
-    beside[:-1] |= core[1:]
-    return smooth, align, np.where(beside & ~core, np.maximum(smooth, 0.75 * smooth.max(axis=0)[None, :]), smooth)
+    wide = smooth.copy()
+    wide[1:] = np.maximum(wide[1:], smooth[:-1] * core[:-1])
+    wide[:-1] = np.maximum(wide[:-1], smooth[1:] * core[1:])
+    return smooth, align, wide
 
 
 def _take_rule_off_kept(clean, dark, mid, own, keep_mask, halo_reach):
