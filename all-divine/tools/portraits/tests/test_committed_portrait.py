@@ -40,7 +40,7 @@ class CommittedPortraitTest(unittest.TestCase):
             ys, xs = np.nonzero(differ)
             self.fail("assets/portraits/abarax/neutral.png is not what the tool makes of the drawing and the recipe: "
                       "%d pixels differ (first at x %d, y %d; the largest step is %d of 255). Make it again: "
-                      "python3 -I tools/portraits/sketch_to_portrait.py --sketch %s --recipe %s --out assets/portraits/abarax"
+                      "tools/.venv/bin/python -I tools/portraits/sketch_to_portrait.py --sketch %s --recipe %s --out assets/portraits/abarax"
                       % (int(differ.sum()), int(xs[0]), int(ys[0]),
                          int(np.abs(made.astype(int) - committed.astype(int)).max()),
                          "docs/art/owner/abarax-portrait-sketch-2026-11-14.jpg",
