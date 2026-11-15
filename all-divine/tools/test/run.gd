@@ -5,8 +5,9 @@ extends SceneTree
 ## Prints PASS <id> or FAIL <id>: <message> per test, then "N passed, M failed".
 ## Exits 1 if anything failed or no test ran. tools/test.sh is the usual way to call it.
 ## --files runs exactly the listed test files (comma-separated res:// paths) instead of discovering them.
-## --shard=<i>/<n> runs every n-th of the files, from the i-th (i from 1): n runs with i from 1 to n cover the suite between
-## them (CI's render job is split this way; the software renderer makes the whole suite too long for one job).
+## --shard=<i>/<n> runs the i-th of n shares of the files (i from 1): n runs with i from 1 to n cover the suite between them
+## (CI's render job is split this way; the software renderer makes the whole suite too long for one job). The files are dealt
+## by their weights in tests/shard_weights.txt, slowest first, so that the shares take about the same time.
 
 func _initialize() -> void:
 	# A script error inside _run makes it return the default for its type, which is false.
@@ -47,7 +48,7 @@ func _run(args: PackedStringArray) -> bool:
 
 	if files.is_empty():
 		files = TestRunner.discover("res://tests", include_render)
-	files = TestRunner.shard(files, shard.x, shard.y)
+	files = TestRunner.shard_for_run(files, shard.x, shard.y)
 	var runner := TestRunner.new()
 	var total := TestReport.new()
 	for path in files:

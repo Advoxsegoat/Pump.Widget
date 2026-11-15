@@ -1,0 +1,77 @@
+# Seconds each slow test file takes in one of CI's render shards (a software renderer draws every frame there).
+# tools/test/run.gd deals the files of a --shard run by these weights (TestRunner.shard): slowest first, each to the shard that
+# holds the least, so that the shards come out even. A file not named here weighs 5 s (TestRunner.DEFAULT_WEIGHT).
+#
+# A line is: <seconds> <the file's path under tests/>. Where the number came from is said after the #:
+#   render log      the time between the file's last PASS line and the one before, in a render shard's log
+#   headless x8     eight times its time in the headless job's log (not yet seen in a render shard's log)
+#   render default  a file of tests/render not yet seen in a log
+# Give a new slow file a line when it joins (its time in a filtered render run here, times two, is near enough), and
+# refresh the numbers from CI's logs when a shard nears its cap (tests/tools/test_ci_workflow.gd says when).
+575  story/test_cine_camera.gd   # render log
+346  bot/test_combat_bot.gd   # render log
+257  actors/test_enemy_brain.gd   # render log
+158  actors/test_blade_knuckle.gd   # render log
+125  demo/test_demo_reel.gd   # render log
+112  story/test_director_freed.gd   # headless x8
+104  actors/test_heavy_tokens.gd   # headless x8
+103  replay/test_replay.gd   # render log
+88   world/test_bilibara.gd   # headless x8
+78   actors/test_sway_input.gd   # render log
+72   moves/test_set_marks.gd   # headless x8
+70   render/test_bilibara_hidden.gd   # render log
+56   moves/test_clip_checker.gd   # headless x8
+56   story/test_director_skip.gd   # headless x8
+56   story/test_story_walk.gd   # headless x8
+56   ui/test_controls_screen.gd   # headless x8
+52   render/test_director_strips.gd   # render log
+50   main/test_selftest.gd   # render log
+49   tools/test_story_check.gd   # render log
+48   render/test_menu_shots.gd   # render log
+48   story/test_moment_aim.gd   # headless x8
+45   render/test_rim_matrix.gd   # render log
+42   render/test_cine_shots.gd   # render log
+40   actors/test_drummer.gd   # headless x8
+40   main/test_main_replay.gd   # headless x8
+40   replay/test_replay_settings_change.gd   # headless x8
+40   story/test_place_reach.gd   # headless x8
+37   render/test_chain_shots.gd   # render log
+34   hud/test_hud.gd   # render log
+34   render/test_readability_shots.gd   # render log
+31   actors/test_heavy_knuckle.gd   # render log
+30   render/test_blade_look.gd   # render default
+30   render/test_block_lighting.gd   # render default
+30   render/test_body_inflate_shots.gd   # render default
+30   render/test_clearout_shot.gd   # render default
+30   render/test_contact_sheet.gd   # render default
+30   render/test_courtyard_shot.gd   # render default
+30   render/test_ground_pictures.gd   # render default
+30   render/test_hud_draw.gd   # render default
+30   render/test_kit_run_bounds.gd   # render default
+30   render/test_moment_strips.gd   # render default
+30   render/test_pixel_stage.gd   # render default
+30   render/test_portrait_card_draw.gd   # render default
+30   render/test_screen_post.gd   # render default
+30   render/test_shot_masks.gd   # render default
+30   render/test_toon_palette.gd   # render default
+30   render/test_yard_shot.gd   # render default
+24   actors/test_heavy_gait.gd   # headless x8
+24   story/test_moment.gd   # headless x8
+24   tools/test_runner_self.gd   # headless x8
+24   ui/test_pause.gd   # headless x8
+20   actors/test_abarax_model.gd   # render log
+19   render/test_drummer_start_shots.gd   # render log
+19   render/test_menu_draw.gd   # render log
+18   anim/test_counter_starts.gd   # render log
+16   actors/test_scarf.gd   # headless x8
+16   combat/test_attack_tokens.gd   # headless x8
+16   combat/test_dodge_chain.gd   # headless x8
+16   replay/test_replay_aim.gd   # headless x8
+16   story/test_director_cast.gd   # headless x8
+16   story/test_moment_replay.gd   # headless x8
+16   ui/test_skip_scene_row.gd   # headless x8
+83   actors/test_abarax_feather.gd   # render log
+40   actors/test_spring_reset.gd   # an estimate (three fights of 600 frames): not yet seen in a log
+150  render/test_story_shots.gd   # 118 s here in a filtered render run at load 4 to 6: not yet seen in a log
+80   tools/test_story_tools.gd   # it starts the two tools for real (45 s here headless): an estimate
+60   tools/test_tool_safety.gd   # it starts and kills the tools (35 s here headless): an estimate
