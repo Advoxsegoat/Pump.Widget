@@ -21,6 +21,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$ROOT/tools/override_cfg.sh"
+. "$ROOT/tools/story_refusal.sh"
 FFMPEG="${FFMPEG:-ffmpeg}"
 SCENE="${1:-}"
 [ -n "$SCENE" ] || { echo "usage: tools/animatic.sh <scene> [out dir]" >&2; exit 2; }
@@ -40,7 +41,7 @@ override_claim animatic.sh || exit $?
 "$ROOT/tools/godot.sh" -s res://tools/story_check.gd -- --scene="$SCENE" >"$log" 2>&1
 status=$?
 if [ "$status" -ne 0 ]; then
-	grep '^story_check: ' "$log" >&2 || cat "$log" >&2
+	story_refusal "$log" >&2
 	exit 1
 fi
 command -v "$FFMPEG" >/dev/null 2>&1 || { echo "animatic.sh: ffmpeg is not installed, so no video can be made (tools/storyboard.sh $SCENE needs none)" >&2; exit 3; }

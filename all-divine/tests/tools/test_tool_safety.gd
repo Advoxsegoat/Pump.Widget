@@ -52,7 +52,7 @@ func _make_root(real_godot: bool) -> String:
 	OS.execute("rm", ["-rf", root])
 	DirAccess.make_dir_recursive_absolute(root.path_join("tools"))
 	DirAccess.make_dir_recursive_absolute(root.path_join("fake"))
-	for name in ["godot.sh", "storyboard.sh", "animatic.sh", "record_reel.sh", "override_cfg.sh"]:
+	for name in ["godot.sh", "storyboard.sh", "animatic.sh", "record_reel.sh", "override_cfg.sh", "story_refusal.sh"]:
 		var from := _project().path_join("tools").path_join(name)
 		if FileAccess.file_exists(from):
 			DirAccess.copy_absolute(from, root.path_join("tools").path_join(name))

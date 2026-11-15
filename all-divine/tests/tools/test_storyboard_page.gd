@@ -12,14 +12,14 @@ func _fixture() -> SceneShots:
 func test_the_text_for_each_fixture_shot_names_framing_move_action_line_sound_and_timing() -> void:
 	var scene := _fixture()
 	assert_eq(StoryboardPage.ShotText.describe(scene, 1), PackedStringArray([
-		"S2   MEDIUM, the camera pushes in   (DOLLY 2>3)",
+		"S2   MEDIUM, the camera pushes in, from medium to close   (DOLLY 2>3)",
 		"1.00 s long   ·   1.50 s to 2.50 s   (frames 90 to 150)",
 		"picture: 0.50 s into the shot (the middle)",
 		"ACTION: He stops and folds his arms",
 		"CAMERA: Medium (people from about the waist up), looking at Knuckle. The camera pushes in, from medium to close. It cuts in from the last shot.",
 		"DOES: Knuckle plays the clip knuckle_idle, repeating (at the start)",
 		"DOES: Abarax plays the clip guard_raise (at the start)",
-		"DOES: Abarax plays the clip guard_hold, repeating (at +0.23 s, frame 14)",
+		"DOES: Abarax plays the clip guard_hold, repeating (at +0.23 s)",
 		"SOUND: cloth_move, heard at Knuckle (at the start)",
 		"FOCUS: sharp on Knuckle",
 	]))

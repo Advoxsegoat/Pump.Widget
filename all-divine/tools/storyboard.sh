@@ -21,6 +21,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$ROOT/tools/override_cfg.sh"
+. "$ROOT/tools/story_refusal.sh"
 SCENE="${1:-}"
 [ -n "$SCENE" ] || { echo "usage: tools/storyboard.sh <scene> [out dir]" >&2; exit 2; }
 case "$SCENE" in *[!a-z0-9_]*) echo "storyboard.sh: '$SCENE' is not a scene's name (lower case, digits and _)" >&2; exit 2 ;; esac
@@ -47,7 +48,7 @@ override_claim storyboard.sh || exit $?
 "$ROOT/tools/godot.sh" -s res://tools/story_check.gd -- --scene="$SCENE" >"$log" 2>&1
 status=$?
 if [ "$status" -ne 0 ]; then
-	grep '^story_check: ' "$log" >&2 || cat "$log" >&2
+	story_refusal "$log" >&2
 	exit 1
 fi
 grep '^story_check: ' "$log" | tail -1
