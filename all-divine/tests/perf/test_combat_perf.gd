@@ -20,6 +20,12 @@ extends TestCase
 const FRAMES := 1200
 const MEAN_BUDGET_FOUR_MS := 3.0
 const MEAN_BUDGET_WAVE_MS := 2.5
+## The longest single step, in the thread's own time: a hitch is what a player feels, and neither the quietest-window mean nor the
+## 99th percentile sees a rare one (a 40 ms stall every 200th step passed both). Measured (thread time, 15 runs, ten alone and five
+## beside eight spinning shells): four Knuckles 10.3 to 18.4 ms, the worst wave 6.4 to 7.7 ms; each bound is about twice its worst
+## and under 40 ms.
+const LONGEST_BUDGET_FOUR_MS := 36.0
+const LONGEST_BUDGET_WAVE_MS := 15.0
 ## What a rendered run is held to (the render shards cost the physics step more).
 const MEAN_BUDGET_RENDERED_MS := 4.0
 const P99_BUDGET_MS := 8.0
@@ -78,13 +84,14 @@ static func mean_budget(headless_ms: float) -> float:
 	return headless_ms if DisplayServer.get_name() == "headless" else MEAN_BUDGET_RENDERED_MS
 
 
-func _hold(label: String, meter: FrameMeter, alive: int, least_alive: int, mean_budget_ms: float) -> void:
+func _hold(label: String, meter: FrameMeter, alive: int, least_alive: int, mean_budget_ms: float, longest_budget_ms: float) -> void:
 	var held := meter.held()
 	if OS.get_environment("PERF_REPORT") != "":
 		print("PERF %s: %d steps, %d foes alive at the end; %s" % [label, held["count"], alive, meter.both()])
 	assert_true(held["count"] >= FRAMES, "%s: timed %d physics steps" % [label, held["count"]])
 	assert_true(alive >= least_alive, "%s: the foes were still there at the end (%d alive): a fight with them gone costs less" % [label, alive])
 	assert_true(held["mean"] <= mean_budget_ms, "%s: a physics step takes %.2f ms in the quietest stretch (%s, budget %.1f ms); %s" % [label, held["mean"], held["basis"], mean_budget_ms, meter.both()])
+	assert_true(held["max"] <= longest_budget_ms, "%s: the longest physics step takes %.2f ms (%s, budget %.1f ms): a hitch a player feels; %s" % [label, held["max"], held["basis"], longest_budget_ms, meter.both()])
 	assert_true(held["p99"] <= P99_BUDGET_MS, "%s: the 99th percentile of a physics step is %.2f ms (%s, budget %.1f ms); %s" % [label, held["p99"], held["basis"], P99_BUDGET_MS, meter.both()])
 
 
@@ -95,7 +102,7 @@ func test_four_knuckles_fight_abarax_within_the_budget() -> void:
 		arena.debug_key(key)
 	assert_eq(_foes_alive(arena), 4, "four Knuckles are in the yard")
 	var done := await _play(arena)
-	_hold("four Knuckles", done[0], done[1], 3, mean_budget(MEAN_BUDGET_FOUR_MS))
+	_hold("four Knuckles", done[0], done[1], 3, mean_budget(MEAN_BUDGET_FOUR_MS), LONGEST_BUDGET_FOUR_MS)
 
 
 func test_the_yards_worst_wave_with_a_drummer_within_the_budget() -> void:
@@ -112,4 +119,4 @@ func test_the_yards_worst_wave_with_a_drummer_within_the_budget() -> void:
 	drummer.place(Transform3D(Basis(Vector3.UP, PI), spawns[2 % spawns.size()].global_position))
 	assert_eq(_foes_alive(arena), 3, "the heavy, a tier I and a Drummer are in the yard")
 	var done := await _play(arena)
-	_hold("the worst wave and a Drummer", done[0], done[1], 2, mean_budget(MEAN_BUDGET_WAVE_MS))
+	_hold("the worst wave and a Drummer", done[0], done[1], 2, mean_budget(MEAN_BUDGET_WAVE_MS), LONGEST_BUDGET_WAVE_MS)
