@@ -129,3 +129,15 @@ func test_an_attacker_with_his_back_to_a_wall_still_hits_the_foe_before_him() ->
 	assert_eq(walled["hits"], open["hits"], "and on the same frame with a wall at his back")
 	var shallow: Dictionary = await _blow(ABARAX, &"palm_jab", KNUCKLE_1, 1.0, _wall(-0.2, Vector3(4.0, 3.0, 0.8)))
 	assert_eq(shallow["hits"], open["hits"], "and with a deep wall his body is half in")
+
+
+# A grab begins with a blow (its hitbox's GRABBED profile), so the rule covers it: through a wall no pair starts.
+func test_a_grab_does_not_take_hold_through_a_wall() -> void:
+	var seen := func(run: Dictionary) -> void:
+		if (run["attacker"] as Actor).paired_with != null:
+			run["paired"] = true
+	var open: Dictionary = await _blow(KNUCKLE_1, &"knuckle_grab", ABARAX, 1.0, [], Vector3.INF, seen)
+	assert_true(open.get("paired", false), "in the open the grab takes hold")
+	var walled: Dictionary = await _blow(KNUCKLE_1, &"knuckle_grab", ABARAX, 1.0, _wall(0.5), Vector3.INF, seen)
+	assert_false(walled.get("paired", false), "through a wall no pair starts")
+	assert_eq(walled["hits"], [], "and the foe is not even struck")
