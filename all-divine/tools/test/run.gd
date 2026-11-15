@@ -2,7 +2,8 @@ extends SceneTree
 ## Test entry point:
 ##   godot --headless --fixed-fps 60 -s res://tools/test/run.gd -- [--filter=<s>] [--files=<a.gd,b.gd>]
 ##         [--render|--forward-plus] [--update-golden] [--expect-method=<rendering method>] [--shard=<i>/<n>]
-## Prints PASS <id> or FAIL <id>: <message> per test, then "N passed, M failed".
+## Prints PASS <id> or FAIL <id>: <message> per test, `FILE-SECONDS <seconds> <path under tests/>` after each file's tests (what
+## tools/test/shard_weights.py turns CI's render logs into tests/shard_weights.txt), then "N passed, M failed".
 ## Exits 1 if anything failed or no test ran. tools/test.sh is the usual way to call it.
 ## --files runs exactly the listed test files (comma-separated res:// paths) instead of discovering them.
 ## --shard=<i>/<n> runs the i-th of n shares of the files (i from 1): n runs with i from 1 to n cover the suite between them
@@ -52,12 +53,16 @@ func _run(args: PackedStringArray) -> bool:
 	var runner := TestRunner.new()
 	var total := TestReport.new()
 	for path in files:
+		var began := Time.get_ticks_msec()
 		var report: TestReport = await runner.run_files([path], filter)
+		var took := (Time.get_ticks_msec() - began) / 1000.0
 		for result in report.results:
 			if result.ok:
 				print("PASS %s" % result.id)
 			else:
 				print("FAIL %s: %s" % [result.id, result.message])
+		if not report.results.is_empty():
+			print(TestRunner.time_line(path, took))
 		total.merge(report)
 
 	print("%d passed, %d failed" % [total.passed, total.failed])

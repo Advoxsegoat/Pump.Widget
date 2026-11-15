@@ -10,22 +10,36 @@ extends SceneTree
 ##   stairs X0 Z0 X1 Z1 N UP            N steps climbing toward UP (n, e, s, w), with a smooth walk ramp
 ##   ramp X0 Z0 X1 Z1 UP                a wedge up toward UP
 ##   edge PIECE X0 Z0 X1 Z1 FACING [solid]   a wall-like Kenney piece every 2.5 m along a line, its face toward FACING
-##   piece PIECE X Z [YAW] [y=Y]        a Kenney piece, colliding as MODELS says
-##   curb X0 Z0 X1 Z1 H [STONE] [moonlit] [name=NAME] [y=RAISE]    a low solid box of STONE (flagstone, slate, cobble,
+##   piece PIECE X Z [YAW] [y=Y] [ghost]   a Kenney piece, colliding as MODELS says (`ghost`: not at all)
+##   curb X0 Z0 X1 Z1 H [STONE] [moonlit] [name=NAME] [y=RAISE]    a low solid box of STONE (flagstone, slate, slate_cold, slate_pale, flagstone_cold, cobble,
 ##                                      tan_earth, snow), named NAME (default Curb), its underside RAISE up (default 0)
-##   ground X0 Z0 X1 Z1 STONE [visual]  a plate of ground 1 m thick with its top at y = 0, at most 12.5 m a side: solid and
+##   ground X0 Z0 X1 Z1 STONE [visual] [name=NAME]  a plate of ground 1 m thick with its top at y = 0, at most 12.5 m a side: solid and
 ##                                      walkable (world, ik_surface; under Walkable), or `visual`: only seen (under
 ##                                      Backdrop); two plates may not overlap
+##   row PIECE X0 Z0 X1 Z1 YAW [y=Y] [backdrop]   a kit piece every 2.5 m along a line (both ends included), turned YAW degrees, Y up
+##                                      (default 0): racks, hides, drifts of planks; a few runs under Props, with no collider
+##                                      (`backdrop`: under Backdrop, casting no shadow: a chimney of the ring)
 ##   block X0 Z0 X1 Z1 STOREYS STYLE ROOF [solid]   a building over whole 2.5 m tiles (at most 60 m a side), 1 to 5
 ##                                      storeys: its south face and roof, drawn as a few MultiMeshes (STYLE: frontage,
-##                                      tannery, shed, plain; ROOF: flat, slope, high), solid (one box, under Blocks) or
+##                                      tannery, shed, plain; ROOF: flat, slope, high, gable), solid (one box, under Blocks) or
 ##                                      backdrop (no collider, no shadow)
 ##   water X0 Z0 X1 Z1 Y [liquor]       a thin plane at height Y, seen only; two at one height may not overlap
+##   drift X Z W D [y=Y] [seed=N]       a mound of snow of rounded lumps (about W x D, at most 0.32 m high), seen only, on Y
 ##   vat X Z                            a 2.5 m slate box 1 m high, solid, with liquor in it
-##   lantern X Z [shadow]               a lantern with its lamp (see lamps)
-##   lamps COLOUR RANGE ENERGY UP [world]   every lantern's lamp; `world`: it lights the world and not the bodies
+##   lantern X Z [shadow] [ghost] [y=Y] [wall=n|e|s|w]  a lantern with its lamp (see lamps): a solid post, or `ghost` (no collider: where no
+##                                      body can reach, on a low wall's top at y=Y); a post that stands against a wall (the way `wall=` says)
+##                                      is a wedge a body slides off, wider than the pole and standing out 0.2 m from the wall, not a cylinder
+##   fringe X0 Z0 X1 Z1 STONE FROM [seed=N]   a ragged fringe of STONE laid on the ground over the rect, seen only: STONE reaches out from
+##                                      the rect's edge FROM (n, e, s or w: the seam it lies on) into the ground beside it, in slabs and tongues of uneven
+##                                      length, so that two grounds do not meet in a straight line
+##   deflect                            every solid body of the layout deflects (see Actor): a body that runs at one goes along it at its own
+##                                      speed, and a body that runs dead on at a post (a slim body), or at a point (a corner), goes round the side it is offset to
+##   guard X0 Z0 X1 Z1 H [name=NAME]    an unseen solid box H high (world only): the body of a colonnade's pillars
+##   lamps COLOUR RANGE ENERGY UP [world] [glass]   every lantern's lamp; `world`: it lights the world and not the bodies; `glass`: each lantern has a
+##                                      small warm glass pane on its lamp's housing too (the lamp's colour toward white), the lamp when ENERGY is 0
 ##   marker NAME X Z [YAW]  /  poi NAME X Z UP    a Marker3D, and one to glance at
-##   sun PITCH YAW COLOUR ENERGY        the DirectionalLight3D, with shadows
+##   sun PITCH YAW COLOUR ENERGY [ortho]  the DirectionalLight3D, with shadows (`ortho`: one orthogonal shadow map, not four splits:
+##                                      each shadow-casting mesh is then drawn once into it, not up to four times)
 ##   moon PITCH YAW COLOUR ENERGY  /  fill PITCH YAW COLOUR ENERGY    a light for the bodies of actors only, no shadows
 ##                                      (a night's moon, a day's fill); the sun leaves the bodies to it; one in a region
 ##   sky COLOUR  /  ambient COLOUR ENERGY    the background and the ambient light
@@ -52,6 +66,9 @@ const FLAGSTONE := preload("res://world/materials/flagstone.tres")
 const STONES := {
 	"flagstone": FLAGSTONE,
 	"slate": preload("res://world/materials/slate.tres"),
+	"slate_cold": preload("res://world/materials/slate_cold.tres"),
+	"slate_pale": preload("res://world/materials/slate_pale.tres"),
+	"flagstone_cold": preload("res://world/materials/flagstone_cold.tres"),
 	"cobble": preload("res://world/materials/cobble.tres"),
 	"tan_earth": preload("res://world/materials/tan_earth.tres"),
 	"snow": preload("res://world/materials/snow.tres"),
@@ -60,10 +77,19 @@ const STONES := {
 const KITS := {
 	"bilibara": preload("res://world/materials/kenney_town_bilibara.tres"),
 }
+## The banners' material in a kit that has neon (the banner pieces' own colours, glowing).
+const NEON := {
+	"bilibara": preload("res://world/materials/kenney_town_neon.tres"),
+}
+## The fences' material in a kit that has dark iron bars.
+const FENCES := {
+	"bilibara": preload("res://world/materials/kenney_town_iron.tres"),
+}
 ## How a piece collides, when not as a box round all of it: "none", "cylinder" (round all of it), "post" (a
 ## pole POST_RADIUS thick, its full height) or "trunk" (a tree's trunk, TRUNK_RADIUS by TRUNK_HEIGHT).
 const MODELS := {
 	"banner-red": "none",
+	"wall-door": "none",
 	"banner-green": "none",
 	"fountain-round": "cylinder",
 	"fountain-round-detail": "cylinder",
@@ -71,10 +97,32 @@ const MODELS := {
 	"tree": "trunk",
 	"tree-high-round": "trunk",
 	"planks": "none",
+	"fence": "none",
+	"fence-gate": "none",
+	"rock-small": "none",
+	"poles": "none",
+	"poles-horizontal": "none",
+	"rock-large": "none",
 	"chimney": "none",
 	"pillar-wood": "post",
 }
+## A fringe lies this far above the ground it is laid on (the ground's plates are 1 m thick with their tops at y = 0).
+const FRINGE_RAISE := 0.006
+const FRINGE_SHADER := preload("res://render/shaders/toon_fringe.gdshader")
+## The lanterns' warm glass: a ball this big, this far up the lamp (the housing's front, toward the camera) and out from the post's axis, in the
+## lamp's colour taken this share of the way to white.
+const GLASS_RADIUS := 0.09
+const GLASS_UP := 0.1
+const GLASS_OUT := 0.2
+const GLASS_WHITE := 0.4
 const POST_RADIUS := 0.27
+## A post against a wall (`lantern ... wall=n`): its collider is a wedge on the wall, WEDGE_HALF either side of the post's middle and
+## WEDGE_DEPTH out from the wall, which stands POST_WALL_GAP from the post's middle. A body's centre then stays outside the pole's
+## round (the wedge stands out 0.2 m, the body's own reach is 0.35 m, the pole 0.27 m from its middle) and the wedge's faces
+## are 27 degrees to the wall, so that a body that runs at it along the wall or at 45 degrees goes up one and down the other.
+const WEDGE_HALF := 0.4
+const WEDGE_DEPTH := 0.2
+const POST_WALL_GAP := 0.28
 const TRUNK_RADIUS := 0.3
 const TRUNK_HEIGHT := 2.0
 ## A solid edge's collision reaches at least this far behind its face.
@@ -150,6 +198,9 @@ class Builder extends "res://tools/world/region_nodes.gd":
 	var _kit := ""  # the `kit` line's name, and the line it was on
 	var _kit_line := 0
 	var _feet := 0  # of `ik_surface` alone
+	var _glass_material: StandardMaterial3D  # the lanterns' warm glass, made once
+	var _deflects := false  # a `deflect` line: the solid bodies carry the Actor's mark (see _mark_deflecting)
+	var _posts: Array[StaticBody3D] = []  # the posts' bodies (slim ones)
 
 	func build(text: String, root_name: String) -> Node3D:
 		world_and_feet = LAYERS.WORLD | LAYERS.IK_SURFACE
@@ -169,6 +220,8 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				if (pass_kind == "ground") == is_ground:
 					_command(words)
 		_dress_the_kit()
+		if _deflects:
+			_mark_deflecting(_root)
 		_own(_root, _root)
 		return _root
 
@@ -205,14 +258,17 @@ class Builder extends "res://tools/world/region_nodes.gd":
 					_edge(args[0], Vector2(n[0], n[1]), Vector2(n[2], n[3]), facing, args.size() > 6 and args[6] == "solid")
 			"piece":
 				if args.is_empty():
-					problem("piece needs PIECE X Z [YAW] [y=Y]")
+					problem("piece needs PIECE X Z [YAW] [y=Y] [ghost]")
 					return
 				var y: Variant = _y_option(args)
-				var n := _numbers(PackedStringArray(Array(args.slice(1)).filter(func(a: String) -> bool: return not a.begins_with("y="))), 2, 3)
-				if n.size() >= 2:
+				var ghosts := Array(args.slice(1)).filter(func(a: String) -> bool: return a == "ghost").size()
+				var n := _numbers(PackedStringArray(Array(args.slice(1)).filter(func(a: String) -> bool: return not a.begins_with("y=") and a != "ghost")), 2, 3)
+				if ghosts > 1:
+					problem("a piece is a ghost once")
+				elif n.size() >= 2:
 					var at := Vector3(n[0], 0.0, n[1])
 					at.y = y if y != null else _ground(Vector2(at.x, at.z))
-					_piece(group_node("Props"), args[0], at, n[2] if n.size() > 2 else 0.0)
+					_piece(group_node("Props"), args[0], at, n[2] if n.size() > 2 else 0.0, ghosts == 1)
 			"curb":
 				var options := Array(args.slice(5))
 				var moonlit := options.has("moonlit")
@@ -236,18 +292,90 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				var n := _numbers(args.slice(0, 5), 5, 5)
 				if n.size() == 5:
 					_curb(_rect(n), n[4], STONES[options[0]] if options.size() == 1 else FLAGSTONE, moonlit, node_name, raise)
+			"row":
+				var backdrop := args.has("backdrop")
+				var row_args := Array(args).filter(func(a: String) -> bool: return a != "backdrop")
+				if row_args.size() < 6 or row_args.size() > 7 or args.count("backdrop") > 1:
+					problem("row needs PIECE X0 Z0 X1 Z1 YAW [y=Y] [backdrop]")
+					return
+				var y: Variant = _y_option(PackedStringArray(row_args))
+				var n := _numbers(PackedStringArray(row_args.slice(1).filter(func(a: String) -> bool: return not a.begins_with("y="))), 5, 5)
+				if n.size() == 5:
+					BLOCKS.row(self, row_args[0], Vector2(n[0], n[1]), Vector2(n[2], n[3]), deg_to_rad(n[4]), y if y != null else 0.0, backdrop)
+			"drift":
+				var seed_value := 1
+				var raise := 0.0
+				var rest := PackedStringArray()
+				var bad_word := false
+				for word in args:
+					if word.begins_with("seed="):
+						bad_word = bad_word or not word.trim_prefix("seed=").is_valid_int()
+						seed_value = word.trim_prefix("seed=").to_int()
+					elif word.begins_with("y="):
+						bad_word = bad_word or not word.trim_prefix("y=").is_valid_float()
+						raise = word.trim_prefix("y=").to_float()
+					else:
+						rest.append(word)
+				var n := _numbers(rest, 4, 4)
+				if bad_word:
+					problem("drift needs X Z W D [y=Y] [seed=N], with numbers")
+				elif n.size() == 4:
+					BLOCKS.drift(self, Vector2(n[0], n[1]), Vector2(n[2], n[3]), raise, seed_value)
 			"lamps":
-				var world := args.size() == 5 and args[4] == "world"
-				if args.size() != 4 and not world:
-					problem("lamps needs COLOUR RANGE ENERGY UP [world]")
+				var extras := Array(args.slice(4))
+				var world := extras.has("world")
+				var glass := extras.has("glass")
+				if args.size() < 4 or args.size() > 6 or extras.any(func(a: String) -> bool: return a != "world" and a != "glass") or extras.size() != (1 if world else 0) + (1 if glass else 0):
+					problem("lamps needs COLOUR RANGE ENERGY UP [world] [glass]")
 					return
 				var n := _numbers(args.slice(1, 4), 3, 3)
 				if _is_colour(args[0]) and n.size() == 3:
-					_lamp = {colour = Color(args[0]), range = n[0], energy = n[1], up = n[2], world = world}
+					_lamp = {colour = Color(args[0]), range = n[0], energy = n[1], up = n[2], world = world, glass = glass}
 			"lantern":
-				var n := _numbers(PackedStringArray(Array(args).filter(func(a: String) -> bool: return a != "shadow")), 2, 2)
-				if n.size() == 2:
-					_lantern(Vector2(n[0], n[1]), args.has("shadow"))
+				var lantern_words := PackedStringArray(Array(args).filter(func(a: String) -> bool: return a != "shadow" and a != "ghost" and not a.begins_with("y=") and not a.begins_with("wall=")))
+				var raise: Variant = _y_option(args)
+				var walls := Array(args).filter(func(a: String) -> bool: return a.begins_with("wall="))
+				var n := _numbers(lantern_words, 2, 2)
+				if args.count("shadow") > 1 or args.count("ghost") > 1 or walls.size() > 1 or (walls.size() == 1 and not WAYS.has(String(walls[0]).trim_prefix("wall="))):
+					problem("lantern needs X Z [shadow] [ghost] [y=Y] [wall=n|e|s|w]")
+				elif n.size() == 2:
+					_lantern(Vector2(n[0], n[1]), args.has("shadow"), args.has("ghost"), raise if raise != null else 0.0,
+							WAYS[String(walls[0]).trim_prefix("wall=")] if walls.size() == 1 else Vector2.ZERO)
+			"fringe":
+				var fringe_seed := 1
+				var fringe_words := PackedStringArray()
+				for word in args:
+					if word.begins_with("seed="):
+						if not word.trim_prefix("seed=").is_valid_int():
+							problem("fringe: '%s' is not a seed" % word)
+							return
+						fringe_seed = word.trim_prefix("seed=").to_int()
+					else:
+						fringe_words.append(word)
+				var fringe_n: Array[float] = []
+				if fringe_words.size() == 6:
+					fringe_n = _numbers(fringe_words.slice(0, 4), 4, 4)
+				if fringe_words.size() != 6 or fringe_n.size() != 4 or not STONES.has(fringe_words[4]) or not WAYS.has(fringe_words[5]):
+					problem("fringe needs X0 Z0 X1 Z1 STONE FROM [seed=N], the stone one of %s and FROM n, e, s or w" % ", ".join(STONES.keys()))
+				else:
+					_fringe(_rect(fringe_n), STONES[fringe_words[4]], fringe_words[5], fringe_seed)
+			"deflect":
+				if not args.is_empty() or _deflects:
+					problem("deflect is one line, with nothing after it")
+				_deflects = true
+			"guard":
+				var guard_name := ""
+				var guard_words := PackedStringArray()
+				for word in args:
+					if word.begins_with("name="):
+						guard_name = word.trim_prefix("name=")
+					else:
+						guard_words.append(word)
+				var n := _numbers(guard_words, 5, 5)
+				if guard_name.is_empty() and args.size() == 6:
+					problem("guard needs X0 Z0 X1 Z1 H [name=NAME]")
+				elif n.size() == 5:
+					_guard(_rect(n), n[4], guard_name)
 			"marker":
 				if args.is_empty():
 					problem("marker needs NAME X Z [YAW]")
@@ -263,9 +391,10 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				if n.size() == 3:
 					_marker(args[0], Vector2(n[0], n[1]), n[2], 0.0, true)
 			"sun":
-				var light := _light_words(args, "sun")
+				var ortho := args.size() == 5 and args[4] == "ortho"
+				var light := _light_words(args.slice(0, 4) if ortho else args, "sun")
 				if not light.is_empty():
-					_sun(light[0], light[1], light[2], light[3])
+					_sun(light[0], light[1], light[2], light[3], ortho)
 			"moon":
 				var light := _light_words(args, "moon")
 				if not light.is_empty():
@@ -275,18 +404,27 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				if not light.is_empty():
 					_fill(light[0], light[1], light[2], light[3])
 			"ground":
-				var visual := args.size() == 6 and args[5] == "visual"
-				if args.size() < 5 or args.size() > 6 or (args.size() == 6 and not visual):
-					problem("ground needs X0 Z0 X1 Z1 STONE [visual]")
+				var plate_name := ""
+				var named := 0
+				var plate_args := PackedStringArray()
+				for word in args:
+					if word.begins_with("name="):
+						named += 1
+						plate_name = word.trim_prefix("name=")
+					else:
+						plate_args.append(word)
+				var visual := plate_args.size() == 6 and plate_args[5] == "visual"
+				if plate_args.size() < 5 or plate_args.size() > 6 or (plate_args.size() == 6 and not visual) or named > 1 or (named == 1 and plate_name.is_empty()):
+					problem("ground needs X0 Z0 X1 Z1 STONE [visual] [name=NAME]")
 					return
-				var n := _numbers(args.slice(0, 4), 4, 4)
+				var n := _numbers(plate_args.slice(0, 4), 4, 4)
 				if n.size() != 4:
 					return
-				if not STONES.has(args[4]):
+				if not STONES.has(plate_args[4]):
 					problem("ground needs X0 Z0 X1 Z1 STONE [visual], the stone one of %s" % ", ".join(STONES.keys()))
 				elif _clear_of(_grounds, _rect(n), "ground"):
 					_clear_of_solid_blocks(_rect(n), visual)
-					BLOCKS.ground(self, _rect(n), STONES[args[4]], visual)
+					BLOCKS.ground(self, _rect(n), STONES[plate_args[4]], visual, plate_name)
 			"block":
 				var solid := args.size() == 8 and args[7] == "solid"
 				if args.size() < 7 or args.size() > 8 or (args.size() == 8 and not solid):
@@ -333,7 +471,11 @@ class Builder extends "res://tools/world/region_nodes.gd":
 					env.ambient_light_energy = n[0]
 			"script":
 				if args.size() == 1 and ResourceLoader.exists(args[0]) and load(args[0]) is Script:
+					# A new script forgets what was set on the old one: the grade of a `grade` line above this one is kept.
+					var grade: Variant = _root.get(&"grade")
 					_root.set_script(load(args[0]))
+					if grade != null:
+						_root.set(&"grade", grade)
 				else:
 					problem("script needs the path of a script (a Region's, or one that extends it)")
 			"grade":
@@ -364,6 +506,16 @@ class Builder extends "res://tools/world/region_nodes.gd":
 		add_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, raise + height / 2, centre.y)), stone)
 		if moonlit:
 			(body.get_node("Mesh") as MeshInstance3D).layers = LAYERS.RENDER_WORLD | LAYERS.RENDER_BODIES
+
+	# An unseen solid box over `rect`, H high, on `world` only (bodies bump into it and never stand on it): the thickness of a wall that a row
+	# of pieces drawn against it (a colonnade's pillars) does not have, so that no body stands inside them.
+	func _guard(rect: Rect2, height: float, node_name := "") -> void:
+		if height <= 0.0:
+			problem("a guard has a height above 0")
+			return
+		var body := make_body(unique_name(node_name if not node_name.is_empty() else "Guard"), _root, LAYERS.WORLD)
+		var centre := rect.get_center()
+		add_box(body, Vector3(rect.size.x, height, rect.size.y), Transform3D(Basis(), Vector3(centre.x, height / 2, centre.y)), null)
 
 	# `count` steps over `rect`, climbing toward `up` to the ground past its far edge.
 	func _stairs(rect: Rect2, count: int, up: Vector2) -> void:
@@ -466,7 +618,7 @@ class Builder extends "res://tools/world/region_nodes.gd":
 
 	# A Kenney piece standing at `at`, turned `yaw` degrees, colliding as MODELS says: a holder named after it
 	# (unscaled) with the piece's scene (Model, at SCALE) and its Body.
-	func _piece(parent: Node3D, piece: String, at: Vector3, yaw: float) -> Node3D:
+	func _piece(parent: Node3D, piece: String, at: Vector3, yaw: float, ghost := false, wall := Vector2.ZERO) -> Node3D:
 		var box := local_box(piece)
 		if box.size == Vector3.ZERO:
 			return null
@@ -478,25 +630,29 @@ class Builder extends "res://tools/world/region_nodes.gd":
 		model.scale = Vector3.ONE * SCALE
 		var size := box.size * SCALE
 		var centre := box.get_center() * SCALE
-		match MODELS.get(piece, "box"):
+		match "none" if ghost else MODELS.get(piece, "box"):
 			"none":
 				pass
 			"cylinder":
 				_cylinder(holder, maxf(size.x, size.z) / 2, size.y, Vector3(centre.x, size.y / 2, centre.z))
 			"post":
-				_cylinder(holder, POST_RADIUS, size.y, Vector3(0, size.y / 2, 0))
+				if wall == Vector2.ZERO:
+					_posts.append(_cylinder(holder, POST_RADIUS, size.y, Vector3(0, size.y / 2, 0)))
+				else:
+					_wedge(holder, size.y, wall)
 			"trunk":
 				_cylinder(holder, TRUNK_RADIUS, TRUNK_HEIGHT, Vector3(0, TRUNK_HEIGHT / 2, 0))
 			_:
 				add_box(make_body("Body", holder, world_and_feet), size, Transform3D(Basis(), centre), null)
 		return holder
 
-	# A lantern at `at` with its lamp (the `lamps` line), which casts shadows if `shadow`.
-	func _lantern(at: Vector2, shadow: bool) -> void:
+	# A lantern at `at` with its lamp (the `lamps` line), which casts shadows if `shadow`: standing `raise` up (on a low wall), and with no
+	# collider if `ghost` (where no body can reach: on a wall's top, in a wall).
+	func _lantern(at: Vector2, shadow: bool, ghost := false, raise := 0.0, wall := Vector2.ZERO) -> void:
 		if _lamp.is_empty():
 			problem("a lantern needs a lamps line before it")
 			return
-		var holder := _piece(group_node("Lanterns"), "lantern", Vector3(at.x, _ground(at), at.y), 0.0)
+		var holder := _piece(group_node("Lanterns"), "lantern", Vector3(at.x, _ground(at) + raise, at.y), 0.0, ghost, wall)
 		if holder == null:
 			return
 		var lamp := OmniLight3D.new()
@@ -510,6 +666,8 @@ class Builder extends "res://tools/world/region_nodes.gd":
 		if _lamp.world:
 			lamp.light_cull_mask = LAYERS.RENDER_WORLD
 		holder.add_child(lamp)
+		if _lamp.glass:
+			_glass(holder)
 
 	func _marker(marker_name: String, at: Vector2, up: float, yaw: float, poi: bool) -> void:
 		var marker := Marker3D.new()
@@ -521,7 +679,7 @@ class Builder extends "res://tools/world/region_nodes.gd":
 		else:
 			_root.add_child(marker)
 
-	func _sun(pitch: float, yaw: float, colour: Color, energy: float) -> void:
+	func _sun(pitch: float, yaw: float, colour: Color, energy: float, ortho := false) -> void:
 		var sun := DirectionalLight3D.new()
 		sun.name = "Sun"
 		sun.rotation_degrees = Vector3(pitch, yaw, 0)
@@ -529,6 +687,8 @@ class Builder extends "res://tools/world/region_nodes.gd":
 		sun.light_energy = energy
 		sun.shadow_enabled = true
 		sun.directional_shadow_max_distance = SUN_SHADOW_DISTANCE
+		if ortho:
+			sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 		_root.add_child(sun)
 		_share_the_bodies()
 
@@ -644,6 +804,8 @@ class Builder extends "res://tools/world/region_nodes.gd":
 		var dresser := DRESSER.new()
 		dresser.name = "Kit"
 		dresser.material = KITS[_kit]
+		dresser.banner_material = NEON.get(_kit)
+		dresser.fence_material = FENCES.get(_kit)
 		_root.add_child(dresser)
 
 	# --- geometry ---
@@ -672,7 +834,99 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				height = maxf(height, terrace.height)
 		return height
 
-	func _cylinder(holder: Node3D, radius: float, height: float, at: Vector3) -> void:
+	# A fringe of `stone` over `rect` on the seam at its `from` edge (a WAYS letter): a flat quad a little above the ground, drawn by toon_fringe,
+	# its UV the metres along the seam and the metres out from it. Seen only (no collider, no shadow), under Fringes.
+	func _fringe(rect: Rect2, stone: Material, from: String, seed_value: int) -> void:
+		var material := stone as ShaderMaterial
+		var texture: Variant = material.get_shader_parameter(&"albedo_tex") if material != null else null
+		if texture == null or rect.size.x <= 0.0 or rect.size.y <= 0.0:
+			problem("fringe needs a rect with an area and a stone with a texture")
+			return
+		var depth := rect.size.y if from == "n" or from == "s" else rect.size.x
+		var shader_material := ShaderMaterial.new()
+		shader_material.shader = FRINGE_SHADER
+		shader_material.set_shader_parameter(&"albedo_tex", texture)
+		shader_material.set_shader_parameter(&"texels_per_metre", material.get_shader_parameter(&"texels_per_metre"))
+		shader_material.set_shader_parameter(&"depth", depth)
+		shader_material.set_shader_parameter(&"seed", float(seed_value))
+		var corners := [rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)]
+		var uvs := PackedVector2Array()
+		for corner: Vector2 in corners:
+			var along := corner.x - rect.position.x if from == "n" or from == "s" else corner.y - rect.position.y
+			var across := 0.0
+			match from:
+				"n": across = corner.y - rect.position.y
+				"s": across = rect.end.y - corner.y
+				"w": across = corner.x - rect.position.x
+				_: across = rect.end.x - corner.x
+			uvs.append(Vector2(along, across))
+		var y := _ground(rect.get_center()) + FRINGE_RAISE
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([Vector3(corners[0].x, y, corners[0].y), Vector3(corners[1].x, y, corners[1].y), Vector3(corners[2].x, y, corners[2].y), Vector3(corners[3].x, y, corners[3].y)])
+		arrays[Mesh.ARRAY_NORMAL] = PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP])
+		arrays[Mesh.ARRAY_TEX_UV] = uvs
+		arrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 2, 1, 0, 3, 2])
+		var mesh := ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var instance := MeshInstance3D.new()
+		instance.name = unique_name("Fringe")
+		instance.mesh = mesh
+		instance.material_override = shader_material
+		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		group_node("Fringes").add_child(instance)
+
+	# The lantern's warm glass: a small pane (a ball a fifth of a metre across) on the front of the lamp's housing, drawn as it is (unshaded) in the
+	# lamp's colour taken a good way toward white: a warm light that is paler than the neon and brighter than anything round it. It is
+	# the lamp when the lamp itself gives no light (at noon).
+	func _glass(holder: Node3D) -> void:
+		if _glass_material == null:
+			_glass_material = StandardMaterial3D.new()
+			_glass_material.resource_name = "lantern_glass"
+			_glass_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			_glass_material.albedo_color = (_lamp.colour as Color).lerp(Color.WHITE, GLASS_WHITE)
+		var ball := SphereMesh.new()
+		ball.radius = GLASS_RADIUS
+		ball.height = GLASS_RADIUS * 2.0
+		ball.radial_segments = 8
+		ball.rings = 4
+		var pane := MeshInstance3D.new()
+		pane.name = "Glass"
+		pane.mesh = ball
+		pane.material_override = _glass_material
+		pane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		pane.position = Vector3(0.0, _lamp.up + GLASS_UP, GLASS_OUT)
+		holder.add_child(pane)
+
+	# The wedge of a post against a wall (`wall` is the way to the wall, a WAYS unit): a convex prism, its base in the wall.
+	func _wedge(holder: Node3D, height: float, wall: Vector2) -> void:
+		var out := -wall
+		var side := Vector2(-out.y, out.x)
+		var points := PackedVector3Array()
+		for y in [-height / 2, height / 2]:
+			for corner: Vector2 in [
+					side * -WEDGE_HALF + wall * POST_WALL_GAP, side * WEDGE_HALF + wall * POST_WALL_GAP,
+					wall * POST_WALL_GAP + out * WEDGE_DEPTH]:
+				points.append(Vector3(corner.x, y, corner.y))
+		var shape := ConvexPolygonShape3D.new()
+		shape.points = points
+		var collision := CollisionShape3D.new()
+		collision.name = "Shape"
+		collision.shape = shape
+		collision.position = Vector3(0, height / 2, 0)
+		var body := make_body("Body", holder, world_and_feet)
+		body.add_child(collision)
+		_posts.append(body)
+
+	# Marks every solid body of the layout for the Actor's deflection (see Actor.DEFLECTS): "slim" the posts' and "free" the vats' (a body that
+	# runs dead on at one goes round it), "smooth" the rest (a body that runs dead on at a flat face of one stands at it, as at any wall).
+	func _mark_deflecting(node: Node) -> void:
+		if node is StaticBody3D:
+			(node as StaticBody3D).set_meta(&"deflects", &"slim" if _posts.has(node) else (&"free" if String(node.name).begins_with("Vat") else &"smooth"))
+		for child in node.get_children():
+			_mark_deflecting(child)
+
+	func _cylinder(holder: Node3D, radius: float, height: float, at: Vector3) -> StaticBody3D:
 		var shape := CylinderShape3D.new()
 		shape.radius = radius
 		shape.height = height
@@ -680,7 +934,9 @@ class Builder extends "res://tools/world/region_nodes.gd":
 		collision.name = "Shape"
 		collision.shape = shape
 		collision.position = at
-		make_body("Body", holder, world_and_feet).add_child(collision)
+		var body := make_body("Body", holder, world_and_feet)
+		body.add_child(collision)
+		return body
 
 	# Makes `owner` own `node`'s subtree (not the insides of instanced pieces), so the scene saves it.
 	func _own(node: Node, owner: Node) -> void:

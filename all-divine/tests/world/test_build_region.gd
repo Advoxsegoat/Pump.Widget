@@ -145,10 +145,13 @@ func test_a_block_stacks_its_front_by_storeys_and_roofs_its_footprint() -> void:
 	for x in [1.25, 3.75, 6.25, 8.75]:
 		for z in [1.25, 3.75]:
 			assert_true(centres.has(Vector2(x, z)), "a roof tile at (%s, %s)" % [x, z])
-	# Their material is the kit's colormap.
-	for piece: Dictionary in front + roofs:
+	# The front's material is the kit's colormap; the roof's is its own (the style's roof, see test_a_blocks_roof_wears_the_roof_of_its_style).
+	for piece: Dictionary in front:
 		for m: Dictionary in piece.meshes:
 			assert_eq(m.material, _material("kenney_town"), "%s is in the kit's material" % piece.piece)
+	for piece: Dictionary in roofs:
+		for m: Dictionary in piece.meshes:
+			assert_eq((m.material as Material).resource_path, MATERIALS % "roof_slate", "%s is in the frontage's roof" % piece.piece)
 
 
 # A block's pieces are drawn a kind at a time: one MultiMesh to each mesh of each piece kind in the block, and no
@@ -157,7 +160,8 @@ func test_a_blocks_pieces_are_a_few_multimeshes_and_not_a_mesh_each() -> void:
 	var built := _build("block 0 0 10 5 3 frontage flat solid\nblock 12.5 0 22.5 5 3 frontage flat")
 	assert_eq(built.problems, PackedStringArray())
 	var root := built.root as Node
-	assert_eq(root.find_children("*", "MeshInstance3D", true, false).size(), 0, "no mesh to a tile")
+	var meshes := root.find_children("*", "MeshInstance3D", true, false)
+	assert_eq(meshes.map(func(m: Node) -> String: return m.name), ["Interior", "Interior"], "no mesh to a tile: one dark interior to a block")
 	var multimeshes := root.find_children("*", "MultiMeshInstance3D", true, false)
 	var instances := 0
 	for mm: MultiMeshInstance3D in multimeshes:
@@ -172,7 +176,7 @@ func test_a_blocks_pieces_are_a_few_multimeshes_and_not_a_mesh_each() -> void:
 
 
 func test_the_styles_choose_pieces_by_storey_and_tile_index() -> void:
-	# frontage: a ground storey of door, wall, window, wall, window, wall; the upper of shutters, shutters, wall, balcony.
+	# frontage: a ground storey of door, shutters, window, shutters, wall, window; the upper of shutters, window, wall, window.
 	var built := _build("block 0 0 15 5 2 frontage flat")
 	var by_tile := {}
 	for piece: Dictionary in _placed(built.root):
@@ -181,8 +185,8 @@ func test_the_styles_choose_pieces_by_storey_and_tile_index() -> void:
 		var tile := floori(_box(piece).get_center().x / TILE)
 		var storey := roundi(piece.xf.origin.y / TILE)
 		by_tile[Vector2i(tile, storey)] = piece.piece
-	var ground := ["wall-door", "wall", "wall-window-small", "wall", "wall-window-small", "wall"]
-	var upper := ["wall-window-shutters", "wall-window-shutters", "wall", "balcony-wall"]
+	var ground := ["wall-door", "wall-window-shutters", "wall-window-small", "wall-window-shutters", "wall", "wall-window-small"]
+	var upper := ["wall-window-shutters", "wall-window-small", "wall", "wall-window-small"]
 	for k in 6:
 		assert_eq(by_tile.get(Vector2i(k, 0)), ground[k], "ground storey, tile %d" % k)
 		assert_eq(by_tile.get(Vector2i(k, 1)), upper[k % 4], "upper storey, tile %d" % k)
@@ -192,9 +196,11 @@ func test_the_styles_choose_pieces_by_storey_and_tile_index() -> void:
 		names[piece.piece] = true
 	for expected in ["wall-wood-door", "wall-wood", "wall-wood-window-small", "wall-wood-window-shutters", "roof"]:
 		assert_true(names.has(expected), "a tannery has %s" % expected)
-	var shed := _build("block 0 0 5 5 1 shed high")
+	var shed := _build("block 0 0 10 5 1 shed high")
 	var plain := _build("block 0 0 5 5 1 plain flat")
-	assert_true(_placed(shed.root, "wall-wood").size() == 2 and _placed(shed.root, "roof-high").size() == 4, "a shed is wall-wood under roof-high")
+	assert_true(_placed(shed.root, "wall-wood").size() == 2 and _placed(shed.root, "wall-wood-window-small").size() == 1 and _placed(shed.root, "wall-wood-door").size() == 1 \
+			and _placed(shed.root, "roof-high").size() == 8, "a shed is wall-wood with a window and a door under roof-high")
+	assert_eq(_placed(_build("block 0 0 15 5 3 frontage flat").root, "balcony-wall").size(), 0, "no style uses the balcony (its frame is a hole)")
 	assert_true(_placed(plain.root, "wall").size() == 2 and _placed(plain.root, "roof-flat").size() == 4, "plain is wall under roof-flat")
 
 
@@ -214,7 +220,8 @@ func test_a_solid_block_has_one_box_over_its_footprint_and_casts_shadows() -> vo
 	var drawn := root.find_children("*", "GeometryInstance3D", true, false)
 	assert_true(drawn.size() > 0)
 	for mesh: GeometryInstance3D in drawn:
-		assert_ne(mesh.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "%s casts shadows" % mesh.name)
+		if mesh.name != &"Interior":   # the walls and the roof cast the block's shadow; the dark box behind them adds nothing to it
+			assert_ne(mesh.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "%s casts shadows" % mesh.name)
 	var visual := _build("block 0 0 10 5 3 frontage flat")
 	var vroot := visual.root as Node
 	assert_true(vroot.get_node_or_null("Backdrop") != null and vroot.get_node_or_null("Blocks") == null, "under Backdrop")
@@ -349,6 +356,58 @@ func test_lamps_world_lights_only_the_world() -> void:
 	assert_eq(_build("lamps #ffb98a 6 0.5 3.45 sky").problems.size(), 1, "a fifth word that is not `world` is a problem")
 
 
+# A lantern is a solid slim post (a cylinder) with its lamp up the post; `ghost` leaves out the collider, `y=` stands it on a low wall.
+func test_lantern_options_ghost_and_y() -> void:
+	var solid := _build("lamps #ffb98a 6 0.5 3.45 world\nlantern 2 2")
+	assert_eq(solid.problems, PackedStringArray())
+	assert_eq(_bodies(solid.root).size(), 1, "a lantern is solid")
+	assert_true((_bodies(solid.root)[0].get_child(0) as CollisionShape3D).shape is CylinderShape3D, "a slim round post")
+	var ghost := _build("lamps #ffb98a 6 0.5 3.45 world\nlantern 2 2 ghost y=0.65")
+	assert_eq(ghost.problems, PackedStringArray())
+	assert_eq(_bodies(ghost.root).size(), 0, "a ghost lantern has no collider")
+	var lamp := (ghost.root as Node).find_children("Lamp", "OmniLight3D", true, false)[0] as OmniLight3D
+	assert_near(lamp.global_position.y, 0.65 + 3.45, 1e-6, "its lamp is up the post, which stands on the wall")
+	for bad in ["lantern 2 2 ghost ghost", "lantern 2 2 y=high", "lantern 2 ghost"]:
+		var built := _build("lamps #ffb98a 6 0.5 3.45 world\n" + bad)
+		assert_eq(built.problems.size(), 1, "%s is one problem: %s" % [bad, built.problems])
+		if built.problems.size() == 1:
+			assert_true((built.problems[0] as String).begins_with("T.txt:2:"), "%s names its line" % bad)
+
+
+# A guard is an unseen solid on `world` only: bodies bump into it, no foot stands on it, nothing of it is drawn.
+func test_guard_is_an_unseen_wall() -> void:
+	var built := _build("guard 0 0 10 0.4 2.5 name=Rail")
+	assert_eq(built.problems, PackedStringArray())
+	var body := (built.root as Node).get_node_or_null("Rail") as StaticBody3D
+	assert_true(body != null, "named Rail")
+	if body != null:
+		assert_eq(body.collision_layer, Layers.WORLD, "on world only")
+		assert_eq(body.find_children("*", "MeshInstance3D", true, false).size(), 0, "nothing of it is drawn")
+		var shape := body.get_child(0) as CollisionShape3D
+		assert_vec_near((shape.shape as BoxShape3D).size, Vector3(10, 2.5, 0.4), 1e-6, "10 x 2.5 x 0.4")
+		assert_vec_near(shape.position, Vector3(5, 1.25, 0.2), 1e-6, "standing on the ground")
+	for bad in ["guard 0 0 10 0.4", "guard 0 0 10 0.4 0", "guard 0 0 10 0.4 x", "guard 0 0 10 0.4 2 name=A extra"]:
+		var wrong := _build(bad)
+		assert_eq(wrong.problems.size(), 1, "%s is one problem: %s" % [bad, wrong.problems])
+		if wrong.problems.size() == 1:
+			assert_true((wrong.problems[0] as String).begins_with("T.txt:1:"), "%s names its line" % bad)
+
+
+# A block's roof is drawn in the roof of its style (slate-blue over the stone fronts, brown-red over the tannery's wood), its walls in the kit's.
+func test_a_blocks_roof_wears_the_roof_of_its_style() -> void:
+	for pair: Array in [["frontage", "roof_slate"], ["plain", "roof_slate"], ["tannery", "roof_tannery"], ["yardwall", "roof_tannery"], ["shed", "roof_tannery"]]:
+		var built := _build("block 0 0 10 5 1 %s gable solid\nblock 15 0 17.5 2.5 1 %s flat solid\nkit bilibara\n" % [pair[0], pair[0]])
+		assert_eq(built.problems, PackedStringArray(), "%s builds" % pair[0])
+		var roofs := (built.root as Node).find_children("*", "KitRun", true, false).filter(func(n: Node) -> bool: return n.get_parent().name == &"Roof")
+		var walls := (built.root as Node).find_children("*", "KitRun", true, false).filter(func(n: Node) -> bool: return n.get_parent().name == &"Front")
+		assert_true(roofs.size() >= 2 and walls.size() >= 2, "%s has roof and wall runs (%d, %d)" % [pair[0], roofs.size(), walls.size()])
+		for run: KitRun in roofs:
+			var material := run.material_override
+			assert_true(material != null and material.resource_path == "res://world/materials/%s.tres" % pair[1], "%s's roof run %s is drawn in %s (%s)" % [pair[0], run.name, pair[1], material.resource_path if material != null else "the kit's"])
+		for run: KitRun in walls:
+			assert_true(run.material_override == null or run.material_override.resource_path.contains("kenney_town"), "%s's wall run keeps the kit's material" % pair[0])
+
+
 # --- the older regions ---
 
 # What the builder makes of a node, and what a scene holds of it, as a line of text: its class, transform and the settings
@@ -460,8 +519,9 @@ func test_kit_bilibara_draws_every_piece_of_the_layout_in_its_colours() -> void:
 	var layout := "ground 0 5 10 15 cobble\nblock 0 0 10 5 2 frontage slope solid\nedge wall 0 7.5 5 7.5 s solid\npiece banner-red 7 7\nlamps #ffb98a 6 0.5 3.45 world\nlantern 8 8\nkit bilibara\n"
 	var built := _build(layout)
 	assert_eq(built.problems, PackedStringArray())
+	# (Every piece but the roofs, which are drawn in their style's own roof material.)
 	var materials := _kit_materials(built.root)
-	assert_eq(materials.keys(), [MATERIALS % "kenney_town_bilibara"], "every piece in the one material: %s" % [materials.keys()])
+	assert_eq(materials.keys(), [MATERIALS % "kenney_town_bilibara", MATERIALS % "roof_slate", MATERIALS % "kenney_town_neon"], "every piece in the one material, the roofs and the banner in theirs: %s" % [materials.keys()])
 	assert_true(_placed(built.root).size() > 10, "and there are pieces")
 	# And so the saved scene draws them: a small scene, with the dresser in it, whose pieces take the material on entering
 	# the tree.
@@ -469,13 +529,13 @@ func test_kit_bilibara_draws_every_piece_of_the_layout_in_its_colours() -> void:
 	assert_eq(packed.pack(built.root as Node), OK)
 	var again := track(packed.instantiate()) as Node
 	assert_true(again.get_node_or_null("Kit") is KitDresser, "a KitDresser called Kit")
-	assert_eq(_kit_materials(again).keys(), [MATERIALS % "kenney_town_bilibara"], "the saved scene draws its pieces in the same material")
+	assert_eq(_kit_materials(again).keys(), [MATERIALS % "kenney_town_bilibara", MATERIALS % "roof_slate", MATERIALS % "kenney_town_neon"], "the saved scene draws its pieces in the same materials")
 	# Wherever the line stands.
 	var first := _build("kit bilibara\npiece lantern 1 1\n")
 	assert_eq(_kit_materials(first.root).keys(), [MATERIALS % "kenney_town_bilibara"])
 	# Without the line, the kit's own.
 	var plain := _build(layout.replace("kit bilibara\n", ""))
-	assert_eq(_kit_materials(plain.root).keys(), [MATERIALS % "kenney_town"], "the kit's own material without the line")
+	assert_eq(_kit_materials(plain.root).keys(), [MATERIALS % "kenney_town", MATERIALS % "roof_slate"], "the kit's own material without the line (the roofs still wear theirs)")
 
 
 func test_a_bad_or_second_kit_line_is_a_problem() -> void:
@@ -682,3 +742,310 @@ func test_the_kit_dresser_dresses_after_the_region_leaves_the_tree_and_returns()
 	root.add_child(late)
 	for mesh: MeshInstance3D in late.find_children("*", "MeshInstance3D", true, false):
 		assert_eq(mesh.material_override, bilibara, "a piece added after the region came back is dressed")
+
+
+# `row PIECE X0 Z0 X1 Z1 YAW [y=Y]`: a piece every tile along a line, both ends included, drawn as a few runs (a rack of twelve
+# poles is one draw, not twelve), under Props, with no collider.
+func test_a_row_is_a_piece_every_tile_along_a_line_in_runs_with_no_collider() -> void:
+	var built := _build("row poles 0 0 30 0 90\nrow planks 5 5 5 12.5 0 y=1")
+	assert_eq(built.problems, PackedStringArray())
+	var root := built.root as Node
+	var poles := _placed(root, "poles")
+	assert_eq(poles.size(), 13, "13 poles: 0 to 30 m every 2.5 m")
+	var xs := poles.map(func(p: Dictionary) -> float: return snappedf(p.xf.origin.x, 0.001))
+	xs.sort()
+	assert_eq(xs[0], 0.0, "the first at the first point")
+	assert_eq(xs[12], 30.0, "the last at the second")
+	for piece: Dictionary in poles:
+		assert_vec_near(piece.xf.basis.get_scale(), Vector3.ONE * 2.5, 1e-4, "at x2.5")
+		assert_vec_near(piece.xf.basis.x.normalized(), Vector3(0, 0, -1), 1e-4, "turned 90 degrees about +Y")
+		assert_true(root.get_node("Props").is_ancestor_of(root.find_children("*", "KitRun", true, false)[0]), "under Props")
+	var planks := _placed(root, "planks")
+	assert_eq(planks.size(), 4, "4 planks along z")
+	for piece: Dictionary in planks:
+		assert_near(piece.xf.origin.y, 1.0, 1e-6, "raised 1 m")
+	var runs := root.find_children("*", "KitRun", true, false)
+	for node in runs:
+		assert_true((node as KitRun).bounds().size.x <= 12.5 + 1e-3 + 2.5, "%s is a short run" % node.name)
+	assert_true(runs.size() <= 5, "a few runs and not one to a piece (%d)" % runs.size())
+	assert_eq(root.find_children("*", "CollisionObject3D", true, false).size(), 0, "nothing to collide with")
+	for bad in ["row poles 0 0 30 3 90", "row poles 0 0 31 0 90", "row nothing 0 0 5 0 0", "row poles 0 0 5 0", "row poles 0 0 5 0 up", "row poles 0 0 5 0 0 backdrop backdrop"]:
+		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)
+	# `backdrop`: the same row under Backdrop, casting no shadow (a chimney of the ring).
+	var far := _build("row chimney 0 0 5 0 0 y=7.5 backdrop")
+	assert_eq(far.problems, PackedStringArray())
+	var far_runs := (far.root as Node).get_node("Backdrop").find_children("*", "KitRun", true, false)
+	assert_eq(far_runs.size(), 1, "one run under Backdrop")
+	assert_eq(((far.root as Node).get_node_or_null("Props")), null, "and none under Props")
+	for run: KitRun in far_runs:
+		assert_eq(run.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "casting no shadow")
+		assert_eq(run.places.size(), 3, "three chimneys")
+
+
+# `piece ... ghost` is a piece with no collider (a decoration a body walks through); without it a piece collides as MODELS says.
+# `ground ... name=NAME` names the plate (so that one place's floor can be told from the rest: the yard's centre).
+func test_a_piece_can_be_a_ghost_and_a_ground_plate_can_be_named() -> void:
+	var built := _build("piece pillar-stone 1 1\npiece pillar-stone 4 1 ghost\npiece stall-bench 7 1 90 ghost y=1\nground 0 5 10 10 slate name=YardCentre\nground 10 5 20 10 slate\nground 20 5 30 10 slate visual name=Apron")
+	assert_eq(built.problems, PackedStringArray())
+	var root := built.root as Node
+	var pillars := root.get_node("Props").find_children("PillarStone*", "Node3D", false, false)
+	assert_eq(pillars.size(), 2, "two pillars")
+	assert_true(pillars[0].get_node_or_null("Body") is StaticBody3D, "the first collides")
+	assert_true(pillars[1].get_node_or_null("Body") == null, "the ghost does not")
+	assert_true(pillars[1].find_child("Model", false, false) != null, "but is seen")
+	assert_true(root.get_node("Props").get_node("StallBench").get_node_or_null("Body") == null, "a ghost with a turn and a height is still a ghost")
+	assert_true(root.get_node("Walkable/YardCentre") is StaticBody3D, "a named plate is a body of that name")
+	assert_true(root.get_node("Walkable/Ground") is StaticBody3D, "and an unnamed one is Ground")
+	assert_true(root.get_node("Backdrop/Apron") is MeshInstance3D, "a named visual plate too")
+	for bad in ["piece pillar-stone 1 1 ghost ghost", "ground 0 0 5 5 slate name=", "ground 0 0 5 5 slate name=A name=B"]:
+		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)
+
+
+# `sun ... ortho`: the sun's shadow is one orthogonal map and not four splits, which in this renderer draws every shadow-casting mesh once
+# and not up to four times (the stretch's views are drawn in a third fewer calls); without it the sun is as before.
+func test_a_sun_can_cast_one_orthogonal_shadow() -> void:
+	var plain := _build("sun -60 30 #f4f7ff 0.25")
+	var ortho := _build("sun -60 30 #f4f7ff 0.25 ortho")
+	assert_eq(plain.problems, PackedStringArray())
+	assert_eq(ortho.problems, PackedStringArray())
+	assert_eq(((plain.root as Node).get_node("Sun") as DirectionalLight3D).directional_shadow_mode, DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS, "four splits as before")
+	assert_eq(((ortho.root as Node).get_node("Sun") as DirectionalLight3D).directional_shadow_mode, DirectionalLight3D.SHADOW_ORTHOGONAL, "one orthogonal map")
+	for bad in ["sun -60 30 #f4f7ff 0.25 round", "sun -60 30 #f4f7ff ortho"]:
+		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)
+
+
+# A window in the kit's wall is a hole through it, and the builder's blocks have no inside: a ray through a window met nothing and
+# showed the background. Each block holds one dark box behind its front (the slab's back to the block's north edge, up to the roof), which
+# casts no shadow and is no collider, so that a window is dark glass.
+func test_a_block_has_a_dark_interior_behind_its_windows() -> void:
+	var built := _build("block 0 0 10 5 2 frontage flat solid\nblock 12.5 0 22.5 7.5 3 tannery slope")
+	assert_eq(built.problems, PackedStringArray())
+	var blocks := (built.root as Node).get_node("Blocks").get_children() + (built.root as Node).get_node("Backdrop").get_children()
+	assert_eq(blocks.size(), 2, "two blocks")
+	for block in blocks:
+		var interior := block.get_node_or_null("Interior") as MeshInstance3D
+		assert_true(interior != null, "%s has an Interior" % block.name)
+		if interior == null:
+			continue
+		var size := (interior.mesh as BoxMesh).size
+		var storeys := 2 if block.name == &"Block" else 3
+		assert_true(block.name == &"Block" or block.name == &"Block2", "%s" % block.name)
+		assert_near(size.y, storeys * TILE + 1.0, 1e-6, "%s: up to the roof and 1 m below the ground (%.2f)" % [block.name, size.y])
+		assert_eq(interior.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "%s: casting no shadow" % block.name)
+		assert_eq(interior.material_override, load("res://world/materials/interior.tres"), "%s: in the interior's material" % block.name)
+		var box := interior.global_transform * interior.get_aabb()
+		var depth := 5.0 if storeys == 2 else 7.5
+		assert_near(box.position.y, -1.0, 1e-6, "%s: from 1 m under the ground (a gap at the foot of a window piece shows it)" % block.name)
+		assert_near(box.end.z, depth - 0.25, 1e-6, "%s: to the back of the front's slab" % block.name)
+		assert_near(box.size.z, depth - 0.25, 1e-6, "%s: to the block's north edge" % block.name)
+		assert_eq(block.find_children("*", "CollisionObject3D", true, false).size(), 1 if storeys == 2 else 0, "%s: no collider of its own" % block.name)
+
+
+# `gable`: a roof of two planes meeting in a ridge along the middle of the block's longer side (the ridge runs along x when the block is
+# wider than it is deep), the tiles of one half turned to slope the other way: from the camera the two planes are lit differently and
+# the block reads as a roof and not a slab. The tile count across the ridge must be even (else the other way, else a problem).
+func test_a_gable_roof_has_two_planes_and_a_ridge_along_the_longer_side() -> void:
+	var wide := _build("block 0 0 10 5 2 plain gable")
+	assert_eq(wide.problems, PackedStringArray())
+	var tiles := _placed(wide.root, "roof")
+	assert_eq(tiles.size(), 8, "four by two roof tiles")
+	for tile: Dictionary in tiles:
+		var z: float = tile.xf.origin.z
+		var toward_ridge := 1.0 if z < 2.5 else -1.0   # the north row's ridge is on its south edge, the south row's on its north edge
+		var at_ridge := _height_at(tile, tile.xf.origin.x, z + toward_ridge * 1.0)
+		var at_eave := _height_at(tile, tile.xf.origin.x, z - toward_ridge * 1.0)
+		assert_true(at_ridge >= at_eave + 0.3, "tile at z %.2f: higher toward the middle (%.2f against %.2f)" % [z, at_ridge, at_eave])
+	var deep := _build("block 0 0 5 20 2 plain gable")
+	assert_eq(deep.problems, PackedStringArray())
+	for tile: Dictionary in _placed(deep.root, "roof"):
+		var x: float = tile.xf.origin.x
+		var toward := 1.0 if x < 2.5 else -1.0
+		assert_true(_height_at(tile, x + toward * 1.0, tile.xf.origin.z) >= _height_at(tile, x - toward * 1.0, tile.xf.origin.z) + 0.3, "tile at x %.2f: higher toward the middle (ridge along z)" % x)
+	var odd := _build("block 0 0 10 7.5 1 plain gable")   # 4 by 3 tiles: the long side is even, the ridge runs along z
+	assert_eq(odd.problems, PackedStringArray())
+	assert_eq(_build("block 0 0 7.5 7.5 1 plain gable").problems.size(), 1, "3 by 3 tiles has no middle: one problem")
+	assert_eq(_build("block 0 0 2.5 5 1 plain gable").problems.size(), 0, "1 by 2: the rows split")
+
+
+# `drift X Z W D [y=Y] [seed=N]`: a low mound of snow of three to five overlapping rounded lumps with an outline of the seed's own (no
+# straight edge over a metre: a polygon of many short sides), highest near its middle and feathering to nothing at the rim, seen only
+# (Backdrop, no collider, no shadow), on the ground or raised Y.
+func test_a_drift_is_a_rounded_mound_that_feathers_to_nothing() -> void:
+	var built := _build("drift 5 5 4 3 y=1 seed=3\ndrift 5 5 4 3 y=1 seed=4")
+	assert_eq(built.problems, PackedStringArray())
+	var root := built.root as Node
+	var drifts := root.get_node("Backdrop").find_children("Drift*", "MeshInstance3D", false, false) as Array
+	assert_eq(drifts.size(), 2, "two drifts")
+	assert_eq(root.find_children("*", "CollisionObject3D", true, false).size(), 0, "no collider")
+	var shapes := []
+	for d: MeshInstance3D in drifts:
+		assert_eq(d.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "no shadow")
+		assert_eq(d.material_override, load("res://world/materials/snow.tres"), "in the snow's material")
+		var arrays := d.mesh.surface_get_arrays(0)
+		var verts := arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array
+		var peak := 0.0
+		var peak_at := Vector3.ZERO
+		var rim := 0.0
+		for v in verts:
+			if v.y > peak:
+				peak = v.y
+				peak_at = v
+		for v in verts:
+			if Vector2(v.x, v.z).length() > 1.2 and absf(v.y) < 1e-6:
+				rim += 1
+		var box := d.global_transform * d.get_aabb()
+		assert_near(box.position.y, 1.0, 1e-3, "%s lies on y = 1" % d.name)
+		assert_true(peak > 0.12 and peak < 0.4, "%s is %.2f m at the most" % [d.name, peak])
+		assert_true(Vector2(peak_at.x, peak_at.z).length() < 1.4, "%s peaks near its middle (%s)" % [d.name, peak_at])
+		assert_true(box.size.x < 5.2 and box.size.z < 4.0 and box.size.x > 1.5, "%s is about 4 x 3 m (%s)" % [d.name, box.size])
+		assert_true(rim > 5, "%s ends at zero height (%d rim vertices)" % [d.name, rim])
+		# Seen from above it is a front face: the normals of the lumps point up (a mound wound the wrong way is culled from above).
+		var normals := arrays[Mesh.ARRAY_NORMAL] as PackedVector3Array
+		var down := 0
+		for i in verts.size():
+			if verts[i].y > 0.05 and normals[i].y <= 0.0:
+				down += 1
+		assert_eq(down, 0, "%s: no normal on its back faces up" % d.name)
+		# The rim is the vertices of height zero that touch a triangle with height: it is a ring of short sides.
+		var tri_count := {}
+		var indices := arrays[Mesh.ARRAY_INDEX] as PackedInt32Array
+		var edges := {}
+		for i in range(0, indices.size(), 3):
+			for k in 3:
+				var a := indices[i + k]
+				var b := indices[i + (k + 1) % 3]
+				var key := Vector2i(mini(a, b), maxi(a, b))
+				edges[key] = edges.get(key, 0) + 1
+		var longest := 0.0
+		var count := 0
+		for key: Vector2i in edges:
+			if edges[key] == 1:
+				count += 1
+				longest = maxf(longest, (verts[key.x] - verts[key.y]).length())
+		assert_true(count >= 24 and longest < 1.0, "%s: an outline of %d sides, the longest %.2f m" % [d.name, count, longest])
+		shapes.append(verts)
+	assert_ne(shapes[0], shapes[1], "another seed, another outline")
+	var again := _build("drift 5 5 4 3 y=1 seed=3")
+	var first := (again.root as Node).get_node("Backdrop").find_children("Drift*", "MeshInstance3D", false, false)[0] as MeshInstance3D
+	assert_eq(first.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX], shapes[0], "the same seed, the same drift")
+	for bad in ["drift 5 5 4", "drift 5 5 0 3", "drift 5 5 4 3 seed=x", "drift 5 5 4 3 y=up", "drift 5 5 40 3"]:
+		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)
+
+
+# A region's `script` line replaces the root's script, and a script swap forgets what was set on the old one: a `grade` line before it was lost
+# (the stretch's whole colour grade with it), and a `script` line before it was fine. Either order keeps the grade.
+func test_a_script_line_after_the_grade_line_keeps_the_grade() -> void:
+	var path := "res://data/render/grades/bilibara_noon.tres"
+	for order in [["grade " + path, "script res://world/arena.gd"], ["script res://world/arena.gd", "grade " + path]]:
+		var built := _build("\n".join(order) + "\n")
+		assert_eq(built.problems, PackedStringArray(), "builds clean (%s)" % [order])
+		var root := built.root as Node
+		assert_true(root.get_script() != null and (root.get_script() as Script).resource_path == "res://world/arena.gd", "the script is set (%s)" % [order])
+		var grade := root.get(&"grade") as Resource
+		assert_true(grade != null and grade.resource_path == path, "the grade is kept (%s)" % [order])
+
+
+# A post against a wall is a wedge on the wall, not a cylinder: a body that runs along the wall or at 45 degrees goes up one face and down the
+# other, and the wedge stands out 0.2 m from the wall, so that a body's centre stays outside the pole's round.
+func test_a_lantern_against_a_wall_is_a_wedge_on_it() -> void:
+	var built := _build("lamps #ffb98a 6 0.5 3.45 world\nlantern 0 0 wall=n\n")
+	assert_eq(built.problems, PackedStringArray())
+	var shape := (_bodies(built.root)[0].get_child(0) as CollisionShape3D).shape as ConvexPolygonShape3D
+	assert_true(shape != null, "a wedge, a convex prism")
+	if shape == null:
+		return
+	var low := 1e9
+	var high := -1e9
+	var wide := 0.0
+	for point in shape.points:
+		low = minf(low, point.z)
+		high = maxf(high, point.z)
+		wide = maxf(wide, absf(point.x))
+	assert_near(low, -0.28, 1e-6, "its base is in the wall, to the north (-z)")
+	assert_near(high - low, 0.2, 1e-6, "it stands out 0.2 m from the wall")
+	assert_near(wide, 0.4, 1e-6, "and 0.8 m wide")
+	var east := _build("lamps #ffb98a 6 0.5 3.45 world\nlantern 0 0 wall=e\n")
+	var points := ((_bodies(east.root)[0].get_child(0) as CollisionShape3D).shape as ConvexPolygonShape3D).points
+	var reach_x := 0.0
+	for point in points:
+		reach_x = maxf(reach_x, point.x)
+	assert_near(reach_x, 0.28, 1e-6, "turned to a wall to the east")
+	for bad in ["lantern 0 0 wall=x", "lantern 0 0 wall=n wall=e", "lantern 0 0 wall"]:
+		assert_eq(_build("lamps #ffb98a 6 0.5 3.45 world\n" + bad).problems.size(), 1, "%s is one problem" % bad)
+
+
+# A `deflect` line marks every solid body of the layout for the Actor: "slim" the posts', "smooth" the rest.
+func test_a_deflect_line_marks_the_solid_bodies() -> void:
+	var built := _build("deflect\nlamps #ffb98a 6 0.5 3.45 world\nlantern 0 0 wall=n\nlantern 5 0\nvat 10 10\nground 0 0 5 5 cobble\n")
+	assert_eq(built.problems, PackedStringArray())
+	var slim := 0
+	var free := 0
+	var smooth := 0
+	for body in _bodies(built.root):
+		assert_true(body.has_meta(&"deflects"), "%s is marked" % body.get_path())
+		if body.get_meta(&"deflects") == &"slim":
+			slim += 1
+			assert_eq(body.name, &"Body", "only a post's body is slim")
+		elif body.get_meta(&"deflects") == &"free":
+			free += 1
+			assert_true(String(body.name).begins_with("Vat"), "only a vat is free-standing")
+		else:
+			smooth += 1
+	assert_eq(slim, 2, "the two posts")
+	assert_eq(free, 1, "and the vat is free-standing")
+	assert_true(smooth >= 1, "the ground is smooth")
+	var plain := _build("lamps #ffb98a 6 0.5 3.45 world\nlantern 0 0 wall=n\nvat 10 10\n")
+	for body in _bodies(plain.root):
+		assert_false(body.has_meta(&"deflects"), "with no deflect line nothing is marked")
+	assert_eq(_build("deflect\ndeflect\n").problems.size(), 1, "two deflect lines are a problem")
+	assert_eq(_build("deflect now\n").problems.size(), 1, "and a deflect with words after it")
+
+
+# A `glass` word on the lamps line gives each lantern a small warm pane on its lamp's housing (unshaded, the lamp's colour toward white), the lamp when it
+# gives no light; a lamp with no energy still builds. Without the word nothing is added (the older regions are as they were).
+func test_lamps_glass_is_a_small_warm_unshaded_pane_on_each_lantern() -> void:
+	var built := _build("lamps #ffb98a 6 0 3.45 world glass\nlantern 0 0\nlantern 4 0 ghost y=0.65\n")
+	assert_eq(built.problems, PackedStringArray())
+	var panes := (built.root as Node).find_children("Glass", "MeshInstance3D", true, false)
+	assert_eq(panes.size(), 2, "a pane on each lantern, ghost or solid")
+	var pane := panes[0] as MeshInstance3D
+	var material := pane.material_override as StandardMaterial3D
+	assert_eq(material.shading_mode, BaseMaterial3D.SHADING_MODE_UNSHADED, "drawn as it is")
+	var colour := material.albedo_color
+	assert_true(colour.v >= 0.99 and colour.s >= 0.15 and colour.s <= 0.40 and colour.r > colour.g and colour.g > colour.b, "warm and paler than a neon (%s: saturation %.2f)" % [colour.to_html(false), colour.s])
+	assert_true((pane.mesh as SphereMesh).radius <= 0.1, "a few pixels, not a lamp")
+	assert_near(pane.position.y, 3.45 + 0.1, 1e-6, "on the lamp's housing")
+	var lamp := (built.root as Node).find_children("Lamp", "OmniLight3D", true, false)[0] as OmniLight3D
+	assert_near(lamp.light_energy, 0.0, 1e-9, "the lamp itself gives no light")
+	var plain := _build("lamps #ffb98a 6 0.5 3.45 world\nlantern 0 0\n")
+	assert_eq((plain.root as Node).find_children("Glass", "MeshInstance3D", true, false).size(), 0, "no glass without the word")
+	for bad in ["lamps #ffb98a 6 0 3.45 glass glass", "lamps #ffb98a 6 0 3.45 pane", "lamps #ffb98a 6 0 3.45 world world"]:
+		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)
+
+
+# A `fringe` is a flat quad of one stone laid on the ground over a rect, its edge FROM on the seam: seen only, no collider, no shadow, its UV the
+# metres along the seam and out from it, drawn by toon_fringe with the stone's own texture.
+func test_a_fringe_is_a_flat_seen_only_quad_with_uv_along_and_out_from_the_seam() -> void:
+	var built := _build("ground 0 0 10 10 cobble\nfringe 1 2 6 3 slate_cold n seed=5\n")
+	assert_eq(built.problems, PackedStringArray())
+	var fringes := (built.root as Node).get_node("Fringes").get_children()
+	assert_eq(fringes.size(), 1, "one fringe")
+	var fringe := fringes[0] as MeshInstance3D
+	assert_eq(fringe.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "it casts no shadow")
+	var material := fringe.material_override as ShaderMaterial
+	assert_eq(material.shader.resource_path, "res://render/shaders/toon_fringe.gdshader", "drawn by toon_fringe")
+	assert_eq(material.get_shader_parameter(&"albedo_tex"), (load("res://world/materials/slate_cold.tres") as ShaderMaterial).get_shader_parameter(&"albedo_tex"), "with the stone's texture")
+	assert_near(float(material.get_shader_parameter(&"depth")), 1.0, 1e-6, "as deep as the rect is across")
+	var arrays := (fringe.mesh as ArrayMesh).surface_get_arrays(0)
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	for i in 4:
+		assert_near(uvs[i].x, vertices[i].x - 1.0, 1e-6, "UV.x runs along the seam in metres")
+		assert_near(uvs[i].y, vertices[i].z - 2.0, 1e-6, "and UV.y out from the north edge")
+		assert_true(vertices[i].y > 0.0 and vertices[i].y < 0.05, "a hair over the ground")
+	assert_eq(_bodies(built.root).filter(func(b: StaticBody3D) -> bool: return b.get_parent().name == &"Fringes").size(), 0, "no collider")
+	var south := _build("ground 0 0 10 10 cobble\nfringe 1 2 6 3 slate_cold s\n")
+	var uv_south := ((((south.root as Node).get_node("Fringes").get_child(0) as MeshInstance3D).mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_TEX_UV] as PackedVector2Array)
+	assert_near(uv_south[0].y, 1.0, 1e-6, "from the south edge the north corners are a metre out")
+	for bad in ["fringe 1 2 6 3 slate_cold", "fringe 1 2 6 3 marble n", "fringe 1 2 6 3 slate_cold x", "fringe 1 2 1 3 slate_cold n", "fringe 1 2 6 3 slate_cold n seed=x"]:
+		assert_eq(_build(bad).problems.size(), 1, "%s is one problem" % bad)
