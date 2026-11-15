@@ -20,7 +20,7 @@
 112  story/test_director_freed.gd   # headless x8
 104  actors/test_heavy_tokens.gd   # headless x8
 103  replay/test_replay.gd   # render log
-88   world/test_bilibara.gd   # headless x8
+101  world/test_bilibara.gd   # render log
 78   actors/test_sway_input.gd   # render log
 72   moves/test_set_marks.gd   # headless x8
 70   render/test_bilibara_hidden.gd   # render log
@@ -79,4 +79,12 @@
 150  render/test_story_shots.gd   # 118 s here in a filtered render run at load 4 to 6: not yet seen in a log
 80   tools/test_story_tools.gd   # it starts the two tools for real (45 s here headless): an estimate
 60   tools/test_tool_safety.gd   # it starts and kills the tools (35 s here headless): an estimate
+540  render/test_bilibara_cues.gd   # render log (533 s: 162 cue pictures)
+93   render/test_bilibara_readability.gd   # render log
+95   render/test_bilibara_readability_more.gd   # as the file above (twelve more positions): not yet seen in a log
+48   render/test_bilibara_tones.gd   # render log
+40   render/test_bilibara_view.gd   # 76 s here in a filtered render run (CI takes about half): not yet seen in a log
+35   render/test_bilibara_shots.gd   # 69 s here in a filtered render run (CI takes about half): not yet seen in a log
+53   world/test_bilibara_sticky.gd   # render log
 250  actors/test_stand_about.gd   # 107 s here headless under load; three foes fight for twenty seconds in each case: an estimate
+72   actors/test_deflect.gd   # render log
