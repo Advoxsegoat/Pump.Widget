@@ -5,7 +5,7 @@ extends TestCase
 ## round one's in r1/). The Knuckles are guarded by their model file's hash (test_abarax_portrait.gd) and the byte-identical rebuild in
 ## test_build_knuckle.py, not by pictures: a picture's pixels depend on the renderer.
 
-const OUT := "res://out/shots/abarax/"
+const OUT := "out/shots/abarax/"  # under the project root; joined at run time, so that the path check does not look for a folder a fresh checkout has not got
 const FACINGS: Array[int] = [0, 45, 90, 135, 180, 225, 270, 315]
 ## A pixel is the body's when its colour differs from the empty stage's by more than this (summed over red, green, blue).
 const BODY_THRESHOLD := 0.06
@@ -144,7 +144,7 @@ func test_the_feather_shows_from_every_facing_at_the_games_camera() -> void:
 # --- the pictures a person looks at (out/shots/abarax/) ---
 
 func _save(image: Image, name: String) -> void:
-	var path := ProjectSettings.globalize_path(OUT).path_join(name)
+	var path := ProjectSettings.globalize_path("res://").path_join(OUT).path_join(name)
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
 	assert_eq(image.save_png(path), OK, "saved %s" % name)
 
@@ -152,7 +152,7 @@ func _save(image: Image, name: String) -> void:
 # The old picture of `name` (taken before the portrait work, with the old model) beside `new_full`, both cut round the head
 # and enlarged, the old on the left: pair_<name>.png.
 func _side_by_side(name: String, new_full: Image, size: Vector2i, scale: int) -> void:
-	var path := ProjectSettings.globalize_path(OUT).path_join("old_%s.png" % name)
+	var path := ProjectSettings.globalize_path("res://").path_join(OUT).path_join("old_%s.png" % name)
 	if not FileAccess.file_exists(path):
 		return
 	var old := shots.head_crop(Image.load_from_file(path), size, scale)
