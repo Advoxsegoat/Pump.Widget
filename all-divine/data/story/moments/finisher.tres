@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="SceneShots" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://story/scene_shots.gd" id="1_scene"]
+[ext_resource type="Script" path="res://story/shot.gd" id="2_shot"]
+
+[sub_resource type="Resource" id="shot_1"]
+script = ExtResource("2_shot")
+id = &"dip"
+start = 0
+length = 60
+framing = 1
+action = "The camera leans in on the middle of the two fighters' chests, and gives the picture back."
+aim = &"@pair"
+aim_height = 0.0
+
+[resource]
+script = ExtResource("1_scene")
+id = &"finisher"
+kind = 2
+status = 0
+revision = 1
+lead_in = 15
+lead_out = 15
+shots = Array[ExtResource("2_shot")]([SubResource("shot_1")])

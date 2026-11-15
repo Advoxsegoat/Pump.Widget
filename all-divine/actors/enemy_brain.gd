@@ -195,6 +195,19 @@ func plan() -> AttackOption:
 	return _plan
 
 
+## A scene begins (Director): whatever it was planning or throwing is off and its token is back, so that no swing it had begun
+## is carried through the scene and lands the moment control is given back.
+func stand_down_for_scene(actor: Actor) -> void:
+	_stand_down(actor)
+	_holding = &""
+
+
+## A scene is over (Director): it rests at least `seconds` before it chooses an attack, so that the player has his hands back
+## before anyone swings. The attack it then chooses is thrown whole, with its tell.
+func rest_for(seconds: float) -> void:
+	_rest = maxf(_rest, seconds)
+
+
 # --- target and perception ---
 
 # Keeps the target while it is alive and in the game, else finds the nearest live actor of the player's team.

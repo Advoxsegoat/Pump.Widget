@@ -77,6 +77,7 @@ func release() -> void:
 		overlay.letterbox = 0.0
 		overlay.close()
 	if is_instance_valid(hud):
+		hud.scene_fade = -1.0
 		hud.suppressed = false
 	_pose = null
 	_glide_from = null
