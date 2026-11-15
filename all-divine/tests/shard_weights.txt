@@ -10,6 +10,7 @@
 # refresh the numbers from CI's logs when a shard nears its cap (tests/tools/test_ci_workflow.gd says when).
 575  story/test_cine_camera.gd   # render log
 346  bot/test_combat_bot.gd   # render log
+390  bot/test_feel_ordering.gd   # headless x8 (48 s here at a load of 14)
 257  actors/test_enemy_brain.gd   # render log
 158  actors/test_blade_knuckle.gd   # render log
 125  demo/test_demo_reel.gd   # render log
