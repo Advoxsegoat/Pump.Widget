@@ -94,10 +94,13 @@ func _fight(dips: bool, path := "", rec: InputRecording = null) -> Dictionary:
 	return out
 
 
-func _without_cursor(rec: InputRecording) -> Array:
+# The recording's controls with the cursor's ground point rounded to the millimetre (a camera rebuilt from its angles is a hundredth of a
+# millimetre off the one it stands for, and a hash of the floats would see it).
+func _millimetres(rec: InputRecording) -> Array:
 	return rec.frames.map(func(frame: Dictionary) -> Dictionary:
 		var kept := frame.duplicate()
-		kept.erase("cursor")
+		if kept.get("cursor") is Vector3:
+			kept["cursor"] = (kept["cursor"] as Vector3).snappedf(0.001)
 		return kept)
 
 
@@ -130,8 +133,7 @@ func test_a_recording_made_with_the_dip_off_is_the_same_as_one_made_with_it_on()
 	if rec_on == null or rec_off == null:
 		return
 	assert_eq(rec_on.hashes, rec_off.hashes, "the fight's state hash is the same at every checkpoint, the finisher's frames among them")
-	# (the mouse's ground point is where a still cursor points through the camera, which leans in: the one control the dip can move)
-	assert_eq(_without_cursor(rec_on), _without_cursor(rec_off), "and so are the controls, the cursor's ground point apart")
+	assert_eq(_millimetres(rec_on), _millimetres(rec_off), "and so are the controls, the cursor's ground point among them to the millimetre (the game's own camera aims, not the dip's)")
 	assert_eq(rec_on.settings, rec_off.settings, "and the settings the recording keeps")
 	var replay := await _fight(true, "", rec_off)
 	assert_eq([replay.diverged, replay.finished, replay.top], [[], 1, 1.0], "the one made without the dip replays as recorded with it")

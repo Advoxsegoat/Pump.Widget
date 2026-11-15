@@ -254,6 +254,7 @@ func begin_moment(shots: SceneShots, rig: CameraRig, hud: Hud, lead: Actor, othe
 	if moment_playing() != null:
 		moment_playing().abort()
 	_moment = self
+	rig.cine_is_dip = true  # the player's aim keeps to the game's own camera while it leans
 	frame = 0
 	_run_start = 0
 	_run_weight = rig.cine_weight
@@ -353,6 +354,7 @@ func _tear_down(all_spawns: bool, now: bool) -> void:
 	if _is_moment:
 		if is_instance_valid(_rig):
 			_rig.cine_weight = 0.0  # the camera is the game's again (release, below, takes the pose)
+			_rig.cine_is_dip = false
 	elif phase != Phase.WAITING:
 		if not _handed_back:
 			_give_back_control()
@@ -644,6 +646,7 @@ func _start_scene() -> void:
 	_take_the_live_actors()
 	_make_the_spawns()
 	_stand_the_world_down()
+	_rig.cine_is_dip = false
 	_overlay = CineOverlay.new()
 	var holder := _hud.get_parent()
 	holder.add_child(_overlay)
@@ -788,6 +791,7 @@ func _moment_frame() -> void:
 # The moment is over and the camera is the game's: weight exactly 0, no pose.
 func _finish_moment() -> void:
 	_rig.cine_weight = 0.0
+	_rig.cine_is_dip = false
 	phase = Phase.DONE
 	if _moment == self:
 		_moment = null
