@@ -194,63 +194,11 @@ func test_the_feather_passes_through_nothing_running_in_eight_directions() -> vo
 	assert_eq(bad, 0, "running: the feather's edges went through %s on %d frames" % [through, bad])
 
 
-# --- nothing snaps when he is put somewhere ---
+# --- nothing snaps when he is put somewhere: tests/actors/test_spring_reset.gd ---
 
 # A bone's direction (its +Y) in the frame of `parent`.
 static func _direction(r: Rig, bone: StringName, parent: StringName) -> Vector3:
 	return (r.shown_pose(parent).basis.inverse() * r.shown_pose(bone).basis.y).normalized()
-
-
-const CHAINS := {&"feather_01": &"Head", &"feather_02": &"Head", &"scarf_01": &"neck_01", &"scarf_02": &"neck_01", &"scarf_03": &"neck_01", &"scarf_04": &"neck_01"}
-
-
-# The most any bone of the feather's chain (first) and of the scarf (second) turns in one frame, over `count` frames from now.
-func _worst_turn(actor: Actor, count: int) -> Array[float]:
-	var before := {}
-	for bone in CHAINS:
-		before[bone] = _direction(actor.rig, bone, CHAINS[bone])
-	var worst: Array[float] = [0.0, 0.0]
-	for i in count:
-		await frames(1)
-		for bone in CHAINS:
-			var now := _direction(actor.rig, bone, CHAINS[bone])
-			var which := 0 if String(bone).begins_with("feather") else 1
-			worst[which] = maxf(worst[which], rad_to_deg(now.angle_to(before[bone])))
-			before[bone] = now
-	return worst
-
-
-func test_nothing_snaps_when_he_is_placed_or_revived() -> void:
-	# The feather turns at most 20 degrees on the frame after a place or a revive. The scarf, which the engine's reset does not fix
-	# either, starts again from its rest pose, 36 degrees from where it hangs, and falls into its hang over two frames: at most 40.
-	var arena := TestArena.make(self)
-	var actor := TestArena.spawn(arena, load(ABARAX) as ActorDef, Brain.new())
-	await frames(60)
-	if not _has_feather(actor.rig):
-		return
-	var kept := {}
-	for spring: SpringBoneSimulator3D in actor.rig.skeleton.find_children("*", "SpringBoneSimulator3D", false, false):
-		kept[spring.get_root_bone_name(0)] = [spring.get_end_bone_name(0), spring.is_end_bone_extended(0), spring.get_end_bone_length(0),
-				spring.get_radius(0), spring.get_stiffness(0), spring.get_drag(0), spring.get_gravity(0), spring.get_gravity_direction(0)]
-	actor.place(Transform3D(Basis(Vector3.UP, PI), Vector3(5, 0, 0)))
-	var placed := await _worst_turn(actor, 1)
-	assert_true(placed[0] <= 20.0, "placed 5 m off and turned about: a bone of the feather turned %.0f degrees on the first frame (at most 20)" % placed[0])
-	assert_true(placed[1] <= 40.0, "placed: a bone of the scarf turned %.0f degrees on the first frame (at most 40)" % placed[1])
-	await frames(60)
-	for spring: SpringBoneSimulator3D in actor.rig.skeleton.find_children("*", "SpringBoneSimulator3D", false, false):
-		var now := [spring.get_end_bone_name(0), spring.is_end_bone_extended(0), spring.get_end_bone_length(0), spring.get_radius(0),
-				spring.get_stiffness(0), spring.get_drag(0), spring.get_gravity(0), spring.get_gravity_direction(0)]
-		assert_eq(now, kept.get(spring.get_root_bone_name(0)), "the spring on %s has its settings after the restart" % spring.get_root_bone_name(0))
-	assert_eq(kept.size(), 2, "the scarf's spring and the feather's")
-	actor.revive(Transform3D(Basis(Vector3.UP, 0.5), Vector3(-3, 0, 2)))
-	var revived := await _worst_turn(actor, 1)
-	assert_true(revived[0] <= 20.0, "revived: the feather turned %.0f degrees on the first frame (at most 20)" % revived[0])
-	assert_true(revived[1] <= 40.0, "revived: the scarf turned %.0f degrees on the first frame (at most 40)" % revived[1])
-	await frames(120)
-	var rest := TestAbaraxPortrait._tip_in_head(actor.rig)
-	actor.place(Transform3D(Basis(Vector3.UP, 2.0), Vector3(1, 0, -4)))
-	await frames(30)
-	assert_true(TestAbaraxPortrait._tip_in_head(actor.rig).distance_to(rest) < 0.01, "30 frames after a place the feather hangs where it did")
 
 
 # --- a frozen actor holds it still ---
