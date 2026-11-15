@@ -1566,7 +1566,7 @@ func test_lamps_light_the_world_only_and_are_warm_and_few() -> void:
 		assert_eq(lamp.light_color.to_html(false), "ffb98a", "a warm lamp")
 		assert_near(lamp.omni_range, 6.0, 1e-6, "range 6")
 		# At noon a warm pool on pale ground is a faint tint, not a bright disc: no lamp lifts the ground under it by more than 0.06.
-		assert_near(lamp.light_energy, 0.15, 1e-6, "energy 0.15")
+		assert_near(lamp.light_energy, 0.025, 1e-6, "energy 0.025")
 		assert_eq(lamp.light_cull_mask, Layers.RENDER_WORLD, "a lamp lights the world and not the bodies")
 		if lamp.shadow_enabled:
 			shadowed.append(lamp)

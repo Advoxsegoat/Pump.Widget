@@ -273,7 +273,7 @@ func _kit_colormap() -> Image:
 
 
 # The kit's colormap drawn in Bilibara's colours: every one of its colours (1,900-odd, swatches and their shading) is
-# given a colour, none loud: saturation at most 0.40, value at most 0.72. Roofs are slate-indigo, plaster a cold stone of
+# given a colour, none loud: saturation at most 0.40, value at most 0.76. Roofs are slate-indigo, plaster a cold stone of
 # value 0.50 to 0.66, timber and trim a dull rose-gold, boards dark wood.
 func test_bilibara_colormap_gives_every_kit_colour_a_quiet_one() -> void:
 	var kit := _kit_colormap()
@@ -288,7 +288,7 @@ func test_bilibara_colormap_gives_every_kit_colour_a_quiet_one() -> void:
 				assert_eq(to, seen[from.to_html(false)], "a colour is always mapped to the same colour")
 				continue
 			seen[from.to_html(false)] = to
-			assert_true(to.s <= 0.40 + 1e-3 and to.v <= 0.72 + 1e-3, "%s becomes %s: saturation %.2f, value %.2f" % [from.to_html(false), to.to_html(false), to.s, to.v])
+			assert_true(to.s <= 0.40 + 1e-3 and to.v <= 0.76 + 1e-3, "%s becomes %s: saturation %.2f, value %.2f" % [from.to_html(false), to.to_html(false), to.s, to.v])
 			if from != Color.BLACK:
 				assert_ne(to, from, "%s is changed" % from.to_html(false))
 	assert_true(seen.size() > 1500, "the kit's map has %d colours" % seen.size())
@@ -300,7 +300,7 @@ func test_bilibara_colormap_gives_every_kit_colour_a_quiet_one() -> void:
 	var board: Color = seen["794939"]
 	assert_true(roof.v <= 0.40 and roof.b > roof.g and roof.b > roof.r, "the cyan roof is slate-indigo (%s)" % roof.to_html(false))
 	assert_true(roof_red.v <= 0.32 and roof_red.b > roof_red.g, "the pink roof is a dark plum-indigo (%s)" % roof_red.to_html(false))
-	assert_true(plaster.v >= 0.50 and plaster.v <= 0.66 and plaster.b >= plaster.r, "plaster is a cold stone (%s)" % plaster.to_html(false))
+	assert_true(plaster.v >= 0.66 and plaster.v <= 0.72 and plaster.b >= plaster.r, "plaster is a cold stone (%s)" % plaster.to_html(false))
 	assert_true(shade.v >= 0.45 and shade.v < plaster.v, "and its shade a little darker (%s)" % shade.to_html(false))
 	assert_true(trim.r > trim.g and trim.g > trim.b and trim.v >= 0.40 and trim.v <= 0.66, "trim is a dull rose-gold (%s)" % trim.to_html(false))
 	assert_true(board.v <= 0.46 and board.r >= board.b, "boards are dark wood (%s)" % board.to_html(false))
@@ -480,6 +480,59 @@ func test_snow_lies_along_the_ridge_as_a_band_with_a_broken_edge_and_no_blue() -
 	assert_true(tones_seen.has(MAKE_TEXTURES.ROOF_SNOW_LIT.to_html(false)) and tones_seen.has(MAKE_TEXTURES.ROOF_SNOW_SHADE.to_html(false)), "snow has a lit and a shaded tone (%s)" % [tones_seen.keys()])
 
 
+# How far down the snow band reaches in each column of a roof tile, as the eye reads a dithered edge: the number of snow texels in the top 48
+# rows, averaged over the column and the two on each side.
+func _snow_edge(img: Image) -> PackedFloat32Array:
+	var count := PackedInt32Array()
+	for x in 80:
+		var n := 0
+		for y in 48:
+			if _is_snow(img.get_pixel(x, y)):
+				n += 1
+		count.append(n)
+	var edge := PackedFloat32Array()
+	for x in 80:
+		var sum := 0.0
+		for k in range(-2, 3):
+			sum += count[posmod(x + k, 80)]
+		edge.append(sum / 5.0)
+	return edge
+
+
+# Today's band ended in regular pointed teeth that read as a row of icicles or fir trees. Its lower edge is shallow (nine rows from highest to
+# lowest at most), has no tooth (a column more than three rows under both of its neighbours four columns off, at most two in the tile) and has
+# long level runs (ten columns or more within a row of one another): irregular, with a few longer runs.
+func test_the_snow_band_ends_in_a_shallow_broken_edge_not_a_saw_tooth() -> void:
+	for pair: Array in [[MAKE_TEXTURES.ROOF_SLATE, MAKE_TEXTURES.ROOF_SLATE_SEED], [MAKE_TEXTURES.ROOF_TANNERY, MAKE_TEXTURES.ROOF_TANNERY_SEED]]:
+		var tones: Array[Color] = []
+		tones.assign(pair[0])
+		var edge := _snow_edge(MAKE_TEXTURES.roof(tones, pair[1]))
+		var least := 99.0
+		var most := -1.0
+		for h in edge:
+			least = minf(least, h)
+			most = maxf(most, h)
+		assert_true(least >= 6.0, "snow lies in every column (%.1f rows at least)" % least)
+		assert_true(most - least <= 9.0, "the edge reaches from %.1f to %.1f rows down (at most 9 apart)" % [least, most])
+		var teeth := 0
+		for x in 80:
+			var here := edge[x]
+			var left := edge[posmod(x - 4, 80)]
+			var right := edge[posmod(x + 4, 80)]
+			if here - left > 3.0 and here - right > 3.0:
+				teeth += 1
+		assert_true(teeth <= 2, "%d teeth in the edge (at most 2)" % teeth)
+		var longest := 1
+		var run := 1
+		for x in range(1, 80):
+			if absf(edge[x] - edge[x - 1]) <= 1.0:
+				run += 1
+				longest = maxi(longest, run)
+			else:
+				run = 1
+		assert_true(longest >= 10, "the longest level run of the edge is %d columns (at least 10)" % longest)
+
+
 func test_roofs_are_slate_blue_and_brown_red_and_made_the_same_every_time_with_their_materials() -> void:
 	var slate: Color = MAKE_TEXTURES.ROOF_SLATE[0]
 	var tannery: Color = MAKE_TEXTURES.ROOF_TANNERY[0]
@@ -519,7 +572,7 @@ func test_wood_reads_brown_and_trim_and_doors_are_darker_than_the_plaster_they_s
 	for hex: String in ["cc8665", "b87758", "c27f5f"]:
 		var trim: Color = find.call(hex)
 		assert_true(trim.v <= shade.v - 0.04 and trim.v >= 0.40, "%s (trim, shutters) is darker than the plaster's shade (%.2f against %.2f)" % [hex, trim.v, shade.v])
-	assert_true(plaster.v >= 0.50, "and the plaster is still pale")
+	assert_true(plaster.v >= 0.66, "and the plaster is still pale")
 
 
 func test_the_banners_are_hot_pink_and_glow() -> void:

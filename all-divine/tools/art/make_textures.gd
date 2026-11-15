@@ -52,11 +52,11 @@ const COBBLE_WIDTH_MAX := 9
 ## The share of setts that are trodden.
 const TRODDEN_SETTS := 0.25
 ## The Tanneries' earth under snow: three pale greys (the snow trodden flat) in blotches 4 to 8 texels across, with a warm grey-tan
-## showing through in patches (whole blotches, about one in five): packed earth in tracks and patches, not a brown field.
+## showing through in patches (whole blotches, about one in eight): packed earth in tracks and patches, not a brown field.
 const EARTHS: Array[Color] = [Color8(174, 169, 161), Color8(171, 165, 158), Color8(167, 162, 155)]
 const TAN := Color8(150, 139, 125)
 ## The share of blotches that are tan.
-const TAN_SHARE := 0.2
+const TAN_SHARE := 0.12
 const EARTH_SEED := 17
 const BLOTCH_MIN := 4
 const BLOTCH_MAX := 8
@@ -213,7 +213,7 @@ static func cobble() -> Image:
 
 
 ## The Tanneries' ground: a 2 m tile of earth in blotches 4 to 8 texels across, laid as a lattice (each band of blotches
-## cut at its own places, so no seam runs the tile's length), one of the three EARTHS each or, one in five, TAN. Every band and every column is cut so that the tile's edge falls inside a blotch: it tiles seamlessly. The same
+## cut at its own places, so no seam runs the tile's length), one of the three EARTHS each or, one in eight, TAN. Every band and every column is cut so that the tile's edge falls inside a blotch: it tiles seamlessly. The same
 ## seeded random numbers (EARTH_SEED) make the same tile.
 static func tan_earth() -> Image:
 	var rng := RandomNumberGenerator.new()
@@ -351,12 +351,22 @@ static func roof(tones: Array[Color], seed_value: int) -> Image:
 				elif dy >= ROOF_ROW - ROOF_UNDER_TEXELS:
 					c = Color8(roundi(c.r8 * ROOF_UNDER), roundi(c.g8 * ROOF_UNDER), roundi(c.b8 * ROOF_UNDER))
 				colours[(row * ROOF_ROW + dy) * size + x] = c
-	# The snow: a band along the ridge, its lower edge a wave that wraps (two sines of whole numbers of cycles, one more of the eight columns'
-	# worth of jitter), dithered over five texels so that the shingles show through, with shaded pockets just inside the edge.
-	var phase_a := rng.randf() * TAU
-	var phase_b := rng.randf() * TAU
+	# The snow: a band along the ridge, dithered over six texels at its lower edge so that the shingles show through, with shaded pockets just
+	# inside the edge. The edge is a row of level runs (8 to 24 columns, each a level of its own within three rows of the middle, a little ragged), not a wave:
+	# a wave read as a row of pointed teeth. It wraps with the tile.
+	var runs := _split(rng, size, 8, 24)
+	var levels := PackedFloat32Array()
+	for r in runs.size():
+		var level := 19.0 + rng.randi_range(-3, 3)
+		if r > 0 and absf(level - levels[r - 1]) < 1.0:
+			level += 2.0
+		levels.append(level)
+	var edges := PackedFloat32Array()
+	for r in runs.size():
+		for k in runs[r]:
+			edges.append(levels[r] + rng.randf_range(-0.5, 0.5))
 	for x in size:
-		var edge := 19.0 + 5.0 * sin(TAU * 2.0 * x / size + phase_a) + 2.5 * sin(TAU * 5.0 * x / size + phase_b) + rng.randf_range(-1.0, 1.0)
+		var edge := edges[x]
 		for y in 40:
 			var snowy := false
 			if y < edge - 3.0:
@@ -447,7 +457,7 @@ static func bilibara_colormap() -> Image:
 ## rose-gold trim). The kit's colours fall in a few families, by hue; each family keeps its own light and dark, laid on a
 ## narrow range of value, so that walls are mid-value (a white jacket and a dark coat both stand out against them) and nothing
 ## is loud: saturation never over 0.40 and value never over 0.72. First values: the snow-noon light may move them.
-##   blue-greys and neutrals (plaster, stone, white): cold stone, value 0.25 + 0.45 v (a pale plaster 0.63)
+##   blue-greys and neutrals (plaster, stone, white): cold stone, value 0.30 + 0.45 v (a pale plaster 0.68: the fronts stand between the roofs and the pale ground)
 ##   warm oranges and peaches (trim, frames, shutters): dull rose-gold, the darker browns (boards) dark wood
 ##   cyan and teal (the roofs), and the saturated blues and violets: slate-indigo
 ##   reds and pinks (the other roof): a dark plum
@@ -459,7 +469,7 @@ static func bilibara_colour(c: Color) -> Color:
 	var s := c.s
 	var v := c.v
 	if s < 0.04:
-		return Color.from_hsv(0.63, 0.08, 0.25 + 0.45 * v)
+		return Color.from_hsv(0.63, 0.08, 0.30 + 0.45 * v)
 	if h >= 0.93 or h < 0.02:
 		return Color.from_hsv(0.77, 0.31, 0.10 + 0.17 * v)
 	if h < 0.12:
@@ -471,7 +481,7 @@ static func bilibara_colour(c: Color) -> Color:
 		return Color.from_hsv(0.40, 0.25, 0.20 + 0.30 * v)
 	if h < 0.55 or s >= 0.35:
 		return Color.from_hsv(0.64, 0.38, 0.16 + 0.26 * v)
-	return Color.from_hsv(0.63, minf(0.10 + 0.3 * s, 0.20), 0.25 + 0.45 * v)
+	return Color.from_hsv(0.63, minf(0.10 + 0.3 * s, 0.20), 0.30 + 0.45 * v)
 
 
 # A size x size RGB image of `colours`, row by row.

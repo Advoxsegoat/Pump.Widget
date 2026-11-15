@@ -397,7 +397,7 @@ row fence 40.85 -73.75 40.85 -56.25 180
 # ground is open, on the top of a low wall (ghost: nobody reaches it; the wall's fences are not before a body, see the notes there), 4.1 m up
 # from the ground to the lamp. A post on the ground is solid, a slim round post a fighter slides round. Two lamps cast shadows, at the shrine
 # sites 80 m apart (ShrineLampA in court A, ShrineLampB in alcove B). Where these differ from the plan's coordinates: the report lists them.
-lamps #ffb98a 6 0.15 3.45 world
+lamps #ffb98a 6 0.025 3.45 world
 lantern -36.1 -4.13 shadow
 lantern -28.5 -4.7
 lantern -20 -4.72
