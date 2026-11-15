@@ -14,6 +14,7 @@ func test_the_text_for_each_fixture_shot_names_framing_move_action_line_sound_an
 	assert_eq(StoryboardPage.ShotText.describe(scene, 1), PackedStringArray([
 		"S2   MEDIUM, the camera pushes in   (DOLLY 2>3)",
 		"1.00 s long   ·   1.50 s to 2.50 s   (frames 90 to 150)",
+		"picture: 0.50 s into the shot (the middle)",
 		"ACTION: He stops and folds his arms",
 		"CAMERA: Medium (people from about the waist up), looking at Knuckle. The camera pushes in, from medium to close. It cuts in from the last shot.",
 		"DOES: Knuckle plays the clip knuckle_idle, repeating (at the start)",
@@ -25,6 +26,7 @@ func test_the_text_for_each_fixture_shot_names_framing_move_action_line_sound_an
 	assert_eq(StoryboardPage.ShotText.describe(scene, 2), PackedStringArray([
 		"S3   CLOSE, the camera holds still   (STATIC)",
 		"1.00 s long   ·   2.50 s to 3.50 s   (frames 150 to 210)",
+		"picture: 0.57 s into the shot (the line just typed)",
 		"ACTION: A line",
 		"CAMERA: Close (one person or detail filling the picture), looking at Abarax. The camera holds still. It cuts in from the last shot.",
 		"SAYS: Fixture Knuckle (Gold Tooth's look): \"Fixture line one.\" (at the start, on screen 0.90 s)  [STAND-IN: the portrait of Fixture Knuckle (Gold Tooth's look) is not drawn yet, so a plain card shows]",
@@ -35,11 +37,11 @@ func test_the_text_for_each_fixture_shot_names_framing_move_action_line_sound_an
 
 func test_the_first_shot_says_where_the_camera_turns_and_the_walk_in_words() -> void:
 	var text := StoryboardPage.ShotText.describe(_fixture(), 0)
-	assert_eq(text.size() > 4, true, "S1 has its rows: %s" % [text])
-	if text.size() > 4:
+	assert_eq(text.size() > 5, true, "S1 has its rows: %s" % [text])
+	if text.size() > 5:
 		assert_eq(text[0], "S1   WIDE, the camera turns from Abarax to the foe stop mark   (PAN Abarax>foe stop)")
-		assert_eq(text[3], "CAMERA: Wide (everyone and the ground round them), looking at Abarax. The camera turns from Abarax to the foe stop mark.")
-		assert_eq(text[4], "DOES: Knuckle walks to the foe stop mark (at the start)")
+		assert_eq(text[4], "CAMERA: Wide (everyone and the ground round them), looking at Abarax. The camera turns from Abarax to the foe stop mark.")
+		assert_eq(text[5], "DOES: Knuckle walks to the foe stop mark (at the start)")
 
 
 func test_a_placeholder_clip_is_marked_on_the_row_it_belongs_to() -> void:
@@ -163,3 +165,32 @@ func test_the_burn_in_lists_a_placeholder_clip_once_it_has_begun() -> void:
 	scene.shots[1].beats[2].placeholder = true   # guard_hold, at frame 14 of S2
 	assert_false(StoryboardPage.ShotText.burn_in(scene, 90 + 13).contains("PLACEHOLDER"), "not before its beat")
 	assert_true(StoryboardPage.ShotText.burn_in(scene, 90 + 14).contains("\nPLACEHOLDER guard_hold"), StoryboardPage.ShotText.burn_in(scene, 90 + 14))
+
+
+# ---- when the picture was taken (fix round 1, item 2) ----
+
+# The row's "picture:" line (empty when the row has none).
+func _picture_line(text: PackedStringArray) -> String:
+	for line in text:
+		if line.begins_with("picture: "):
+			return line
+	return ""
+
+
+func test_each_row_says_when_its_picture_was_taken_and_why_that_instant() -> void:
+	var scene := _fixture()
+	assert_eq(_picture_line(StoryboardPage.ShotText.describe(scene, 0)), "picture: 1.17 s into the shot (the walk's end)", "S1: the Knuckle's walk arrives at frame 70")
+	assert_eq(_picture_line(StoryboardPage.ShotText.describe(scene, 1)), "picture: 0.50 s into the shot (the middle)", "S2: no line, no walk")
+	assert_eq(_picture_line(StoryboardPage.ShotText.describe(scene, 2)), "picture: 0.57 s into the shot (the line just typed)", "S3: 17 characters at two frames each")
+	scene.shots[2].key_frame = 12
+	assert_eq(_picture_line(StoryboardPage.ShotText.describe(scene, 2)), "picture: 0.20 s into the shot (chosen in the shot's data)", "the data's own frame says so")
+
+
+func test_the_picture_line_sits_under_the_times_in_grey() -> void:
+	var scene := _fixture()
+	var text := StoryboardPage.ShotText.describe(scene, 2)
+	assert_eq(text[1].begins_with("1.00 s long"), true)
+	assert_eq(text[2].begins_with("picture: "), true, "the third row of text, straight under the times: %s" % [text])
+	var blocks := StoryboardPage.blocks_of(text)
+	assert_eq(blocks[2].color, StoryboardPage.GREY, "grey, like the times")
+	assert_eq(blocks[3].color, StoryboardPage.INK, "the ACTION after it is in ink")

@@ -82,6 +82,8 @@ class ShotText extends RefCounted:
 		var shot := scene.shots[index]
 		out.append("%s   %s, the camera %s   (%s)" % [shot.id, FRAMING[shot.framing], _move_phrase(scene, shot), _shorthand(scene, shot)])
 		out.append("%s long   ·   %s to %s   (frames %d to %d)" % [_secs(shot.length), _secs(shot.start), _secs(shot.start + shot.length), shot.start, shot.start + shot.length])
+		var choice := key_choice(shot, scene)
+		out.append("picture: %s into the shot (%s)" % [_secs(choice.frame), choice.reason])
 		out.append("ACTION: " + (shot.action if shot.action != "" else "(no action written yet)"))
 		out.append("CAMERA: " + _camera_sentence(scene, shot, index))
 		for beat in shot.beats:
@@ -102,17 +104,22 @@ class ShotText extends RefCounted:
 	## whose walk arrives inside it (given the `scene` to know the places), the frame the body is at rest at its mark; else
 	## the middle. Always inside the shot.
 	static func key_frame(shot: Shot, scene: SceneShots = null) -> int:
+		return key_choice(shot, scene).frame
+
+	## The frame key_frame picks and why: {frame, reason}, the reason in the sheet's words ("the line just typed", "the walk's end",
+	## "the middle", or "chosen in the shot's data").
+	static func key_choice(shot: Shot, scene: SceneShots = null) -> Dictionary:
 		var last := maxi(shot.length - 1, 0)
 		if shot.key_frame >= 0:
-			return clampi(shot.key_frame, 0, last)
+			return {frame = clampi(shot.key_frame, 0, last), reason = "chosen in the shot's data"}
 		if not shot.lines.is_empty():
 			var line := shot.lines[shot.lines.size() - 1]
-			return clampi(line.at + int(_shared().call("typing_frames", line.text)), 0, last)
+			return {frame = clampi(line.at + int(_shared().call("typing_frames", line.text)), 0, last), reason = "the line just typed"}
 		if scene != null:
 			var arrival := _arrival(scene, shot)
 			if arrival >= 0 and arrival <= last:
-				return arrival
-		return clampi(shot.length / 2, 0, last)
+				return {frame = arrival, reason = "the walk's end"}
+		return {frame = clampi(shot.length / 2, 0, last), reason = "the middle"}
 
 	## The key frame of each shot, counted from the first shot's first frame (the scene's own clock, without the glide in).
 	static func key_frames(scene: SceneShots) -> PackedInt32Array:
@@ -399,7 +406,7 @@ static func blocks_of(lines: PackedStringArray) -> Array[Dictionary]:
 		var line := lines[i]
 		if i == 0:
 			blocks.append({label = "", size = TITLE_SIZE, color = INK, rows = wrap_text(line, column, TITLE_SIZE, font), height = TITLE_HEIGHT, indent = 0})
-		elif i == 1:
+		elif i <= 2:
 			blocks.append({label = "", size = FONT_SIZE, color = GREY, rows = wrap_text(line, column, FONT_SIZE, font), height = LINE_HEIGHT, indent = 0})
 		else:
 			var colon := line.find(": ")
