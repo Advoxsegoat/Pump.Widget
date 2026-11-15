@@ -70,3 +70,5 @@
 16   story/test_director_cast.gd   # headless x8
 16   story/test_moment_replay.gd   # headless x8
 16   ui/test_skip_scene_row.gd   # headless x8
+83   actors/test_abarax_feather.gd   # render log
+40   actors/test_spring_reset.gd   # an estimate (three fights of 600 frames): not yet seen in a log
