@@ -365,7 +365,7 @@ const LONG_PAUSE := 200
 # Pauses the game for `n` physics frames, and plays on.
 func _pause_for(n: int) -> void:
 	if Game.state != Game.State.PLAY:
-		Game.reset()
+		Game.state = Game.State.BOOT  # not Game.reset(), which ends a slow-down: the fight this pauses may have one running
 		Game.change(Game.State.PLAY)
 	Game.change(Game.State.PAUSE)
 	await frames(n)

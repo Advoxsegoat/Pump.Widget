@@ -27,6 +27,22 @@ func test_the_builds_wait_for_the_tests() -> void:
 	assert_true(export_job.has("    needs: [test]"), "the export job needs the test job (headless suite and clip checker)")
 
 
+func test_the_headless_job_plays_the_combat_bot_over_two_seeds() -> void:
+	var steps := _steps(_block(_lines(), "  test:", 2))
+	var bot: Array = Array(steps).filter(func(text: String) -> bool: return text.contains("name: Combat bot\n"))
+	assert_eq(bot.size(), 1, "the headless job has a bot step")
+	if bot.size() == 1:
+		assert_true(bot[0].contains("run_bot.gd -- --seeds=1-2 --frames=3600 --policy=mixed"), "seeds 1 and 2, 3,600 frames, the mixed policy: %s" % bot[0])
+
+
+func test_the_headless_job_also_plays_the_counter_policy() -> void:
+	var steps := _steps(_block(_lines(), "  test:", 2))
+	var bot: Array = Array(steps).filter(func(text: String) -> bool: return text.contains("name: Combat bot, the other policies"))
+	assert_eq(bot.size(), 1, "a second bot step, for what the suite is too short to hold")
+	if bot.size() == 1:
+		assert_true(bot[0].contains("--policy=counter"), bot[0])
+
+
 func test_the_builds_are_uploaded_before_the_linux_build_runs() -> void:
 	var steps := _steps(_block(_lines(), "  export:", 2))
 	var uploads: Array[int] = []
@@ -63,6 +79,27 @@ func test_the_render_job_runs_the_whole_suite_in_shards() -> void:
 	for i in shards.size():
 		assert_eq(shards[i], str(i + 1), "the shards are 1 to %d, each once" % shards.size())
 	assert_true(job.has("      fail-fast: false"), "one shard failing does not stop the others")
+
+
+func test_the_python_tools_step_installs_the_pinned_libraries_and_runs_the_portrait_tests() -> void:
+	# The sketch tool needs Pillow and numpy, which the runner's own Python may not have: the step installs them at the
+	# versions the tool was made with, before it runs the tool's tests. They go into a venv of the step's own, and the
+	# portrait tests run with that venv's Python: a plain `pip install` on a runner lands in the user's site folder, which
+	# the isolated mode the tests run in (-I) does not read (CI said "No module named 'numpy'").
+	var steps := _steps(_block(_lines(), "  test:", 2))
+	var found := ""
+	for step in steps:
+		if step.contains("name: Python tools' tests"):
+			found = step
+	assert_false(found.is_empty(), "the headless job has a Python tools' step")
+	var venv := found.find("python3 -m venv \"$RUNNER_TEMP/tools-venv\"")
+	var install := found.find("\"$RUNNER_TEMP/tools-venv/bin/python\" -m pip install --quiet pillow==12.3.0 numpy==2.5.3")
+	var portraits := found.find("\"$RUNNER_TEMP/tools-venv/bin/python\" -I -m unittest discover -s tools/portraits/tests")
+	assert_true(venv >= 0, "the step makes a venv of its own")
+	assert_true(install >= 0, "the step installs pillow==12.3.0 and numpy==2.5.3 into the venv")
+	assert_true(portraits >= 0, "the step runs the portrait tests with the venv's Python, isolated")
+	assert_true(venv < install and install < portraits, "the venv is made, then the libraries are installed, then the portrait tests run")
+	assert_false(found.contains("\n          python3 -m pip install"), "nothing is installed into the runner's own Python (the isolated tests could not see it)")
 
 
 func _lines() -> PackedStringArray:

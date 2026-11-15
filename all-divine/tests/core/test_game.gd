@@ -10,6 +10,7 @@ func _allowed() -> Array:
 		[S.PLAY, S.PAUSE], [S.PAUSE, S.PLAY],
 		[S.PLAY, S.MENU], [S.MENU, S.PLAY],
 		[S.PLAY, S.CUTSCENE], [S.CUTSCENE, S.PLAY],
+		[S.CUTSCENE, S.PAUSE], [S.PAUSE, S.CUTSCENE],
 		[S.PAUSE, S.TITLE], [S.MENU, S.TITLE],
 	]
 
@@ -100,3 +101,49 @@ func test_reset_zeroes_play_frames() -> void:
 	assert_true(Game.play_frames > 0, "some frames counted")
 	Game.reset()
 	assert_eq(Game.play_frames, 0)
+
+
+func test_a_cutscene_can_be_paused_and_the_pause_gives_it_back() -> void:
+	Game.change(S.PLAY)
+	Game.change(S.CUTSCENE)
+	assert_true(Game.change(S.PAUSE), "a cutscene can be paused")
+	assert_true(get_tree().paused)
+	var seen := []
+	var on_change := func(a, b): seen.append([a, b])
+	Game.state_changed.connect(on_change)
+	assert_true(Game.change(S.PLAY), "the menu's Resume asks for PLAY")
+	Game.state_changed.disconnect(on_change)
+	assert_eq(Game.state, S.CUTSCENE, "and the pause gives back what it paused: the cutscene")
+	assert_eq(seen, [[S.PAUSE, S.CUTSCENE]], "said as the move it was")
+	assert_false(get_tree().paused)
+	Game.change(S.PLAY)
+	Game.change(S.PAUSE)
+	Game.change(S.PLAY)
+	assert_eq(Game.state, S.PLAY, "a pause from the fight gives back the fight")
+
+
+func test_play_frames_stand_still_in_a_cutscene() -> void:
+	Game.change(S.PLAY)
+	await frames(3)
+	Game.change(S.CUTSCENE)
+	var at: int = Game.play_frames
+	await frames(30)
+	assert_eq(Game.play_frames, at, "a scene is not fight time: the HUD's blink and bars, the refusal gate, stand where they were")
+	Game.change(S.PLAY)
+	await frames(4)
+	assert_eq(Game.play_frames - at, 4, "and go on from there when the fight is back")
+
+
+func test_a_cutscene_that_ends_while_paused_is_not_given_back_by_the_pause() -> void:
+	Game.change(S.PLAY)
+	Game.change(S.CUTSCENE)
+	Game.end_cutscene()
+	assert_eq(Game.state, S.PLAY, "ending a cutscene that is the state plays")
+	Game.change(S.CUTSCENE)
+	Game.change(S.PAUSE)
+	Game.end_cutscene()
+	assert_eq(Game.state, S.PAUSE, "paused, the game stays paused")
+	Game.change(S.PLAY)
+	assert_eq(Game.state, S.PLAY, "and Resume plays: the cutscene is over")
+	Game.end_cutscene()
+	assert_eq(Game.state, S.PLAY, "ending one that is not on changes nothing")
