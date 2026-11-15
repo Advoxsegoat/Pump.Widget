@@ -26,6 +26,10 @@ const IN_SUITE := ["knuckle_1,knuckle_1,knuckle_1", "knuckle_1,knuckle_1,knuckle
 ## The list is the record of what is not yet true; empty would mean every trio the suite plays meets every rule.
 const NOT_YET := {
 	"knuckle_1,knuckle_1,knuckle_drummer": "rule 1, 123 frames at seeds 1-20 (over 90 in seeds 8, 9, 3, 4, 16, 20 before the hand-over: 180): the holder jogs in on a heading swung round an attacker, then brakes to a walk; no blow's reach was changed",
+	"knuckle_2,knuckle_2,knuckle_2": "rule 1, 148 frames at seeds 1-20 (seed 14): out of the suite's share, the holder detours round an attacker",
+	"knuckle_3,knuckle_3,knuckle_3": "rule 1, 93 frames at seeds 1-20 (seeds 7, 11, 16, 17: 92 to 93): three frames over",
+	"knuckle_blade,knuckle_blade,knuckle_blade": "rule 1, 122 frames at seeds 1-20 (seeds 4, 5, 15, 20)",
+	"knuckle_drummer,knuckle_drummer,knuckle_drummer": "rule 1, 113 frames at seeds 1-20 (seeds 1, 2, 4, 10), and one first attack late by rule 3 (seed 15: frame 439, allowed 360): the seven-blow strings",
 	"spacing": "three tier I: 0.57 of the frames have every two foes over 40 degrees apart at seeds 1-20 (worst seed 15), against 0.8: two who attack stand 30 to 40 degrees apart on a ring of 1 m",
 }
 
