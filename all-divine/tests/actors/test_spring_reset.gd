@@ -49,7 +49,7 @@ func test_a_reset_leaves_every_property_of_every_joint_as_it_was() -> void:
 	var was := dump(r)
 	assert_true(was.size() > 60, "the dump has the settings and the joints (%d properties)" % was.size())
 	assert_true(was.has("Scarf/settings/0/joints/3/gravity"), "the scarf's last joint is in the dump")
-	assert_true(was.has("Feather/settings/0/joints/1/stiffness"), "the feather's last joint is in the dump")
+	assert_true(was.has("Feather/settings/0/joints/2/stiffness"), "the feather's last joint is in the dump")
 	r.reset_springs()
 	r.tick(1.0 / 60)
 	var once := _differences(was, dump(r))
@@ -69,7 +69,7 @@ func test_a_reset_leaves_every_property_of_every_joint_as_it_was() -> void:
 # Where the scarf's and the feather's tips are, in the head's frame.
 static func _tips(r: Rig) -> Array[Vector3]:
 	var head := r.shown_pose(&"Head")
-	return [head.affine_inverse() * r.shown_pose(&"scarf_04").origin, head.affine_inverse() * r.shown_pose(&"feather_02").origin]
+	return [head.affine_inverse() * r.shown_pose(&"scarf_04").origin, head.affine_inverse() * r.shown_pose(&"feather_03").origin]
 
 
 func test_the_scarf_hangs_after_a_reset_where_it_hangs_without_one() -> void:
@@ -125,7 +125,7 @@ func test_a_fight_that_begins_with_a_place_has_the_scarf_a_fight_without_one_has
 
 # --- nothing snaps when he is put somewhere ---
 
-const CHAINS := {&"feather_01": &"Head", &"feather_02": &"Head", &"scarf_01": &"neck_01", &"scarf_02": &"neck_01", &"scarf_03": &"neck_01", &"scarf_04": &"neck_01"}
+const CHAINS := {&"feather_01": &"Head", &"feather_02": &"Head", &"feather_03": &"Head", &"scarf_01": &"neck_01", &"scarf_02": &"neck_01", &"scarf_03": &"neck_01", &"scarf_04": &"neck_01"}
 
 
 # A bone's direction (its +Y) in the frame of `parent`.

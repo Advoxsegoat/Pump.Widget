@@ -3,7 +3,7 @@
 peasant on one skeleton, plus a scarf with four bones of its own and the things the owner's pencil portrait
 (docs/art/owner/abarax-portrait-sketch-2026-11-14.jpg) draws on him: a top-knot with the sides cut close, a
 forelock and the small tie at his left temple, a ring in his right lobe, and from his left ear a link, a ring,
-two beads and a barred feather on two bones of their own. The model has palette slots in UV2 instead of
+two beads and a barred feather on three bones of their own. The model has palette slots in UV2 instead of
 textures, one material, and at most 4,000 triangles.
 
     tools/.venv/bin/python -I tools/anim/build_abarax.py --ubc <dir> --outfits <dir> --out <glb>
@@ -28,9 +28,11 @@ Palette slots are stored as UV2.x = (slot + 0.5) / 16 (UV2.y = 0.5). Vertex colo
     8     gold   the rings (his right lobe's, and the feather's), the link, a bead and the feather's pale bars
 
 Bones: the 65 joints the base and the outfit share, plus scarf_01 to scarf_04 (scarf_01's parent is
-neck_01; each bone is 0.175 m long and they hang down the back), plus feather_01 and feather_02 (feather_01
-hangs from the Head at his left lobe and carries the link, the ring, the beads and the cord; feather_02 hangs
-from it and carries the feather). The new bones come last, so the 69 before them keep their places.
+neck_01; each bone is 0.175 m long and they hang down the back), plus feather_01, feather_02 and
+feather_03 (feather_01 hangs from the Head at his left lobe and carries the link, the ring, the beads and the cord;
+feather_02 hangs from it and carries the root half of the feather, feather_03 the tip half, so that a spring on
+them has a joint at the blade's middle and one at its tip to keep out of the way of a fist). The new bones come
+last, so the 69 before them keep their places.
 
 Made in code, like the scarf, and not decimated: Abarax_Forelock, Abarax_Feather, Abarax_EarRing, and the bun
 of Abarax_Topknot. The rest of Abarax_Topknot is the upper skull's faces of the decimated head, drawn a little
@@ -335,12 +337,18 @@ def build_scarf(armature, neck, back):
 # x 0.079-0.091, y 0.006-0.032, z 1.668-1.715, so the lobe hangs at about (0.082, 0.016, 1.666).
 LOBE_LEFT = (0.082, 0.016, 1.666)
 LOBE_RIGHT = (-0.087, 0.016, 1.659)  # the ring's centre: it hangs round the lobe, a little below it
-FEATHER_BONES = ("feather_01", "feather_02")
-# feather_01 carries the link, ring, beads and cord: 4.5 cm leaning 15 degrees out from straight down, from the lobe. feather_02
-# carries the feather, as the drawing has it: it trails out to the side (and a little back), clear of the neck and the collar, 15 cm
-# long and, at its widest, 6.8 cm across (a longer, thinner blade read as a stick at the game's camera, where a pixel is 3 cm).
-CHAIN_LENGTH, CHAIN_TILT = 0.045, 15.0
-FEATHER_LENGTH = 0.15
+FEATHER_BONES = ("feather_01", "feather_02", "feather_03")
+# feather_01 carries the link, ring, beads and cord: 3.5 cm leaning 15 degrees out from straight down, from the lobe. feather_02
+# and feather_03 carry the feather, as the drawing has it: it trails out to the side (and a little back), clear of the neck and the
+# collar, 12 cm long and, at its widest, 4.1 cm across (round two's 15 by 6.8 cm crossed a fist raised beside his ear in a fight; at this
+# size the springs' capsules can keep it clear of fists, scarf and head in every fight tried). FEATHER_WIDTH is the blade's widths as a
+# fraction of FEATHER_BLADE's rows, which are those of a 15 cm blade of 6.8 cm.
+CHAIN_LENGTH, CHAIN_TILT = 0.035, 15.0
+FEATHER_LENGTH = 0.12
+FEATHER_WIDTH = 0.6
+# feather_02 carries the blade up to this far along it, feather_03 the rest; the blade's weights blend 2 cm either side of it.
+FEATHER_SPLIT = 0.06
+FEATHER_SPLIT_FROM, FEATHER_SPLIT_TO = FEATHER_SPLIT - 0.02, FEATHER_SPLIT + 0.02
 FEATHER_DIRECTION = (0.70, 0.35, 0.60)
 # The blade, as (distance along the bone, half width above the quill, half width below it): it widens from the quill's base, is cut
 # into three notches along its lower edge and narrows to the tip. The faces twist about the bone from facing front at its root to
@@ -449,16 +457,18 @@ def smoothstep(lo, hi, x):
 
 
 def feather_joints():
-    """The three joints of the feather's chain, from the left lobe: out of the lobe, to the end of feather_01 (leaning
-    CHAIN_TILT degrees out from straight down) and to the feather's tip (along FEATHER_DIRECTION)."""
+    """The four joints of the feather's chain, from the left lobe: out of the lobe, to the end of feather_01 (leaning
+    CHAIN_TILT degrees out from straight down), to the blade's middle and to its tip (along FEATHER_DIRECTION)."""
     start = Vector(LOBE_LEFT)
     down = lambda tilt: Vector((math.sin(math.radians(tilt)), 0.0, -math.cos(math.radians(tilt))))
     middle = start + down(CHAIN_TILT) * CHAIN_LENGTH
-    return [start, middle, middle + Vector(FEATHER_DIRECTION).normalized() * FEATHER_LENGTH]
+    out = Vector(FEATHER_DIRECTION).normalized()
+    return [start, middle, middle + out * FEATHER_SPLIT, middle + out * FEATHER_LENGTH]
 
 
 def add_feather_bones(armature, joints):
-    """feather_01 from the Head at the lobe, feather_02 below it; after the scarf's, so the bones before keep their place."""
+    """feather_01 from the Head at the lobe, feather_02 below it and feather_03 below that; after the scarf's, so the bones before keep
+    their place."""
     bpy.context.view_layer.objects.active = armature
     with active(armature):
         bpy.ops.object.mode_set(mode="EDIT")
@@ -581,8 +591,8 @@ def feather(armature, joints):
     """From his left lobe: a link, a ring, two beads and a cord, then the barred feather (gold and the hair's brown: dark against the
     cream of the shirt behind it and gold against the ground beyond): a quill and a notched blade that twists about the bone."""
     made = Made()
-    first, second = {"feather_01": 1.0}, {"feather_02": 1.0}
-    start, middle, tip = joints
+    first = {"feather_01": 1.0}
+    start, middle, _split, tip = joints
     along = (middle - start).normalized()
     out = (tip - middle).normalized()
     at = lambda s: start + along * s
@@ -598,10 +608,13 @@ def feather(armature, joints):
     for layer, facing_sign in ((0, -1), (1, 1)):
         rows = []
         for i, (s, upper, lower) in enumerate(FEATHER_BLADE):
+            s, upper, lower = s * FEATHER_LENGTH / 0.15, upper * FEATHER_WIDTH, lower * FEATHER_WIDTH
             angle = math.radians(FEATHER_TWIST) * s / FEATHER_LENGTH
             normal = base * math.cos(angle) + quarter * math.sin(angle)
             width = out.cross(normal)  # up the blade's upper edge
-            weights = {"feather_01": 0.5, "feather_02": 0.5} if i == 0 else second
+            tip_half = smoothstep(FEATHER_SPLIT_FROM, FEATHER_SPLIT_TO, s)
+            weights = {"feather_01": 0.5, "feather_02": 0.5} if i == 0 else {"feather_02": 1.0 - tip_half, "feather_03": tip_half}
+            weights = {bone: w for bone, w in weights.items() if w > 0.0}
             centre = middle + out * s
             rows.append(([made.vert(centre + width * upper + normal * (facing_sign * 0.001), weights),
                           made.vert(centre + normal * (facing_sign * FEATHER_BULGE), weights),
@@ -610,7 +623,7 @@ def feather(armature, joints):
             slot = GOLD if band % 2 == 0 else HAIR
             for k in range(2):
                 made.face([a[k], a[k + 1], b[k + 1], b[k]], slot, facing=normal_a + normal_b)
-    return made_object(FEATHER_MESH, made, armature, ["feather_01", "feather_02"])
+    return made_object(FEATHER_MESH, made, armature, list(FEATHER_BONES))
 
 
 # --- step 5: palette slots ---

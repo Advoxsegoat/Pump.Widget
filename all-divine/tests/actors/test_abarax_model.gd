@@ -18,7 +18,7 @@ func test_imports_with_one_skeleton_and_scarf_chain() -> void:
 	var skeletons := model.find_children("*", "Skeleton3D")
 	assert_eq(skeletons.size(), 1)
 	var s: Skeleton3D = skeletons[0]
-	assert_eq(s.get_bone_count(), 71)
+	assert_eq(s.get_bone_count(), 72)
 	assert_eq(s.get_bone_name(s.get_bone_parent(s.find_bone("scarf_01"))), "neck_01")
 	for i in range(1, SCARF.size()):
 		assert_eq(s.get_bone_name(s.get_bone_parent(s.find_bone(SCARF[i]))), SCARF[i - 1])

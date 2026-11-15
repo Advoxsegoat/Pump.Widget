@@ -11,6 +11,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import gltf_inspect  # noqa: E402
 
@@ -36,7 +38,7 @@ BASE = [
     "thigh_r", "calf_r", "foot_r", "ball_r", "ball_leaf_r",
 ]
 SCARF = ["scarf_01", "scarf_02", "scarf_03", "scarf_04"]
-FEATHER = ["feather_01", "feather_02"]
+FEATHER = ["feather_01", "feather_02", "feather_03"]
 REST_69 = Path(__file__).with_name("abarax_rest_69.json")  # the 69 bones of the model before the portraits: parent and world matrix
 
 # The slot table (tools/anim/build_abarax.py): which slots each mesh may carry.
@@ -106,7 +108,7 @@ class BuildAbarax(unittest.TestCase):
     def test_skeleton_is_base_plus_scarf_plus_feather(self):
         names = gltf_inspect.joint_names(self.j)
         self.assertEqual(set(names), set(BASE) | set(SCARF) | set(FEATHER))
-        self.assertEqual(len(names), 71, "no joint is listed twice")
+        self.assertEqual(len(names), 72, "no joint is listed twice")
         self.assertEqual(len(self.j["skins"]), 1, "one skeleton")
 
     def test_the_69_bones_of_before_are_where_they_were(self):
@@ -121,8 +123,8 @@ class BuildAbarax(unittest.TestCase):
             self.assertLess(worst, 2e-5, f"{name} moved by {worst}")
 
     def test_the_old_bones_keep_their_order_and_the_only_new_ones_are_the_feather_s(self):
-        # The exporter lists joints depth-first, so the feather's two (under the Head) sit before the scarf's four, which
-        # move up by two places; no clip, def or test reads a bone by its place (they read names).
+        # The exporter lists joints depth-first, so the feather's three (under the Head) sit before the scarf's four, which
+        # move up by three places; no clip, def or test reads a bone by its place (they read names).
         names = gltf_inspect.joint_names(self.j)
         before = json.loads(REST_69.read_text())
         self.assertEqual([n for n in names if n in before], list(before), "the 69 in the order they had")
@@ -131,7 +133,7 @@ class BuildAbarax(unittest.TestCase):
     def test_feather_bones_hang_from_the_left_ear(self):
         parents = gltf_inspect.joint_parents(self.j)
         self.assertTrue(all(n in parents for n in FEATHER), f"the feather's bones {FEATHER} are in the skeleton")
-        self.assertEqual([parents[n] for n in FEATHER], ["Head", "feather_01"])
+        self.assertEqual([parents[n] for n in FEATHER], ["Head", "feather_01", "feather_02"])
         at = gltf_inspect.joint_positions(self.j)
         ear = at["feather_01"]
         self.assertGreater(ear[0], 0.07, "feather_01 is on his left (+X)")
@@ -140,6 +142,47 @@ class BuildAbarax(unittest.TestCase):
         self.assertLess(abs(ear[2] - (-0.015)), 0.02, "level with the ear, not the face")
         self.assertLess(at["feather_02"][1], ear[1], "the feather hangs below the ring and beads")
         self.assertGreater(at["feather_02"][0], ear[0] - 1e-6, "and leans out past the jaw, never in toward the neck")
+        # the blade (12 cm) has a joint at its root and one at its middle: 6 cm apart along the blade, which stands off up and out
+        root, middle = at["feather_02"], at["feather_03"]
+        self.assertLess(abs(math.dist(root, middle) - 0.06), 0.002, "feather_03 is at the middle of the blade (6 cm along it)")
+        self.assertGreater(middle[1], root[1], "and the blade goes up from its root")
+
+    def test_the_blade_is_the_size_the_springs_can_keep_clear(self):
+        # 12 cm by 4 cm (the brief): at 15 by 6.8 cm it crossed a fist raised beside his ear in a fight whatever the springs did.
+        at = gltf_inspect.joint_positions(self.j)
+        root, middle = np.array(at["feather_02"]), np.array(at["feather_03"])
+        axis = (middle - root) / np.linalg.norm(middle - root)
+        along, across = [], []
+        for p in self.positions("Abarax_Feather"):
+            v = np.array(p) - root
+            if math.dist(p, at["feather_01"]) > 0.05:  # the blade (the link, ring, beads and cord are within 5 cm of the lobe)
+                along.append(float(v @ axis))
+                across.append(float(np.linalg.norm(v - axis * (v @ axis))))
+        self.assertLessEqual(max(along), 0.125, "the blade is at most 12.5 cm long")
+        self.assertLessEqual(2 * max(across), 0.045, "and at most 4.5 cm across")
+        self.assertGreater(max(along), 0.10, "but it is a feather and not a stub")
+
+    def test_the_blade_is_carried_by_its_two_bones_and_the_chain_by_the_first(self):
+        names = gltf_inspect.joint_names(self.j)
+        parents = gltf_inspect.joint_parents(self.j)
+        used = {}  # bone name -> the most weight any feather vertex gives it
+        for mesh in self.j["meshes"]:
+            if mesh["name"] != "Abarax_Feather":
+                continue
+            for prim in mesh["primitives"]:
+                buffers = gltf_inspect._buffers(self.j, self.path)
+                joints = gltf_inspect._read_accessor(self.j, buffers, prim["attributes"]["JOINTS_0"])
+                weights = gltf_inspect._read_accessor(self.j, buffers, prim["attributes"]["WEIGHTS_0"])
+                skin_joints = self.j["skins"][0]["joints"]
+                for js, ws in zip(joints, weights):
+                    for joint, weight in zip(js, ws):
+                        if weight > 0.0:
+                            bone = self.j["nodes"][skin_joints[joint]]["name"]
+                            used[bone] = max(used.get(bone, 0.0), weight)
+        self.assertEqual(set(used), set(FEATHER), f"the feather mesh is skinned to {sorted(used)}")
+        self.assertEqual(used["feather_03"], 1.0, "the tip of the blade is all feather_03's")
+        self.assertEqual(used["feather_01"], 1.0, "the link, ring and cord are all feather_01's")
+        self.assertEqual(parents["feather_03"], "feather_02")
 
     def test_the_four_new_parts_are_where_the_drawing_has_them(self):
         head_low, head_high = self.bounds("Abarax_Head")

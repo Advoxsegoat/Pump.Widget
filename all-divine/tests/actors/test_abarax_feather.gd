@@ -137,8 +137,9 @@ func test_the_feather_passes_through_nothing_in_any_pose() -> void:
 			r.tick(1.0 / 60)
 		var steps := 1
 		if clip == &"getup":
-			# He gets up from lying (the scarf's test says the same: played from idle the pose snaps and the scarf whips into it):
-			# lie him down first, as a death does, and let him lie a while.
+			# He gets up from lying (the scarf's test says the same: played from idle the pose snaps and the scarf whips into it).
+			# The get-up clip played from standing crosses once (the scarf, on the frame the body snaps to the floor); the game never
+			# plays it so, and from lying it is clean: so lie him down first, as a death does, and let him lie a while.
 			r.play_move(&"death", 0.15)
 			for f in int(r.tree.get_animation(&"death").length * 60) + 20:
 				await frames(1)
@@ -194,6 +195,89 @@ func test_the_feather_passes_through_nothing_running_in_eight_directions() -> vo
 	assert_eq(bad, 0, "running: the feather's edges went through %s on %d frames" % [through, bad])
 
 
+# The feather's edges against the skinned triangles on every frame of a seeded fight: {frames, bad, through, moves, first} (the moves the
+# frames that crossed were in, what they went through at most, and the first such frame).
+func _crossings_in_fight(seed_number: int, wave: int, count: int) -> Dictionary:
+	var found := {"frames": 0, "bad": 0, "through": {}, "moves": {}, "first": -1}
+	var parts := {}
+	await FightBot.play(self, seed_number, [wave], count, true, func(player: Actor, f: int) -> void:
+		if parts.is_empty():
+			parts["feather"] = _prepare(player.rig, ["Abarax_Feather"])[0]
+			parts["blade"] = blade_vertices(parts["feather"])
+			parts["solids"] = _prepare(player.rig, SOLIDS)
+		found["frames"] += 1
+		var now := crossings(player.rig, parts["feather"], parts["blade"], parts["solids"])
+		if now.is_empty():
+			return
+		found["bad"] += 1
+		found["first"] = f if found["first"] < 0 else found["first"]
+		var move := String(player.runner.current.id) if player.runner.current != null else "-"
+		found["moves"][move] = found["moves"].get(move, 0) + 1
+		for key in now:
+			found["through"][key] = maxi(found["through"].get(key, 0), now[key]))
+	return found
+
+
+# Two seeded fights of 1,500 frames against real foes (a reactive brain: walks, palms, sways, ducks, dash-steps, guards; the player cannot
+# die). Both crossed on the model of fix round 2: the first through the left sleeve in `palm_cross` (a fist past the ear, 44 of 160 frames
+# of the last 160), the second through the scarf in a `stagger`.
+func test_the_feather_passes_through_nothing_in_a_seeded_fight_with_palm_cross() -> void:
+	var found := await _crossings_in_fight(12, 10, 1500)
+	print("feather in seeded fight 12 (wave 10): ", found)
+	assert_true(found["frames"] == 1500, "the fight ran (%d frames)" % found["frames"])
+	assert_eq(found["bad"], 0, "the feather's edges went through %s on %d of 1500 frames (the first %d, in %s)" % [found["through"], found["bad"], found["first"], found["moves"]])
+
+
+func test_the_feather_passes_through_nothing_in_a_seeded_fight_with_staggers() -> void:
+	var found := await _crossings_in_fight(12, 11, 1500)
+	print("feather in seeded fight 12 (wave 11): ", found)
+	assert_true(found["frames"] == 1500, "the fight ran (%d frames)" % found["frames"])
+	assert_eq(found["bad"], 0, "the feather's edges went through %s on %d of 1500 frames (the first %d, in %s)" % [found["through"], found["bad"], found["first"], found["moves"]])
+
+
+# The attack clips, and those that move his body most: each is played below while he turns.
+const ATTACKS: Array[StringName] = [&"palm_jab", &"palm_cross", &"palm_hook", &"palm_heavy", &"counter_hook", &"counter_rise", &"catch", &"parry",
+		&"finisher", &"dash_step", &"dash_step_left", &"dash_step_right", &"dash_step_back", &"hop"]
+## The rate a fight turns him (LocomotionTuning.turn_rate_deg), in degrees a frame; he turns one way for TURN_RUN frames, then the other, as
+## he does from one foe to the next.
+const TURN_PER_FRAME := 12.0
+const TURN_RUN := 18
+
+
+func test_the_feather_passes_through_nothing_in_any_attack_while_he_turns() -> void:
+	var table := {}
+	for clip in ATTACKS:
+		var r: Rig = track(load(RIG).instantiate())
+		if not _has_feather(r):
+			return
+		var feather := _prepare(r, ["Abarax_Feather"])[0]
+		var blade := blade_vertices(feather)
+		var solids := _prepare(r, SOLIDS)
+		for i in 60:
+			await frames(1)
+			r.tick(1.0 / 60)
+		r.play_move(clip, 0.15)
+		var steps := int(r.tree.get_animation(clip).length * 60) + 1
+		var bad := 0
+		var through := {}
+		var first := -1
+		for f in steps:
+			await frames(1)
+			r.set_move_time(f / 60.0)
+			r.rotation.y += deg_to_rad(TURN_PER_FRAME) * (1.0 if (f / TURN_RUN) % 2 == 0 else -1.0)
+			r.tick(1.0 / 60)
+			var now := crossings(r, feather, blade, solids)
+			if not now.is_empty():
+				bad += 1
+				first = f if first < 0 else first
+				for key in now:
+					through[key] = maxi(through.get(key, 0), now[key])
+		table[clip] = "%d of %d frames %s" % [bad, steps, through]
+		assert_eq(bad, 0, "%s while turning: the feather's edges went through %s on %d of %d frames (the first, %d)" % [clip, through, bad, steps, first])
+		r.free()
+	print("feather crossings in attacks while turning: ", table)
+
+
 # --- nothing snaps when he is put somewhere: tests/actors/test_spring_reset.gd ---
 
 # A bone's direction (its +Y) in the frame of `parent`.
@@ -225,7 +309,7 @@ func test_a_frozen_actor_holds_the_feather_exactly_still() -> void:
 # --- it does not whip ---
 
 func _has_feather(r: Rig) -> bool:
-	var has := r.skeleton.find_bone("feather_01") >= 0 and r.skeleton.find_bone("feather_02") >= 0
+	var has := r.skeleton.find_bone("feather_01") >= 0 and r.skeleton.find_bone("feather_02") >= 0 and r.skeleton.find_bone("feather_03") >= 0
 	assert_true(has, "the rig has the feather's bones")
 	return has
 
@@ -252,7 +336,7 @@ func _fight(script: Array) -> Dictionary:
 	for f in 1500:
 		await frames(1)
 		var moved := false
-		for bone in [&"feather_01", &"feather_02"]:
+		for bone in [&"feather_01", &"feather_02", &"feather_03"]:
 			var now := _direction(player.rig, bone, &"Head")
 			if before.has(bone):
 				var turn := rad_to_deg(now.angle_to(before[bone]))

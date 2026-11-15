@@ -86,6 +86,8 @@ var cadence := 1.0
 var _springs_reset := false
 ## The ticks still to run the springs to rest on after a restart (_restart_springs).
 var _springs_settle := 0
+## Whether the rig has ticked once.
+var _ticked := false
 
 const MOVE_AB := &"parameters/move_ab/blend_amount"
 const MOVE_BLEND := &"parameters/move_blend/blend_amount"
@@ -734,8 +736,11 @@ func tick(delta: float) -> void:
 	_place_look_target()
 	_look_time += delta
 	_show_look()
-	if _springs_reset or _springs_settle > 0:
+	# Not on the first tick of a rig: the pose of that tick is not the pose of the ones after it (a chain run to rest on it stands at its
+	# rest pose again in the frame shown, 26 edges of the feather through the head), and a rig placed at once is placed from the next.
+	if (_springs_reset or _springs_settle > 0) and _ticked:
 		_restart_springs(delta)
+	_ticked = true
 	# The skeleton would run its modifiers in an update deferred to the end of the frame. advance() gives
 	# them the delta, and the update is run here instead, so this tick's pose is done when tick returns.
 	# The deferred update then finds nothing left to do: running the update clears what it was asked for.
@@ -743,11 +748,11 @@ func tick(delta: float) -> void:
 	skeleton.notification(Skeleton3D.NOTIFICATION_UPDATE_SKELETON)
 
 
-## Makes every spring (the scarf's, the feather's) forget where it was and start again from the pose the skeleton has, from the next
-## tick on: for a body that was put somewhere else (Actor.place: a spawn, a region change, a revive), whose springs would otherwise
-## swing back across the jump from where they were, 180 degrees in a frame. (SpringBoneSimulator3D.reset() does not do it: it keeps the
-## world position the chain was at and swings it over. Naming the root bone again starts it afresh, at the rest pose
-## the model was built in, from which it falls into its hang within a frame or two (the scarf's hang is 36 degrees from its rest).)
+## Makes every spring (the scarf's, the feather's) forget where it was and start again, hanging, from the next tick on: for a body that was
+## put somewhere else (Actor.place: a spawn, a region change, a revive), whose springs would otherwise swing back across the jump from
+## where they were, 180 degrees in a frame. (SpringBoneSimulator3D.reset() does not do it: it keeps the world position the chain was at and
+## swings it over; naming the root bone again starts it afresh, at the rest pose the model was built in, from which it falls into its
+## hang in front of the player: see _restart_springs, which has them run to rest out of sight.)
 func reset_springs() -> void:
 	_springs_reset = true
 

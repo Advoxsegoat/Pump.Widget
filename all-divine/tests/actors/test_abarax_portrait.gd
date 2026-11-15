@@ -54,16 +54,16 @@ func _fight_hashes() -> Array[int]:
 
 const RIG := "res://actors/abarax/abarax_rig.tscn"
 const PARTS: PackedStringArray = ["Abarax_Topknot", "Abarax_Forelock", "Abarax_Feather", "Abarax_EarRing"]
-const FEATHER_BONE_LENGTH := 0.15  # the length of feather_02 (the builder's FEATHER_LENGTH)
+const FEATHER_BONE_LENGTH := 0.06  # what the spring extends feather_03 by: the blade's second half (the builder's FEATHER_LENGTH less FEATHER_SPLIT)
 
 
 func _def() -> ActorDef:
 	return load(ABARAX) as ActorDef
 
 
-# The feather's tip: the end of feather_02 (the bone's origin plus its length along its +Y), in the world.
+# The feather's tip: the end of feather_03 (the bone's origin plus its length along its +Y), in the world.
 static func _tip(r: Rig) -> Vector3:
-	var end := r.shown_pose(&"feather_02")
+	var end := r.shown_pose(&"feather_03")
 	return end.origin + end.basis.y.normalized() * FEATHER_BONE_LENGTH
 
 
@@ -73,7 +73,7 @@ static func _tip_in_head(r: Rig) -> Vector3:
 
 
 func _has_feather(r: Rig) -> bool:
-	var has := r.skeleton.find_bone("feather_01") >= 0 and r.skeleton.find_bone("feather_02") >= 0
+	var has := r.skeleton.find_bone("feather_01") >= 0 and r.skeleton.find_bone("feather_02") >= 0 and r.skeleton.find_bone("feather_03") >= 0
 	assert_true(has, "the rig has the feather's bones")
 	return has
 
@@ -114,11 +114,12 @@ func test_no_other_actor_wears_them() -> void:
 func test_the_feather_hangs_from_his_left_ear() -> void:
 	var r: Rig = track(load(RIG).instantiate())
 	var skeleton := r.skeleton
-	assert_true(skeleton.find_bone("feather_01") >= 0 and skeleton.find_bone("feather_02") >= 0, "the feather's two bones are in the skeleton")
+	assert_true(skeleton.find_bone("feather_01") >= 0 and skeleton.find_bone("feather_02") >= 0 and skeleton.find_bone("feather_03") >= 0, "the feather's three bones are in the skeleton")
 	if skeleton.find_bone("feather_01") < 0:
 		return
 	assert_eq(skeleton.get_bone_name(skeleton.get_bone_parent(skeleton.find_bone("feather_01"))), "Head")
 	assert_eq(skeleton.get_bone_name(skeleton.get_bone_parent(skeleton.find_bone("feather_02"))), "feather_01")
+	assert_eq(skeleton.get_bone_name(skeleton.get_bone_parent(skeleton.find_bone("feather_03"))), "feather_02")
 	var lobe := skeleton.get_bone_global_rest(skeleton.find_bone("feather_01")).origin  # at rest, in the model's own space
 	assert_true(lobe.x > 0.07 and lobe.x < 0.11, "on his left (+X): %s" % lobe)
 	assert_true(lobe.y > 1.63 and lobe.y < 1.70, "at the lobe's height: %s" % lobe)
@@ -136,8 +137,8 @@ func test_the_rig_springs_the_feather_and_only_the_feather_and_the_scarf() -> vo
 	assert_true(feather != null, "a spring on feather_01")
 	if feather == null:
 		return
-	assert_eq(feather.get_end_bone_name(0), "feather_02")
-	assert_true(feather.is_end_bone_extended(0), "its end extended by the feather's length")
+	assert_eq(feather.get_end_bone_name(0), "feather_03")
+	assert_true(feather.is_end_bone_extended(0), "its end extended by the blade's second half")
 	assert_near(feather.get_end_bone_length(0), FEATHER_BONE_LENGTH, 1e-6)
 	var plain: Rig = track(load(RIG).instantiate())
 	for spring in plain.skeleton.find_children("*", "SpringBoneSimulator3D", false, false):
