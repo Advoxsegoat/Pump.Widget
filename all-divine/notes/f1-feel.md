@@ -67,8 +67,8 @@ the ten seeds (a lone tier I) and then dies; `counter` clears one in five of the
 at that reaction (the bot answers a blow only after its reaction plus a dodge's 4-frame lead, and the jab's tell is 15 frames from the glint to
 the blow). It goes to the owner's list; it is not changed here. (What would change it is the tell's length in the Knuckle's jab, or a longer
 window for the sway's evade.) The cross (20 frames) is next and is mostly parried or evaded; the hook, the sweep and the thrust are not where the
-damage is. The Drummer's string was never met by `counter` at 18 (a bot that dies on the first wave does not reach it); at 14 it takes 20 HP in the two
-waves `counter` clears with him, at 10 it takes 5.
+damage is. The Drummer's string was never met by `counter` at 18 (a bot that dies on the first wave does not reach it); at 14 it takes 20 HP in the one
+wave `counter` clears with him, at 10 it takes 5 in ten.
 
 ## What the three tables say
 
