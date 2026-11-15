@@ -333,6 +333,9 @@ func _observe(run: Dictionary) -> void:
 
 
 func _free(runs: Array[Dictionary]) -> void:
+	for node in Sfx.playing_nodes():
+		node.stop()  # a blow's sound still playing when the run ends is reported as a leak
+	OS.delay_msec(150)
 	for run in runs:
 		if is_instance_valid(run["arena"]):
 			(run["arena"] as Node).free()
