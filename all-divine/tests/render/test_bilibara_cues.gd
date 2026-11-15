@@ -177,15 +177,22 @@ func _cues_at(main: Main, foe: Actor, at: Vector3, out: Array) -> void:
 	var box := _box(main, foe, with.get_size())
 	var body := await _body(main, foe, without)
 	# What moves in the picture of itself (the water, a banner) is not the cue: the pixels two pictures of the same moment apart differ in.
-	await _draw()
-	var again := _world(main)
+	var seen: Array[Image] = [without]
+	for k in 3:
+		for i in 2:
+			await RenderingServer.frame_post_draw
+		seen.append(_world(main))
+	var noise := {}
 	for y in without.get_height():
 		for x in without.get_width():
-			var a := without.get_pixel(x, y)
-			var b := again.get_pixel(x, y)
-			if absf(a.r - b.r) + absf(a.g - b.g) + absf(a.b - b.b) > 0.02:
-				body[Vector2i(x, y)] = true
-	var still: Dictionary = body.duplicate()
+			var first := seen[0].get_pixel(x, y)
+			for k in range(1, seen.size()):
+				var other := seen[k].get_pixel(x, y)
+				if absf(first.r - other.r) + absf(first.g - other.g) + absf(first.b - other.b) > 0.02:
+					noise[Vector2i(x, y)] = true
+					break
+	body.merge(noise)
+	var still: Dictionary = noise
 	out.append(["parry rim", _measure(with, without, body, box), with])
 	# A particle effect is sampled at three moments of its life and the fullest picture kept; it is measured over everything (a spark at the chest is
 	# over the body, which is where it shows).
