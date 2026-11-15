@@ -728,11 +728,7 @@ func tick(delta: float) -> void:
 	if _springs_reset:
 		_springs_reset = false
 		for node in skeleton.find_children("*", "SpringBoneSimulator3D", false, false):
-			var spring := node as SpringBoneSimulator3D
-			for i in spring.get_setting_count():
-				var root := spring.get_root_bone_name(i)
-				spring.set_root_bone_name(i, "")
-				spring.set_root_bone_name(i, root)
+			_restart_spring(node as SpringBoneSimulator3D)
 	# The skeleton would run its modifiers in an update deferred to the end of the frame. advance() gives
 	# them the delta, and the update is run here instead, so this tick's pose is done when tick returns.
 	# The deferred update then finds nothing left to do: running the update clears what it was asked for.
@@ -747,6 +743,31 @@ func tick(delta: float) -> void:
 ## the model was built in, from which it falls into its hang within a frame or two (the scarf's hang is 36 degrees from its rest).)
 func reset_springs() -> void:
 	_springs_reset = true
+
+
+# Has `spring` forget its state by taking its settings away and giving them back: root and end bones, the extension of the end, and
+# the value (not a curve) of each setting's radius, stiffness, drag and gravity and its gravity's direction.
+func _restart_spring(spring: SpringBoneSimulator3D) -> void:
+	var saved: Array[Dictionary] = []
+	for i in spring.get_setting_count():
+		saved.append({"root": spring.get_root_bone_name(i), "end": spring.get_end_bone_name(i), "extended": spring.is_end_bone_extended(i),
+				"direction": spring.get_end_bone_direction(i), "length": spring.get_end_bone_length(i), "radius": spring.get_radius(i),
+				"stiffness": spring.get_stiffness(i), "drag": spring.get_drag(i), "gravity": spring.get_gravity(i),
+				"gravity_direction": spring.get_gravity_direction(i)})
+	spring.set_setting_count(0)
+	spring.set_setting_count(saved.size())
+	for i in saved.size():
+		var was := saved[i]
+		spring.set_root_bone_name(i, was["root"])
+		spring.set_end_bone_name(i, was["end"])
+		spring.set_extend_end_bone(i, was["extended"])
+		spring.set_end_bone_direction(i, was["direction"])
+		spring.set_end_bone_length(i, was["length"])
+		spring.set_radius(i, was["radius"])
+		spring.set_stiffness(i, was["stiffness"])
+		spring.set_drag(i, was["drag"])
+		spring.set_gravity(i, was["gravity"])
+		spring.set_gravity_direction(i, was["gravity_direction"])
 
 
 ## How much the move layer shows over locomotion: 0 is locomotion only, 1 is the move only.

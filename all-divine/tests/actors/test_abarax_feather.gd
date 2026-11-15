@@ -228,11 +228,20 @@ func test_nothing_snaps_when_he_is_placed_or_revived() -> void:
 	await frames(60)
 	if not _has_feather(actor.rig):
 		return
+	var kept := {}
+	for spring: SpringBoneSimulator3D in actor.rig.skeleton.find_children("*", "SpringBoneSimulator3D", false, false):
+		kept[spring.get_root_bone_name(0)] = [spring.get_end_bone_name(0), spring.is_end_bone_extended(0), spring.get_end_bone_length(0),
+				spring.get_radius(0), spring.get_stiffness(0), spring.get_drag(0), spring.get_gravity(0), spring.get_gravity_direction(0)]
 	actor.place(Transform3D(Basis(Vector3.UP, PI), Vector3(5, 0, 0)))
 	var placed := await _worst_turn(actor, 1)
 	assert_true(placed[0] <= 20.0, "placed 5 m off and turned about: a bone of the feather turned %.0f degrees on the first frame (at most 20)" % placed[0])
 	assert_true(placed[1] <= 40.0, "placed: a bone of the scarf turned %.0f degrees on the first frame (at most 40)" % placed[1])
 	await frames(60)
+	for spring: SpringBoneSimulator3D in actor.rig.skeleton.find_children("*", "SpringBoneSimulator3D", false, false):
+		var now := [spring.get_end_bone_name(0), spring.is_end_bone_extended(0), spring.get_end_bone_length(0), spring.get_radius(0),
+				spring.get_stiffness(0), spring.get_drag(0), spring.get_gravity(0), spring.get_gravity_direction(0)]
+		assert_eq(now, kept.get(spring.get_root_bone_name(0)), "the spring on %s has its settings after the restart" % spring.get_root_bone_name(0))
+	assert_eq(kept.size(), 2, "the scarf's spring and the feather's")
 	actor.revive(Transform3D(Basis(Vector3.UP, 0.5), Vector3(-3, 0, 2)))
 	var revived := await _worst_turn(actor, 1)
 	assert_true(revived[0] <= 20.0, "revived: the feather turned %.0f degrees on the first frame (at most 20)" % revived[0])
