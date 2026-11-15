@@ -16,9 +16,9 @@ func test_the_text_for_each_fixture_shot_names_framing_move_action_line_sound_an
 		"1.00 s long   ·   1.50 s to 2.50 s   (frames 90 to 150)",
 		"ACTION: He stops and folds his arms",
 		"CAMERA: Medium (people from about the waist up), looking at Knuckle. The camera pushes in, from medium to close. It cuts in from the last shot.",
-		"DOES: Knuckle plays knuckle_idle, repeating (at the start)",
-		"DOES: Abarax plays guard_raise (at the start)",
-		"DOES: Abarax plays guard_hold, repeating (at +0.23 s, frame 14)",
+		"DOES: Knuckle plays the clip knuckle_idle, repeating (at the start)",
+		"DOES: Abarax plays the clip guard_raise (at the start)",
+		"DOES: Abarax plays the clip guard_hold, repeating (at +0.23 s, frame 14)",
 		"SOUND: cloth_move, heard at Knuckle (at the start)",
 		"FOCUS: sharp on Knuckle",
 	]))
@@ -46,7 +46,7 @@ func test_a_placeholder_clip_is_marked_on_the_row_it_belongs_to() -> void:
 	var scene := _fixture()
 	scene.shots[1].beats[0].placeholder = true
 	var text := StoryboardPage.ShotText.describe(scene, 1)
-	assert_true("\n".join(text).contains("DOES: Knuckle plays knuckle_idle, repeating (at the start)  [PLACEHOLDER: this clip is not made yet, so Knuckle just stands]"), "\n".join(text))
+	assert_true("\n".join(text).contains("DOES: Knuckle plays the clip knuckle_idle, repeating (at the start)  [PLACEHOLDER: this clip is not made yet, so Knuckle just stands]"), "\n".join(text))
 
 
 func test_the_key_frame_defaults_to_the_middle_and_is_clamped_inside_the_shot() -> void:
