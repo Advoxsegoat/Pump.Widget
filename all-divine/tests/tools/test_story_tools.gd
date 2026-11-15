@@ -49,7 +49,7 @@ func test_no_scene_at_all_is_the_usage_line_and_exit_2() -> void:
 
 
 func test_a_scene_the_checker_refuses_stops_both_tools_with_the_checkers_lines_and_exit_1() -> void:
-	_folder = ProjectSettings.globalize_path("res://scenes/story/zz_refused_%d" % OS.get_process_id())
+	_folder = _root().path_join("scenes/story/zz_refused_%d" % OS.get_process_id())
 	DirAccess.make_dir_recursive_absolute(_folder)
 	for file in ["script.md", "notes.md"]:
 		DirAccess.copy_absolute(ProjectSettings.globalize_path(FIXTURE_DIR).path_join(file), _folder.path_join(file))
