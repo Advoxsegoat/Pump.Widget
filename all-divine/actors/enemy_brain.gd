@@ -61,6 +61,33 @@ const SETTLE_WITHIN := 0.15
 ## presses only at this speed (m/s) or slower: a move stops the body dead, so one started from a jog slides its feet.
 const BRAKE_MARGIN := 0.1
 const PRESS_SPEED := 1.2
+## Task 14f: foes spread round their target. A foe with another within SPREAD_DEG (seen from the target) circles away from it, and
+## one who waits (no token to be had) stands in the outer half of his band, a body's width clear of the attackers' ring.
+const SPREAD_DEG := 60.0
+## A foe with a neighbour within SPREAD_DEG on both sides, the two gaps within EVEN_DEG of each other, stands his ground (he does not circle,
+## which would be to choose between two equals on every frame); he goes on again when they differ by EVEN_DEG plus EVEN_MARGIN.
+const EVEN_DEG := 10.0
+const EVEN_MARGIN := 10.0
+## Seconds a holder who is in his band but not his range may be held up (blocked, no way round) before he gives his token to a ready foe
+## with a clear line to the target, and how long he rests after (he does not take it straight back).
+const HAND_OVER_AFTER := 0.75
+const HAND_OVER_REST := 0.5
+## How near the straight line from a foe to the target a body may be before the line is not clear, metres, and how near the target the
+## foe must be to be given a token.
+const CLEAR_LINE := 0.5
+const HAND_OVER_REACH := 4.0
+## How far round, degrees, a foe's way in is swung away from a neighbour that close, and how near the ring (metres to go) that starts.
+const SPREAD_SWING := 25.0
+## A neighbour this close to a foe's own line to the target is in his way: only then is his way in swung round him.
+const LINE_DEG := 30.0
+const SPREAD_SWING_CLOSE := 75.0
+## Once a neighbour is that close to his line, he stays "close" until the neighbour is this many degrees further off: the swing itself moves the
+## bearings by about a degree a frame, and at the edge of LINE_DEG the swing was switching between its two sizes on every frame.
+const LINE_MARGIN := 8.0
+const SPREAD_REACH := 1.5
+## Once swinging round a neighbour, a foe goes on until he is this much (metres) further from his range than SPREAD_REACH: the swing walks him
+## away from it (against a wall, a step back each frame), and without the margin that step alone switched the swing off and on again.
+const SPREAD_REACH_MARGIN := 0.3
 ## How much further than an attack's back_up_margin (metres) a back-up may go before the attack is given up.
 const BACK_UP_SPARE := 0.1
 ## How far beyond a warped blow's strike_distance and MoveRunner.MAX_WARP the target may stand when it lands and the combo
@@ -122,6 +149,12 @@ var _retreat_left := 0.0
 var _retreated := false  # it retreated since its HP last went below retreat_below
 var _feint_window := {}  # action -> whether the feint's window takes it (read from its clip once)
 var _charge_holds := {}  # action -> whether its moveset move has a charge_hold on it (read from its clip once)
+var _in_line := false  # a neighbour stands within LINE_DEG of his line, so the swing is the close one (see _spread_swing)
+var _spreading := false  # swinging round a neighbour on the way in (see _spread_swing)
+var _even := false  # between two neighbours at even gaps: standing his ground (see _away_from_neighbour)
+var _held_up := 0.0  # seconds it has gone on toward its range and got no nearer than it has been, for the hand-over
+var _nearest_yet := INF  # the nearest it has been to its target since it began to close in
+var _self: Actor  # its own actor, kept for _reangle (which is called from where only the clock is known)
 var _wind_ups := {}  # move id -> seconds to its first hitbox_on (read from its clip once)
 
 
@@ -135,6 +168,7 @@ func think(actor: Actor, delta: float) -> Intent:
 	if _last_at != Vector3.INF and delta > 0.0:
 		_speed = _flat(actor, _last_at).length() / delta
 	_last_at = actor.global_position
+	_self = actor
 	for option: AttackOption in _cooldowns.keys():
 		_cooldowns[option] = maxf(_cooldowns[option] - delta, 0.0)
 	_find_target(actor)
@@ -292,9 +326,20 @@ func _space(actor: Actor, intent: Intent, delta: float) -> void:
 		_settling = false
 		_reset_spacing()
 		# Round it, easing toward the middle of its range as it goes (it settles at preferred_range, not at an edge).
-		var ease := clampf((distance - def.preferred_range) / def.range_tolerance, -1.0, 1.0) * DRIFT
+		var middle := def.preferred_range + (def.range_tolerance * 0.5 if _waiting(actor) else 0.0)
+		var ease := clampf((distance - middle) / def.range_tolerance, -1.0, 1.0) * DRIFT
+		var away := _away_from_neighbour(actor)
+		if away != 0.0:
+			_circle = away
+		elif _even:
+			# between two equals: no way round, only his distance (straight out if he is nearer than the waiters' band)
+			intent.move = toward * ease * def.circle_speed
+			_blocked = 0.0
+			return
 		intent.move = (toward.rotated(_circle * PI * 0.5) + toward * ease).normalized() * def.circle_speed
-		if _watch_blocked(actor, intent, delta):
+		# Blocked circling turns the other way, unless a neighbour decides the way (he would put it back on the next frame, and the foe
+		# would flip twice for nothing).
+		if _watch_blocked(actor, intent, delta) and away == 0.0:
 			_circle = -_circle
 		return
 	_settling = true  # out of its range: it goes back to preferred_range itself, not to the edge of its range
@@ -324,13 +369,137 @@ func _track_progress(error: float, delta: float) -> void:
 
 # Tries another angle: the circling turns the other way and the heading swings REANGLE_DEG that way.
 func _reangle() -> void:
-	_circle = -_circle
+	var open := _open_side(_self) if _self != null else 0.0
+	_circle = open if open != 0.0 else -_circle
 	_swing = _circle * deg_to_rad(REANGLE_DEG)
 	_failing = 0.0
 	_blocked = 0.0
 
 
+# The other foes of this target, with the signed angle (degrees, seen from the target) each stands at from `actor`.
+func _neighbour_angles(actor: Actor) -> Array[float]:
+	var angles := _all_neighbour_angles(actor)
+	if angles.size() < 2:
+		angles.clear()  # two foes fight as they always did: it takes a third to crowd the ring
+	return angles
+
+
+func _all_neighbour_angles(actor: Actor) -> Array[float]:
+	var angles: Array[float] = []
+	var from := -_flat(actor, target.global_position)
+	if from.length() < 1e-3:
+		return angles
+	for node in actor.get_tree().get_nodes_in_group(Actor.GROUP):
+		var other := node as Actor
+		if other == null or other == actor or other.dead or not (other.brain is EnemyBrain) or (other.brain as EnemyBrain).target != target:
+			continue
+		var mode_of_other := (other.brain as EnemyBrain).mode
+		if mode_of_other == Mode.IDLE or mode_of_other == Mode.NOTICING:
+			continue
+		var there := -_flat(other, target.global_position)
+		if there.length() < 1e-3:
+			continue
+		angles.append(rad_to_deg(from.angle_to(there)))
+	return angles
+
+
+# Which way round the target (the `_circle` that takes it there) is open: toward the side whose nearest neighbour is further, 0 with
+# no neighbour. Moving along `_circle` = 1 turns its bearing from the target by the sign of the cross product below.
+func _open_side(actor: Actor) -> float:
+	var angles := _neighbour_angles(actor)
+	if angles.is_empty():
+		return 0.0
+	var positive := 360.0  # the nearest neighbour on the side of increasing bearing
+	var negative := 360.0
+	for angle in angles:
+		if angle >= 0.0:
+			positive = minf(positive, angle)
+		else:
+			negative = minf(negative, -angle)
+	var toward_positive := positive >= negative  # more room that way
+	return _circle_for(actor, 1.0 if toward_positive else -1.0)
+
+
+# The `_circle` whose circling turns its bearing from the target the way `bearing_sign` says (the sign of from.angle_to).
+func _circle_for(actor: Actor, bearing_sign: float) -> float:
+	var to := _flat(actor, target.global_position)
+	if to.length() < 1e-3:
+		return _circle
+	var from := -to
+	var tangent := (to / to.length()).rotated(PI * 0.5)
+	var turns := signf(from.cross(tangent))
+	return bearing_sign * turns if turns != 0.0 else _circle
+
+
+# 0, or the `_circle` that takes it away from its nearest neighbour when that one is within SPREAD_DEG. Between two neighbours, both within
+# SPREAD_DEG and at gaps within EVEN_DEG of each other, it is 0 and `_even` is set: pushed away from whichever is nearer, a foe between equals
+# would change his mind on every step (a shiver), so he stands his ground until the gaps differ by EVEN_DEG + EVEN_MARGIN.
+func _away_from_neighbour(actor: Actor, within := SPREAD_DEG) -> float:
+	var nearest := 360.0
+	var sign_of := 0.0
+	var positive := 360.0
+	var negative := 360.0
+	for angle in _neighbour_angles(actor):
+		if absf(angle) < nearest:
+			nearest = absf(angle)
+			sign_of = signf(angle)
+		if angle >= 0.0:
+			positive = minf(positive, angle)
+		else:
+			negative = minf(negative, -angle)
+	# Both neighbours near (a margin past SPREAD_DEG too: a neighbour at the very edge of it would be in and out on alternate frames).
+	if positive < within + EVEN_MARGIN and negative < within + EVEN_MARGIN:
+		var gap := absf(positive - negative)
+		_even = gap < EVEN_DEG or (_even and gap < EVEN_DEG + EVEN_MARGIN)
+		if _even:
+			return 0.0
+	else:
+		_even = false
+	if nearest >= within or sign_of == 0.0:
+		return 0.0
+	return _circle_for(actor, -sign_of)
+
+
+# How far (radians) its way in is swung to keep off a neighbour who stands within SPREAD_DEG of its bearing: nothing far out, SPREAD_SWING
+# near the ring. It goes in beside him, not in a queue behind him. Between two neighbours the swing grows with how much nearer one is than the
+# other (nothing at even gaps, all of it at EVEN_DEG + EVEN_MARGIN), so that it is not a switch that a step in either direction throws.
+func _spread_swing(actor: Actor, still_to_go: float) -> float:
+	if still_to_go > SPREAD_REACH + (SPREAD_REACH_MARGIN if _spreading else 0.0):
+		_spreading = false
+		_in_line = false
+		return 0.0
+	var positive := 360.0
+	var negative := 360.0
+	for angle in _neighbour_angles(actor):
+		if angle >= 0.0:
+			positive = minf(positive, angle)
+		else:
+			negative = minf(negative, -angle)
+	var nearest := minf(positive, negative)
+	if nearest >= SPREAD_DEG:
+		_spreading = false
+		_in_line = false
+		return 0.0
+	_spreading = true
+	var scale := 1.0
+	if positive < SPREAD_DEG + EVEN_MARGIN and negative < SPREAD_DEG + EVEN_MARGIN:
+		scale = clampf(absf(positive - negative) / (EVEN_DEG + EVEN_MARGIN), 0.0, 1.0)
+	var away := _circle_for(actor, -1.0 if positive < negative else 1.0)
+	_in_line = nearest < LINE_DEG or (_in_line and nearest < LINE_DEG + LINE_MARGIN)
+	return away * deg_to_rad(SPREAD_SWING_CLOSE if _in_line else SPREAD_SWING) * scale
+
+
+# Whether it waits for its turn: no token for it to take (both are held by others).
+func _waiting(actor: Actor) -> bool:
+	if def.ignores_tokens or _neighbour_angles(actor).is_empty():
+		return false
+	var tokens := AttackTokens.of(actor)
+	return tokens != null and not tokens.holds(actor) and not tokens.can_take(actor, target)
+
+
 func _reset_spacing() -> void:
+	_nearest_yet = INF
+	_held_up = 0.0
 	_swing = 0.0
 	_failing = 0.0
 	_best_error = INF
@@ -361,11 +530,13 @@ func _choose(actor: Actor) -> void:
 		token = AttackTokens.take_for(actor, target)
 	var open: Array[AttackOption] = []
 	var total := 0.0
+	var needs_more := false
 	var distance := _flat(actor, target.global_position).length()
 	for option in def.attacks:
 		if _cooldowns.get(option, 0.0) > 0.0 or option.weight <= 0.0 or (option.needs_token and not token):
 			continue
 		if option.needs_token and not def.ignores_tokens and option.tokens != 1 and not _may_hold(actor, option):
+			needs_more = true
 			continue  # a big attack waits until the tokens it needs are free
 		if not on_menu(option, distance):
 			continue
@@ -373,6 +544,8 @@ func _choose(actor: Actor) -> void:
 		total += option.weight
 	if open.is_empty():
 		_give_back(actor)
+		if needs_more:
+			AttackTokens.reserve_for(actor, target)  # the others let the tokens run out for it (Task 14f)
 		return
 	var roll := rng.randf() * total
 	var chosen := open.back() as AttackOption
@@ -425,6 +598,17 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 		_drop_plan(actor)
 		return
 	_track_progress(maxf(distance - hi, lo - distance), delta)
+	if distance > hi and actor.frozen == 0:
+		if distance < _nearest_yet - PROGRESS:
+			_nearest_yet = distance
+			_held_up = 0.0
+		else:
+			_held_up += delta
+		if _held_up >= HAND_OVER_AFTER and distance <= def.preferred_range + def.range_tolerance and _hand_over(actor):
+			return
+	else:
+		_held_up = 0.0
+		_nearest_yet = INF
 	if distance > hi:
 		# Jogs in, braking to a walk over the last of it: from where slowing down to a walk at the tuning's decel only just
 		# takes it to the edge of the range (BRAKE_MARGIN before).
@@ -432,7 +616,7 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 		var speed := actor.locomotion.speed
 		var braking := maxf(speed * speed - tuning.walk_speed * tuning.walk_speed, 0.0) / (2.0 * maxf(tuning.decel, 0.01))
 		var push := WALK_PUSH if distance - hi <= braking + BRAKE_MARGIN else JOG_PUSH
-		intent.move = (to / distance).rotated(_swing) * push
+		intent.move = (to / distance).rotated(_swing + _spread_swing(actor, distance - hi)) * push
 	else:
 		# A back-up within the option's margin, at a walk. One chosen while still going faster than a walk (a jog in) brakes first,
 		# the stick at rest: a stick pushed the other way turns the body round at once at the speed it has (Locomotion), and it
@@ -449,6 +633,54 @@ func _close_in(actor: Actor, intent: Intent, delta: float) -> void:
 		intent.move = (-to / distance).rotated(_swing) * WALK_PUSH
 	if _watch_blocked(actor, intent, delta):
 		_reangle()
+
+
+# Gives its token to a foe who can use it, if there is one: engaged, ready, within HAND_OVER_REACH of the target, with a clear line to it.
+# True if it did (it drops its plan and rests a while); false, and it keeps both, if nobody can.
+func _hand_over(actor: Actor) -> bool:
+	if not _plan.needs_token or def.ignores_tokens or _neighbour_angles(actor).is_empty():
+		return false
+	var taker := false
+	for node in actor.get_tree().get_nodes_in_group(Actor.GROUP):
+		var other := node as Actor
+		if other == null or other == actor or other.dead or not (other.brain is EnemyBrain):
+			continue
+		var brain := other.brain as EnemyBrain
+		if brain.target != target or brain.mode != Mode.ENGAGED or brain._plan != null or brain._rest > 0.0 or brain._backing or other.runner.busy() or other.frozen > 0:
+			continue
+		if _flat(other, target.global_position).length() > HAND_OVER_REACH or not brain._line_is_clear(other):
+			continue
+		var tokens := AttackTokens.of(other)
+		if tokens != null and tokens.holds(other):
+			continue
+		if brain.def.attacks.any(func(o: AttackOption) -> bool: return o.weight > 0.0 and brain._cooldowns.get(o, 0.0) <= 0.0):
+			taker = true
+			break
+	if not taker:
+		return false
+	_drop_plan(actor)
+	_rest = maxf(_rest, HAND_OVER_REST)
+	_held_up = 0.0
+	return true
+
+
+# Whether no body stands within CLEAR_LINE of the straight line from `actor` to its target (the target's own and its own excepted).
+func _line_is_clear(actor: Actor) -> bool:
+	var from := Vector2(actor.global_position.x, actor.global_position.z)
+	var to := Vector2(target.global_position.x, target.global_position.z)
+	var line := to - from
+	var length := line.length()
+	if length < 1e-3:
+		return true
+	for node in actor.get_tree().get_nodes_in_group(Actor.GROUP):
+		var other := node as Actor
+		if other == null or other == actor or other == target or other.dead:
+			continue
+		var at := Vector2(other.global_position.x, other.global_position.z) - from
+		var along := at.dot(line) / length
+		if along > 0.0 and along < length and absf(at.cross(line / length)) < CLEAR_LINE:
+			return false
+	return true
 
 
 # Presses the attack: the feint first, if it feints, else the option's action (held for a delayed swing). Its token is
