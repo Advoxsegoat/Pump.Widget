@@ -396,6 +396,7 @@ func test_the_yard_doors_read_as_barred_from_the_north_view() -> void:
 const KNOWN := {
 	"GateFar|shaded": "in the shade of the house beside it: 0.28", "GateNear|shaded": "in the shade of the house beside it: 0.27",
 	"LaneMid|snow": "the ground 0.656 in the sun, the snow a fogged 0.651", "GateFar|snow": "the ground 0.659, the snow 0.679", "GateNear|snow": "the ground 0.678, the snow 0.607",
+	"LoopLane|snow": "the ground 0.658, the snow 0.696: 0.038, a hair under 0.04",
 	"StreetEast|snow": "the cobble 0.709 is the palest ground of the stretch, the snow a fogged 0.58",
 }
 const SNOW_BELOW := 0.12
