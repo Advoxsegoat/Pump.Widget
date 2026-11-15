@@ -31,7 +31,7 @@ def run_main(args):
     return code, err.getvalue()
 
 
-def leaves_the_rules(dark, rules, keep_mask, scale):
+def leaves_the_rules(dark, rules, keep_mask, scale, contrasts):
     """What `remove_rules` returns when it takes nothing out."""
     return dark.copy(), np.zeros(dark.shape, dtype=bool), [1] * len(rules), [tool.Taken() for _ in rules]
 
@@ -54,7 +54,7 @@ class LeftoverEndToEndTest(unittest.TestCase):
             code, err = run_main(["--sketch", self.sketch, "--recipe", self.recipe, "--out", self.out])
         self.assertEqual(code, 2, "rules were left in the portrait and the command exited %d" % code)
         self.assertEqual(len(err.strip().splitlines()), 1, err)
-        self.assertRegex(err, r"rules remain at rows \d+-\d+.*, columns \d+-\d+ of the photograph|rules remain at rows [\d\-, ]+, columns \d+-\d+ of the photograph")
+        self.assertRegex(err, r"rules remain: a straight line runs across \d+% of the picture at rows \d+-\d+, columns \d+-\d+ of the photograph")
         self.assertIn("`keep`", err)
         self.assertFalse(os.path.exists(os.path.join(self.out, "neutral.png")), "a portrait was written")
 

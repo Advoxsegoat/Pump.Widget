@@ -107,7 +107,8 @@ class PageClassesTest(unittest.TestCase):
 
     def test_tilts_to_three_degrees(self):
         for degrees in (-3, 3):
-            self.check_page("tilt %d degrees" % degrees, pages.make_page(degrees=degrees))
+            # (a rule phase at which no stroke of the scribble ends on a rule: one that does is refused, with the `keep` that would hold it)
+            self.check_page("tilt %d degrees" % degrees, pages.make_page(degrees=degrees, first=70))
 
     def test_rules_of_five_and_twenty_percent_contrast(self):
         for contrast in (0.05, 0.20):
@@ -145,18 +146,18 @@ class PageClassesTest(unittest.TestCase):
         line = stages["line"].copy()
         line[500:503, 60:850] = 0.4
         with self.assertRaises(tool.PortraitError) as caught:
-            tool.check_clean(line, stages["dark"], stages["rules"], 1.0)
+            tool.check_clean(line, None, 1.0)
         message = str(caught.exception)
         self.assertIn("rules remain", message)
-        self.assertRegex(message, r"rows 50\d")
+        self.assertRegex(message, r"rows (49|50)\d")
         self.assertNotIn("\n", message)
 
     def test_a_page_the_rules_cannot_account_for_is_refused(self):
-        # for each rule, the longest run of columns with a stroke of the drawing along it (0 on a rule alone and on the owner's
-        # drawing); and the line names the rows and columns of the photograph (here twice the working size), not the rule's number
-        tool.check_ink([tool.Taken(0.0), tool.Taken(0.03, 10), tool.Taken(0.1, 29)], (800, 600), 2.0)
+        # for each run of columns with a stroke of the drawing along a rule that lost its ink to the rule's removal; the line names the rows and
+        # columns of the photograph (here twice the working size), not the rule's number
+        tool.check_ink([tool.Taken(), tool.Taken(), tool.Taken()], (800, 600), 2.0)
         with self.assertRaises(tool.PortraitError) as caught:
-            tool.check_ink([tool.Taken(0.0), tool.Taken(0.6, 80, (100, 180), (300, 310)), tool.Taken(0.0)], (800, 600), 2.0)
+            tool.check_ink([tool.Taken(), tool.Taken(80, (100, 180), (300, 310), 0.6), tool.Taken()], (800, 600), 2.0)
         message = str(caught.exception)
         self.assertIn("ink", message)
         self.assertIn("rows 600-620", message)

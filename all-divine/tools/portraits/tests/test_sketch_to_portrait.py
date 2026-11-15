@@ -102,9 +102,9 @@ def keep_rect_for_along():
     return [(min(xs) - 4) / W, (min(ys) - 6) / H, (max(xs) + 4) / W, (max(ys) + 6) / H]
 
 
-def run_clean(page, recipe):
+def run_clean(page, recipe, tolerant=False):
     parsed = write_and_load(recipe)
-    return tool.clean_page(page, parsed)
+    return tool.clean_page(page, parsed, tolerant=tolerant)
 
 
 def write_and_load(recipe):
@@ -179,7 +179,7 @@ class SketchToPortraitTest(unittest.TestCase):
     def setUpClass(cls):
         cls.page, cls.strokes, cls.rules = make_page()
         cls.stages = run_clean(cls.page, recipe_dict(keep=[keep_rect_for_along()]))
-        cls.stages_without_keep = run_clean(cls.page, recipe_dict())
+        cls.stages_without_keep = run_clean(cls.page, recipe_dict(), tolerant=True)
 
     def test_the_paper_is_evened_out(self):
         flat = tool.flatten(self.page)
@@ -213,7 +213,8 @@ class SketchToPortraitTest(unittest.TestCase):
         kept = dark_share(self.stages)
         lost_without = dark_share(self.stages_without_keep)
         self.assertGreaterEqual(kept, 0.9, "with its rectangle in `keep` only %.0f%% of the stroke is still dark" % (100 * kept))
-        # a stroke of 40 px is shorter than the run (INK_RUN_MOST) the tool refuses a page for: it is lost without `keep`, as it was
+        # a stroke of 40 px is lost to the rule's removal without `keep`: the tool says so (it would refuse the page) and names the stroke
+        self.assertTrue(any("`keep`" in str(problem) for problem in self.stages_without_keep["problems"]), "without `keep` the tool does not refuse the page")
         self.assertLess(lost_without, kept, "without `keep` the stroke is just as dark (%.0f%%): the test does not show what `keep` is for" % (100 * lost_without))
 
     def test_a_horizontal_stroke_between_rules_is_kept(self):
@@ -230,8 +231,9 @@ class SketchToPortraitTest(unittest.TestCase):
         for x, i, degrees in CROSSING:
             self.assertTrue(label_reaches(line > 0.2, stroke_points(x, i, degrees)), "a crossing stroke is cut on plain paper")
         # and a ruled page read as plain keeps its rules: they are the drawing's, as far as the tool is told
-        ruled = run_clean(self.page, recipe_dict(paper="plain"))
+        ruled = run_clean(self.page, recipe_dict(paper="plain"), tolerant=True)
         self.assertTrue(np.array_equal(ruled["cleaned"], ruled["dark"]))
+        self.assertTrue(any("rules remain" in str(problem) for problem in ruled["problems"]), "a ruled page read as plain was not refused for its rules")
 
     def test_ruled_paper_with_no_rules_found_fails_with_a_line(self):
         page, _, _ = make_page(rules=False)
@@ -372,11 +374,11 @@ class SketchToPortraitTest(unittest.TestCase):
         # the pencil's own darkness goes up and down; a bar is a run of grey that never reaches pencil
         runs = grey_runs(stages, stages["line"])
         self.assertLessEqual(max(runs), GREY_RUN_MOST, "a grey bar of %d px is left along a rule (the rules' runs: %s)" % (max(runs), runs))
-        # ... and the measure sees one: the same picture with a grey bar laid across the mouth along its rule
+        # ... and the measure sees one: the same picture with a grey bar laid along the mouth's rule
         mouth = int(np.argmin([abs(float(np.polyval(coef, 0.52 * w - w / 2.0)) - 0.507 * h) for coef in stages["rules"]]))
         barred = stages["line"].copy()
         centre, _alone, _ = tool.rule_centre(stages["dark"], stages["rules"][mouth], w)
-        for x in range(int(0.47 * w), int(0.55 * w)):
+        for x in range(int(0.16 * w), int(0.26 * w)):   # on the bare paper left of the bust, along the mouth's rule
             y = int(round(centre[x]))
             barred[y - 1: y + 2, x] = np.maximum(barred[y - 1: y + 2, x], 0.3)
         self.assertGreater(grey_runs(stages, barred)[mouth], GREY_RUN_MOST, "a grey bar across the mouth is not seen by the check")

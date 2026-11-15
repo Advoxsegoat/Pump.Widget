@@ -20,50 +20,53 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, ".."))
 import sketch_to_portrait as tool  # noqa: E402
 import variants  # noqa: E402
-from measures import ink_of, lines_left  # noqa: E402
+from measures import ink_of, lines_left, parallel  # noqa: E402
 
 COMMITTED = os.path.join(HERE, "..", "..", "..", "assets", "portraits", "abarax", "neutral.png")
 STROKES_PRESENT = 0.97
 
 
+def judge(v, folder):
+    """("right" | "refused" | "WRONG", what) for one variant: made right, refused in a line, or made wrong with exit 0."""
+    recipe_of_owner = tool.load_recipe(variants.RECIPE)
+    with Image.open(COMMITTED) as image:
+        reference = ink_of(np.asarray(image.convert("RGB")))
+    path = os.path.join(folder, "v.png")
+    v.image.save(path)
+    try:
+        recipe = tool.check_recipe(v.recipe(recipe_of_owner))
+        stages = tool.clean_page(tool.load_page(path), recipe)
+    except tool.PortraitError as error:
+        return "refused", str(error)[:150]
+    back = variants.unwarp(v, stages["line"])
+    card = tool.crop_card(back, recipe_of_owner["crop"])
+    ink = ink_of(tool.compose(card, recipe_of_owner))
+    near = np.asarray(Image.fromarray((ink * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(5))) > 0
+    share = float(near[reference].mean())
+    cover, slope, _row = lines_left(stages["line"])
+    if share >= STROKES_PRESENT and cover < 0.6:
+        return "right", "strokes present %.1f%%, most inked row %.0f%%" % (100 * share, 100 * cover)
+    return "WRONG", "strokes present %.1f%% (need %.0f%%), a line across %.0f%% of the page at slope %+.3f" % (
+        100 * share, 100 * STROKES_PRESENT, 100 * cover, slope)
+
+
+def judge_spec(spec):
+    with tempfile.TemporaryDirectory() as folder:
+        return judge(variants.make(spec), folder)
+
+
 class OwnerVariantsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.recipe = tool.load_recipe(variants.RECIPE)
-        with Image.open(COMMITTED) as image:
-            cls.reference = ink_of(np.asarray(image.convert("RGB")))
-        cls.rows = {}
-        with tempfile.TemporaryDirectory() as folder:
-            for v in variants.every_variant():
-                cls.rows[v.name] = cls.judge(v, folder)
+        cls.rows = dict(zip([spec for spec in variants.SPECS], parallel(judge_spec, variants.SPECS)))
+        cls.rows = {variants.make(spec).name: row for spec, row in cls.rows.items()}
         print("\n%-16s %-8s %s" % ("variant", "result", "what"))
         for name, (result, what) in cls.rows.items():
             print("%-16s %-8s %s" % (name, result, what))
 
-    @classmethod
-    def judge(cls, v, folder):
-        path = os.path.join(folder, "v.png")
-        v.image.save(path)
-        try:
-            recipe = tool.check_recipe(v.recipe(cls.recipe))
-            stages = tool.clean_page(tool.load_page(path), recipe)
-        except tool.PortraitError as error:
-            return "refused", str(error)[:150]
-        back = variants.unwarp(v, stages["line"])
-        card = tool.crop_card(back, cls.recipe["crop"])
-        ink = ink_of(tool.compose(card, cls.recipe))
-        near = np.asarray(Image.fromarray((ink * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(5))) > 0
-        share = float(near[cls.reference].mean())
-        cover, slope, _row = lines_left(stages["line"])
-        if share >= STROKES_PRESENT and cover < 0.6:
-            return "right", "strokes present %.1f%%, most inked row %.0f%%" % (100 * share, 100 * cover)
-        return "WRONG", "strokes present %.1f%% (need %.0f%%), a line across %.0f%% of the page at slope %+.3f" % (
-            100 * share, 100 * STROKES_PRESENT, 100 * cover, slope)
-
     def test_the_committed_portrait_itself_passes_our_measures(self):
         """The yardstick: the untouched photograph is right by the same measures (so the variants are judged by something that can say yes)."""
-        with tempfile.TemporaryDirectory() as folder:
-            result, what = self.judge(variants.turned(0), folder)
+        result, what = judge_spec(("turned", 0))
         self.assertEqual(result, "right", what)
 
     def test_no_variant_is_a_wrong_portrait_made_with_exit_0(self):

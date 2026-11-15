@@ -90,7 +90,7 @@ class CrossingTest(unittest.TestCase):
         row = int(round(pages.rule_row_at(page, 2, 300)))
         line[row - 1: row + 2, 150:350] = 0.4   # 200 of 600 columns: a third of the page's width
         with self.assertRaises(tool.PortraitError) as caught:
-            tool.check_clean(line, stages["dark"], stages["rules"], 2.0)   # a photograph twice the working size
+            tool.check_clean(line, None, 2.0)   # a photograph twice the working size
         message = str(caught.exception)
         self.assertNotIn("\n", message)
         self.assertRegex(message, r"rows 5\d\d-6\d\d, columns 3\d\d-69\d of the photograph")
@@ -104,7 +104,7 @@ class CrossingTest(unittest.TestCase):
         line = stages["line"].copy()
         row = int(round(pages.rule_row_at(page, 2, 300)))
         line[row - 1: row + 2, 270:330] = 0.9
-        tool.check_clean(line, stages["dark"], stages["rules"], 1.0)
+        tool.check_clean(line, None, 1.0)
 
 
 if __name__ == "__main__":

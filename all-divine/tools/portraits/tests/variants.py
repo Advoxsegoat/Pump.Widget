@@ -140,7 +140,9 @@ def unwarp(variant, line):
     return np.clip(np.asarray(out, dtype=np.float32), 0.0, 1.0)
 
 
-def every_variant():
-    out = [turned(d) for d in (-5, -3, -2, -1, 1, 2, 3, 5)]
-    out += [scaled(0.75), scaled(0.5), exposed(0.6), exposed(0.8), exposed(1.2), keystoned(0.03)]
-    return out
+SPECS = [("turned", d) for d in (-5, -3, -2, -1, 1, 2, 3, 5)] + [("scaled", 0.75), ("scaled", 0.5), ("exposed", 0.6), ("exposed", 0.8), ("exposed", 1.2), ("keystoned", 0.03)]
+
+
+def make(spec):
+    """The variant a spec names (`SPECS`)."""
+    return {"turned": turned, "scaled": scaled, "exposed": exposed, "keystoned": keystoned}[spec[0]](spec[1])

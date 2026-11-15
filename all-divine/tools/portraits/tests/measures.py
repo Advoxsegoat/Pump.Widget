@@ -49,3 +49,15 @@ def against_truth(rgb, truth_card):
     stray = int((grey & ~dilate(truth_card, 13)).sum())
     extra = lines_left(grey.astype(np.float32), 0.5)[0] - lines_left(truth_card.astype(np.float32), 0.5)[0]
     return present, stray, extra
+
+
+def parallel(function, items):
+    """`function` over `items` on as many processes as the machine has cores (at most four): a test that runs the whole tool on many made pages is
+    quicker than one after another, and the tool is deterministic, so the answers are the same."""
+    import multiprocessing
+    import os
+    workers = max(1, min(4, os.cpu_count() or 1))
+    if workers == 1 or len(items) < 2:
+        return [function(item) for item in items]
+    with multiprocessing.get_context("fork").Pool(workers) as pool:
+        return pool.map(function, items)

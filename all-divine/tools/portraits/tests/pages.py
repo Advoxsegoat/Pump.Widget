@@ -13,10 +13,10 @@ def polyline_ellipse(cx, cy, rx, ry, a0=0.0, a1=360.0, n=90):
             for k in range(n + 1)]
 
 
-def scribble(w, h, shift=0.0, slanted=False):
+def scribble(w, h, shift=0.0, slanted=True):
     """Polylines (list of point lists, width) of a face-sized scribble in the middle of a w x h page. Strokes of many
-    angles; none is a straight horizontal line (a rule's own direction), the mouth is a shallow curve. `slanted` also tips the
-    foot of the nose (a short, nearly level stroke that, at some rule phases, lies along a rule: the tool refuses that, and
+    angles; none is a straight horizontal line (a rule's own direction), the mouth is a shallow curve. `slanted` (the default) tips the
+    foot of the nose; untipped it is a short, nearly level stroke that, at some rule phases, lies along a rule (the tool refuses that, and
     says to mark it in `keep`)."""
     cx, cy = w * (0.5 + shift), h * 0.5
     s = w / 900.0

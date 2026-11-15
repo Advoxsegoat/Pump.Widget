@@ -29,8 +29,9 @@ one gets into the game, in a few minutes.
 
 **Photographing it.** Lay the page flat and get the whole page in the picture, with a little paper showing on every side.
 Use even light (daylight from a window is best; no flash, no lamp glare across the pencil, no hand shadow). Hold the camera
-straight above the page, not at an angle. Plain paper is easiest; ruled paper works (the tool finds the rules and takes
-them out, as it did for Abarax). A drawing in soft pencil on a clean page gives the best result.
+straight above the page, not at an angle. Plain paper is safest, then ruled paper with its lines roughly level in the photograph
+(the tool finds the rules and takes them out, as it did for Abarax); when it cannot do a page it says so in one line and what to
+change. A drawing in soft pencil on a clean page gives the best result.
 
 **Where the file goes and what to call it.** Put the photograph in this folder (`docs/art/owner/`) and name it
 `<speaker>-<expression>-<date>.jpg`, for example `kesra-neutral-2026-12-02.jpg`. The speaker is the lower-case id of the
