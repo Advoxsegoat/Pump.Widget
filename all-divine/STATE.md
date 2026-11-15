@@ -193,6 +193,8 @@ Anyone replays it with `-- --replay=<path>` on the same game version; a fight th
 
 ## Decisions
 
+- **Work on the portraits is stopped** (the owner, Nov 15: "stop working on the portraits completely and focus on the game"). What is in the game stays as it is: Abarax's portrait from the owner's drawing, the card beside the dialogue box, and the sketch tool that made it (`tools/portraits/sketch_to_portrait.py`, as it was when it made his portrait). A later version of the tool (any ruled paper, whole-page photographs, a venv set-up) was not finished and is not merged: it is parked on the branch `ccr-5c2252e8-iewfjk-lane-art` with its review notes, to be taken up only if the owner asks.
+- **With three foes the surround stays** (the owner, Nov 15): foes spread round the player and may strike from behind; a fight with three alive is harder than the same foes two at a time (7 to 32% more health lost in the bot's fights), and that is wanted.
 - **Portraits are the owner's drawings**, cleaned and lightly tinted; nothing of ours draws or generates a face (the owner, Nov 14, after seeing a redraw and a face drawn from nothing). A character the owner has not drawn shows a plain card. Plan: [`docs/superpowers/plans/2026-11-14-all-divine-portraits.md`](../docs/superpowers/plans/2026-11-14-all-divine-portraits.md) (its Task 2 is withdrawn).
 - Spec: [`docs/superpowers/specs/2026-10-25-all-divine-rpg-foundation-design.md`](../docs/superpowers/specs/2026-10-25-all-divine-rpg-foundation-design.md)
 - Plan: [`docs/superpowers/plans/2026-10-25-all-divine-rpg-f0-foundation.md`](../docs/superpowers/plans/2026-10-25-all-divine-rpg-f0-foundation.md)
