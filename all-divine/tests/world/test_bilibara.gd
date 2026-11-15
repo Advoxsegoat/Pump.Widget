@@ -21,14 +21,17 @@ const GRID_X := Vector2i(-90, 90)
 const GRID_Z := Vector2i(-165, 25)
 ## The seven places of the plan's table (x0 z0 w d), and the stone each is laid in.
 const PLACES := {
-	"W1 court A": {rect = Rect2(-40, -5, 10, 10), stone = "slate"},
+	"W1 court A": {rect = Rect2(-40, -5, 10, 10), stone = "slate_cold"},
 	"W2 Rue Caillou": {rect = Rect2(-30, -5, 62.5, 10), stone = "cobble"},
 	"W3 the Tanneries lane": {rect = Rect2(25, -55, 5, 50), stone = "tan_earth"},
 	"W4 the Rack Walk": {rect = Rect2(-35, -25, 60, 5), stone = "tan_earth"},
 	"W5 the loop lane": {rect = Rect2(-35, -20, 5, 15), stone = "tan_earth"},
-	"W6 alcove B": {rect = Rect2(30, -37.5, 7.5, 7.5), stone = "slate"},
+	"W6 alcove B": {rect = Rect2(30, -37.5, 7.5, 7.5), stone = "slate_pale"},
 	"W7 the Tanneries yard": {rect = Rect2(15, -75, 25, 20), stone = "tan_earth"},
 }
+## The yard's fighting square is laid in its own stone with a border course of another round it: the margins stay tan earth.
+const YARD_CENTRE_STONE := "flagstone_cold"
+const YARD_BORDER_STONE := "slate_cold"
 const AREA := 1906.25
 ## Markers: name -> [x, z, yaw in degrees about +Y (0 faces south, 90 east, 180 north, 270 west)].
 const MARKERS := {
@@ -39,8 +42,9 @@ const MARKERS := {
 }
 ## Points of interest: name -> [x, z, height above the ground].
 const POIS := {
-	"ShrinePlinth_A": [-35, 0, 1.0], "ShrinePlinth_B": [36.25, -33.75, 1.0], "ShortcutGate": [-32.5, -5, 1.0],
+	"ShrinePlinth_A": [-36.1, -4.7, 0.65], "ShrinePlinth_B": [31.8, -37.2, 0.65], "ShortcutGate": [-32.5, -5, 1.0],
 	"YardGate": [27.5, -55, 1.4], "YardCentre": [27.5, -65, 1.0], "VatWest": [20, -66.25, 1.0], "VatEast": [35, -66.25, 1.0],
+	"Lazymans": [-38.75, -5, 1.8], "HatShop": [-10, -5, 1.6],
 }
 
 ## The flood fill, made once for the run (the stretch does not change): {free, ground, reached} by cell.
@@ -213,10 +217,10 @@ func test_the_stretch_is_a_plain_region_with_its_markers_pois_and_no_enemy_spawn
 	var env := (region.get_node("WorldEnvironment") as WorldEnvironment).environment
 	assert_eq(env.background_color.to_html(false), "aebbcc", "the sky")
 	var sun := region.get_node("Sun") as DirectionalLight3D
-	assert_vec_near(sun.rotation_degrees, Vector3(-60, 30, 0), 1e-3, "the sun's way")
+	assert_vec_near(sun.rotation_degrees, Vector3(-80, 30, 0), 1e-3, "the sun's way (noon: nearly overhead)")
 	assert_near(sun.light_energy, 0.25, 1e-6, "its energy")
 	assert_eq(sun.light_color.to_html(false), "f4f7ff", "and colour")
-	assert_eq(region.find_children("Vat*", "StaticBody3D", true, false).size(), 2, "two vats")
+	assert_eq(region.find_children("Vat*", "StaticBody3D", true, false).size(), 5, "five vats: two in the yard, three in the drying yard")
 	assert_true(region.get_node_or_null("Kit") is KitDresser, "drawn in Bilibara's colours (kit bilibara)")
 
 
@@ -269,7 +273,12 @@ func test_every_ground_is_toon_world_at_32_texels_per_metre() -> void:
 				place = place_name
 		assert_ne(place, "", "%s is in one of the places" % body.name)
 		if place != "":
-			assert_eq(material.resource_path, STONE % PLACES[place].stone, "%s (%s) is %s" % [body.name, place, PLACES[place].stone])
+			var stone: String = PLACES[place].stone
+			if String(body.name).begins_with("YardPlateCentre"):
+				stone = YARD_CENTRE_STONE
+			elif String(body.name).begins_with("YardPlateBorder"):
+				stone = YARD_BORDER_STONE
+			assert_eq(material.resource_path, STONE % stone, "%s (%s) is %s" % [body.name, place, stone])
 		assert_near(mesh.global_position.y + (mesh.mesh as BoxMesh).size.y / 2.0, 0.0, 1e-6, "%s: its top is at y = 0" % body.name)
 		assert_true(body.collision_layer & Layers.WORLD != 0 and body.collision_layer & Layers.IK_SURFACE != 0, "%s: world and ik_surface" % body.name)
 
@@ -565,7 +574,7 @@ func _low_or_post(body: StaticBody3D, most: float, post_ok: bool) -> bool:
 	for shape: CollisionShape3D in body.find_children("*", "CollisionShape3D", true, false):
 		var size := (shape.shape as BoxShape3D).size if shape.shape is BoxShape3D else Vector3(9, 9, 9)
 		low = low and size.y <= most + 1e-6
-		thin = thin and size.x < 0.8 and size.z < 0.8
+		thin = thin and size.y <= 1.05   # no exemption for width: only what stands no higher than a fighter's hips
 	return low or (post_ok and thin)
 
 
@@ -639,16 +648,23 @@ func test_nothing_tall_touches_walkable_ground_on_its_south_side() -> void:
 		if body.get_parent().name == &"Walkable" or String(body.name).begins_with("Vat"):
 			continue
 		for shape: CollisionShape3D in body.find_children("*", "CollisionShape3D", true, false):
-			var box := (shape.shape as BoxShape3D).size
+			var box := _size_of(shape)
 			var centre := shape.global_position
 			var top := centre.y + box.y / 2.0
-			if centre.y - box.y / 2.0 >= 1.8 or (box.x < 0.8 and box.z < 0.8):
+			if centre.y - box.y / 2.0 >= 1.8 or (top <= 1.05 and top > 0.65 + 1e-6):
 				continue
-			var x := centre.x - box.x / 2.0 + 0.05
 			var north := false
-			while x < centre.x + box.x / 2.0 - 0.04:
-				north = north or _ground_under(space, Vector2(x, centre.z - box.z / 2.0 - 0.1))
-				x += 0.25
+			if shape.shape is CylinderShape3D or shape.shape is ConvexPolygonShape3D:
+				# A round post (or a post's wedge against its wall): a body can stand north of it (within 45 degrees of north) where a capsule fits on a ring just outside it, on ground a body can stand on.
+				var ring := box.x / 2.0 + BODY + 0.03
+				for degrees in range(225, 316, 5):
+					var around := Vector2(centre.x, centre.z) + Vector2.from_angle(deg_to_rad(degrees)) * ring
+					north = north or (_ground_under(space, around) and not _blocked(space, around))
+			else:
+				var x := centre.x - box.x / 2.0 + 0.05
+				while x < centre.x + box.x / 2.0 - 0.04:
+					north = north or _ground_under(space, Vector2(x, centre.z - box.z / 2.0 - 0.1))
+					x += 0.25
 			if north and top > 0.65 + 1e-6:
 				tall.append("%s is %.2f m high with ground on its north side" % [body.get_path(), top])
 			elif north:
@@ -659,14 +675,15 @@ func test_nothing_tall_touches_walkable_ground_on_its_south_side() -> void:
 	for wall in 5:
 		assert_true(region.get_node_or_null("LowWall%d" % (wall + 1)) is StaticBody3D, "LowWall%d" % (wall + 1))
 	assert_true(region.get_node_or_null("Gate") is StaticBody3D, "the Gate")
-	var rail := region.get_node_or_null("GateRail") as StaticBody3D
-	assert_true(rail != null, "the GateRail")
-	if rail != null:
-		var shape := rail.get_node("Shape") as CollisionShape3D
-		var size := (shape.shape as BoxShape3D).size
-		assert_true(size.y <= 0.12 + 1e-6 and size.z <= 0.12 + 1e-6, "the rail is no thicker than 0.12 m (%s)" % size)
-		assert_true(shape.global_position.y - size.y / 2.0 >= 2.4 - 1e-6, "its underside is at 2.4 m or higher")
-		assert_true(shape.global_position.x - size.x / 2.0 <= -35.125 + 1e-3 and shape.global_position.x + size.x / 2.0 >= -29.875 - 1e-3, "across the tops of the two posts")
+	# No rail across the posts' tops: it crossed the heads of the fighters standing north of the gate (see test_bilibara_hidden).
+	assert_true(region.get_node_or_null("GateRail") == null, "no rail across the tops of the gate's posts")
+	for body: StaticBody3D in region.find_children("*", "StaticBody3D", true, false):
+		if body.get_parent().name == &"Walkable" or body.get_parent().get_parent().name == &"Blocks":
+			continue
+		for shape: CollisionShape3D in body.find_children("*", "CollisionShape3D", true, false):
+			var size := _size_of(shape)
+			var inside_gate := Rect2(-35.2, -6.5, 5.4, 3.0).intersects(Rect2(shape.global_position.x - size.x / 2.0, shape.global_position.z - size.z / 2.0, size.x, size.z))
+			assert_false(inside_gate and shape.global_position.y + size.y / 2.0 > 1.0 and body.name != &"Lantern", "%s is no taller than 1 m over the gate" % body.get_path())
 
 
 # Each low wall (from the walkable side north of it) and the gate (from both sides), at two or three x positions: {label, x, face
@@ -680,6 +697,15 @@ func _edges() -> Array[Dictionary]:
 	for x: float in [-34.5, -32.5, -30.5]:
 		list.append({label = "the gate from the north, x %.1f" % x, x = x, face = -5.5, way = 1})
 		list.append({label = "the gate from the south, x %.1f" % x, x = x, face = -4.5, way = -1})
+	# The solid props (north faces are stood against from the north with way +1, south faces from the south with way -1): the bench and
+	# stool of alcove B (its south face is left out: the 3 m start of the sprint lies beyond the alcove's kerb), the bollards, the yard's vats, the plinths, the street's stalls, cart, bench and stool.
+	for prop in [["alcove bench north", 34.5, -35.825, 1], ["alcove bench north", 35.5, -35.825, 1], ["alcove bench south", 35.0, -35.175, -1],
+			["alcove stool north", 34.0, -33.325, 1], ["west bollard", 24.875, -55.325, 1], ["east bollard", 30.125, -55.325, 1],
+			["west vat north", 20.0, -67.5, 1], ["west vat south", 20.0, -65.0, -1], ["east vat north", 35.0, -67.5, 1], ["east vat south", 35.0, -65.0, -1],
+			["plinth A", -36.1, -4.4, -1], ["plinth B", 31.8, -36.9, -1], ["stall west", -8.75, -2.5, -1], ["stall east", 8.75, -2.5, -1],
+			["cart", -22.5, -2.76, -1], ["street bench", 12.5, -4.35, -1], ["street stool", 14.1, -4.35, -1]]:
+		# A vat is a free-standing thing (see Actor.DEFLECTS): a body that runs, dash-steps or lunges straight at its middle goes round it, rather than stand at it.
+		list.append({label = "%s, x %.2f" % [prop[0], prop[1]], x = prop[1], face = prop[2], way = prop[3], round = String(prop[0]).contains("vat")})
 	return list
 
 
@@ -708,7 +734,11 @@ func _try(region: Region, label: String, def_path: String, gap: float, frames_to
 	var problems := PackedStringArray()
 	for e in edges:
 		var at := (e.actor as Actor).global_position
-		if e.in > 0.1 or e.up > 0.1 or (at.z - e.face) * e.way > -0.2:
+		var goes_round: bool = e.get("round", false)
+		if goes_round:
+			if e.up > 0.1:
+				problems.append("%s, %s: rose to %.2f m" % [label, e.label, e.up])
+		elif e.in > 0.1 or e.up > 0.1 or (at.z - e.face) * e.way > -0.2:
 			problems.append("%s, %s: reached %.2f m past the face, rose to %.2f m, ended %.2f m from it" % [label, e.label, e.in, e.up, -(at.z - e.face) * e.way])
 		(e.actor as Actor).queue_free()
 	await frames(1)
@@ -775,3 +805,999 @@ func test_nothing_gets_over_a_low_wall_or_the_gate() -> void:
 				follower.queue_free()
 				await frames(1)
 	assert_eq(crossed, PackedStringArray(), "no pairing carries a body across the gate or up on it")
+
+
+# --- The backdrop and the sight line (Task 3) ---
+
+# What a body can be hidden by, as boxes in world space ({box, name}): every mesh of the region that is not the walkable ground (a
+# plate's top is at y = 0, under any head), with a kit run taken at KitRun.bounds() (a MultiMesh's own box is zero headless).
+func _occluders(region: Region) -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	var walkable := region.get_node_or_null("Walkable")
+	for node: Node3D in region.find_children("*", "Node3D", true, false):
+		if walkable != null and walkable.is_ancestor_of(node):
+			continue
+		var box := AABB()
+		if node is KitRun:
+			box = (node as KitRun).bounds()
+		elif node is MeshInstance3D and (node as MeshInstance3D).mesh != null and not String(node.name).begins_with("Water"):
+			box = node.global_transform * (node as MeshInstance3D).get_aabb()
+		else:
+			continue
+		if box.size == Vector3.ZERO or String(node.name).begins_with("Ground"):
+			continue
+		found.append({box = box, name = String(region.get_path_to(node))})
+	return found
+
+
+func test_nothing_stands_between_the_camera_and_a_body_anywhere_it_can_stand() -> void:   # Review Focus 1
+	var region := _region()
+	if region == null:
+		return
+	var fill := await _fill(region)
+	var reached: Dictionary = fill.reached
+	var occluders := _occluders(region)
+	assert_true(occluders.size() > 40, "there are meshes to look through (%d)" % occluders.size())
+	# The camera is DISTANCE from what it looks at, along its pitch: up and south of the cell. The segment is the brief's, from the
+	# head (2 m up) to the camera; a second, along the view's own direction from the head (the true line of an orthographic camera,
+	# which is steeper), is held too.
+	var pitch := deg_to_rad(-CameraRig.PITCH_DEG)
+	var to_camera := Vector3(0.0, CameraRig.DISTANCE * sin(pitch), CameraRig.DISTANCE * cos(pitch))
+	var hits := {}  # mesh -> the first cell it hides a body at
+	var tested := 0
+	for cell: Vector2i in reached.keys():
+		var at := _middle(cell)
+		for dx: float in [-0.35, 0.0, 0.35]:
+			var base := Vector3(at.x + dx, 0.0, at.y)
+			var head := base + Vector3(0.0, 2.0, 0.0)
+			var ends: Array[Vector3] = [base + to_camera, head + to_camera]
+			for entry in occluders:
+				var box: AABB = entry.box
+				if box.end.y <= 1.05 or String(entry.name).contains("/Fence") or box.position.x > base.x or box.end.x < base.x or box.end.z < at.y:
+					continue
+				tested += 1
+				for end in ends:
+					if box.intersects_segment(head, end):
+						if not hits.has(entry.name):
+							hits[entry.name] = "cell %s (x offset %.2f)" % [at, dx]
+						break
+	assert_true(tested > 0, "the test looked at something (%d box checks)" % tested)
+	var shown := PackedStringArray()
+	for mesh_name: String in hits:
+		if shown.size() < 8:
+			shown.append("%s hides a body at %s" % [mesh_name, hits[mesh_name]])
+	assert_eq(shown, PackedStringArray(), "nothing stands between the camera and a body (%d meshes do)" % hits.size())
+
+
+func test_the_backdrop_is_never_walkable_and_never_shades_the_ground() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var backdrop := region.get_node_or_null("Backdrop")
+	assert_true(backdrop != null, "a Backdrop group")
+	if backdrop == null:
+		return
+	assert_eq(backdrop.find_children("*", "CollisionObject3D", true, false).size(), 0, "nothing under Backdrop is a collider")
+	var shading := PackedStringArray()
+	var meshes := backdrop.find_children("*", "GeometryInstance3D", true, false)
+	for mesh: GeometryInstance3D in meshes:
+		if mesh.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+			shading.append(String(region.get_path_to(mesh)))
+	assert_eq(shading, PackedStringArray(), "no mesh under Backdrop casts a shadow")
+	assert_true(meshes.size() >= 10, "and it holds the picture beyond the places (%d meshes)" % meshes.size())
+	var blocks := region.get_node_or_null("Blocks")
+	assert_true(blocks != null, "a Blocks group")
+	if blocks != null:
+		for block: Node in blocks.get_children():
+			assert_true(block.get_node_or_null("Body") is StaticBody3D, "%s under Blocks is solid" % block.name)
+	var walkable := region.get_node("Walkable")
+	for mesh: Node in meshes:
+		assert_false(walkable.is_ancestor_of(mesh), "%s is not in Walkable" % mesh.name)
+
+
+# Every kit piece of the region, as {node, box (world, from its meshes), piece}: a placed scene (Props, Edges, Lanterns) and a run's
+# places alike.
+func _kit_instances(region: Region) -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	for node: Node3D in region.find_children("*", "Node3D", true, false):
+		if node is KitRun:
+			var run := node as KitRun
+			for place in run.places:
+				found.append({node = node, piece = String(run.piece), at = (run.global_transform * place).origin, scale = (run.global_transform * place).basis.get_scale()})
+		elif node.scene_file_path.begins_with("res://assets/env/kenney_town/"):
+			found.append({node = node, piece = node.scene_file_path.get_file().get_basename(), at = node.global_position, scale = node.global_basis.get_scale()})
+	return found
+
+
+func test_the_drying_yard_and_the_harbor_are_dressed_and_unwalkable() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var fill := await _fill(region)
+	var reached: Dictionary = fill.reached
+	var ground: Dictionary = fill.ground
+	var kit := _kit_instances(region)
+	var boxes := _kit_boxes(region)
+	var count := func(piece: String) -> int: return kit.filter(func(k: Dictionary) -> bool: return k.piece == piece).size()
+	assert_true(count.call("poles-horizontal") >= 12, "at least 12 poles-horizontal (%d)" % count.call("poles-horizontal"))
+	assert_true(count.call("poles") >= 12, "at least 12 poles (%d)" % count.call("poles"))
+	assert_true(count.call("planks") >= 6, "at least 6 planks (%d)" % count.call("planks"))
+	assert_true(count.call("rock-large") >= 2, "at least 2 rock-large (%d)" % count.call("rock-large"))
+	# South of the Rack Walk's kerb (z -19.6): the three vats, and every rack at least 3 m back from it (and nothing there taller
+	# than 1.7 + 0.71 s, s metres from the kerb: the vats, the rocks and the racks are, at those distances).
+	var vats := region.find_children("Vat*", "StaticBody3D", true, false).filter(func(v: Node3D) -> bool: return (v.get_node("Shape") as Node3D).global_position.z > -19.6 and (v.get_node("Shape") as Node3D).global_position.z < -10.0)
+	assert_eq(vats.size(), 3, "three vats in the drying yard")
+	for spot: Vector2 in [Vector2(-20, -15), Vector2(-5, -15), Vector2(10, -15)]:
+		assert_true(vats.any(func(v: Node3D) -> bool: return Vector2((v.get_node("Shape") as Node3D).global_position.x, (v.get_node("Shape") as Node3D).global_position.z).distance_to(spot) < 0.3), "a vat at %s" % spot)
+	var dressing := region.get_node("Props").find_children("*", "Node3D", true, false)
+	var too_near := PackedStringArray()
+	for k in kit:
+		if k.piece in ["poles", "poles-horizontal"] and k.at.z - (-19.6) < 3.0 + 1.0:
+			too_near.append("%s at %s" % [k.piece, k.at])
+	assert_eq(too_near, PackedStringArray(), "racks start 3 m from the kerb")
+	var tall_near := PackedStringArray()
+	for k in kit:
+		if k.at.z > -19.6 and k.at.z < -10.0 and k.at.x > -30.0 and k.at.x < 22.5 and k.piece not in ["planks"]:
+			var most: float = 1.7 + 0.71 * (k.at.z + 19.6 - 1.3)
+			var height: float = {"poles": 2.5, "poles-horizontal": 2.5, "rock-large": 2.91, "rock-small": 2.55}.get(k.piece, 1.0)
+			if height > most:
+				tall_near.append("%s at %s is %.2f m, the line allows %.2f" % [k.piece, k.at, height, most])
+	assert_eq(tall_near, PackedStringArray(), "nothing in the drying yard stands above the line of sight")
+	# The harbor: the water at y -0.9 from z 9 to 32, a quay wall of wall-half along z 9, an apron of visual cobble.
+	var water := region.find_children("Water*", "MeshInstance3D", true, false)
+	assert_eq(water.size(), 1, "one sheet of water")
+	var quay_top := -INF
+	for k in boxes:
+		if k.piece == "wall-half":
+			quay_top = maxf(quay_top, (k.box as AABB).end.y)
+	var apron_top := -INF
+	for g: MeshInstance3D in region.get_node("Backdrop").find_children("Ground*", "MeshInstance3D", true, false):
+		if g.global_position.z > 5.0:
+			apron_top = maxf(apron_top, (g.global_transform * g.get_aabb()).end.y)
+	if water.size() == 1:
+		var level: float = (water[0] as MeshInstance3D).global_position.y
+		assert_true(level <= apron_top - 0.5, "the water (%.2f) lies at least 0.5 m below the apron (%.2f), so the quay is a drop" % [level, apron_top])
+		assert_true(level < quay_top - 1.0, "and well below the quay wall's top (%.2f)" % quay_top)
+	if water.size() == 1:
+		var plane := (water[0] as MeshInstance3D).mesh as PlaneMesh
+		var w := water[0] as MeshInstance3D
+		assert_near(w.global_position.z - plane.size.y / 2.0, 9.0, 1e-3, "from z 9, under the quay wall (the brief's 9.25 left a gap of sky between wall and water)")
+		assert_near(w.global_position.z + plane.size.y / 2.0, 32.0, 1e-3, "to z 32")
+	assert_true(count.call("wall-half") >= 28, "the quay wall is wall-half every tile (%d)" % count.call("wall-half"))
+	var quay := kit.filter(func(k: Dictionary) -> bool: return k.piece == "wall-half")
+	assert_true(quay.all(func(k: Dictionary) -> bool: return absf(k.at.z - 9.0) < 1.3 and k.at.y < 0.01), "the quay wall stands along z 9")
+	var apron := region.get_node("Backdrop").find_children("Ground*", "MeshInstance3D", true, false).filter(func(g: MeshInstance3D) -> bool: return g.global_position.z > 5.0)
+	assert_true(apron.size() >= 6, "an apron of visual plates (%d)" % apron.size())
+	# None of it is walkable: no ground under it for the body's fill, none of it reached.
+	var walkable_south := 0
+	for cell: Vector2i in reached.keys():
+		var at := _middle(cell)
+		if at.y > 5.4 or (at.y > -19.6 and at.y < -10.0 and at.x > -30.0 and at.x < 22.5):
+			walkable_south += 1
+	assert_eq(walkable_south, 0, "no reached cell on the apron, the quay, the water or in the drying yard")
+	for cell: Vector2i in ground.keys():
+		var at := _middle(cell)
+		assert_false(at.y > 5.4 or (at.y > -19.6 and at.y < -10.0 and at.x > -30.0 and at.x < 22.5), "no walkable ground under %s" % at)
+	assert_true(dressing.size() > 0, "and it is dressed in Props")
+
+
+func test_every_piece_is_a_kenney_toon_piece_at_two_and_a_half_times() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var dresser := region.get_node("Kit") as KitDresser
+	var off_scale := PackedStringArray()
+	var not_toon := PackedStringArray()
+	var kit := _kit_instances(region)
+	assert_true(kit.size() > 300, "the stretch is built of kit pieces (%d)" % kit.size())
+	for k in kit:
+		if not (k.scale as Vector3).is_equal_approx(Vector3.ONE * 2.5):
+			off_scale.append("%s %s" % [k.piece, k.scale])
+	var seen := {}
+	for node: Node3D in region.find_children("*", "Node3D", true, false):
+		var materials: Array[Material] = []
+		if node is KitRun:
+			materials.append((node as KitRun).material_override)
+		elif node.scene_file_path.begins_with("res://assets/env/kenney_town/"):
+			for mesh: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
+				materials.append(mesh.material_override)
+		for material in materials:
+			# A roof wears its style's roof material (the roof shader, the shingles picture); every other piece the Bilibara colormap.
+			if node.get_parent().name == &"Roof":
+				var roof_ok: bool = material is ShaderMaterial and (material as ShaderMaterial).shader.resource_path == "res://render/shaders/toon_roof.gdshader"
+				seen[region.get_path_to(node)] = true
+				if not roof_ok:
+					not_toon.append(String(region.get_path_to(node)))
+				continue
+			# A banner wears the neon colormap (the same shader with a glow of its own).
+			var neon: bool = node.scene_file_path.get_file().begins_with("banner")
+			# A fence wears the dark iron (bars that read against a pale wall).
+			var iron: bool = (node.scene_file_path.get_file().begins_with("fence") and not node.scene_file_path.get_file().begins_with("fence-gate")) or (node is KitRun and String((node as KitRun).piece).begins_with("fence") and not String((node as KitRun).piece).begins_with("fence-gate"))
+			var want := dresser.banner_material if neon else (dresser.fence_material if iron else dresser.material)
+			var ok: bool = material is ShaderMaterial and (material as ShaderMaterial).shader.resource_path == TOON_WORLD and material == want
+			var tex := (material as ShaderMaterial).get_shader_parameter(&"albedo_tex") as Texture2D if ok else null
+			ok = ok and tex != null and (iron or tex.resource_path == ("res://assets/env/textures/bilibara_neon_colormap.png" if neon else "res://assets/env/textures/bilibara_colormap.png"))
+			seen[region.get_path_to(node)] = true
+			if not ok:
+				not_toon.append(String(region.get_path_to(node)))
+	assert_eq(off_scale, PackedStringArray(), "pieces not at x2.5")
+	assert_eq(not_toon, PackedStringArray(), "pieces not in toon_world with the Bilibara colormap")
+	assert_true(seen.size() > 50, "and many were looked at (%d)" % seen.size())
+
+
+## The solid masses and what each wears: its rectangle, the style of its front and the roof piece (`gable`: two planes meeting in a ridge,
+## the tiles of one half turned about; a roof of the `roof` piece under the sight line: its ridge is at most 9.1 m, and the tests hold it).
+const MASSES := [
+	{rect = Rect2(-40, -25, 5, 20), style = "frontage", roof = "roof", gable = true}, {rect = Rect2(-30, -10, 55, 5), style = "frontage", roof = "roof", gable = true},
+	{rect = Rect2(30, -20, 2.5, 15), style = "frontage", roof = "roof", gable = true}, {rect = Rect2(32.5, -5, 2.5, 10), style = "frontage", roof = "roof", gable = true},
+	{rect = Rect2(-42.5, -5, 2.5, 10), style = "frontage", roof = "roof", gable = true}, {rect = Rect2(-40, -45, 30, 20), style = "tannery", roof = "roof", gable = true},
+	{rect = Rect2(-10, -45, 35, 20), style = "tannery", roof = "roof", gable = true}, {rect = Rect2(30, -45, 10, 7.5), style = "tannery", roof = "roof", gable = true},
+	{rect = Rect2(37.5, -37.5, 2.5, 7.5), style = "tannery", roof = "roof-high"}, {rect = Rect2(12.5, -80, 30, 5), style = "yardwall", roof = "roof", gable = true},
+	{rect = Rect2(12.5, -75, 2.5, 20), style = "tannery", roof = "roof-high"}, {rect = Rect2(40, -75, 2.5, 20), style = "tannery", roof = "roof-high"},
+]
+
+
+# Whether the roof tiles of `roof` face two ways (the ridge between them: the pieces' x axes point at opposite ways).
+func _two_ways(roof: Node) -> bool:
+	var ways := {}
+	for run: KitRun in roof.get_children():
+		for place in run.places:
+			ways[Vector2(snappedf(place.basis.x.normalized().x, 0.01), snappedf(place.basis.x.normalized().z, 0.01))] = true
+	return ways.size() >= 2
+
+
+func test_every_solid_mass_has_a_front_of_its_style_and_a_roof() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var blocks := region.get_node("Blocks").get_children()
+	assert_eq(blocks.size(), MASSES.size(), "%d solid masses" % MASSES.size())
+	var matched := {}
+	for block in blocks:
+		var shape := block.get_node("Body/Shape") as CollisionShape3D
+		var size := (shape.shape as BoxShape3D).size
+		var rect := Rect2(shape.global_position.x - size.x / 2.0, shape.global_position.z - size.z / 2.0, size.x, size.z)
+		var found := MASSES.filter(func(m: Dictionary) -> bool: return (m.rect as Rect2).is_equal_approx(rect))
+		assert_eq(found.size(), 1, "%s (%s) is one of the masses" % [block.name, rect])
+		if found.size() != 1:
+			continue
+		matched[found[0].rect] = true
+		var want: Dictionary = found[0]
+		var front := block.get_node("Front").get_children().map(func(r: Node) -> String: return String((r as KitRun).piece))
+		var wood := front.filter(func(p: String) -> bool: return p.begins_with("wall-wood"))
+		assert_eq(wood.size() == front.size(), want.style != "frontage", "%s: a %s front (%s)" % [block.name, want.style, front])
+		assert_false(front.has("balcony-wall"), "%s: no balcony (its frame is a hole)" % block.name)
+		if rect.size.x >= 12.5:
+			if want.style == "frontage":
+				assert_true(front.has("wall-door") and front.has("wall-window-small") and front.has("wall-window-shutters"), "%s: a stone front with a door, windows and shutters" % block.name)
+			elif want.style == "yardwall":
+				assert_true(front.has("wall-wood-window-shutters") and not front.has("wall-wood-door"), "%s: planks with lofts and no door of its own" % block.name)
+			else:
+				assert_true(front.has("wall-wood-door") and front.has("wall-wood-window-small"), "%s: planks with a door and windows" % block.name)
+		var roofs := block.get_node("Roof").get_children().map(func(r: Node) -> String: return String((r as KitRun).piece))
+		assert_eq(roofs.filter(func(p: String) -> bool: return p != want.roof), [], "%s: roofed in %s" % [block.name, want.roof])
+		assert_true(roofs.size() > 0, "%s has a roof" % block.name)
+		if want.get("gable", false):
+			var yaws := {}
+			for run: KitRun in block.get_node("Roof").get_children():
+				for place in run.places:
+					yaws[snappedf(place.basis.x.normalized().x, 0.01)] = snappedf(place.basis.x.normalized().z, 0.01)
+			assert_true(yaws.size() >= 2 or (block.get_node("Roof").get_children().any(func(r: KitRun) -> bool: return r.places.size() > 0) and _two_ways(block.get_node("Roof"))), "%s: a gable has its two halves turned about" % block.name)
+		if want.roof == "roof-flat":
+			var top := 0.0
+			for run: KitRun in block.get_node("Roof").get_children():
+				top = maxf(top, run.bounds().end.y)
+			assert_near(top, 7.83, 0.02, "%s: a flat roof's top is the sight line's 7.83 m" % block.name)
+	assert_eq(matched.size(), MASSES.size(), "every mass was found")
+
+
+# --- The dressed places (Task 3) ---
+
+# Every kit piece of the region with its box in world space: {piece, box, node}. A scene instance's box is its meshes' merged; a run's
+# places are each a piece of the run's mesh (a piece of two meshes is two entries of one place: merged by position).
+func _kit_boxes(region: Region) -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	for node: Node3D in region.find_children("*", "Node3D", true, false):
+		if node is KitRun:
+			var run := node as KitRun
+			for place in run.places:
+				found.append({piece = String(run.piece), box = run.global_transform * place * run.local * run.part.get_aabb(), node = node})
+		elif node.scene_file_path.begins_with("res://assets/env/kenney_town/"):
+			var box := AABB()
+			var first := true
+			for mesh: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
+				var b: AABB = mesh.global_transform * mesh.get_aabb()
+				box = b if first else box.merge(b)
+				first = false
+			found.append({piece = node.scene_file_path.get_file().get_basename(), box = box, node = node})
+	return found
+
+
+func _centre(box: AABB) -> Vector2:
+	return Vector2(box.get_center().x, box.get_center().z)
+
+
+func _pieces(region: Region, piece: String) -> Array[Dictionary]:
+	return _kit_boxes(region).filter(func(k: Dictionary) -> bool: return k.piece == piece)
+
+
+func _poi_at(region: Region, poi_name: String) -> Vector2:
+	var poi := region.find_child(poi_name, true, false) as Marker3D
+	return Vector2(poi.global_position.x, poi.global_position.z)
+
+
+func test_the_places_are_dressed() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var lazymans := _poi_at(region, "Lazymans")
+	var door_near := _pieces(region, "wall-door").any(func(k: Dictionary) -> bool: return _centre(k.box).distance_to(lazymans) < 4.0)
+	assert_true(door_near, "a wall-door within 4 m of Lazymans (the Lazyman's back door)")
+	# Site A: a pillar-stone plinth on the shrine's point, the court's slate under it.
+	# Site B: a bench, a stool and a plinth.
+	var alcove := Rect2(30, -37.5, 7.5, 7.5)
+	assert_true(_pieces(region, "stall-bench").any(func(k: Dictionary) -> bool: return alcove.has_point(_centre(k.box))), "a stall-bench in alcove B")
+	assert_true(_pieces(region, "stall-stool").any(func(k: Dictionary) -> bool: return alcove.has_point(_centre(k.box))), "a stall-stool in alcove B")
+	# The street: two stalls, a cart, and banners on the fronts of the street and the yard.
+	assert_true(_pieces(region, "stall-red").size() >= 2, "at least 2 stall-red (%d)" % _pieces(region, "stall-red").size())
+	assert_true(_pieces(region, "cart").size() >= 1, "a cart")
+	var banners := _pieces(region, "banner-red") + _pieces(region, "banner-green")
+	assert_true(banners.filter(func(k: Dictionary) -> bool: return k.box.get_center().z > -6.0 and k.box.get_center().z < 0.0).size() >= 3, "at least 3 banners on the street's fronts")
+	assert_true(banners.filter(func(k: Dictionary) -> bool: return k.box.get_center().z < -70.0).size() >= 3, "and 3 in the yard")
+	assert_eq(_pieces(region, "banner-green").size(), 1, "one banner-green (the hat shop's)")
+	# The street's props stand at its north margin, off its clear line, flush with the fronts or a body's width from them.
+	var in_street := PackedStringArray()
+	for piece in ["stall-red", "stall-bench", "stall-stool", "cart"]:
+		for k in _pieces(region, piece).filter(func(p: Dictionary) -> bool: return p.box.get_center().z < 0.0 and p.box.get_center().x < 30.0):
+			var box: AABB = k.box
+			if box.position.z < -5.0 - 1e-3 or box.end.z > -2.4 or (box.position.z > -5.0 + 0.05 and box.position.z < -5.0 + 0.7):
+				in_street.append("%s at %s" % [piece, box])
+	assert_eq(in_street, PackedStringArray(), "the street's props stand at its north margin, flush with the fronts (or a body's width off)")
+	# The sites' plinths are solid blocks no higher than 0.65 m against the south face of a wall (not before a door or the gate), so that
+	# whatever stands on them later hides nobody; the spawn on site A is 1 m or more clear of its plinth.
+	for plinth_name in ["Plinth_A", "Plinth_B"]:
+		var body := region.get_node_or_null(plinth_name) as StaticBody3D
+		assert_true(body != null, "a solid %s" % plinth_name)
+		if body == null:
+			continue
+		var shape := body.get_node("Shape") as CollisionShape3D
+		var size := (shape.shape as BoxShape3D).size
+		assert_true(size.y <= 0.65 + 1e-6 and size.y >= 0.4, "%s is %.2f m high" % [plinth_name, size.y])
+		var rect := Rect2(shape.global_position.x - size.x / 2.0, shape.global_position.z - size.z / 2.0, size.x, size.z)
+		var wall_z := -5.0 if plinth_name == "Plinth_A" else -37.5
+		assert_near(rect.position.y, wall_z, 1e-3, "%s stands against the wall's south face (z %.2f)" % [plinth_name, wall_z])
+		assert_true(poi_rect_ok(region, plinth_name, rect), "its point of interest is on it")
+	var site_a := _marker_at(region, "ShrineSite_A")
+	var plinth_a_shape := region.get_node("Plinth_A").get_node("Shape") as CollisionShape3D
+	var pa := Rect2(plinth_a_shape.global_position.x - 0.8, plinth_a_shape.global_position.z - 0.3, 1.6, 0.6)
+	assert_true(pa.grow(1.0).has_point(site_a) == false, "the spawn on site A is 1 m clear of its plinth")
+
+
+func poi_rect_ok(region: Region, plinth_name: String, rect: Rect2) -> bool:
+	var at := _poi_at(region, "ShrinePlinth_" + plinth_name.right(1))
+	return rect.grow(0.01).has_point(at)
+
+
+func test_the_gate_is_a_closed_low_shortcut_gate() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var gates := _pieces(region, "fence-gate")
+	assert_eq(gates.size(), 2, "two fence-gate pieces")
+	var xs := gates.map(func(k: Dictionary) -> float: return _centre(k.box).x)
+	xs.sort()
+	if xs.size() == 2:
+		assert_true(xs[0] > -35.0 and xs[0] < -32.5 and xs[1] > -32.5 and xs[1] < -30.0, "one in each half of x -35..-30 (%s)" % [xs])
+	for k in gates:
+		assert_true(absf(k.box.get_center().z - (-5.0)) < 0.3, "%s across the gate at z -5" % [k.box])
+	var board := region.get_node("Gate") as StaticBody3D
+	var shape := board.get_node("Shape") as CollisionShape3D
+	var size := (shape.shape as BoxShape3D).size
+	assert_true(size.x >= 5.0 - 1e-6 and size.y >= 0.55 and size.y <= 0.65, "a solid body 5 m wide and 0.55 to 0.65 m high (%s)" % size)
+	var posts := _pieces(region, "pillar-stone").filter(func(k: Dictionary) -> bool: return absf(k.box.get_center().z - (-5.1)) < 0.3 and k.box.get_center().x < -29.0 and k.box.get_center().x > -36.0)
+	assert_eq(posts.size(), 2, "two pillar-stone pilasters")
+	for post in posts:
+		# Each is a pilaster on a wall's face (the Lazyman's back, x <= -35, and the street's row, x >= -30): none of it in the slot, where a
+		# body could stand behind it, and it is only drawn (no collider): half of it is in the wall.
+		var box: AABB = post.box
+		var in_wall: bool = box.end.x <= -35.0 + 1e-3 or box.position.x >= -30.0 - 1e-3
+		assert_true(in_wall, "a pilaster is wholly in a wall's span, none of it in the slot (x %.3f to %.3f)" % [box.position.x, box.end.x])
+		assert_true((post.node as Node).get_node_or_null("Body") == null, "and has no collider")
+	var near := region.get_node("GateNear") as Marker3D
+	var far := region.get_node("GateFar") as Marker3D
+	assert_near(near.global_position.z, -3.5, 1e-3, "GateNear 1.5 m south of the gate")
+	assert_near(far.global_position.z, -6.5, 1e-3, "GateFar 1.5 m north (3 m apart)")
+	# Nothing taller than 1.3 m within 3 m north of it (z -8 to -5.5, x -35 to -30) except the posts: in a collider or a mesh.
+	var tall := PackedStringArray()
+	var zone := Rect2(-35.0, -8.0, 5.0, 2.5)
+	for body: StaticBody3D in region.find_children("*", "StaticBody3D", true, false):
+		if body.get_parent().name == &"Walkable":
+			continue
+		for s: CollisionShape3D in body.find_children("*", "CollisionShape3D", true, false):
+			var b := _size_of(s)
+			var rect := Rect2(s.global_position.x - b.x / 2.0, s.global_position.z - b.z / 2.0, b.x, b.z)
+			if rect.intersection(zone).get_area() > 1e-4 and s.global_position.y + b.y / 2.0 > 1.3 and not s.global_position.y + b.y / 2.0 <= 1.3:
+				tall.append("%s" % body.get_path())
+	for k in _kit_boxes(region):
+		var rect := Rect2(k.box.position.x, k.box.position.z, k.box.size.x, k.box.size.z)
+		if rect.intersection(zone).get_area() > 1e-4 and k.box.end.y > 1.3 and k.box.position.y < 3.0:   # a roof's eaves overhead hide nobody (the sight-line test holds that)
+			tall.append("%s at %s" % [k.piece, k.box])
+	assert_eq(tall, PackedStringArray(), "nothing taller than 1.3 m within 3 m north of the gate bar the posts")
+
+
+func test_the_yard_has_three_barred_doors_two_vats_and_a_mouth() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var doors := _pieces(region, "wall-door").filter(func(k: Dictionary) -> bool: return k.box.get_center().z < -70.0 and not k.node is KitRun)
+	assert_eq(doors.size(), 3, "three wall-door pieces on the yard's north wall")
+	for n in [1, 2, 3]:
+		var hand := region.get_node("HandDoor_%d" % n) as Marker3D
+		var near := doors.filter(func(k: Dictionary) -> bool: return absf(k.box.get_center().x - hand.global_position.x) < 0.6)
+		assert_eq(near.size(), 1, "a wall-door within 0.6 m of HandDoor_%d's x" % n)
+		for k in near:
+			assert_true(absf((k.box as AABB).end.z - (-75.0)) < 0.1, "on the wall's face (its slab's south side at z %.2f)" % (k.box as AABB).end.z)
+	# Barred: the wall is one solid box over the doors (no opening).
+	var wall := region.get_node("Blocks").get_children().filter(func(b: Node) -> bool: return absf((b.get_node("Body/Shape") as Node3D).global_position.z - (-77.5)) < 0.1)
+	assert_eq(wall.size(), 1, "the north wall is one solid mass")
+	for spot in ["VatWest", "VatEast"]:
+		var at := _poi_at(region, spot)
+		var vats := region.find_children("Vat*", "StaticBody3D", true, false).filter(func(v: Node3D) -> bool: return Vector2((v.get_node("Shape") as Node3D).global_position.x, (v.get_node("Shape") as Node3D).global_position.z).distance_to(at) < 0.3)
+		assert_eq(vats.size(), 1, "a vat at %s" % spot)
+		for v in vats:
+			var size := ((v.get_node("Shape") as CollisionShape3D).shape as BoxShape3D).size
+			assert_near(size.y, 1.0, 1e-6, "%s is solid and 1.0 m high" % spot)
+	var posts := region.find_children("Bollard*", "StaticBody3D", false, false)
+	assert_eq(posts.size(), 2, "two bollards at the mouth")
+	if posts.size() == 2:
+		var shapes := posts.map(func(p: Node) -> CollisionShape3D: return p.get_node("Shape") as CollisionShape3D)
+		assert_near(absf(shapes[0].global_position.x - shapes[1].global_position.x), 5.25, 1e-3, "5.25 m apart")
+		for sh: CollisionShape3D in shapes:
+			assert_true((sh.shape as BoxShape3D).size.y <= 1.0 + 1e-6, "no higher than 1.0 m (%s)" % (sh.shape as BoxShape3D).size)
+	var spawn := region.get_node("KnuckleSpawn") as Marker3D
+	assert_true(Rect2(15, -75, 25, 20).has_point(Vector2(spawn.global_position.x, spawn.global_position.z)), "KnuckleSpawn is inside the yard's walls")
+	assert_vec_near(spawn.global_basis.z, Vector3(0, 0, 1), 1e-3, "facing south")
+	# The yard's floor is in pieces: a centre where fights happen, and margins, each named, so that one line changes the centre.
+	var centre := region.get_node("Walkable").get_node_or_null("YardPlateCentre") as StaticBody3D
+	assert_true(centre != null, "a plate called YardPlateCentre")
+	if centre != null:
+		var s := (centre.get_node("Shape") as CollisionShape3D)
+		assert_true(Rect2(s.global_position.x - 6.25, s.global_position.z - 5.0, 12.5, 10.0).has_point(Vector2(27.5, -65.0)), "which holds the yard's centre")
+	assert_true(region.get_node("Walkable").find_children("YardPlate*", "StaticBody3D", false, false).size() >= 5, "among at least 5 plates of the yard")
+
+
+func test_the_low_walls_wear_a_coping_and_a_railing_and_the_drifts_lie_on_unwalkable_ground() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var copings := region.find_children("Coping*", "StaticBody3D", false, false)
+	assert_eq(copings.size(), 5, "a coping on each of the five low walls")
+	for wall in 5:
+		var low := region.get_node("LowWall%d" % (wall + 1)) as StaticBody3D
+		var wall_shape := low.get_node("Shape") as CollisionShape3D
+		var wall_size := (wall_shape.shape as BoxShape3D).size
+		var capped := copings.filter(func(c: Node3D) -> bool: return (c.get_node("Shape") as Node3D).global_position.distance_to(wall_shape.global_position + Vector3(0, wall_size.y / 2.0 + 0.025, 0)) < 1e-3)
+		assert_eq(capped.size(), 1, "LowWall%d has its coping on top, over its whole footprint" % (wall + 1))
+		for c in capped:
+			var size := ((c.get_node("Shape") as CollisionShape3D).shape as BoxShape3D).size
+			assert_true(is_equal_approx(size.x, wall_size.x) and is_equal_approx(size.z, wall_size.z) and size.y <= 0.05 + 1e-6, "the same footprint, 0.05 m thick (%s)" % size)
+			assert_true(wall_size.y + size.y <= 0.65 + 1e-6, "and wall and coping are no higher than 0.65 m")
+		# A railing of fence stands on the wall, seen through, behind its north end (a body at the end has none of it before him).
+		var rect := Rect2(wall_shape.global_position.x - wall_size.x / 2.0, wall_shape.global_position.z - wall_size.z / 2.0, wall_size.x, wall_size.z)
+		var rails := _pieces(region, "fence").filter(func(k: Dictionary) -> bool: return rect.grow(0.1).has_point(_centre(k.box)))
+		assert_true(rails.size() >= 2, "LowWall%d wears a railing of fence (%d pieces)" % [wall + 1, rails.size()])
+		for rail in rails:
+			assert_true(rail.box.position.y >= wall_size.y - 1e-3, "the fence stands on the wall")
+			assert_true(rail.box.position.z >= rect.position.y + 2.5 - 1e-3, "and at least 2.5 m back from its north end")
+	var plates := _plates(region)
+	var wrong := PackedStringArray()
+	var drifts := region.get_node("Backdrop").find_children("Drift*", "MeshInstance3D", false, false)
+	for drift: MeshInstance3D in drifts:
+		var box := drift.global_transform * drift.get_aabb()
+		assert_true(box.size.y > 0.1 and box.size.y < 0.4, "%s is a low mound (%.2f m)" % [drift.name, box.size.y])
+		assert_eq(drift.get_parent().name, &"Backdrop", "%s is Backdrop: no collider, no shadow" % drift.name)
+		for plate in plates:
+			if Rect2(box.position.x, box.position.z, box.size.x, box.size.z).intersection(plate.rect).get_area() > 1e-6:
+				wrong.append("%s over a walkable plate" % drift.name)
+	assert_eq(wrong, PackedStringArray(), "no drift lies on walkable ground")
+	assert_true(drifts.size() >= 8, "and there are drifts (%d)" % drifts.size())
+
+
+# Every solid prop standing on walkable ground (the stalls, the cart, the bench and stools, the vats of the yard, the posts) is a thing to fight
+# round, and nothing is a step a body rides up or a pocket it is wedged in: a body shoved at it from each side that has open ground, for 40
+# frames at SHOVE, ends outside the prop's footprint (no more than 5 cm into the capsule's reach), on the ground, and walks off.
+func test_every_solid_prop_on_walkable_ground_is_fought_round_and_nothing_rides_up_it() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var fill := await _fill(region)
+	var reached: Dictionary = fill.reached
+	var props: Array[Dictionary] = []   # {name, rect}
+	var bodies: Array = region.get_node("Props").find_children("*", "StaticBody3D", true, false) + region.find_children("Bollard*", "StaticBody3D", false, false) + region.find_children("Plinth_*", "StaticBody3D", false, false)
+	for body: StaticBody3D in bodies:
+		for shape: CollisionShape3D in body.find_children("*", "CollisionShape3D", true, false):
+			var size := _size_of(shape)
+			var world_box: AABB = shape.global_transform * AABB(-size / 2.0, size)
+			var rect := Rect2(world_box.position.x, world_box.position.z, world_box.size.x, world_box.size.z)
+			var near := false
+			for cell: Vector2i in [_cell_of(rect.position - Vector2(0.9, 0.9)), _cell_of(rect.end + Vector2(0.9, 0.9)), _cell_of(Vector2(rect.get_center().x, rect.position.y - 0.9)),
+					_cell_of(Vector2(rect.get_center().x, rect.end.y + 0.9)), _cell_of(Vector2(rect.position.x - 0.9, rect.get_center().y)), _cell_of(Vector2(rect.end.x + 0.9, rect.get_center().y))]:
+				near = near or reached.has(cell)
+			if near:
+				props.append({name = String(body.get_path()), rect = rect, top = world_box.end.y})
+	assert_true(props.size() >= 12, "the walkable ground has solid props (%d)" % props.size())
+	var space := region.get_world_3d().direct_space_state
+	var problems := PackedStringArray()
+	for prop in props:
+		var rect: Rect2 = prop.rect
+		var sides: Array[Dictionary] = []
+		var mid := rect.get_center()
+		for way: Vector2 in [Vector2(0, 1), Vector2(0, -1), Vector2(1, 0), Vector2(-1, 0)]:
+			var start := mid + way * ((absf(way.x) * rect.size.x + absf(way.y) * rect.size.y) / 2.0 + 1.0)
+			if reached.has(_cell_of(start)) and not _blocked(space, start):
+				sides.append({start = start, way = -way})
+		for side in sides:
+			side.actor = _spawn(region, ABARAX, Vector3(side.start.x, 0.0, side.start.y))
+		await frames(2)
+		for i in 40:
+			for side in sides:
+				(side.actor as Actor).push(Vector3(side.way.x, 0.0, side.way.y) * SHOVE * DT * 10.0)
+			await frames(1)
+		for side in sides:
+			var at := (side.actor as Actor).global_position
+			var inside := rect.grow(BODY - 0.05).has_point(Vector2(at.x, at.z))
+			if inside or at.y > 0.1 or at.y < -0.2:
+				problems.append("%s from %s: ended at %s" % [prop.name, side.start, at])
+			side.actor.queue_free()
+		await frames(1)
+	assert_eq(problems, PackedStringArray(), "every solid prop is fought round and none is ridden up or entered")
+
+
+# The yard's north wall carries one door at each hand door and no other: the tannery front's own wooden doors are not drawn under the
+# stone-framed ones (they were: the doors showed doubled).
+func test_each_hand_door_is_one_door() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var boxes := _kit_boxes(region).filter(func(k: Dictionary) -> bool: return String(k.piece).contains("door") and k.box.end.z < -74.0 and k.box.position.z > -75.4 and k.box.get_center().x > 15.0 and k.box.get_center().x < 40.0)
+	for n in [1, 2, 3]:
+		var hand := region.get_node("HandDoor_%d" % n) as Marker3D
+		var near := boxes.filter(func(k: Dictionary) -> bool: return absf(k.box.get_center().x - hand.global_position.x) < 1.3)
+		assert_eq(near.size(), 1, "one door at HandDoor_%d (%s)" % [n, near.map(func(k: Dictionary) -> String: return "%s at %s" % [k.piece, k.box.get_center()])])
+	assert_eq(boxes.size(), 3, "three doors on the yard's north wall in all")
+
+
+# The yard says it is where the fights are: a fighting square in stone with a border course, and the margins dressed (hides, railings).
+func test_the_yard_floor_is_a_stone_square_with_a_border_and_dressed_margins() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var walkable := region.get_node("Walkable")
+	var centre := walkable.get_node_or_null("YardPlateCentre") as StaticBody3D
+	assert_true(centre != null, "a centre plate")
+	if centre != null:
+		assert_eq(((centre.get_node("Mesh") as MeshInstance3D).material_override as Material).resource_path, STONE % YARD_CENTRE_STONE, "in %s" % YARD_CENTRE_STONE)
+	var border := walkable.find_children("YardPlateBorder*", "StaticBody3D", false, false)
+	assert_true(border.size() >= 4, "a border course of at least four plates (%d)" % border.size())
+	for plate: StaticBody3D in border:
+		assert_eq(((plate.get_node("Mesh") as MeshInstance3D).material_override as Material).resource_path, STONE % YARD_BORDER_STONE, "%s in %s" % [plate.name, YARD_BORDER_STONE])
+	var margin_stuff := _kit_boxes(region).filter(func(k: Dictionary) -> bool: return k.piece in ["planks", "fence"] and k.box.get_center().z < -55.0 and k.box.get_center().z > -75.0 and k.box.get_center().x > 15.0 and k.box.get_center().x < 40.0)
+	assert_true(margin_stuff.size() >= 12, "stacked hides and railings in the yard's margins (%d pieces)" % margin_stuff.size())
+	var in_square := margin_stuff.filter(func(k: Dictionary) -> bool: return Rect2(21.25, -70, 12.5, 10).has_point(_centre(k.box)))
+	assert_eq(in_square.size(), 0, "none of it in the fighting square")
+	var too_high := margin_stuff.filter(func(k: Dictionary) -> bool: return k.piece == "planks" and k.box.end.y > 1.05)
+	assert_eq(too_high.size(), 0, "the stacks are under a fighter's hips")
+
+
+# The kit's pieces no style uses, where they fit: ghost lanterns on the street's fronts (the lamps are Task 4's), a colonnade of wooden
+# pillars under the works' galleries on the Rack Walk, balconies on the street's row, small rocks in the drying yard.
+func test_the_kit_pieces_that_fit_are_used_and_none_of_them_stands_behind_a_fighter() -> void:
+	var region := _region()
+	if region == null:
+		return
+	for piece in ["lantern", "pillar-wood", "balcony-wall", "rock-small"]:
+		assert_true(_pieces(region, piece).size() >= 2, "%s is used (%d)" % [piece, _pieces(region, piece).size()])
+	# Each stands north of the ground it overlooks (against a front, or beyond the unwalkable): no body is before it from the camera.
+	var fronts := {"pillar-wood": -24.0, "balcony-wall": -4.0}
+	for piece: String in fronts:
+		for k in _pieces(region, piece):
+			assert_true(k.box.end.z <= fronts[piece] + 1e-3, "%s at %s stands against a front" % [piece, k.box])
+	# The lanterns have their own test (the post is a slim solid one, or a ghost on a low wall where no body is): see test_lanterns_are_posts.
+
+
+# The ring leaves no gap: on the 2.5 m tiles of x -60..62.5, z -95..5 every tile is under a ring block, a solid mass, a plate of ground (walkable
+# or only seen) or a low wall, bar single tiles (no gap wider than 2.5 m, at any depth of row: the void test frames only the first).
+func test_the_ring_leaves_no_gap_wider_than_a_tile() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var covers: Array[Rect2] = []
+	for holder in region.get_node("Backdrop").get_children():
+		var interior := holder.get_node_or_null("Interior") as MeshInstance3D
+		if interior != null:
+			var box := interior.global_transform * interior.get_aabb()
+			covers.append(Rect2(box.position.x, box.position.z, box.size.x, box.size.z + 0.25))
+		elif String(holder.name).begins_with("Ground"):
+			var box := (holder as MeshInstance3D).global_transform * (holder as MeshInstance3D).get_aabb()
+			covers.append(Rect2(box.position.x, box.position.z, box.size.x, box.size.z))
+	for block in region.get_node("Blocks").get_children():
+		var shape := block.get_node("Body/Shape") as CollisionShape3D
+		var size := (shape.shape as BoxShape3D).size
+		covers.append(Rect2(shape.global_position.x - size.x / 2.0, shape.global_position.z - size.z / 2.0, size.x, size.z))
+	for plate in _plates(region):
+		covers.append(plate.rect)
+	for wall in 5:
+		var shape := region.get_node("LowWall%d" % (wall + 1)).get_node("Shape") as CollisionShape3D
+		var size := (shape.shape as BoxShape3D).size
+		covers.append(Rect2(shape.global_position.x - size.x / 2.0, shape.global_position.z - size.z / 2.0, size.x, size.z))
+	var nx := 49
+	var nz := 40
+	var open := {}
+	for i in nx:
+		for j in nz:
+			var centre := Vector2(-60.0 + 2.5 * (i + 0.5), -95.0 + 2.5 * (j + 0.5))
+			if not covers.any(func(r: Rect2) -> bool: return r.grow(0.01).has_point(centre)):
+				open[Vector2i(i, j)] = true
+	var gaps := PackedStringArray()
+	for cell: Vector2i in open:
+		if open.has(cell + Vector2i(1, 0)) or open.has(cell + Vector2i(0, 1)):
+			gaps.append("tiles at x %.2f z %.2f" % [-60.0 + 2.5 * cell.x, -95.0 + 2.5 * cell.y])
+	assert_eq(gaps.slice(0, 6), PackedStringArray(), "no two neighbouring tiles of the footprint are bare (%d bare tiles in all)" % open.size())
+
+
+# --- The light (Task 4): the book's cold snow-noon ---
+
+const GRADE := "res://data/render/grades/bilibara_noon.tres"
+const HAZE := "#aebbcc"
+
+
+func _env(region: Region) -> Environment:
+	var holders := region.find_children("*", "WorldEnvironment", true, false)
+	assert_eq(holders.size(), 1, "one WorldEnvironment")
+	return (holders[0] as WorldEnvironment).environment
+
+
+# The box round a collision shape (a lantern's post is a cylinder, or a wedge against its wall), in its own space and about its middle.
+func _size_of(shape: CollisionShape3D) -> Vector3:
+	if shape.shape is CylinderShape3D:
+		var cylinder := shape.shape as CylinderShape3D
+		return Vector3(cylinder.radius * 2.0, cylinder.height, cylinder.radius * 2.0)
+	if shape.shape is ConvexPolygonShape3D:
+		var reach := Vector3.ZERO
+		for point in (shape.shape as ConvexPolygonShape3D).points:
+			reach = Vector3(maxf(reach.x, absf(point.x)), maxf(reach.y, absf(point.y)), maxf(reach.z, absf(point.z)))
+		return reach * 2.0
+	return (shape.shape as BoxShape3D).size
+
+
+func _lamps(region: Region) -> Array[OmniLight3D]:
+	var found: Array[OmniLight3D] = []
+	for lamp: OmniLight3D in region.find_children("*", "OmniLight3D", true, false):
+		found.append(lamp)
+	return found
+
+
+func test_the_light_is_the_snow_noon() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var env := _env(region)
+	var sun := region.get_node_or_null("Sun") as DirectionalLight3D
+	var fill := region.get_node_or_null("Fill") as DirectionalLight3D
+	assert_true(sun != null and fill != null, "a Sun and a Fill")
+	if sun == null or fill == null:
+		return
+	# The fill: for the bodies only, no shadow, cool, 1.0 to 1.3, from the camera's side and above.
+	assert_eq(fill.light_cull_mask, Layers.RENDER_BODIES, "the fill lights the bodies and nothing else")
+	assert_false(fill.shadow_enabled, "the fill casts no shadow")
+	assert_true(fill.light_energy >= 1.0 and fill.light_energy <= 1.3, "the fill's energy is 1.0 to 1.3 (%.2f)" % fill.light_energy)
+	assert_true(fill.light_color.b >= fill.light_color.r, "the fill is cool (%s)" % fill.light_color.to_html(false))
+	# The light travels along -z of its basis: it comes from the camera's side (+z) and above when basis.z has z > 0.5 and y > 0.3.
+	var from := fill.global_transform.basis.z
+	assert_true(from.z > 0.5 and from.y > 0.3, "the fill comes from the camera's side and above (%s)" % from)
+	# The sun: shadows, a gentle key, and it leaves the bodies to the fill.
+	assert_true(sun.shadow_enabled, "the sun casts shadows")
+	assert_near(sun.light_energy, 0.25, 1e-6, "the sun is a gentle key")
+	# Noon: the sun is nearly overhead (pitch 75 degrees or steeper), so a front shades little of the ground a fighter stands on and the pale
+	# ground is the same pale in the open and by a wall (the ground's band in the readability test is 0.12 wide).
+	assert_true(sun.rotation_degrees.x <= -75.0 and sun.rotation_degrees.x >= -89.0, "the sun stands high (pitch %.0f, 75 to 89 degrees down)" % -sun.rotation_degrees.x)
+	assert_eq(sun.light_cull_mask & Layers.RENDER_BODIES, 0, "the sun leaves the bodies to the fill")
+	assert_eq(env.ambient_light_source, Environment.AMBIENT_SOURCE_COLOR, "ambient from a colour")
+	assert_eq(env.ambient_light_color.to_html(false), "bccadf", "the ambient is #bccadf")
+	assert_near(env.ambient_light_energy, 0.62, 1e-6, "ambient energy 0.62")
+	assert_eq(env.background_color.to_html(false), "aebbcc", "the sky is the haze")
+	var grade := region.grade
+	assert_true(grade != null and grade.resource_path == GRADE, "the grade is bilibara_noon (%s)" % [grade.resource_path if grade != null else "none"])
+	if grade != null:
+		assert_eq(grade.fog_color.to_html(false), "aebbcc", "the grade's fog is the sky's colour")
+		assert_near(grade.fog_density, 0.015, 1e-6, "fog density")
+		assert_near(grade.saturation, 0.9, 1e-6, "saturation")
+		# The ground is pale of itself now, so the grade's lift is the plan's: it deepens the shadows, it does not lift the ground out of black.
+		assert_near(grade.lift.r, 0.05, 1e-6, "lift r")
+		assert_near(grade.lift.g, 0.06, 1e-6, "lift g")
+		assert_near(grade.lift.b, 0.09, 1e-6, "lift b")
+
+
+func test_shade_is_at_least_seventy_percent_of_sun() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var env := _env(region)
+	var sun := region.get_node_or_null("Sun") as DirectionalLight3D
+	if sun == null:
+		fail("no Sun")
+		return
+	# The toon shader's lowest step gives 0.35 of a light; ambient is kept whole.
+	var ambient := env.ambient_light_energy * env.ambient_light_color.v
+	var ratio := (ambient + 0.35 * sun.light_energy) / (ambient + sun.light_energy)
+	assert_true(ratio >= 0.7, "shade is %.2f of sunlit ground (at least 0.7)" % ratio)
+
+
+func test_the_environment_meets_the_looks_preconditions() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var env := _env(region)
+	assert_eq(env.tonemap_mode, Environment.TONE_MAPPER_LINEAR, "tonemap linear")
+	assert_near(env.tonemap_exposure, 1.0, 1e-6, "exposure 1")
+	assert_false(env.glow_enabled, "no glow")
+	assert_false(env.ssao_enabled, "no SSAO")
+	assert_false(env.ssil_enabled, "no SSIL")
+	assert_false(env.sdfgi_enabled, "no SDFGI")
+	assert_false(env.adjustment_enabled, "no colour adjustments")
+	assert_false(env.fog_enabled, "no environment fog")
+	assert_false(env.volumetric_fog_enabled, "no volumetric fog")
+	var ambient := env.ambient_light_color
+	assert_true(ambient.b >= ambient.r, "the ambient is cool (%s)" % ambient.to_html(false))
+	assert_true(env.ambient_light_energy > 0.0 and env.ambient_light_energy * ambient.r < 0.5, "the ambient is soft (energy %.2f)" % env.ambient_light_energy)
+
+
+## The 18 lanterns of the layout: x, z of the post, whether the lamp casts shadows, and how high the post's foot is (0.65 on a low wall).
+const LANTERNS := [
+	[-36.1, -4.13, true, 0.0], [-28.5, -4.7, false, 0.0],
+	[-20.0, -4.72, false, 0.0], [-5.0, -4.72, false, 0.0], [10.0, -4.72, false, 0.0], [22.0, -4.72, false, 0.0],
+	[23.75, -15.0, false, 0.65], [31.25, -46.5, false, 0.65],
+	[36.9, -37.23, true, 0.0], [33.7, -37.23, false, 0.0],
+	[-18.75, -24.33, false, 0.0], [-1.25, -24.33, false, 0.0], [16.25, -24.33, false, 0.0],
+	[-28.75, -15.0, false, 0.65],
+	[17.5, -74.72, false, 0.0], [37.5, -74.72, false, 0.0], [23.75, -50.0, false, 0.65], [31.25, -50.0, false, 0.65],
+]
+
+
+func test_lamps_light_the_world_only_and_are_warm_and_few() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var lamps := _lamps(region)
+	assert_eq(lamps.size(), 18, "18 lamps")
+	var shadowed: Array[OmniLight3D] = []
+	var posts := region.get_node_or_null("Lanterns")
+	assert_true(posts != null and posts.get_child_count() == 18, "18 lanterns")
+	for lamp in lamps:
+		assert_true(lamp.get_parent() != null and lamp.get_parent().get_parent() == posts, "a lamp sits in a lantern (%s)" % lamp.get_path())
+		assert_eq(lamp.light_color.to_html(false), "ffb98a", "a warm lamp")
+		assert_near(lamp.omni_range, 6.0, 1e-6, "range 6")
+		# At noon a lamp lights nothing: a pool on pale ground is a ring on a sheet of paper (court A's two ghost rings). The warm glass on the lantern is the lamp.
+		assert_near(lamp.light_energy, 0.0, 1e-6, "energy 0: no light on the ground from a lamp at noon")
+		assert_eq(lamp.light_cull_mask, Layers.RENDER_WORLD, "a lamp lights the world and not the bodies")
+		if lamp.shadow_enabled:
+			shadowed.append(lamp)
+		# None in the street's clear band (a prop's south edge is no further south than z -2.4).
+		var at := lamp.global_position
+		if at.x < 30.0 and at.z > -6.0 and at.z < 0.0:
+			assert_true(at.z + 0.27 <= -2.4, "the lantern at %s is out of the street's clear band" % at)
+	assert_eq(shadowed.size(), 2, "two shadow casters")
+	if shadowed.size() == 2:
+		assert_true(shadowed[0].global_position.distance_to(shadowed[1].global_position) >= 60.0, "the two shadow casters are 60 m or more apart")
+	# Every one of the layout's posts has a lamp 3.45 up over it.
+	for spec: Array in LANTERNS:
+		var found := lamps.any(func(l: OmniLight3D) -> bool:
+			return absf(l.global_position.x - spec[0]) < 0.05 and absf(l.global_position.z - spec[1]) < 0.05 and absf(l.global_position.y - (3.45 + spec[3])) < 0.05 and l.shadow_enabled == spec[2])
+		assert_true(found, "a lamp %.2f m over (%.2f, %.2f)" % [3.45, spec[0], spec[1]])
+
+
+func test_no_mesh_is_reached_by_more_than_six_lamps_and_no_point_by_more_than_two_shadows() -> void:   # Review Focus 5
+	var region := _region()
+	if region == null:
+		return
+	var lamps := _lamps(region)
+	var worst := 0
+	var worst_name := ""
+	for node: Node3D in region.find_children("*", "GeometryInstance3D", true, false):
+		var box := AABB()
+		if node is KitRun:
+			box = (node as KitRun).bounds()
+		elif node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+			box = node.global_transform * (node as MeshInstance3D).get_aabb()
+		else:
+			continue
+		# A mesh that is drawn unshaded (the dark interiors behind the windows) takes no light, so no lamp reaches it.
+		var material := (node as GeometryInstance3D).material_override as StandardMaterial3D
+		if material != null and material.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED:
+			continue
+		var count := 0
+		for lamp in lamps:
+			var centre := lamp.global_position
+			var nearest := centre.clamp(box.position, box.end)
+			if nearest.distance_to(centre) <= lamp.omni_range:
+				count += 1
+		if count > worst:
+			worst = count
+			worst_name = String(region.get_path_to(node))
+	assert_true(worst <= 6, "%s is reached by %d lamps (at most 6)" % [worst_name, worst])
+	var casters := lamps.filter(func(l: OmniLight3D) -> bool: return l.shadow_enabled)
+	var most := 0
+	for x in range(-45, 46):
+		for z in range(-80, 11):
+			var inside := 0
+			for lamp: OmniLight3D in casters:
+				if lamp.global_position.distance_to(Vector3(x, 0.0, z)) <= lamp.omni_range:
+					inside += 1
+			most = maxi(most, inside)
+	assert_true(most <= 2, "no point is in the range of more than two shadow casters (%d)" % most)
+
+
+# --- Posts: a lantern's post or a colonnade's pillar is something a fighter slides round, and nothing hangs in the air ---
+
+## A fighter sprints at a post from 4 m, in eight directions, at offsets across its width of 10 cm steps.
+func test_every_lamp_hangs_from_a_post_that_stands_on_the_ground_or_a_low_wall() -> void:
+	var region := _region()
+	if region == null:
+		return
+	await frames(2)
+	var space := region.get_world_3d().direct_space_state
+	var solid := 0
+	var on_wall := 0
+	for post: Node3D in region.get_node("Lanterns").get_children():
+		var lamp := post.get_node("Lamp") as OmniLight3D
+		assert_near(lamp.position.y, 3.45, 1e-6, "%s: the lamp is 3.45 m up its post" % post.name)
+		var foot := post.global_position
+		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(foot + Vector3(0, 0.02, 0), foot - Vector3(0, 0.2, 0), Layers.WORLD | Layers.IK_SURFACE))
+		assert_false(hit.is_empty(), "%s stands on something (foot %s)" % [post.name, foot])
+		if not hit.is_empty():
+			assert_near((hit["position"] as Vector3).y, foot.y, 0.02, "%s's foot is on what it stands on" % post.name)
+		var body := post.get_node_or_null("Body") as StaticBody3D
+		if body != null:
+			solid += 1
+			var shape := body.get_child(0) as CollisionShape3D
+			# A post against a wall (all thirteen) is a wedge a body slides off; elsewhere a slim round post.
+			assert_true(shape.shape is ConvexPolygonShape3D or (shape.shape is CylinderShape3D and (shape.shape as CylinderShape3D).radius <= 0.3), "%s: a slim post (a wedge or a cylinder)" % post.name)
+			assert_true(body.get_meta(&"deflects", &"") == &"slim", "%s: a slim body, which a body that runs at it goes round" % post.name)
+		else:
+			# A ghost: its foot is on a low wall's top, where no body reaches.
+			on_wall += 1
+			assert_near(foot.y, 0.65, 1e-6, "%s: a ghost post stands on a low wall's top" % post.name)
+			assert_true(hit.get("collider") != null and String((hit["collider"] as Node).name).begins_with("Coping"), "%s stands on a low wall's coping (%s)" % [post.name, hit.get("collider")])
+	assert_eq(solid + on_wall, 18, "18 posts")
+	assert_true(solid >= 10 and on_wall >= 4, "most posts are solid, four stand on walls (%d, %d)" % [solid, on_wall])
+
+
+const POST_R := 0.27
+
+
+func test_a_sprint_at_the_colonnade_stops_square_or_slides_along_it() -> void:
+	var region := _region()
+	if region == null:
+		return
+	await frames(2)
+	var guard := region.get_node("ColonnadeGuard") as StaticBody3D
+	var space := region.get_world_3d().direct_space_state
+	var problems := PackedStringArray()
+	# Straight at it, and at 45 degrees either way, at five places along it and offsets between pillars.
+	for x: float in [-30.0, -10.1, 0.0, 9.9, 18.0]:
+		for dx: float in [0.0, 1.0, -1.0]:
+			var way := Vector2(dx, -1.0).normalized()
+			var start := Vector2(x, -24.6) - way * 3.4
+			var actor := _spawn(region, ABARAX, Vector3(start.x, 0.0, start.y))
+			actor.set_brain(ScriptBrain.new([{frames = 120, move = way, hold = [&"dodge"]}]))
+			await frames(2)
+			var trail := PackedVector2Array()
+			for i in 90:
+				await frames(1)
+				trail.append(Vector2(actor.global_position.x, actor.global_position.z))
+			var end := trail[trail.size() - 1]
+			# Past the colonnade's east end and the corner of the works beyond it (x 25) is the Tanneries lane, which a body that slides along the
+			# pillars at full speed reaches and goes up: z -25.04 there is the lane's, not the pillars'.
+			if end.y < -24.6 + BODY - 0.05 and end.x < 24.9:
+				problems.append("x %.1f way %s: ended %.2f m inside the pillars' line (z %.2f)" % [x, way, -24.6 + BODY - end.y, end.y])
+			if absf(dx) > 0.5 and absf(end.x - start.x) < 1.5:
+				problems.append("x %.1f way %s: stuck, moved %.2f m along it" % [x, way, end.x - start.x])
+			var reversals := 0
+			var last_sign := 0
+			for k in range(trail.size() - 30, trail.size()):
+				var step := (trail[k] - trail[k - 1]).x
+				if absf(step) > 0.002:
+					var sign_now := 1 if step > 0.0 else -1
+					if last_sign != 0 and sign_now != last_sign:
+						reversals += 1
+					last_sign = sign_now
+			if reversals > 2:
+				problems.append("x %.1f way %s: shakes" % [x, way])
+			actor.queue_free()
+			await frames(1)
+	assert_true(guard != null, "a ColonnadeGuard")
+	assert_eq(problems, PackedStringArray(), "the colonnade holds a sprint and lets it slide")
+	assert_true(space != null)
+
+
+# At the gate's spots (where the camera's GateFar and GateNear markers stand, and along the slot) no mesh, seen or not, collider or not, crosses
+# the line from a fighter's head (the crown at 1.8 m, three points across him) to the camera: the gate's first dressing had a rail 2.4 m up that
+# crossed 13 of 115 head pixels at GateFar.
+func test_no_piece_crosses_a_head_at_the_gates_spots() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var pitch := deg_to_rad(-CameraRig.PITCH_DEG)
+	var to_camera := Vector3(0.0, CameraRig.DISTANCE * sin(pitch), CameraRig.DISTANCE * cos(pitch))
+	var occluders := _occluders(region)
+	var crossing := PackedStringArray()
+	for spot: Array in [[-34.65, -5.86], [-34.0, -5.86], [-32.5, -5.86], [-31.0, -5.86], [-30.35, -5.86], [-32.5, -6.5]]:
+		for dx: float in [-0.2, 0.0, 0.2]:
+			for h: float in [1.5, 1.65, 1.8]:
+				var head := Vector3(spot[0] + dx, h, spot[1])
+				for entry in occluders:
+					var box: AABB = entry.box
+					if box.end.y < 1.0 or String(entry.name).begins_with("Backdrop/Block") or String(entry.name).begins_with("Blocks/"):
+						continue
+					if box.intersects_segment(head, head + to_camera):
+						crossing.append("%s over (%.2f, %.2f) at %.2f m" % [entry.name, spot[0] + dx, spot[1], h])
+	assert_eq(crossing.slice(0, 6), PackedStringArray(), "nothing crosses a head at the gate (%d crossings)" % crossing.size())
+
+
+# --- The seams: no two grounds meet in a straight line ---
+
+# Where two plates of different ground meet in the open, one reaches into the other as a ragged fringe (build_region's `fringe`, drawn by toon_fringe: each
+# 0.5 m of the seam it reaches out a different way, low in one cell and high in the next, so no run of its edge is straight for more than half a metre).
+# Found from the built scene, not the layout: every pair of walkable plates of different stone that share an edge, each seam (but under a kerb or a wall, which hide
+# it) is laid with fringes along the whole of its length.
+func test_no_two_grounds_meet_in_a_straight_line() -> void:
+	var region := _region()
+	if region == null:
+		return
+	await frames(2)
+	var plates: Array[Dictionary] = []
+	for body: StaticBody3D in region.get_node("Walkable").get_children():
+		var shape := body.get_node("Shape") as CollisionShape3D if body.has_node("Shape") else body.find_children("*", "CollisionShape3D", true, false)[0] as CollisionShape3D
+		var size := (shape.shape as BoxShape3D).size
+		var centre := shape.global_position
+		var mesh := body.find_children("*", "MeshInstance3D", true, false)
+		plates.append({rect = Rect2(centre.x - size.x / 2.0, centre.z - size.z / 2.0, size.x, size.z), stone = (mesh[0] as MeshInstance3D).material_override.resource_name if not mesh.is_empty() else "", name = body.name})
+	var fringes: Array[AABB] = []
+	var holder := region.get_node_or_null("Fringes")
+	for fringe: MeshInstance3D in (holder.get_children() if holder != null else []):
+		fringes.append(fringe.global_transform * fringe.mesh.get_aabb())
+	var hiders: Array[AABB] = []
+	for body: StaticBody3D in region.find_children("*", "StaticBody3D", true, false):
+		if body.get_parent().name == &"Walkable":
+			continue
+		for shape: CollisionShape3D in body.find_children("*", "CollisionShape3D", true, false):
+			if shape.shape is BoxShape3D:
+				var box := shape.shape as BoxShape3D
+				hiders.append(AABB(shape.global_position - box.size / 2.0, box.size))
+	var joins := 0
+	var bare := PackedStringArray()
+	for i in plates.size():
+		for j in range(i + 1, plates.size()):
+			var a: Rect2 = plates[i].rect
+			var b: Rect2 = plates[j].rect
+			if plates[i].stone == plates[j].stone or plates[i].stone.is_empty() or plates[j].stone.is_empty():
+				continue
+			var seam := a.intersection(b.grow(0.001))
+			var points: Array[Vector3] = []
+			if (seam.size.x < 0.01 and seam.size.y > 0.01) or (seam.size.y < 0.01 and seam.size.x > 0.01):
+				var along := seam.size.y if seam.size.x < seam.size.y else seam.size.x
+				var steps := int(along / 0.25)
+				for k in steps + 1:
+					var t := (k + 0.5) / (steps + 1)
+					points.append(Vector3(seam.position.x + (0.0 if seam.size.x > 0.01 else 0.0) + (seam.size.x * t if seam.size.x > seam.size.y else seam.size.x / 2.0), 0.0,
+							seam.position.y + (seam.size.y * t if seam.size.y > seam.size.x else seam.size.y / 2.0)))
+			if points.is_empty():
+				continue
+			joins += 1
+			for point in points:
+				var hidden := hiders.any(func(box: AABB) -> bool: return box.grow(0.05).has_point(point + Vector3(0.0, box.position.y + 0.01 - 0.0, 0.0)) or (box.grow(0.05).has_point(Vector3(point.x, box.position.y + box.size.y / 2.0, point.z)) and box.size.y <= 3.0 and box.position.y >= -0.01))
+				var covered := fringes.any(func(box: AABB) -> bool: return box.grow(0.02).has_point(Vector3(point.x, box.position.y, point.z)))
+				if not hidden and not covered:
+					bare.append("%s | %s at (%.2f, %.2f)" % [plates[i].name, plates[j].name, point.x, point.z])
+	assert_true(joins >= 12, "the joins of two grounds are found (%d)" % joins)
+	assert_eq(bare.slice(0, 6), PackedStringArray(), "every seam of two grounds in the open is laid with a fringe along its whole length (%d bare points)" % bare.size())
