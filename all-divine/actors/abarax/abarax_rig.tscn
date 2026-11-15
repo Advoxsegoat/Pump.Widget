@@ -214,12 +214,6 @@ radius = 0.06
 height = 0.2
 position_offset = Vector3(0, 0.04, 0)
 
-[node name="ScarfLoop" type="SpringBoneCollisionCapsule3D" parent="Model/Armature/Skeleton3D/Feather"]
-bone_name = &"neck_01"
-radius = 0.10
-height = 0.2
-position_offset = Vector3(0, 0.04, 0)
-
 [node name="Collar" type="SpringBoneCollisionCapsule3D" parent="Model/Armature/Skeleton3D/Feather"]
 bone_name = &"clavicle_l"
 radius = 0.065
