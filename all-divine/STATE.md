@@ -70,6 +70,10 @@ F0 (Foundation) is built: a lit courtyard to walk in, with Abarax moving, dash-s
 - F3 Task 1 (stretch): the region builder's `ground`, `block`, `water`, `vat`, `fill`, `kit` commands and the `lamps ... world` and `curb` options (a stone, a name, a raise); a calm cobble, a cold tan-earth and a blue-grey snow texture and Bilibara's own colormap for the kit (`tools/art/make_textures.gd`); 17 more pieces of the Kenney kit; a block's pieces are drawn as a few MultiMeshes (`KitRun`, no run longer than 12.5 m) and coloured by `KitDresser`; the builder refuses masses that overlap and a solid block over walkable ground; old layouts build the same scenes.
 - F3 Task 2 (stretch): `world/bilibara/` (built from `layout.txt`) is a flat 1,906 m² place of seven walkable parts (court A, Rue Caillou, the Tanneries lane, the Rack Walk, the loop lane, alcove B, the 25 × 20 m yard) with a shut shortcut gate (a 0.6 m board in a posted frame with a rail) and every marker later lanes need; F2 enters it from the game. The walkable set is flood-filled and sealed (no pocket, no leak; shoves, throws, dash-steps and every enemy's lunge are held at every edge), the loop is walkable to the gate and the gate is a 144 m way round. Nothing low hides a fighter: the low walls are 0.6 m, and a body against one or against the gate has nothing above 0.4 m of him hidden (a render test measures the hidden share). It is a bare blockout: plain fronts, flat roofs, nothing south of the kerbs; Task 3 dresses it (`tools/test.sh`: 1470 passed, 0 failed).
 
+### Portraits
+
+- Portraits Task 1: Abarax's portrait is the owner's drawing. `tools/portraits/sketch_to_portrait.py` turns a photograph of a pencil drawing into a portrait of 464×640: it finds the notebook's rules and takes them out (bridging the strokes that cross them, keeping a stroke that lies along one where the recipe says `keep`), crops, and lays light washes under the line (`docs/art/owner/<drawing>.recipe.json`); a test holds the picture in the game equal, pixel for pixel, to what the tool makes from the owner's photograph and the recipe. It refuses a page it cannot handle with one line that says what would help, and `--init-recipe` writes a first recipe for a new drawing by itself (untinted). In the game a `PortraitCard` of 116×160 picture pixels stands at the dialogue box's left, drawn at the window's own resolution with a one-pixel frame; the text starts to its right; a shot that holds a line is framed in the picture's free area. A speaker with no drawing shows a plain card, and the story checker lists it as a stand-in (once for each scene, speaker and expression; `story_check --final` refuses it by name). The owner's photographs live in `docs/art/owner/` and are never edited (`tools/test.sh`: 1816 passed, 0 failed on the joined tree; the tool's own tests: 44).
+
 ## Preview reel
 
 The builds boot into `main/main.tscn`: the training yard with the Arena's waves and the Hud (Task 14 replaced the preview demo's yard, director and plain-label HUD). `demo/demo_reel.tscn` is the scripted fight in the yard with the Hud on (both fighters on ScriptBrain choreographies, so it plays the same every time) that `tools/record_reel.sh` records into `out/demo/`: the preview, its closeup and a short clip of the Knuckle's perilous sweep from its tell to the blow.
@@ -147,6 +151,13 @@ F1 Combat core (spec §9). Its plan is written, awaiting the owner's review: [`d
 5. When scenes can be started (the next Director task): pause one with Esc and resume; on a second viewing pause and choose Skip scene: the bars slide away in about two thirds of a second and the button you chose does nothing until you let go. Mash buttons through a scene: nothing happens when control returns. Be mid-jab, mid-hop or flinching when a scene begins: no limb snaps. Hold a dodge chain at Quick when a scene begins: still Quick after. Clear a wave just before a scene: the next arrives after it.
 6. The fixture's medium shot cuts Abarax's legs under the lower bar and its over-the-shoulder shot is dark: both are test staging, to be judged again on the first real scene.
 
+## Owner checklist for the portraits
+
+1. Abarax's portrait in a dialogue (`tools/test.sh --render --filter=test_portrait_card` writes `out/story/card_abarax_640.png` and `_1080.png`): is it your drawing as you want it shown: the mouth, the brows, the feather's light gold, the washes?
+2. The pencil's weight: `out/story/card_line_gain_compare.png` shows the line as you drew it beside a little darker (`line_gain` 0.7 in the recipe). It is as drawn today; say if you want it darker.
+3. The card's place and size beside the box, and its thin frame: right, or should it be larger, or sit inside the box?
+4. A new drawing: `docs/art/owner/README.md`, "Adding a drawing" (photograph the whole page flat in even light; plain paper is easiest). Until a character is drawn their lines show a plain card.
+
 ## Filing a replay
 
 Start the game with `-- --record=<path>`, play, and quit: the file is written as the game ends. Attach the `.tres`.
@@ -167,6 +178,7 @@ Anyone replays it with `-- --replay=<path>` on the same game version; a fight th
 
 ## Decisions
 
+- **Portraits are the owner's drawings**, cleaned and lightly tinted; nothing of ours draws or generates a face (the owner, Nov 14, after seeing a redraw and a face drawn from nothing). A character the owner has not drawn shows a plain card. Plan: [`docs/superpowers/plans/2026-11-14-all-divine-portraits.md`](../docs/superpowers/plans/2026-11-14-all-divine-portraits.md) (its Task 2 is withdrawn).
 - Spec: [`docs/superpowers/specs/2026-10-25-all-divine-rpg-foundation-design.md`](../docs/superpowers/specs/2026-10-25-all-divine-rpg-foundation-design.md)
 - Plan: [`docs/superpowers/plans/2026-10-25-all-divine-rpg-f0-foundation.md`](../docs/superpowers/plans/2026-10-25-all-divine-rpg-f0-foundation.md)
 - CI: [`.github/workflows/all-divine.yml`](../.github/workflows/all-divine.yml) (jobs: `test`, `render`, `render-forward-plus`, `export`; `export` waits for `test`, and uploads the builds before it runs the Linux one)
@@ -189,6 +201,10 @@ all-divine/tools/godot.sh -s res://tools/bot/run_bot.gd -- --seeds=1-10 --frames
                                                # the combat bot: a line for each seed (waves, deaths, problems); --policy=all, --detail
 all-divine/tools/godot.sh --render -- --record=out/replays/session.tres   # play; the recording is written as the game ends
 all-divine/tools/godot.sh --render -- --replay=out/replays/session.tres   # the same fight again: `as recorded`, or the frame it diverged at
+python3 -I all-divine/tools/portraits/sketch_to_portrait.py --init-recipe docs/art/owner/<drawing>.jpg --out docs/art/owner/<drawing>.recipe.json
+                                               # a first recipe for a new drawing (needs Pillow 12.3.0 and numpy 2.5.3 where this Python can see them)
+python3 -I all-divine/tools/portraits/sketch_to_portrait.py --sketch docs/art/owner/<drawing>.jpg --recipe docs/art/owner/<drawing>.recipe.json --out all-divine/assets/portraits/<speaker>
+                                               # the portrait from the drawing and its recipe; --stages <folder> shows each step
 python3 -I all-divine/tools/assets/fetch.py fetch all   # download, hash-check and extract the asset packs into .cache/ (--accept-new records a changed hash)
 python3 -I all-divine/tools/assets/import_kenney.py     # copy the listed Kenney town pieces into assets/env/kenney_town/
 python3 -I -m unittest discover -s all-divine/tools/assets/tests   # the Python tools' tests
