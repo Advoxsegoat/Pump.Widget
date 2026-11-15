@@ -14,6 +14,7 @@ const FIRST_ROOM := 16
 var _holder: Node3D
 var _multi: MultiMesh
 var _material: ShaderMaterial
+var _inked: Array[Rig] = []  # the rigs this region gave the rim's dark edge: it takes it back from them when it leaves the tree
 var _points := PackedVector3Array()  # where each ellipse is now (a MultiMesh keeps its transforms with the renderer, which a headless run has not)
 
 
@@ -50,6 +51,7 @@ func _process(_delta: float) -> void:
 		var actor := node as Actor
 		if actor != null and actor.is_inside_tree() and actor.is_visible_in_tree():
 			under.append(actor.global_position + Vector3(0.0, LIFT, 0.0))
+			_ink(actor.rig)
 	if under.size() > _multi.instance_count:
 		# Changing the count empties the instances: all of them are set again below.
 		var room := _multi.instance_count
@@ -60,6 +62,22 @@ func _process(_delta: float) -> void:
 		_multi.set_instance_transform(i, Transform3D(Basis(), under[i]))
 	_multi.visible_instance_count = under.size()
 	_points = PackedVector3Array(under)
+
+
+# The stretch's pale ground is what a rim's dark edge is for (Rig.RIM_INK_PX): every body in the tree has it, a foe from its first frame.
+func _ink(rig: Rig) -> void:
+	if rig != null and rig.rim_ink_px != Rig.RIM_INK_PX:
+		rig.rim_ink_px = Rig.RIM_INK_PX
+		if not _inked.has(rig):
+			_inked.append(rig)
+
+
+# A body that goes on to another region (the player's) has no edge there.
+func _exit_tree() -> void:
+	for rig in _inked:
+		if is_instance_valid(rig):
+			rig.rim_ink_px = 0.0
+	_inked.clear()
 
 
 ## Where the ellipses lie now, one for each actor in the tree that is shown: for the tests.

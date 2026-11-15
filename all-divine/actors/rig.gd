@@ -55,7 +55,8 @@ const TOON_SHADER := preload("res://render/shaders/toon_character.gdshader")
 ## body's mark is written before any body's hull reads it, and both come after the screen look's quad, which is the first
 ## of the transparent things, so the rim is drawn over the look and not blurred or outlined by it.
 const RIM_MARK_PRIORITY := -1
-## A rim carries a dark edge of its own, this many pixels of the 640x360 picture wide outside it, in this colour: a pale rim (the parry's, the
+## A place whose ground wants it gives its bodies a rim with a dark edge of its own (`rim_ink_px`, set to this by the Bilibara stretch's region;
+## 0, no ink pass at all, everywhere else: the training yard's rims read by their own light). The edge is this many pixels of the 640x360 picture wide outside it, in this colour: a pale rim (the parry's, the
 ## heavy's) is a thin line that the pale ground of the snow town takes back, and a dark edge reads on any ground (the rim reads on a
 ## dark yard by its own light, on snow by the edge round it). It is the same hull pass again, grown further and lit only where the rim
 ## did not light (a pixel takes the body's mark as it is lit), drawn after the rim.
@@ -187,6 +188,9 @@ var _meshes_found := false
 var _flash_seconds := 0.0  # how long the flash in progress was to last, and how long it has left
 var _flash_left := 0.0
 var _rim: ShaderMaterial  # the rim's hull pass, made the first time an aura is asked for
+## Width in pixels of the dark edge outside the rim; 0 (the default) puts no ink pass over the body. The region a body is in sets it (see RIM_INK_PX).
+var rim_ink_px := 0.0:
+	set = set_rim_ink_px
 var _rim_ink: ShaderMaterial  # the dark edge outside the rim: a second hull, wider, drawn after it (see RIM_INK_PX)
 var _rim_mark: ShaderMaterial  # the rim's mark pass, drawn before it: the material over each mesh while an aura is on
 var _mark := 0  # the stencil mark the two passes share while an aura is on (RimMarks), 0 with none
@@ -384,6 +388,22 @@ func clear_aura() -> void:
 	if _rim != null:
 		_rim.set_shader_parameter(&"rim_strength", 0.0)
 		_rim_ink.set_shader_parameter(&"rim_strength", 0.0)
+
+
+## Sets the edge's width (`rim_ink_px`): a rim that is on takes the ink pass, or lets it go, at once.
+func set_rim_ink_px(width: float) -> void:
+	width = maxf(width, 0.0)
+	if is_equal_approx(width, rim_ink_px):
+		return
+	rim_ink_px = width
+	if _rim != null:
+		_link_rim_ink()
+		_rim_ink.set_shader_parameter(&"rim_width", rim_width_px + rim_ink_px)
+
+
+# The ink pass follows the rim's hull when the edge has a width, and is not part of the chain when it has none.
+func _link_rim_ink() -> void:
+	_rim.next_pass = _rim_ink if rim_ink_px > 0.0 else null
 
 
 ## Whether an aura is on.
@@ -991,7 +1011,8 @@ static func _rim_pass(shader: Shader, priority: int, next: ShaderMaterial) -> Sh
 func _show_rim() -> void:
 	if _rim == null:
 		_rim_ink = _rim_pass(null, RIM_MARK_PRIORITY + 2, null)
-		_rim = _rim_pass(null, RIM_MARK_PRIORITY + 1, _rim_ink)
+		_rim = _rim_pass(null, RIM_MARK_PRIORITY + 1, null)
+		_link_rim_ink()
 		_rim_mark = _rim_pass(null, RIM_MARK_PRIORITY, _rim)
 	if not _aura_on:
 		_aura_on = true
@@ -1003,7 +1024,7 @@ func _show_rim() -> void:
 	_rim.set_shader_parameter(&"rim_strength", aura_level())
 	_rim_ink.set_shader_parameter(&"inflate", shader_inflate())
 	_rim_ink.set_shader_parameter(&"rim_color", RIM_INK_COLOR)
-	_rim_ink.set_shader_parameter(&"rim_width", rim_width_px + RIM_INK_PX)
+	_rim_ink.set_shader_parameter(&"rim_width", rim_width_px + rim_ink_px)
 	_rim_ink.set_shader_parameter(&"rim_strength", aura_level())
 
 
