@@ -943,3 +943,59 @@ func test_a_script_line_after_the_grade_line_keeps_the_grade() -> void:
 		assert_true(root.get_script() != null and (root.get_script() as Script).resource_path == "res://world/arena.gd", "the script is set (%s)" % [order])
 		var grade := root.get(&"grade") as Resource
 		assert_true(grade != null and grade.resource_path == path, "the grade is kept (%s)" % [order])
+
+
+# A post against a wall is a wedge on the wall, not a cylinder: a body that runs along the wall or at 45 degrees goes up one face and down the
+# other, and the wedge stands out 0.2 m from the wall, so that a body's centre stays outside the pole's round.
+func test_a_lantern_against_a_wall_is_a_wedge_on_it() -> void:
+	var built := _build("lamps #ffb98a 6 0.5 3.45 world\nlantern 0 0 wall=n\n")
+	assert_eq(built.problems, PackedStringArray())
+	var shape := (_bodies(built.root)[0].get_child(0) as CollisionShape3D).shape as ConvexPolygonShape3D
+	assert_true(shape != null, "a wedge, a convex prism")
+	if shape == null:
+		return
+	var low := 1e9
+	var high := -1e9
+	var wide := 0.0
+	for point in shape.points:
+		low = minf(low, point.z)
+		high = maxf(high, point.z)
+		wide = maxf(wide, absf(point.x))
+	assert_near(low, -0.28, 1e-6, "its base is in the wall, to the north (-z)")
+	assert_near(high - low, 0.2, 1e-6, "it stands out 0.2 m from the wall")
+	assert_near(wide, 0.4, 1e-6, "and 0.8 m wide")
+	var east := _build("lamps #ffb98a 6 0.5 3.45 world\nlantern 0 0 wall=e\n")
+	var points := ((_bodies(east.root)[0].get_child(0) as CollisionShape3D).shape as ConvexPolygonShape3D).points
+	var reach_x := 0.0
+	for point in points:
+		reach_x = maxf(reach_x, point.x)
+	assert_near(reach_x, 0.28, 1e-6, "turned to a wall to the east")
+	for bad in ["lantern 0 0 wall=x", "lantern 0 0 wall=n wall=e", "lantern 0 0 wall"]:
+		assert_eq(_build("lamps #ffb98a 6 0.5 3.45 world\n" + bad).problems.size(), 1, "%s is one problem" % bad)
+
+
+# A `deflect` line marks every solid body of the layout for the Actor: "slim" the posts', "smooth" the rest.
+func test_a_deflect_line_marks_the_solid_bodies() -> void:
+	var built := _build("deflect\nlamps #ffb98a 6 0.5 3.45 world\nlantern 0 0 wall=n\nlantern 5 0\nvat 10 10\nground 0 0 5 5 cobble\n")
+	assert_eq(built.problems, PackedStringArray())
+	var slim := 0
+	var free := 0
+	var smooth := 0
+	for body in _bodies(built.root):
+		assert_true(body.has_meta(&"deflects"), "%s is marked" % body.get_path())
+		if body.get_meta(&"deflects") == &"slim":
+			slim += 1
+			assert_eq(body.name, &"Body", "only a post's body is slim")
+		elif body.get_meta(&"deflects") == &"free":
+			free += 1
+			assert_true(String(body.name).begins_with("Vat"), "only a vat is free-standing")
+		else:
+			smooth += 1
+	assert_eq(slim, 2, "the two posts")
+	assert_eq(free, 1, "and the vat is free-standing")
+	assert_true(smooth >= 1, "the ground is smooth")
+	var plain := _build("lamps #ffb98a 6 0.5 3.45 world\nlantern 0 0 wall=n\nvat 10 10\n")
+	for body in _bodies(plain.root):
+		assert_false(body.has_meta(&"deflects"), "with no deflect line nothing is marked")
+	assert_eq(_build("deflect\ndeflect\n").problems.size(), 1, "two deflect lines are a problem")
+	assert_eq(_build("deflect now\n").problems.size(), 1, "and a deflect with words after it")

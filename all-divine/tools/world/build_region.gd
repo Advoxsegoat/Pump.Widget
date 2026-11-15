@@ -26,8 +26,11 @@ extends SceneTree
 ##   water X0 Z0 X1 Z1 Y [liquor]       a thin plane at height Y, seen only; two at one height may not overlap
 ##   drift X Z W D [y=Y] [seed=N]       a mound of snow of rounded lumps (about W x D, at most 0.32 m high), seen only, on Y
 ##   vat X Z                            a 2.5 m slate box 1 m high, solid, with liquor in it
-##   lantern X Z [shadow] [ghost] [y=Y]  a lantern with its lamp (see lamps): a solid post, or `ghost` (no collider: where no body can reach, on a
-##                                      low wall's top at y=Y)
+##   lantern X Z [shadow] [ghost] [y=Y] [wall=n|e|s|w]  a lantern with its lamp (see lamps): a solid post, or `ghost` (no collider: where no
+##                                      body can reach, on a low wall's top at y=Y); a post that stands against a wall (the way `wall=` says)
+##                                      is a wedge a body slides off, wider than the pole and standing out 0.2 m from the wall, not a cylinder
+##   deflect                            every solid body of the layout deflects (see Actor): a body that runs at one goes along it at its own
+##                                      speed, and a body that runs dead on at a post (a slim body), or at a point (a corner), goes round the side it is offset to
 ##   guard X0 Z0 X1 Z1 H [name=NAME]    an unseen solid box H high (world only): the body of a colonnade's pillars
 ##   lamps COLOUR RANGE ENERGY UP [world]   every lantern's lamp; `world`: it lights the world and not the bodies
 ##   marker NAME X Z [YAW]  /  poi NAME X Z UP    a Marker3D, and one to glance at
@@ -100,6 +103,13 @@ const MODELS := {
 	"pillar-wood": "post",
 }
 const POST_RADIUS := 0.27
+## A post against a wall (`lantern ... wall=n`): its collider is a wedge on the wall, WEDGE_HALF either side of the post's middle and
+## WEDGE_DEPTH out from the wall, which stands POST_WALL_GAP from the post's middle. A body's centre then stays outside the pole's
+## round (the wedge stands out 0.2 m, the body's own reach is 0.35 m, the pole 0.27 m from its middle) and the wedge's faces
+## are 27 degrees to the wall, so that a body that runs at it along the wall or at 45 degrees goes up one and down the other.
+const WEDGE_HALF := 0.4
+const WEDGE_DEPTH := 0.2
+const POST_WALL_GAP := 0.28
 const TRUNK_RADIUS := 0.3
 const TRUNK_HEIGHT := 2.0
 ## A solid edge's collision reaches at least this far behind its face.
@@ -175,6 +185,8 @@ class Builder extends "res://tools/world/region_nodes.gd":
 	var _kit := ""  # the `kit` line's name, and the line it was on
 	var _kit_line := 0
 	var _feet := 0  # of `ik_surface` alone
+	var _deflects := false  # a `deflect` line: the solid bodies carry the Actor's mark (see _mark_deflecting)
+	var _posts: Array[StaticBody3D] = []  # the posts' bodies (slim ones)
 
 	func build(text: String, root_name: String) -> Node3D:
 		world_and_feet = LAYERS.WORLD | LAYERS.IK_SURFACE
@@ -194,6 +206,8 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				if (pass_kind == "ground") == is_ground:
 					_command(words)
 		_dress_the_kit()
+		if _deflects:
+			_mark_deflecting(_root)
 		_own(_root, _root)
 		return _root
 
@@ -302,13 +316,19 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				if _is_colour(args[0]) and n.size() == 3:
 					_lamp = {colour = Color(args[0]), range = n[0], energy = n[1], up = n[2], world = world}
 			"lantern":
-				var lantern_words := PackedStringArray(Array(args).filter(func(a: String) -> bool: return a != "shadow" and a != "ghost" and not a.begins_with("y=")))
+				var lantern_words := PackedStringArray(Array(args).filter(func(a: String) -> bool: return a != "shadow" and a != "ghost" and not a.begins_with("y=") and not a.begins_with("wall=")))
 				var raise: Variant = _y_option(args)
+				var walls := Array(args).filter(func(a: String) -> bool: return a.begins_with("wall="))
 				var n := _numbers(lantern_words, 2, 2)
-				if args.count("shadow") > 1 or args.count("ghost") > 1:
-					problem("lantern needs X Z [shadow] [ghost] [y=Y]")
+				if args.count("shadow") > 1 or args.count("ghost") > 1 or walls.size() > 1 or (walls.size() == 1 and not WAYS.has(String(walls[0]).trim_prefix("wall="))):
+					problem("lantern needs X Z [shadow] [ghost] [y=Y] [wall=n|e|s|w]")
 				elif n.size() == 2:
-					_lantern(Vector2(n[0], n[1]), args.has("shadow"), args.has("ghost"), raise if raise != null else 0.0)
+					_lantern(Vector2(n[0], n[1]), args.has("shadow"), args.has("ghost"), raise if raise != null else 0.0,
+							WAYS[String(walls[0]).trim_prefix("wall=")] if walls.size() == 1 else Vector2.ZERO)
+			"deflect":
+				if not args.is_empty() or _deflects:
+					problem("deflect is one line, with nothing after it")
+				_deflects = true
 			"guard":
 				var guard_name := ""
 				var guard_words := PackedStringArray()
@@ -564,7 +584,7 @@ class Builder extends "res://tools/world/region_nodes.gd":
 
 	# A Kenney piece standing at `at`, turned `yaw` degrees, colliding as MODELS says: a holder named after it
 	# (unscaled) with the piece's scene (Model, at SCALE) and its Body.
-	func _piece(parent: Node3D, piece: String, at: Vector3, yaw: float, ghost := false) -> Node3D:
+	func _piece(parent: Node3D, piece: String, at: Vector3, yaw: float, ghost := false, wall := Vector2.ZERO) -> Node3D:
 		var box := local_box(piece)
 		if box.size == Vector3.ZERO:
 			return null
@@ -582,7 +602,10 @@ class Builder extends "res://tools/world/region_nodes.gd":
 			"cylinder":
 				_cylinder(holder, maxf(size.x, size.z) / 2, size.y, Vector3(centre.x, size.y / 2, centre.z))
 			"post":
-				_cylinder(holder, POST_RADIUS, size.y, Vector3(0, size.y / 2, 0))
+				if wall == Vector2.ZERO:
+					_posts.append(_cylinder(holder, POST_RADIUS, size.y, Vector3(0, size.y / 2, 0)))
+				else:
+					_wedge(holder, size.y, wall)
 			"trunk":
 				_cylinder(holder, TRUNK_RADIUS, TRUNK_HEIGHT, Vector3(0, TRUNK_HEIGHT / 2, 0))
 			_:
@@ -591,11 +614,11 @@ class Builder extends "res://tools/world/region_nodes.gd":
 
 	# A lantern at `at` with its lamp (the `lamps` line), which casts shadows if `shadow`: standing `raise` up (on a low wall), and with no
 	# collider if `ghost` (where no body can reach: on a wall's top, in a wall).
-	func _lantern(at: Vector2, shadow: bool, ghost := false, raise := 0.0) -> void:
+	func _lantern(at: Vector2, shadow: bool, ghost := false, raise := 0.0, wall := Vector2.ZERO) -> void:
 		if _lamp.is_empty():
 			problem("a lantern needs a lamps line before it")
 			return
-		var holder := _piece(group_node("Lanterns"), "lantern", Vector3(at.x, _ground(at) + raise, at.y), 0.0, ghost)
+		var holder := _piece(group_node("Lanterns"), "lantern", Vector3(at.x, _ground(at) + raise, at.y), 0.0, ghost, wall)
 		if holder == null:
 			return
 		var lamp := OmniLight3D.new()
@@ -775,7 +798,35 @@ class Builder extends "res://tools/world/region_nodes.gd":
 				height = maxf(height, terrace.height)
 		return height
 
-	func _cylinder(holder: Node3D, radius: float, height: float, at: Vector3) -> void:
+	# The wedge of a post against a wall (`wall` is the way to the wall, a WAYS unit): a convex prism, its base in the wall.
+	func _wedge(holder: Node3D, height: float, wall: Vector2) -> void:
+		var out := -wall
+		var side := Vector2(-out.y, out.x)
+		var points := PackedVector3Array()
+		for y in [-height / 2, height / 2]:
+			for corner: Vector2 in [
+					side * -WEDGE_HALF + wall * POST_WALL_GAP, side * WEDGE_HALF + wall * POST_WALL_GAP,
+					wall * POST_WALL_GAP + out * WEDGE_DEPTH]:
+				points.append(Vector3(corner.x, y, corner.y))
+		var shape := ConvexPolygonShape3D.new()
+		shape.points = points
+		var collision := CollisionShape3D.new()
+		collision.name = "Shape"
+		collision.shape = shape
+		collision.position = Vector3(0, height / 2, 0)
+		var body := make_body("Body", holder, world_and_feet)
+		body.add_child(collision)
+		_posts.append(body)
+
+	# Marks every solid body of the layout for the Actor's deflection (see Actor.DEFLECTS): "slim" the posts' and "free" the vats' (a body that
+	# runs dead on at one goes round it), "smooth" the rest (a body that runs dead on at a flat face of one stands at it, as at any wall).
+	func _mark_deflecting(node: Node) -> void:
+		if node is StaticBody3D:
+			(node as StaticBody3D).set_meta(&"deflects", &"slim" if _posts.has(node) else (&"free" if String(node.name).begins_with("Vat") else &"smooth"))
+		for child in node.get_children():
+			_mark_deflecting(child)
+
+	func _cylinder(holder: Node3D, radius: float, height: float, at: Vector3) -> StaticBody3D:
 		var shape := CylinderShape3D.new()
 		shape.radius = radius
 		shape.height = height
@@ -783,7 +834,9 @@ class Builder extends "res://tools/world/region_nodes.gd":
 		collision.name = "Shape"
 		collision.shape = shape
 		collision.position = at
-		make_body("Body", holder, world_and_feet).add_child(collision)
+		var body := make_body("Body", holder, world_and_feet)
+		body.add_child(collision)
+		return body
 
 	# Makes `owner` own `node`'s subtree (not the insides of instanced pieces), so the scene saves it.
 	func _own(node: Node, owner: Node) -> void:

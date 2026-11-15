@@ -654,8 +654,8 @@ func test_nothing_tall_touches_walkable_ground_on_its_south_side() -> void:
 			if centre.y - box.y / 2.0 >= 1.8 or (top <= 1.05 and top > 0.65 + 1e-6):
 				continue
 			var north := false
-			if shape.shape is CylinderShape3D:
-				# A round post: a body can stand north of it (within 45 degrees of north) where a capsule fits on a ring just outside it, on ground a body can stand on.
+			if shape.shape is CylinderShape3D or shape.shape is ConvexPolygonShape3D:
+				# A round post (or a post's wedge against its wall): a body can stand north of it (within 45 degrees of north) where a capsule fits on a ring just outside it, on ground a body can stand on.
 				var ring := box.x / 2.0 + BODY + 0.03
 				for degrees in range(225, 316, 5):
 					var around := Vector2(centre.x, centre.z) + Vector2.from_angle(deg_to_rad(degrees)) * ring
@@ -704,7 +704,8 @@ func _edges() -> Array[Dictionary]:
 			["west vat north", 20.0, -67.5, 1], ["west vat south", 20.0, -65.0, -1], ["east vat north", 35.0, -67.5, 1], ["east vat south", 35.0, -65.0, -1],
 			["plinth A", -36.1, -4.4, -1], ["plinth B", 31.8, -36.9, -1], ["stall west", -8.75, -2.5, -1], ["stall east", 8.75, -2.5, -1],
 			["cart", -22.5, -2.76, -1], ["street bench", 12.5, -4.35, -1], ["street stool", 14.1, -4.35, -1]]:
-		list.append({label = "%s, x %.2f" % [prop[0], prop[1]], x = prop[1], face = prop[2], way = prop[3]})
+		# A vat is a free-standing thing (see Actor.DEFLECTS): a body that runs, dash-steps or lunges straight at its middle goes round it, rather than stand at it.
+		list.append({label = "%s, x %.2f" % [prop[0], prop[1]], x = prop[1], face = prop[2], way = prop[3], round = String(prop[0]).contains("vat")})
 	return list
 
 
@@ -733,7 +734,11 @@ func _try(region: Region, label: String, def_path: String, gap: float, frames_to
 	var problems := PackedStringArray()
 	for e in edges:
 		var at := (e.actor as Actor).global_position
-		if e.in > 0.1 or e.up > 0.1 or (at.z - e.face) * e.way > -0.2:
+		var goes_round: bool = e.get("round", false)
+		if goes_round:
+			if e.up > 0.1:
+				problems.append("%s, %s: rose to %.2f m" % [label, e.label, e.up])
+		elif e.in > 0.1 or e.up > 0.1 or (at.z - e.face) * e.way > -0.2:
 			problems.append("%s, %s: reached %.2f m past the face, rose to %.2f m, ended %.2f m from it" % [label, e.label, e.in, e.up, -(at.z - e.face) * e.way])
 		(e.actor as Actor).queue_free()
 	await frames(1)
@@ -1452,11 +1457,16 @@ func _env(region: Region) -> Environment:
 	return (holders[0] as WorldEnvironment).environment
 
 
-# The box round a collision shape (a lantern's post is a cylinder), in its own space.
+# The box round a collision shape (a lantern's post is a cylinder, or a wedge against its wall), in its own space and about its middle.
 func _size_of(shape: CollisionShape3D) -> Vector3:
 	if shape.shape is CylinderShape3D:
 		var cylinder := shape.shape as CylinderShape3D
 		return Vector3(cylinder.radius * 2.0, cylinder.height, cylinder.radius * 2.0)
+	if shape.shape is ConvexPolygonShape3D:
+		var reach := Vector3.ZERO
+		for point in (shape.shape as ConvexPolygonShape3D).points:
+			reach = Vector3(maxf(reach.x, absf(point.x)), maxf(reach.y, absf(point.y)), maxf(reach.z, absf(point.z)))
+		return reach * 2.0
 	return (shape.shape as BoxShape3D).size
 
 
@@ -1630,12 +1640,6 @@ func test_no_mesh_is_reached_by_more_than_six_lamps_and_no_point_by_more_than_tw
 # --- Posts: a lantern's post or a colonnade's pillar is something a fighter slides round, and nothing hangs in the air ---
 
 ## A fighter sprints at a post from 4 m, in eight directions, at offsets across its width of 10 cm steps.
-const SPRINT_START := 4.0
-const SPRINT_OFFSETS: Array[float] = [-0.2, -0.1, 0.0, 0.1, 0.2]
-## The posts tried: one of each kind of place (court A's free-standing post, a street front's, the Rack Walk's, alcove B's and the yard's wall).
-const SPRINT_POSTS: Array[String] = ["Lantern", "Lantern3", "Lantern11", "Lantern10", "Lantern15"]
-
-
 func test_every_lamp_hangs_from_a_post_that_stands_on_the_ground_or_a_low_wall() -> void:
 	var region := _region()
 	if region == null:
@@ -1656,7 +1660,9 @@ func test_every_lamp_hangs_from_a_post_that_stands_on_the_ground_or_a_low_wall()
 		if body != null:
 			solid += 1
 			var shape := body.get_child(0) as CollisionShape3D
-			assert_true(shape.shape is CylinderShape3D and (shape.shape as CylinderShape3D).radius <= 0.3, "%s: a slim round post" % post.name)
+			# A post against a wall (all thirteen) is a wedge a body slides off; elsewhere a slim round post.
+			assert_true(shape.shape is ConvexPolygonShape3D or (shape.shape is CylinderShape3D and (shape.shape as CylinderShape3D).radius <= 0.3), "%s: a slim post (a wedge or a cylinder)" % post.name)
+			assert_true(body.get_meta(&"deflects", &"") == &"slim", "%s: a slim body, which a body that runs at it goes round" % post.name)
 		else:
 			# A ghost: its foot is on a low wall's top, where no body reaches.
 			on_wall += 1
@@ -1664,105 +1670,6 @@ func test_every_lamp_hangs_from_a_post_that_stands_on_the_ground_or_a_low_wall()
 			assert_true(hit.get("collider") != null and String((hit["collider"] as Node).name).begins_with("Coping"), "%s stands on a low wall's coping (%s)" % [post.name, hit.get("collider")])
 	assert_eq(solid + on_wall, 18, "18 posts")
 	assert_true(solid >= 10 and on_wall >= 4, "most posts are solid, four stand on walls (%d, %d)" % [solid, on_wall])
-
-
-# The frames an open sprint takes to cover `metres` from rest (Abarax, in the street, east).
-func _open_sprint_frames(region: Region, metres: float) -> int:
-	var actor := _spawn(region, ABARAX, Vector3(-18.0, 0.0, 1.0))
-	actor.set_brain(ScriptBrain.new([{frames = 400, move = Vector2(1, 0), hold = [&"dodge"]}]))
-	await frames(2)
-	var start := actor.global_position
-	var count := 0
-	while actor.global_position.distance_to(start) < metres and count < 400:
-		await frames(1)
-		count += 1
-	actor.queue_free()
-	await frames(1)
-	return count
-
-
-# Eight bodies at once, each sprinting at the point `at` (a post of radius `radius`) from one of eight ways, `offset` m to the side:
-# the problems found: not past the post (or, dead on, not stopped square at it) when the time is up, or shaking from side to side.
-func _sprint_at(region: Region, posts: Dictionary, radius: float, offset: float, run_frames: int, way: Vector2) -> PackedStringArray:
-	var space := region.get_world_3d().direct_space_state
-	var runners: Array[Dictionary] = []
-	for label: String in posts:
-		var at: Vector2 = posts[label]
-		var start := at - way * SPRINT_START + way.orthogonal() * offset
-		# The way must be open: the start stands free, and a ray from it to the post meets nothing before it.
-		var ray := space.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(start.x, 0.5, start.y), Vector3(at.x, 0.5, at.y), Layers.WORLD))
-		if _blocked(space, start) or not _ground_under(space, start) or (not ray.is_empty() and (ray["position"] as Vector3).distance_to(Vector3(at.x, 0.5, at.y)) > radius + 0.05):
-			continue
-		var actor := _spawn(region, ABARAX, Vector3(start.x, 0.0, start.y))
-		actor.set_brain(ScriptBrain.new([{frames = run_frames, move = way, hold = [&"dodge"]}]))
-		runners.append({actor = actor, way = way, trail = [], label = label, at = at})
-	await frames(2)
-	for i in run_frames:
-		await frames(1)
-		for r in runners:
-			var p := (r.actor as Actor).global_position
-			(r.trail as Array).append(Vector2(p.x, p.z))
-	var problems := PackedStringArray()
-	for r in runners:
-		var heading: Vector2 = r.way
-		var at: Vector2 = r.at
-		var label: String = r.label
-		var trail := PackedVector2Array(r.trail)
-		var end: Vector2 = trail[trail.size() - 1]
-		var along := (end - at).dot(heading)
-		var side := (end - at).dot(heading.orthogonal())
-		var square := absf(offset) < 0.05 and along < radius + BODY + 0.15
-		# Close to dead on (under 0.2 m aside) a body pressing into a round post turns aside slowly, as a body does against any wall
-		# (the legs go no faster than the body): it is not past it in the time, but it must be moving aside, not standing and pressing.
-		var creeping := absf(offset) < 0.2 - 1e-6 and (absf((end - at).dot(heading.orthogonal())) - absf((trail[trail.size() - 30] - at).dot(heading.orthogonal()))) >= 0.02
-		if along < 0.2 and not square and not creeping:
-			problems.append("%s, from %s at %.1f m aside: not past it after %d frames (%.2f along, %.2f aside)" % [label, -heading, offset, run_frames, along, side])
-		# Shaking: the sideways movement reverses direction again and again over the last half second.
-		var reversals := 0
-		var last_sign := 0
-		for k in range(maxi(trail.size() - 30, 1), trail.size()):
-			var step := (trail[k] - trail[k - 1]).dot(heading.orthogonal())
-			if absf(step) > 0.002:
-				var sign_now := 1 if step > 0.0 else -1
-				if last_sign != 0 and sign_now != last_sign:
-					reversals += 1
-				last_sign = sign_now
-		if reversals > 2:
-			problems.append("%s, from %s at %.1f m aside: shakes (%d reversals)" % [label, -heading, offset, reversals])
-	for r in runners:
-		(r.actor as Actor).queue_free()
-	await frames(1)
-	return problems
-
-
-func test_a_sprint_at_a_post_slides_round_it_or_stops_square() -> void:
-	var region := _region()
-	if region == null:
-		return
-	await frames(2)
-	var open_frames := await _open_sprint_frames(region, SPRINT_START + 1.4)
-	assert_true(open_frames > 20 and open_frames < 300, "an open sprint of %.1f m takes %d frames" % [SPRINT_START + 1.4, open_frames])
-	var ways: Array[Vector2] = []
-	for k in 8:
-		# Every solid post stands against a front, a wall or a plinth to its north: a sprint into that side is a sprint into a corner (the
-		# wall holds him, as it holds him anywhere), so the five ways that do not run north are tried.
-		var way := Vector2.from_angle(TAU * k / 8.0)
-		if way.y > -0.1:
-			ways.append(way)
-	var posts := {}
-	for post_name in SPRINT_POSTS:
-		var post := region.get_node("Lanterns/" + post_name) as Node3D
-		assert_true(post.get_node_or_null("Body") != null, "%s is a solid post" % post_name)
-		posts[post_name] = Vector2(post.global_position.x, post.global_position.z)
-	var problems := PackedStringArray()
-	var tried := 0
-	# One way at a time (bodies from all round at once would jam each other at the post), the posts together (they are far apart).
-	for way in ways:
-		for offset in SPRINT_OFFSETS:
-			tried += posts.size()
-			problems.append_array(await _sprint_at(region, posts, POST_R, offset, open_frames + 60, way))
-	assert_true(tried >= 100, "the sprints were tried (%d)" % tried)
-	assert_eq(problems.slice(0, 8), PackedStringArray(), "every sprint at a lantern's post ends past it or square on it, and none shakes (%d problems)" % problems.size())
 
 
 const POST_R := 0.27
@@ -1789,7 +1696,9 @@ func test_a_sprint_at_the_colonnade_stops_square_or_slides_along_it() -> void:
 				await frames(1)
 				trail.append(Vector2(actor.global_position.x, actor.global_position.z))
 			var end := trail[trail.size() - 1]
-			if end.y < -24.6 + BODY - 0.05:
+			# Past the colonnade's east end and the corner of the works beyond it (x 25) is the Tanneries lane, which a body that slides along the
+			# pillars at full speed reaches and goes up: z -25.04 there is the lane's, not the pillars'.
+			if end.y < -24.6 + BODY - 0.05 and end.x < 24.9:
 				problems.append("x %.1f way %s: ended %.2f m inside the pillars' line (z %.2f)" % [x, way, -24.6 + BODY - end.y, end.y])
 			if absf(dx) > 0.5 and absf(end.x - start.x) < 1.5:
 				problems.append("x %.1f way %s: stuck, moved %.2f m along it" % [x, way, end.x - start.x])

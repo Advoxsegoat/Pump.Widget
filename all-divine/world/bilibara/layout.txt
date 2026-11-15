@@ -54,6 +54,7 @@ sun -80 30 #f4f7ff 0.25 ortho
 fill -40 20 #f4f7ff 1.1
 script res://world/bilibara/bilibara_region.gd
 grade res://data/render/grades/bilibara_noon.tres
+deflect
 
 # --- The ground: the seven places, in plates of at most 12.5 m a side, exactly tiling each ---
 # W1 court A, "Behind the Lazyman's" (slate)
@@ -398,22 +399,22 @@ row fence 40.85 -73.75 40.85 -56.25 180
 # from the ground to the lamp. A post on the ground is solid, a slim round post a fighter slides round. Two lamps cast shadows, at the shrine
 # sites 80 m apart (ShrineLampA in court A, ShrineLampB in alcove B). Where these differ from the plan's coordinates: the report lists them.
 lamps #ffb98a 6 0.025 3.45 world
-lantern -36.1 -4.13 shadow
-lantern -28.5 -4.7
-lantern -20 -4.72
-lantern -5 -4.72
-lantern 10 -4.72
-lantern 22 -4.72
+lantern -36.1 -4.13 shadow wall=n
+lantern -28.5 -4.7 wall=n
+lantern -20 -4.72 wall=n
+lantern -5 -4.72 wall=n
+lantern 10 -4.72 wall=n
+lantern 22 -4.72 wall=n
 lantern 23.75 -15 ghost y=0.65
 lantern 31.25 -46.5 ghost y=0.65
-lantern 36.9 -37.23 shadow
-lantern 33.7 -37.23
-lantern -18.75 -24.33
-lantern -1.25 -24.33
-lantern 16.25 -24.33
+lantern 36.9 -37.23 shadow wall=n
+lantern 33.7 -37.23 wall=n
+lantern -18.75 -24.33 wall=n
+lantern -1.25 -24.33 wall=n
+lantern 16.25 -24.33 wall=n
 lantern -28.75 -15 ghost y=0.65
-lantern 17.5 -74.72
-lantern 37.5 -74.72
+lantern 17.5 -74.72 wall=n
+lantern 37.5 -74.72 wall=n
 lantern 23.75 -50 ghost y=0.65
 lantern 31.25 -50 ghost y=0.65
 row pillar-wood -35 -24.8 20 -24.8 0
