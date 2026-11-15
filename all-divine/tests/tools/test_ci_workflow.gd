@@ -27,6 +27,22 @@ func test_the_builds_wait_for_the_tests() -> void:
 	assert_true(export_job.has("    needs: [test]"), "the export job needs the test job (headless suite and clip checker)")
 
 
+func test_the_headless_job_plays_the_combat_bot_over_two_seeds() -> void:
+	var steps := _steps(_block(_lines(), "  test:", 2))
+	var bot: Array = Array(steps).filter(func(text: String) -> bool: return text.contains("name: Combat bot\n"))
+	assert_eq(bot.size(), 1, "the headless job has a bot step")
+	if bot.size() == 1:
+		assert_true(bot[0].contains("run_bot.gd -- --seeds=1-2 --frames=3600 --policy=mixed"), "seeds 1 and 2, 3,600 frames, the mixed policy: %s" % bot[0])
+
+
+func test_the_headless_job_also_plays_the_counter_policy() -> void:
+	var steps := _steps(_block(_lines(), "  test:", 2))
+	var bot: Array = Array(steps).filter(func(text: String) -> bool: return text.contains("name: Combat bot, the other policies"))
+	assert_eq(bot.size(), 1, "a second bot step, for what the suite is too short to hold")
+	if bot.size() == 1:
+		assert_true(bot[0].contains("--policy=counter"), bot[0])
+
+
 func test_the_builds_are_uploaded_before_the_linux_build_runs() -> void:
 	var steps := _steps(_block(_lines(), "  export:", 2))
 	var uploads: Array[int] = []
@@ -63,6 +79,57 @@ func test_the_render_job_runs_the_whole_suite_in_shards() -> void:
 	for i in shards.size():
 		assert_eq(shards[i], str(i + 1), "the shards are 1 to %d, each once" % shards.size())
 	assert_true(job.has("      fail-fast: false"), "one shard failing does not stop the others")
+
+
+# test.sh stops a shard after TEST_TIMEOUT seconds: a guard against a hung test, not a budget. By the weights (seconds in a
+# render shard, tests/shard_weights.txt) no shard may come near it: when this fails, add a shard to the matrix and the run line,
+# or refresh the weights from CI's logs if they have gone stale.
+func test_no_render_shard_is_dealt_more_than_three_quarters_of_its_cap() -> void:
+	var job := _block(_lines(), "  render:", 2)
+	var count := 0
+	var cap := 0
+	for line in job:
+		var body := line.strip_edges()
+		if body.begins_with("run: tools/test.sh --render --shard=${{ matrix.shard }}/"):
+			count = body.get_slice("/", body.get_slice_count("/") - 1).to_int()
+		if body.begins_with("TEST_TIMEOUT:"):
+			cap = body.trim_prefix("TEST_TIMEOUT:").replace('"', "").strip_edges().to_int()
+	assert_true(count >= 2 and cap > 0, "the render job names its shards (%d) and its cap (%d s)" % [count, cap])
+	if count < 2 or cap <= 0:
+		return
+	var files := TestRunner.discover("res://tests", true)
+	var weights := TestRunner.read_weights(TestRunner.WEIGHTS)
+	var loads := PackedInt32Array()
+	for index in range(1, count + 1):
+		var total := 0.0
+		for path in TestRunner.shard_for_run(files, index, count):
+			total += float(weights.get(path, TestRunner.DEFAULT_WEIGHT))
+		loads.append(int(total))
+	var heaviest := 0
+	for load in loads:
+		heaviest = maxi(heaviest, load)
+	assert_true(heaviest * 4 <= cap * 3, "the heaviest of %d shards is dealt %d s of a cap of %d s (%s)" % [count, heaviest, cap, loads])
+
+
+func test_the_python_tools_step_installs_the_pinned_libraries_and_runs_the_portrait_tests() -> void:
+	# The sketch tool needs Pillow and numpy, which the runner's own Python may not have: the step installs them at the
+	# versions the tool was made with, before it runs the tool's tests. They go into a venv of the step's own, and the
+	# portrait tests run with that venv's Python: a plain `pip install` on a runner lands in the user's site folder, which
+	# the isolated mode the tests run in (-I) does not read (CI said "No module named 'numpy'").
+	var steps := _steps(_block(_lines(), "  test:", 2))
+	var found := ""
+	for step in steps:
+		if step.contains("name: Python tools' tests"):
+			found = step
+	assert_false(found.is_empty(), "the headless job has a Python tools' step")
+	var venv := found.find("python3 -m venv \"$RUNNER_TEMP/tools-venv\"")
+	var install := found.find("\"$RUNNER_TEMP/tools-venv/bin/python\" -m pip install --quiet pillow==12.3.0 numpy==2.5.3")
+	var portraits := found.find("\"$RUNNER_TEMP/tools-venv/bin/python\" -I -m unittest discover -s tools/portraits/tests")
+	assert_true(venv >= 0, "the step makes a venv of its own")
+	assert_true(install >= 0, "the step installs pillow==12.3.0 and numpy==2.5.3 into the venv")
+	assert_true(portraits >= 0, "the step runs the portrait tests with the venv's Python, isolated")
+	assert_true(venv < install and install < portraits, "the venv is made, then the libraries are installed, then the portrait tests run")
+	assert_false(found.contains("\n          python3 -m pip install"), "nothing is installed into the runner's own Python (the isolated tests could not see it)")
 
 
 func _lines() -> PackedStringArray:
@@ -104,3 +171,20 @@ func _steps(job: PackedStringArray) -> PackedStringArray:
 		elif inside and not line.begins_with("      "):
 			inside = false
 	return steps
+
+
+func test_the_render_job_installs_ffmpeg_so_the_animatic_is_made_in_ci_and_not_skipped() -> void:
+	# tests/render/test_story_shots.gd makes the animatic with tools/animatic.sh, which needs ffmpeg (and ffprobe, which comes with
+	# it). The render job installs its own packages and the runner image is not promised to have it: the test fails there, and does
+	# not skip, when it is missing, so the install line must name it.
+	var steps := _steps(_block(_lines(), "  render:", 2))
+	var installs: Array = Array(steps).filter(func(text: String) -> bool: return text.contains("apt-get install"))
+	assert_eq(installs.size(), 1, "the render job installs its packages in one step")
+	if installs.size() != 1:
+		return
+	var words := PackedStringArray()
+	for line: String in String(installs[0]).split("\n"):
+		if line.strip_edges().begins_with("sudo apt-get install"):
+			words = line.strip_edges().split(" ")
+	assert_true(words.has("xvfb"), "it still installs the virtual display: %s" % [words])
+	assert_true(words.has("ffmpeg"), "and ffmpeg, for the animatic: %s" % [words])

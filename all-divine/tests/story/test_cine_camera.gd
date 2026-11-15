@@ -79,6 +79,16 @@ func _world() -> Callable:
 	return func(name: StringName) -> Variant: return PLACES.get(name, null)
 
 
+# The portrait cards in the stage that are not on their way out (the overlay shows one while a line is up; a card taken away
+# is hidden at once and freed at the frame's end).
+func _cards() -> Array[Node]:
+	var found: Array[Node] = []
+	for card in stage.find_children("*", "PortraitCard", true, false):
+		if not card.is_queued_for_deletion():
+			found.append(card)
+	return found
+
+
 func _fixture() -> SceneShots:
 	return (load(FIXTURE) as SceneShots).duplicate_deep()
 
@@ -282,6 +292,7 @@ func test_a_scene_cut_short_gives_everything_back_at_three_instants() -> void:
 		assert_true(rig.cine_weight > 0.0 and hud.suppressed, "mid-scene at %d" % instant)
 		if instant == 205:
 			assert_true(overlay.showing(), "a line is showing")
+			assert_eq(_cards().size(), 1, "and its portrait card is up")
 		if instant == 20:
 			assert_true(overlay.bar_height() > 0, "the bars are sliding in")
 		parts.root.queue_free()
@@ -292,6 +303,7 @@ func test_a_scene_cut_short_gives_everything_back_at_three_instants() -> void:
 		assert_eq(overlay.letterbox, 0.0, "the bars are out")
 		assert_eq(overlay.bar_height(), 0)
 		assert_false(overlay.showing(), "the box is closed")
+		assert_eq(_cards().size(), 0, "and the portrait card is gone with it (%d)" % instant)
 		await frames(3)
 		assert_eq(rig.cine_weight, 0.0, "and it stays so")
 		assert_near(rig.camera.size, CameraRig.ORTHO_SIZE, 1e-6, "the game camera's own size")
@@ -305,5 +317,6 @@ func test_a_scene_cut_short_gives_everything_back_at_three_instants() -> void:
 	assert_eq(rig.cine_weight, 0.0)
 	assert_false(hud.suppressed)
 	assert_eq(overlay.bar_height(), 0)
+	assert_eq(_cards().size(), 0, "release() gives the portrait card back too")
 	parts.camera.release()
 	assert_false(hud.suppressed, "twice is harmless")

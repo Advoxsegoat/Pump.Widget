@@ -82,6 +82,12 @@ var model_scale := 1.0
 ## How much thicker the body is drawn than its model, in metres (set_body_inflate).
 var body_inflate := 0.0
 var cadence := 1.0
+## Springs to start afresh at the next tick (reset_springs).
+var _springs_reset := false
+## The ticks still to run the springs to rest on after a restart (_restart_springs).
+var _springs_settle := 0
+## Whether the rig has ticked once.
+var _ticked := false
 
 const MOVE_AB := &"parameters/move_ab/blend_amount"
 const MOVE_BLEND := &"parameters/move_blend/blend_amount"
@@ -672,8 +678,15 @@ func hold_end_pose(clip: StringName) -> void:
 		set_move_time(tree.get_animation(clip).length)
 
 
-## Fades the move layer out over `blend_out` seconds, back to locomotion. 0 or less is at once.
+## Fades the move layer out over `blend_out` seconds, back to locomotion. 0 or less is at once. What the layer shows fades as it
+## is: a crossfade between two moves that is still going (a move cut short by another, held by the hit-stop before it could finish
+## blending) is frozen into a one-key pose of what the last tick showed, as a new move would freeze it (play_move), so that no frame
+## plays more of a clip that was never fully on the body, nor lets the cut move go on playing.
 func stop_move(blend_out: float) -> void:
+	if _slot >= 0 and _layer > 0.0 and not is_equal_approx(_ab, _ab_goal):
+		_hold_pose(_slot)
+		_ab = float(_slot)
+		_ab_goal = _ab
 	_layer_goal = 0.0
 	_layer_time = blend_out
 	if blend_out <= 0.0:
@@ -723,11 +736,109 @@ func tick(delta: float) -> void:
 	_place_look_target()
 	_look_time += delta
 	_show_look()
+	# Not on the first tick of a rig: the pose of that tick is not the pose of the ones after it (a chain run to rest on it stands at its
+	# rest pose again in the frame shown, 26 edges of the feather through the head), and a rig placed at once is placed from the next.
+	if (_springs_reset or _springs_settle > 0) and _ticked:
+		_restart_springs(delta)
+	_ticked = true
 	# The skeleton would run its modifiers in an update deferred to the end of the frame. advance() gives
 	# them the delta, and the update is run here instead, so this tick's pose is done when tick returns.
 	# The deferred update then finds nothing left to do: running the update clears what it was asked for.
 	skeleton.advance(delta)
 	skeleton.notification(Skeleton3D.NOTIFICATION_UPDATE_SKELETON)
+
+
+## Makes every spring (the scarf's, the feather's) forget where it was and start again, hanging, from the next tick on: for a body that was
+## put somewhere else (Actor.place: a spawn, a region change, a revive), whose springs would otherwise swing back across the jump from
+## where they were, 180 degrees in a frame. (SpringBoneSimulator3D.reset() does not do it: it keeps the world position the chain was at and
+## swings it over; naming the root bone again starts it afresh, at the rest pose the model was built in, from which it falls into its
+## hang in front of the player: see _restart_springs, which has them run to rest out of sight.)
+func reset_springs() -> void:
+	_springs_reset = true
+
+
+# The most steps a restarted spring is taken through, out of sight, to come to rest (the scarf's takes about thirty).
+const SPRING_SETTLE_STEPS := 400
+# A restarted spring is at rest when none of its bones moved more than this (m) in a step.
+const SPRING_SETTLED := 0.00002
+# The ticks after a restart on which the springs are run to rest again: the engine starts a chain over from its rest pose once more
+# at the first update after the frame that restarted it (a deferred step of its own: seen, not documented), which would put it at the
+# rest pose in front of the player a frame late.
+const SPRING_SETTLE_TICKS := 3
+
+
+# On the tick after reset_springs (and for SPRING_SETTLE_TICKS ticks from then), runs every spring to rest at once against the pose
+# the skeleton has now, the other modifiers of the skeleton off for the steps (their own timers, the look-at's and the breathing's,
+# must not run on): so that the frame shown has the chains already hanging as gravity gives them for the body's present attitude, and
+# not standing at their rest pose and falling over it in front of the player (101 degrees in a frame after a revive, with the body
+# lying down). A tick the restart is due on also restarts them.
+func _restart_springs(delta: float) -> void:
+	var springs: Array[SpringBoneSimulator3D] = []
+	var others: Array[SkeletonModifier3D] = []
+	for child in skeleton.get_children():
+		if child is SpringBoneSimulator3D:
+			springs.append(child)
+		elif child is SkeletonModifier3D and (child as SkeletonModifier3D).active:
+			others.append(child)
+	if _springs_reset:
+		_springs_reset = false
+		_springs_settle = SPRING_SETTLE_TICKS
+		for spring in springs:
+			_restart_spring(spring)
+	_springs_settle -= 1
+	var ends: Array[int] = []
+	for spring in springs:
+		for i in spring.get_setting_count():
+			ends.append(skeleton.find_bone(spring.get_end_bone_name(i)))
+	if ends.is_empty():
+		return
+	for other in others:
+		other.active = false
+	var was: Array[Vector3] = []
+	was.resize(ends.size())
+	for step in SPRING_SETTLE_STEPS:
+		skeleton.advance(delta)
+		skeleton.notification(Skeleton3D.NOTIFICATION_UPDATE_SKELETON)  # the pose shown (_shown) is the one the springs gave
+		var moved := 0.0
+		for k in ends.size():
+			var at := _shown[ends[k]].origin
+			moved = maxf(moved, at.distance_to(was[k]))
+			was[k] = at
+		if step > 0 and moved < SPRING_SETTLED:
+			break
+	for other in others:
+		other.active = true
+
+
+# Has `spring` forget its state by taking its settings away and giving them back, every property of them and each joint's own. The
+# engine makes the joints of a setting anew with its defaults (a radius of 0.1, a stiffness of 1, no drag and no gravity) and honours
+# a joint's own values only while its setting is individual, so the joints are given theirs under that flag and it is put back.
+func _restart_spring(spring: SpringBoneSimulator3D) -> void:
+	var settings: Array = []  # [name, value] of every property of the settings themselves, in the order the engine lists them
+	var joints: Array = []  # of every joint's
+	for property in spring.get_property_list():
+		var name := String(property["name"])
+		if not name.begins_with("settings/"):
+			continue
+		if name.contains("/joints/"):
+			if property["usage"] & PROPERTY_USAGE_EDITOR != 0:
+				joints.append([name, spring.get(name)])
+		elif property["usage"] & PROPERTY_USAGE_STORAGE != 0:
+			settings.append([name, spring.get(name)])
+	var count := spring.get_setting_count()
+	var individual: Array[bool] = []
+	for i in count:
+		individual.append(spring.is_config_individual(i))
+	spring.set_setting_count(0)
+	spring.set_setting_count(count)
+	for entry in settings:
+		spring.set(entry[0], entry[1])
+	for i in count:
+		spring.set_individual_config(i, true)
+	for entry in joints:
+		spring.set(entry[0], entry[1])
+	for i in count:
+		spring.set_individual_config(i, individual[i])
 
 
 ## How much the move layer shows over locomotion: 0 is locomotion only, 1 is the move only.

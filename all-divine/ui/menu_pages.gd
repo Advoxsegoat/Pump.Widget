@@ -45,13 +45,18 @@ static func build(id: StringName, menu: Menu) -> MenuPage:
 			return _root(menu)
 
 
-# Resume, Controls, Settings, and Quit, which asks first (and is left out on the web, where the page owns the window).
+# Resume, Skip scene (only when the game was paused from a scene that can be skipped), Controls, Settings, and Quit, which asks
+# first (and is left out on the web, where the page owns the window). The page is built each time it is shown and a scene cannot end
+# while the game is paused, so a Skip scene row is never left standing for a scene that is over.
 static func _root(menu: Menu) -> MenuPage:
-	var rows: Array[MenuRow] = [
-		MenuRow.action("Resume", resume),
+	var rows: Array[MenuRow] = [MenuRow.action("Resume", resume)]
+	var scene := Director.current()
+	if scene != null and scene.is_skippable():
+		rows.append(MenuRow.action("Skip scene", skip_scene))
+	rows.append_array([
 		MenuRow.action("Controls", func() -> void: menu.push_page(CONTROLS)),
 		MenuRow.action("Settings", func() -> void: menu.push_page(SETTINGS)),
-	]
+	] as Array[MenuRow])
 	if not menu.web:
 		rows.append(MenuRow.action("Quit", func() -> void: menu.show_page(QUIT)))
 	return _page("Paused", rows, resume)
@@ -69,6 +74,14 @@ static func _quit(menu: Menu) -> MenuPage:
 ## Back to the game.
 static func resume() -> void:
 	Game.change(Game.State.PLAY)
+
+
+## Ends the scene the game was paused from (the Director's skip: the fight is handed back, the camera glides home from where it
+## stands) and goes back to the game. The pause then gives back PLAY, not the scene: Director.skip told Game the scene is over.
+static func skip_scene() -> void:
+	var scene := Director.current()
+	if scene != null and scene.skip():
+		Game.change(Game.State.PLAY)
 
 
 # A page of these rows; Back does `back`, and the first row is selected on arrival.

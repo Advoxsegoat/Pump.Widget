@@ -249,8 +249,9 @@ func test_walls_hold_both_and_the_grab_plays_or_falls_back_cleanly() -> void:
 
 
 func test_a_grab_that_cannot_be_staged_is_a_staggering_hit() -> void:
-	# The same checks as the finisher's: Abarax turned past the facing gate (the Knuckle's finisher_facing_deg, 30), or a
-	# wall between their chests. The grab still takes hold of him, as a HIT that staggers, and nothing is paired.
+	# The same checks as the finisher's: Abarax turned past the facing gate (the Knuckle's finisher_facing_deg, 30). The grab
+	# still takes hold of him, as a HIT that staggers, and nothing is paired. A wall between their chests is no longer a case
+	# of this: a wall stops the blow itself (HitScanner), so the grab strikes no one.
 	var turned := _grab_run(TIERS["knuckle_1"], 60.0)
 	await Duel.play_to(self, turned["k"], 60)
 	assert_eq(turned["got"], ["GRABBED"], "turned 60 degrees away: the grab takes hold")
@@ -260,7 +261,7 @@ func test_a_grab_that_cannot_be_staged_is_a_staggering_hit() -> void:
 	var walled := _grab_run(TIERS["knuckle_1"])
 	TestArena.wall(walled["arena"], Vector3(0, 1.5, 0.45), Vector3(4, 3, 0.04))
 	await Duel.play_to(self, walled["k"], 60)
-	assert_eq(walled["got"], ["GRABBED"], "with a wall between their chests: the grab takes hold")
+	assert_eq(walled["got"], [], "with a wall between their chests: the wall stops the blow, nothing lands")
 	assert_eq([(walled["k"] as Actor).paired_with, (walled["abarax"] as Actor).paired_with], [null, null], "unpaired")
-	assert_true((walled["started"] as Array).has(&"stagger"), "and he staggers: %s" % [walled["started"]])
+	assert_false((walled["started"] as Array).has(&"stagger"), "and he does not stagger: %s" % [walled["started"]])
 	(walled["arena"] as Node).free()
