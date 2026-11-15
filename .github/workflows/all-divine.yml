@@ -103,15 +103,17 @@ jobs:
       - name: Virtual display and software OpenGL
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb mesa-utils libgl1-mesa-dri
+          sudo apt-get install -y --no-install-recommends xvfb mesa-utils libgl1-mesa-dri ffmpeg
 
       - name: Install Godot
         run: bash tools/setup.sh
 
       # Here a software renderer draws every frame of every test, so the run takes about ten times the headless
-      # one. The suite is split over five jobs side by side (each takes every third test file, so a folder's
-      # slow files are spread); between them they run every test. test.sh's cap is a guard against a hung test,
-      # not a budget: a shard that nears it means another shard is due (add it to the matrix and to this line).
+      # one. The suite is split over five jobs side by side: the files are dealt by their weights in
+      # tests/shard_weights.txt, slowest first, so that the shards take about the same time; between them they
+      # run every test. test.sh's cap is a guard against a hung test, not a budget: a test in
+      # tests/tools/test_ci_workflow.gd fails when a shard is dealt more than three quarters of it (then another
+      # shard is due: add it to the matrix and to this line, or refresh the weights).
       - name: Test suite with the render tests
         run: tools/test.sh --render --shard=${{ matrix.shard }}/5
         env:

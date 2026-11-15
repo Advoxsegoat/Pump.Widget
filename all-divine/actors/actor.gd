@@ -271,6 +271,7 @@ func place(at: Transform3D) -> void:
 	locomotion.speed = 0.0
 	locomotion.facing_yaw = rotation.y
 	reset_physics_interpolation()
+	rig.reset_springs()
 
 
 ## The way the body faces, in the world: its +Z.
