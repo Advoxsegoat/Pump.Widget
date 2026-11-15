@@ -18,12 +18,19 @@ extends Node
 const GROUP := &"attack_tokens"
 ## How many enemies may commit to one target at a time.
 const PER_TARGET := 2
+## Seconds a foe who needs more tokens than are free waits before the others are held back for him, how long they are held back, and
+## how long he must wait for the next time (so a heavy is let in, but does not shut the others out).
+const RESERVE_AFTER := 0.0
+const RESERVE_FOR := 3.0
+const RESERVE_REST := 1.0
 ## Seconds a token is kept without being taken again before it comes back by itself.
 const TIMEOUT := 3.0
 ## Asked for as a count: all of a target's tokens, whatever their number.
 const ALL := 0
 
 var _held := {}  # attacker (Actor) -> [target (Actor), seconds since last taken, how many tokens]
+var _reserved := {}  # attacker (Actor) -> [target (Actor), seconds it has waited, seconds since it last asked]: waits for tokens a big attack needs
+var _rested := {}  # attacker (Actor) -> seconds before it may hold others back again
 var _watching := {}  # attacker (Actor) -> the Callables connected to its signals
 
 
@@ -45,6 +52,10 @@ func take(attacker: Actor, target: Actor, n := 1) -> bool:
 	if attacker == null or target == null or not attacker.is_inside_tree():
 		return false
 	var want := _wanted(n)
+	if not (_held.has(attacker) and _held[attacker][0] == target) and _reserved_by_other(attacker, target):
+		return false  # a foe who needs more tokens than are free waits for them: nobody new starts while he does
+	if _reserved.has(attacker) and _reserved[attacker][0] == target and _others(attacker, target) + want <= PER_TARGET:
+		_reserved.erase(attacker)
 	if _held.has(attacker):
 		if _held[attacker][0] == target:
 			if _others(attacker, target) + want > PER_TARGET:
@@ -60,6 +71,30 @@ func take(attacker: Actor, target: Actor, n := 1) -> bool:
 	return true
 
 
+## `attacker` waits for the tokens a big attack needs (it holds none, and fewer than it needs are free): until it has them, or
+## TIMEOUT passes, no other attacker begins to hold one of `target`'s tokens, so the ones in use run out and it is let in. Task 14f.
+func reserve(attacker: Actor, target: Actor) -> void:
+	if attacker == null or target == null or _rested.has(attacker):
+		return
+	if _reserved.has(attacker):
+		_reserved[attacker][2] = 0.0
+	else:
+		_reserved[attacker] = [target, 0.0, 0.0]
+
+
+## Whether some attacker's reservation holds `target`'s tokens back from the others now: those tokens are in use, not free.
+func is_reserved(target: Actor) -> bool:
+	for key: Variant in _reserved:
+		if is_instance_valid(key) and _reserved[key][0] == target and _reserved[key][1] >= RESERVE_AFTER:
+			return true
+	return false
+
+
+## Gives up `attacker`'s reservation, if it has one.
+func unreserve(attacker: Actor) -> void:
+	_reserved.erase(attacker)
+
+
 ## Whether `attacker` could hold `n` of `target`'s tokens now, holding what it holds.
 func can_take(attacker: Actor, target: Actor, n := 1) -> bool:
 	return attacker != null and target != null and _others(attacker, target) + _wanted(n) <= PER_TARGET
@@ -67,6 +102,7 @@ func can_take(attacker: Actor, target: Actor, n := 1) -> bool:
 
 ## Gives `attacker`'s token back, if it holds one.
 func give_back(attacker: Actor) -> void:
+	_reserved.erase(attacker)
 	if not _held.has(attacker):
 		return
 	_held.erase(attacker)
@@ -97,6 +133,12 @@ static func take_for(attacker: Actor, target: Actor, n := 1) -> bool:
 
 
 ## give_back on the AttackTokens in `attacker`'s tree, if there is one.
+static func reserve_for(attacker: Actor, target: Actor) -> void:
+	var tokens := of(attacker)
+	if tokens != null:
+		tokens.reserve(attacker, target)
+
+
 static func give_back_for(attacker: Actor) -> void:
 	var tokens := of(attacker)
 	if tokens != null:
@@ -104,6 +146,21 @@ static func give_back_for(attacker: Actor) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	for key: Variant in _reserved.keys():
+		if not is_instance_valid(key) or (key as Actor).dead or not is_instance_valid(_reserved[key][0]):
+			_reserved.erase(key)
+			continue
+		_reserved[key][1] += delta
+		_reserved[key][2] += delta
+		if _reserved[key][2] > 0.5:
+			_reserved.erase(key)  # it stopped asking: it chose something else, or the tokens came free
+		elif _reserved[key][1] >= RESERVE_AFTER + RESERVE_FOR:
+			_reserved.erase(key)
+			_rested[key] = RESERVE_REST
+	for key: Variant in _rested.keys():
+		_rested[key] -= delta
+		if _rested[key] <= 0.0 or not is_instance_valid(key):
+			_rested.erase(key)
 	for key: Variant in _held.keys():
 		if not is_instance_valid(key) or (key as Actor).dead or not is_instance_valid(_held[key][0]):
 			_held.erase(key)
@@ -152,6 +209,14 @@ func _unwatch(attacker: Actor) -> void:
 		attacker.died.disconnect(callables[2])
 	if attacker.tree_exiting.is_connected(callables[2]):
 		attacker.tree_exiting.disconnect(callables[2])
+
+
+# Whether another attacker waits for tokens of `target`.
+func _reserved_by_other(attacker: Actor, target: Actor) -> bool:
+	for key: Variant in _reserved:
+		if key != attacker and is_instance_valid(key) and _reserved[key][0] == target and _reserved[key][1] >= RESERVE_AFTER:
+			return true
+	return false
 
 
 # How many tokens of `target` are held by anyone but `attacker`.
