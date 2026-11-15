@@ -1,6 +1,9 @@
 extends SceneTree
 ## The combat bot's command:
 ##   tools/godot.sh -s res://tools/bot/run_bot.gd -- [--seeds=1-10] [--frames=7200] [--policy=mixed|aggress|counter|mash|all] [--reaction=14] [--detail]
+##                                                    [--parent=<pid>]
+## --parent=<pid>: a process this run is for (the test that starts it): when that process is gone (killed) the run stops its own child
+## and ends, so that a killed test run does not leave a bot playing for a minute after it.
 ## Plays each seed (see BotRunner) and prints a line for it ("bot seed 3: waves 4, deaths 1, problems 0 (...)"); exits 1 if any seed
 ## had a problem. The fight is played on the fixed clock, as fast as the machine goes: without --fixed-fps 60 it would run in real time,
 ## so a run is played by a Godot of its own started with it, one for each seed (and run again if it dies).
@@ -13,10 +16,17 @@ const RUNNER := "res://tools/bot/bot_runner.gd"
 const MARK := "--on-the-fixed-clock"
 ## How many times a seed is run again when its Godot dies.
 const RETRIES := 2
+const PARENT := "--parent="
+## The process whose death ends this run (0: none).
+var _parent := 0
 
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
+	for arg in args.duplicate():
+		if arg.begins_with(PARENT):
+			_parent = arg.trim_prefix(PARENT).to_int()
+			args.remove_at(args.find(arg))
 	await physics_frame  # the autoloads are in the tree from the first frame, not from _initialize
 	var runner: Variant = load(RUNNER).new()
 	if args.has(MARK):
@@ -62,6 +72,10 @@ func _child(user_args: Array) -> int:
 	var err: FileAccess = child["stderr"]
 	var pid: int = child["pid"]
 	while OS.is_process_running(pid):
+		if _parent > 0 and not DirAccess.dir_exists_absolute("/proc/%d" % _parent):
+			OS.kill(pid)  # the process this run is for is gone
+			quit(3)
+			return 3
 		_pass_on(out, false)
 		_pass_on(err, true)
 		OS.delay_msec(50)
