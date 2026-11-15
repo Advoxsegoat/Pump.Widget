@@ -13,9 +13,11 @@ def polyline_ellipse(cx, cy, rx, ry, a0=0.0, a1=360.0, n=90):
             for k in range(n + 1)]
 
 
-def scribble(w, h, shift=0.0):
+def scribble(w, h, shift=0.0, slanted=False):
     """Polylines (list of point lists, width) of a face-sized scribble in the middle of a w x h page. Strokes of many
-    angles; none is a straight horizontal line (a rule's own direction), the mouth is a shallow curve."""
+    angles; none is a straight horizontal line (a rule's own direction), the mouth is a shallow curve. `slanted` also tips the
+    foot of the nose (a short, nearly level stroke that, at some rule phases, lies along a rule: the tool refuses that, and
+    says to mark it in `keep`)."""
     cx, cy = w * (0.5 + shift), h * 0.5
     s = w / 900.0
     strokes = []
@@ -25,7 +27,7 @@ def scribble(w, h, shift=0.0):
     strokes.append(([(cx + 30 * s, cy - 66 * s), (cx + 70 * s, cy - 80 * s), (cx + 108 * s, cy - 62 * s)], 6))
     strokes.append(([(cx - 92 * s, cy - 28 * s), (cx - 58 * s, cy - 14 * s), (cx - 24 * s, cy - 30 * s)], 4))  # lash lines
     strokes.append(([(cx + 30 * s, cy - 30 * s), (cx + 64 * s, cy - 12 * s), (cx + 98 * s, cy - 28 * s)], 4))
-    strokes.append(([(cx + 4 * s, cy - 40 * s), (cx - 6 * s, cy + 20 * s), (cx - 24 * s, cy + 40 * s), (cx + 14 * s, cy + 42 * s)], 3))  # nose
+    strokes.append(([(cx + 4 * s, cy - 40 * s), (cx - 6 * s, cy + 20 * s), (cx - 24 * s, cy + 40 * s), (cx + 14 * s, cy + (52 if slanted else 42) * s)], 3))  # nose
     strokes.append(([(cx - 56 * s, cy + 96 * s), (cx - 10 * s, cy + 108 * s), (cx + 52 * s, cy + 94 * s)], 4))  # mouth
     strokes.append(([(cx + 84 * s, cy + 10 * s), (cx + 88 * s, cy + 14 * s)], 8))     # a mole
     for k in range(6):                                                                  # hatching at the jaw
@@ -48,8 +50,9 @@ def rule_rows(w, h, spacing, degrees, first=None):
 
 
 def make_page(w=900, h=1200, spacing=100, degrees=1.0, contrast=0.28, shadow="left", rules=True, face=True, seed=7,
-              shift=0.0, grain=0.003):
-    """Returns a dict: grey (the page 0..1, float32), strokes (polylines), stroke_mask, rule_mask, rule_lines (row functions)."""
+              shift=0.0, grain=0.003, first=None, extra=None):
+    """Returns a dict: grey (the page 0..1, float32), strokes (polylines), stroke_mask, rule_mask, rule_lines (row functions).
+    `first` is the row of the first rule (default one spacing down), `extra` more strokes, [(points, width)], drawn with the rest."""
     rng = np.random.RandomState(seed)
     ys, xs = np.mgrid[0:h, 0:w]
     if shadow == "left":
@@ -66,7 +69,7 @@ def make_page(w=900, h=1200, spacing=100, degrees=1.0, contrast=0.28, shadow="le
     rule_mask = np.zeros((h, w), dtype=bool)
     lines = []
     if rules:
-        for row, slope in rule_rows(w, h, spacing, degrees):
+        for row, slope in rule_rows(w, h, spacing, degrees, first):
             lines.append((row, slope))
             for x in range(int(0.06 * w), int(0.98 * w)):
                 y = int(round(row + slope * (x - w / 2.0)))
@@ -75,6 +78,7 @@ def make_page(w=900, h=1200, spacing=100, degrees=1.0, contrast=0.28, shadow="le
     layer = Image.new("L", (w, h), 0)
     draw = ImageDraw.Draw(layer)
     strokes = scribble(w, h, shift) if face else []
+    strokes = strokes + list(extra or [])
     for points, width in strokes:
         draw.line(points, fill=255, width=width, joint="curve")
     stroke_mask = np.asarray(layer) > 0
@@ -114,3 +118,56 @@ def photograph(w=900, h=1200, seed=3):
         field += amount * np.asarray(img, dtype=np.float64)
     field = (field - field.min()) / (field.max() - field.min())
     return np.clip(field * 0.9 + 0.05, 0.0, 1.0).astype(np.float32)
+
+
+_NOISE = {}
+
+
+def ruled_darkness(w, h, spacing, degrees, contrast, seed=0):
+    """The darkness (0 = paper) of a flat page with only rules on it, made cheaply for sweeps of the spacing estimate: rules
+    `spacing` rows apart (any fraction), tilted `degrees` with the same slight fan as `make_page`, 3 rows thick, and the paper's
+    grain. No shadow, no drawing."""
+    key = (w, h, seed)
+    if key not in _NOISE:
+        _NOISE[key] = np.random.RandomState(seed).normal(0.0, 0.003, (h, w)).astype(np.float32)
+    dark = np.zeros((h, w), dtype=np.float32)
+    xs = np.arange(int(0.06 * w), int(0.98 * w))
+    for row, slope in rule_rows(w, h, spacing, degrees):
+        ys = np.round(row + slope * (xs - w / 2.0)).astype(int)
+        for o in (-1, 0, 1):
+            ok = (ys + o >= 0) & (ys + o < h)
+            dark[ys[ok] + o, xs[ok]] = contrast
+    return dark + _NOISE[key]
+
+
+def whole_page_photo(megapixels, page_mm, rule_mm, seed=5, degrees=0.8, contrast=0.22):
+    """A whole-page photograph of a ruled notebook (a made one): the picture is portrait, 3:4; the page is 0.9 of its width, on a
+    dark desk, a shadow down one side, rules `rule_mm` apart from 30 mm down, the page `page_mm` wide (a 216 mm or 148 mm page is
+    279 or 210 mm tall), and a face-sized scribble across the middle of it, its lines as wide as a soft pencil's (0.5 mm).
+    Returns (grey float32 H x W, rule mask uint8 0/255, stroke mask uint8 0/255), all the picture's size."""
+    w = int(round(math.sqrt(megapixels * 1e6 * 3.0 / 4.0) / 8.0)) * 8
+    h = w * 4 // 3
+    px_mm = 0.9 * w / page_mm
+    page_h = px_mm * (279.0 if page_mm > 200 else 210.0)
+    x0, y0 = 0.05 * w, (h - page_h) / 2.0
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+    on_page = (xs >= x0) & (xs < x0 + 0.9 * w) & (ys >= y0) & (ys < y0 + page_h)
+    shade = np.clip(0.5 + 0.5 * (xs - x0) / (0.5 * w), 0.0, 1.0)
+    grey = np.where(on_page, 0.82 * (0.6 + 0.4 * shade), 0.30).astype(np.float32)
+    rules = Image.new("L", (w, h), 0)
+    draw = ImageDraw.Draw(rules)
+    thick = max(1, int(round(0.25 * px_mm)))
+    slope = math.tan(math.radians(degrees))
+    row = y0 + 30.0 * px_mm
+    while row < y0 + page_h - 8.0 * px_mm:
+        draw.line([(x0 + 0.02 * w, row + slope * (0.02 * w - 0.45 * w)), (x0 + 0.88 * w, row + slope * (0.88 * w - 0.45 * w))], fill=255, width=thick)
+        row += rule_mm * px_mm
+    strokes = Image.new("L", (w, h), 0)
+    sdraw = ImageDraw.Draw(strokes)
+    for points, width in scribble(w, h, slanted=True):
+        sdraw.line(points, fill=255, width=max(1, int(round(width / 4.0 * 0.5 * px_mm))), joint="curve")
+    rule_mask, stroke_mask = np.asarray(rules), np.asarray(strokes)
+    grey = grey * (1.0 - contrast * (rule_mask > 0)) * (1.0 - 0.6 * (stroke_mask > 0))
+    rng = np.random.RandomState(seed)
+    grey = grey + rng.normal(0.0, 0.004, grey.shape).astype(np.float32)
+    return np.clip(grey, 0.0, 1.0).astype(np.float32), rule_mask, stroke_mask

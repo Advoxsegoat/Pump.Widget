@@ -71,10 +71,10 @@ class NextDrawingTest(unittest.TestCase):
             made = os.path.join(folder, "made")
             code, err, out = run_main(["--sketch", sketch, "--recipe", recipe, "--out", made])
             self.assertEqual(code, 0, "%s: the tool failed on its own first recipe: %s" % (name, err))
-            image = Image.open(os.path.join(made, "neutral.png"))
-            self.assertEqual(image.size, (464, 640))
+            with Image.open(os.path.join(made, "neutral.png")) as image:
+                self.assertEqual(image.size, (464, 640))
+                rgb = np.asarray(image.convert("RGB"), dtype=np.float64)
             # untinted: every pixel lies between the card's paper and its ink (no wash)
-            rgb = np.asarray(image.convert("RGB"), dtype=np.float64)
             paper = np.array([int(written["card"]["paper"][i:i + 2], 16) for i in (1, 3, 5)], dtype=np.float64)
             ink = np.array([int(written["card"]["ink"][i:i + 2], 16) for i in (1, 3, 5)], dtype=np.float64)
             t = (paper - rgb) / (paper - ink)

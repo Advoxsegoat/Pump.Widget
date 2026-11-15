@@ -24,7 +24,8 @@ COMMITTED = os.path.join(HERE, "..", "..", "..", "assets", "portraits", "abarax"
 
 
 def decode(path):
-    return np.asarray(Image.open(path).convert("RGB"))
+    with Image.open(path) as image:
+        return np.asarray(image.convert("RGB"))
 
 
 class CommittedPortraitTest(unittest.TestCase):

@@ -206,15 +206,15 @@ class SketchToPortraitTest(unittest.TestCase):
 
     def test_a_stroke_along_a_rule_is_kept(self):
         pts = along_points()
+
         def dark_share(stages):
             line = stages["line"]
             return float(np.mean([line[int(round(y)), int(round(x))] > 0.5 for x, y in pts]))
         kept = dark_share(self.stages)
         lost_without = dark_share(self.stages_without_keep)
         self.assertGreaterEqual(kept, 0.9, "with its rectangle in `keep` only %.0f%% of the stroke is still dark" % (100 * kept))
+        # a stroke of 40 px is shorter than the run (INK_RUN_MOST) the tool refuses a page for: it is lost without `keep`, as it was
         self.assertLess(lost_without, kept, "without `keep` the stroke is just as dark (%.0f%%): the test does not show what `keep` is for" % (100 * lost_without))
-        print("\n  a stroke along a rule: %.0f%% kept with `keep`, %.0f%% without (%.0f%% lost)" % (
-            100 * kept, 100 * lost_without, 100 * (kept - lost_without)))
 
     def test_a_horizontal_stroke_between_rules_is_kept(self):
         line = self.stages["line"]
@@ -273,16 +273,16 @@ class SketchToPortraitTest(unittest.TestCase):
             with open(os.path.join(folder, "b", "neutral.png"), "rb") as handle:
                 second = handle.read()
             self.assertEqual(first, second, "two runs differ")
-            image = Image.open(os.path.join(folder, "a", "neutral.png"))
-            self.assertEqual(image.size, (464, 640))
-            self.assertEqual(image.mode, "RGB")
+            with Image.open(os.path.join(folder, "a", "neutral.png")) as image:
+                self.assertEqual(image.size, (464, 640))
+                self.assertEqual(image.mode, "RGB")
 
     def test_the_stages_pictures_are_written_for_a_person(self):
         with tempfile.TemporaryDirectory() as folder:
             sketch = save_page(self.page, folder)
             recipe = os.path.join(folder, "r.json")
             with open(recipe, "w") as handle:
-                json.dump(recipe_dict(), handle)
+                json.dump(recipe_dict(keep=[keep_rect_for_along()]), handle)
             code, err = run_main(["--sketch", sketch, "--recipe", recipe, "--out", os.path.join(folder, "o"),
                                   "--stages", os.path.join(folder, "s")])
             self.assertEqual(code, 0, err)
@@ -310,7 +310,8 @@ class SketchToPortraitTest(unittest.TestCase):
                     json.dump(recipe_dict(keep=[keep_rect_for_along()], tints=tint), handle)
                 code, err = run_main(["--sketch", sketch, "--recipe", recipe, "--out", os.path.join(folder, name)])
                 self.assertEqual(code, 0, err)
-                made[name] = np.asarray(Image.open(os.path.join(folder, name, "neutral.png")), dtype=np.float32) / 255.0
+                with Image.open(os.path.join(folder, name, "neutral.png")) as image:
+                    made[name] = np.asarray(image, dtype=np.float32) / 255.0
         plain, tinted = made["plain"], made["tinted"]
         paper = np.array([0xec, 0xe2, 0xc8]) / 255.0
         wash = np.array([0xc8, 0xa8, 0x90]) / 255.0

@@ -29,7 +29,8 @@ def recipe_with(gain):
 
 
 def darkness_of(path):
-    rgb = np.asarray(Image.open(path).convert("RGB"), dtype=np.float64)
+    with Image.open(path) as image:
+        rgb = np.asarray(image.convert("RGB"), dtype=np.float64)
     return ((PAPER - rgb) / (PAPER - INK)).mean(axis=-1)
 
 

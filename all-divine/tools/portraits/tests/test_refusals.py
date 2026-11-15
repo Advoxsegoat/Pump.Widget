@@ -151,14 +151,18 @@ class PageClassesTest(unittest.TestCase):
         self.assertNotIn("\n", message)
 
     def test_a_page_the_rules_cannot_account_for_is_refused(self):
-        # for each rule, the share of its length that more than twice its own ink was taken out of: none on a rule alone (0 to 0.02
-        # on every page made here and on the owner's drawing), most of it where the drawing lies along the rule
-        tool.check_ink([0.0, 0.03, 0.1])
+        # for each rule, the longest run of columns with a stroke of the drawing along it (0 on a rule alone and on the owner's
+        # drawing); and the line names the rows and columns of the photograph (here twice the working size), not the rule's number
+        tool.check_ink([tool.Taken(0.0), tool.Taken(0.03, 10), tool.Taken(0.1, 29)], (800, 600), 2.0)
         with self.assertRaises(tool.PortraitError) as caught:
-            tool.check_ink([0.0, 0.6, 0.0])
-        self.assertIn("ink", str(caught.exception))
-        self.assertIn("rule 2 of 3", str(caught.exception))
-        self.assertNotIn("\n", str(caught.exception))
+            tool.check_ink([tool.Taken(0.0), tool.Taken(0.6, 80, (100, 180), (300, 310)), tool.Taken(0.0)], (800, 600), 2.0)
+        message = str(caught.exception)
+        self.assertIn("ink", message)
+        self.assertIn("rows 600-620", message)
+        self.assertIn("columns 200-360", message)
+        self.assertIn("`keep`", message)
+        self.assertNotIn("rule 2 of 3", message)
+        self.assertNotIn("\n", message)
 
     def test_a_drawing_laid_along_the_rules_is_refused_not_erased_in_silence(self):
         page = pages.make_page(spacing=100)
