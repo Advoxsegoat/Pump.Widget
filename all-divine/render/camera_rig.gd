@@ -82,7 +82,12 @@ var post_quad: MeshInstance3D
 ## and `cine`. Only the Director sets them.
 var cine: CinePose = null
 var cine_weight := 0.0
+## The cine layer is a combat moment's dip (the Director sets it): what the player aims with (the cursor's ground point, what the
+## lock-on finds in the picture) is the game's own camera, as if no dip leaned it in. A scene's camera is not the dip's: the player
+## has no control in one, and his aim reads what he sees.
+var cine_is_dip := false
 
+var _shown_is_dip := false  # whether the pose in _cine_shown is a combat moment's
 var _cine_shown: CinePose = null  # the pose the last _apply showed, while the cine layer is on
 var _lean := Vector3.ZERO
 var _lean_velocity := Vector3.ZERO
@@ -144,9 +149,39 @@ func focus_distance() -> float:
 func cursor_ground(screen: Vector2, plane_y: float) -> Variant:
 	if not is_instance_valid(stage) or not stage.is_inside_tree() or not camera.is_inside_tree():
 		return null
+	if _aims_with_game():
+		return _game_cursor_ground(screen, plane_y)
 	var pixel := stage.world_pixel(screen)
 	var origin := camera.project_ray_origin(pixel)
 	var direction := camera.project_ray_normal(pixel)
+	if absf(direction.y) < PARALLEL:
+		return null
+	return origin + direction * ((plane_y - origin.y) / direction.y)
+
+
+# Whether the picture shown is a dip's (the camera node still shows it until the next _apply, even on the frame the weight is 0 again), so that the player's aim must read the game's own camera instead.
+func _aims_with_game() -> bool:
+	return _cine_shown != null and _shown_is_dip
+
+
+# cursor_ground as the game camera (what _apply would show with no dip: the follow point, the fixed turn, its shake, snapped to the grid)
+# reads it: the shown camera and the stage's shift are put back as they were when it has run.
+func _game_cursor_ground(screen: Vector2, plane_y: float) -> Variant:
+	var b := Basis.from_euler(Vector3(deg_to_rad(PITCH_DEG), deg_to_rad(YAW_DEG), 0.0))
+	var shaken := shake_offset()
+	var wanted := _follow + b.z * DISTANCE + b.x * shaken.x + b.y * shaken.y
+	var was := camera.global_transform
+	var was_size := camera.size
+	var was_subpixel := stage.subpixel
+	camera.global_transform = Transform3D(b, PixelSnap.snap(wanted, b))
+	camera.size = ORTHO_SIZE
+	stage.subpixel = PixelSnap.subpixel(wanted, b)
+	var pixel := stage.world_pixel(screen)
+	var origin := camera.project_ray_origin(pixel)
+	var direction := camera.project_ray_normal(pixel)
+	camera.global_transform = was
+	camera.size = was_size
+	stage.subpixel = was_subpixel
 	if absf(direction.y) < PARALLEL:
 		return null
 	return origin + direction * ((plane_y - origin.y) / direction.y)
@@ -267,8 +302,12 @@ func _ease_lean(delta: float) -> void:
 
 ## Where `world` is on the picture, in metres from its centre along the camera's right (x) and up (y).
 func screen_offset(world: Vector3) -> Vector2:
-	var rel := world - global_position
+	var at := global_position
 	var b := global_basis
+	if _aims_with_game():
+		at = _follow  # the game camera's place and turn, not the dip's
+		b = Basis.from_euler(Vector3(deg_to_rad(PITCH_DEG), deg_to_rad(YAW_DEG), 0.0))
+	var rel := world - at
 	return Vector2(rel.dot(b.x), rel.dot(b.y))
 
 
@@ -301,6 +340,7 @@ func _apply() -> void:
 func _apply_cine() -> void:
 	var pose := CinePose.blend(gameplay_pose(), cine, cine_weight)
 	_cine_shown = pose
+	_shown_is_dip = cine_is_dip
 	# A basis made from the angles, not `rotation`: that one keeps the scale the last basis had, an ulp off 1.
 	basis = Basis.from_euler(Vector3(deg_to_rad(pose.pitch_deg), deg_to_rad(pose.yaw_deg), 0.0))
 	global_position = pose.aim
@@ -318,6 +358,7 @@ func _apply_cine() -> void:
 # Back to the game camera: the rotation and size _ready and _init give it.
 func _leave_cine() -> void:
 	_cine_shown = null
+	_shown_is_dip = false
 	basis = Basis.from_euler(Vector3(deg_to_rad(PITCH_DEG), deg_to_rad(YAW_DEG), 0.0))
 	camera.basis = Basis.IDENTITY  # placing it in a turned rig leaves rounding in its own turn
 	camera.size = ORTHO_SIZE

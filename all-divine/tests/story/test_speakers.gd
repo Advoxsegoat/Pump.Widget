@@ -1,77 +1,85 @@
 extends TestCase
-## The speakers: each has a neutral portrait and the six expressions as 48 by 48 pictures, and the pictures differ.
+## The speakers: Abarax has the owner's own drawing (a 464 by 640 picture, the card's), his other five expressions point at it
+## until the owner draws them; every other speaker has no drawing yet and shows the built-in blank card. What is a stand-in
+## is said by `placeholder_exprs`, which the shot checker lists and `story_check --final` refuses.
 
 const SPEAKERS: PackedStringArray = ["abarax", "noella", "sierra", "kesra", "fixture_knuckle"]
 const EXPRESSIONS: PackedStringArray = ["neutral", "smile", "serious", "angry", "sad", "surprise"]
 
 
-func test_every_speaker_has_neutral_and_the_six_expressions_as_48_by_48_with_transparent_corners() -> void:
+func _speaker(id: String) -> Speaker:
+	return Registry.fetch(&"speakers", StringName(id)) as Speaker
+
+
+func test_every_speaker_has_a_name_and_a_card_for_each_of_the_six_expressions() -> void:
 	for id in SPEAKERS:
-		var speaker := Registry.fetch(&"speakers", StringName(id)) as Speaker
+		var speaker := _speaker(id)
 		assert_true(speaker != null, "speaker %s" % id)
 		if speaker == null:
 			continue
 		assert_eq(speaker.id, StringName(id))
 		assert_true(speaker.display_name != "", "%s has a name" % id)
-		assert_true(speaker.portraits.has(&"neutral"), "%s has a neutral portrait" % id)
 		for expression in EXPRESSIONS:
-			var texture := speaker.portraits.get(StringName(expression)) as Texture2D
-			assert_true(texture != null, "%s has %s" % [id, expression])
-			if texture == null:
-				continue
-			var image := texture.get_image()
-			assert_eq(image.get_size(), Vector2i(48, 48), "%s %s is 48x48" % [id, expression])
-			assert_eq(image.get_pixel(0, 0).a, 0.0, "%s %s: the top left corner is clear" % [id, expression])
-			assert_eq(image.get_pixel(47, 0).a, 0.0, "%s %s: the top right corner is clear" % [id, expression])
+			var card := speaker.card(StringName(expression))
+			assert_true(card != null, "%s has a card for %s" % [id, expression])
+			if card != null:
+				assert_eq(card.get_size(), Vector2(464, 640), "%s %s is the card's 464 by 640" % [id, expression])
 
 
-## Two expressions of a speaker must differ by this many pixels to be told apart at 48 pixels.
-const MIN_DIFFERENCE := 12
-## Known limit: the Tactics painter has no option that strengthens `serious`, which is a change of the brows alone, so it
-## stays 10 pixels from `neutral`. It is not painted over; the owner is told.
-const KNOWN_SHORT := {"neutral|serious": 8}
+func test_abarax_has_the_owners_drawing_and_his_other_expressions_point_at_it() -> void:
+	var abarax := _speaker("abarax")
+	var neutral := abarax.portraits.get(&"neutral") as Texture2D
+	assert_true(neutral != null, "a neutral portrait")
+	var image := neutral.get_image()
+	assert_eq(image.get_size(), Vector2i(464, 640))
+	for point in [Vector2i(0, 0), Vector2i(463, 0), Vector2i(0, 639), Vector2i(463, 639), Vector2i(232, 320)]:
+		assert_eq(image.get_pixelv(point).a, 1.0, "no alpha at %s: the card is paper" % [point])
+	var paper := image.get_pixel(450, 20)
+	assert_true(paper.r > 0.85 and paper.g > 0.8 and paper.b > 0.65, "the paper is warm cream at a corner: %s" % paper)
+	for expression in ["smile", "serious", "angry", "sad", "surprise"]:
+		assert_true(abarax.portraits.get(StringName(expression)) == neutral, "%s points at the neutral drawing" % expression)
+		assert_true(abarax.placeholder_exprs.has(StringName(expression)), "%s is a stand-in until the owner draws it" % expression)
+		assert_true(abarax.card(StringName(expression)) == neutral, "and its card is the neutral drawing")
+	assert_false(abarax.placeholder_exprs.has(&"neutral"), "the neutral drawing is the owner's own")
+	assert_eq(abarax.placeholder_exprs.size(), 5)
+	assert_true(abarax.card(&"no_such_face") == neutral, "an expression nobody has shows neutral")
 
 
-func test_the_expressions_differ() -> void:
-	for id in SPEAKERS:
-		var speaker := Registry.fetch(&"speakers", StringName(id)) as Speaker
-		if speaker == null:
-			fail("speaker %s is missing" % id)
-			continue
-		var images := {}
+func test_every_other_speaker_shows_the_blank_card_and_all_its_expressions_are_stand_ins() -> void:
+	var blank := Speaker.new().card(&"neutral")
+	assert_true(blank != null)
+	assert_eq(blank.get_size(), Vector2(464, 640))
+	for id in ["noella", "sierra", "kesra", "fixture_knuckle"]:
+		var speaker := _speaker(id)
+		assert_true(speaker.portraits.is_empty(), "%s has no drawing yet" % id)
 		for expression in EXPRESSIONS:
-			var texture := speaker.portraits.get(StringName(expression)) as Texture2D
-			if texture == null:
-				fail("%s has no %s" % [id, expression])
-				continue
-			images[expression] = texture.get_image().get_data()
-		var short := PackedStringArray()
-		for i in EXPRESSIONS.size():
-			for j in range(i + 1, EXPRESSIONS.size()):
-				var a: PackedByteArray = images.get(EXPRESSIONS[i], PackedByteArray())
-				var b: PackedByteArray = images.get(EXPRESSIONS[j], PackedByteArray())
-				var differing := 0
-				for p in range(0, mini(a.size(), b.size()), 4):
-					if a[p] != b[p] or a[p + 1] != b[p + 1] or a[p + 2] != b[p + 2] or a[p + 3] != b[p + 3]:
-						differing += 1
-				var key := "%s|%s" % [EXPRESSIONS[i], EXPRESSIONS[j]]
-				var floor_px: int = KNOWN_SHORT.get(key, MIN_DIFFERENCE)
-				if differing < MIN_DIFFERENCE:
-					short.append("%s differs by %d" % [key, differing])
-				assert_true(differing >= floor_px, "%s: %s and %s differ by %d pixels, under %d" % [id, EXPRESSIONS[i], EXPRESSIONS[j], differing, floor_px])
-		# the pairs that fall short of 12 are only the known ones
-		assert_true(short.size() <= KNOWN_SHORT.size(), "%s: pairs short of %d: %s" % [id, MIN_DIFFERENCE, ", ".join(short)])
+			assert_true(speaker.placeholder_exprs.has(StringName(expression)), "%s %s is a stand-in" % [id, expression])
+			assert_true(speaker.card(StringName(expression)) == blank, "%s %s shows the one blank card" % [id, expression])
+		assert_eq(speaker.placeholder_exprs.size(), 6)
 
 
-func test_every_portrait_file_has_a_ledger_row() -> void:
+func test_the_blank_card_is_cream_paper_with_a_grey_bust() -> void:
+	var image := Speaker.new().card(&"neutral").get_image()
+	assert_eq(image.get_size(), Vector2i(464, 640))
+	var paper := image.get_pixel(8, 8)
+	assert_true(paper.r > 0.85 and paper.g > 0.8 and paper.b > 0.65 and paper.r > paper.b, "cream at the corner: %s" % paper)
+	var head := image.get_pixel(232, 250)
+	var shoulders := image.get_pixel(232, 560)
+	for part in [head, shoulders]:
+		assert_true(absf(part.r - part.g) < 0.06 and absf(part.g - part.b) < 0.06 and part.r < 0.75, "a grey shape: %s" % part)
+	assert_true(Speaker.new().card(&"neutral") == Speaker.new().card(&"smile"), "one card is made, for every speaker")
+
+
+func test_the_portrait_files_have_a_ledger_row() -> void:
 	var rows := FileAccess.get_file_as_string("res://ASSETS.md")
-	assert_true(rows.contains("| assets/portraits/ |"), "ASSETS.md has a row for assets/portraits/")
-	for id in ["abarax", "noella", "sierra", "kesra", "goldtooth"]:
-		for expression in EXPRESSIONS:
-			assert_true(FileAccess.file_exists("res://assets/portraits/%s/%s.png" % [id, expression]), "%s/%s.png" % [id, expression])
+	assert_true(rows.contains("| assets/portraits/abarax/neutral.png |"), "ASSETS.md has a row for Abarax's picture")
+	assert_true(FileAccess.file_exists("res://assets/portraits/abarax/neutral.png"), "abarax/neutral.png")
+	for old in ["smile", "serious", "angry", "sad", "surprise"]:
+		assert_false(FileAccess.file_exists("res://assets/portraits/abarax/%s.png" % old), "the old 48 by 48 %s is gone" % old)
 
 
 func test_a_speaker_with_no_neutral_portrait_is_not_complete() -> void:
 	var speaker := Speaker.new()
 	assert_false(speaker.portraits.has(&"neutral"))
 	assert_eq(speaker.blip_pitch, 1.0)
+	assert_eq(speaker.placeholder_exprs.size(), 0, "a made speaker has no stand-ins listed")

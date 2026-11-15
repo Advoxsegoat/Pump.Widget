@@ -246,3 +246,29 @@ func test_a_warp_never_passes_max_warp_however_far_its_move_travels() -> void:
 		await frames(1)
 		deepest = minf(deepest, knuckle.runner._warp)
 	assert_true(deepest >= -MoveRunner.MAX_WARP - 1e-6, "the warp held it back %.2f m, at most %.2f" % [-deepest, MoveRunner.MAX_WARP])
+
+
+func test_a_stop_in_the_hit_stop_of_a_cancelling_reaction_fades_the_pose_it_was_showing() -> void:
+	# A reaction cuts a move short and the hit-stop that goes with it holds the body for a few frames: the rig has not ticked, so
+	# its crossfade from the move it cut is where it began (the old pose in full). A stop then must fade THAT pose to locomotion,
+	# not play out the crossfade into the reaction's clip (a pose the body never showed) while the layer fades: the picture
+	# turned 60 degrees at a calf in one frame.
+	var arena := TestArena.make(self)
+	var actor := TestArena.spawn(arena, load(ABARAX), Brain.new())
+	await frames(3)
+	actor.runner.start(Registry.fetch(&"moves", &"guard_raise") as MoveData)
+	await frames(12)
+	assert_true(actor.runner.busy(), "he is in the middle of the raise")
+	actor.runner.start(Registry.fetch(&"moves", &"flinch") as MoveData)
+	actor.freeze(4)
+	await frames(4)
+	var pose := StoryStage.pose_of(actor.rig)
+	actor.runner.stop(0.1)
+	var worst := 0.0
+	for i in 12:
+		await frames(1)
+		var now := StoryStage.pose_of(actor.rig)
+		worst = maxf(worst, StoryStage.angle_between(pose, now, "scarf"))
+		pose = now
+	assert_true(worst <= 20.0, "no bone turns more than 20 degrees a frame while the cut move fades, not %.1f" % worst)
+	assert_eq(actor.rig.move_weight(), 0.0, "and it has faded out")

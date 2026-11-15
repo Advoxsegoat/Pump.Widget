@@ -225,3 +225,19 @@ func test_poise_is_the_defs_threshold_and_never_moves() -> void:
 	_tick(stats, 5.0)
 	stats.restore_posture()
 	assert_eq(stats.poise, 15.0)
+
+
+func test_restore_gives_back_the_bars_but_never_a_dead_actors_health() -> void:
+	var stats := _stats()
+	stats.spend_stamina(40.0)
+	var saved := stats.save()
+	stats.take_damage(1000.0)
+	stats.spend_stamina(20.0)
+	stats.restore(saved)
+	assert_eq(stats.hp, 0.0, "a man who died in the meantime is not given his health back")
+	assert_eq(stats.stamina, saved.stamina, "the other bars are as they were")
+	var living := _stats()
+	var before := living.save()
+	living.take_damage(30.0)
+	living.restore(before)
+	assert_eq(living.hp, living.max_hp, "and a living one has his health as it was")

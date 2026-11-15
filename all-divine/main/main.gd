@@ -11,10 +11,11 @@ extends Node
 ##
 ## F1 (a pad's Select) shows or hides the controls list; F2 enters the Bilibara stretch; F3 shows or hides the debug overlay; F4 turns the screen look off
 ## and on; F5 switches the region; F6, F7 and F8 spawn a tier I, II or III Knuckle and F9 resets the fight (the Arena's
-## debug keys, which Main passes on); F11 or Alt+Enter switches between
+## debug keys, which Main passes on); F10 plays the fixture scene (fixture_yard_entrance) where he stands, so that a scene can be seen
+## in the game (not in a pause, a scene, a replay, or a place with no room for it: fixture_refusal says why); F11 or Alt+Enter switches between
 ## borderless fullscreen, where the game starts, and a 1280x720 window (WindowToggle); the menu button (Esc,
 ## Start) pauses, and the pause menu (Menu, in the Hud's picture) shows while it is paused: its Resume row or the menu button
-## resumes. While it is open F5 to F9 do nothing and every other event goes to the menu. This node runs while the game
+## resumes. While it is open F5 to F10 do nothing and every other event goes to the menu. This node runs while the game
 ## is paused (to hear the menu button and give the menu its events); the stage, and so the world in it, stops.
 ##
 ## With --record=<path> the controls are written down (core/replay/recorder.gd) and saved to the path when the game ends, and with
@@ -34,9 +35,11 @@ const EXIT_DIVERGED := 3
 const YARD := "res://world/training_yard/training_yard.tscn"
 const COURTYARD := "res://world/courtyard/courtyard.tscn"
 const BILIBARA := "res://world/bilibara/bilibara.tscn"
-## The keys Main reads itself (F1 to F9 and F11; Alt+Enter is WindowToggle's) and the pad button it reads (Select), which the controls
+## The scene F10 plays.
+const FIXTURE := &"fixture_yard_entrance"
+## The keys Main reads itself (F1 to F11; Alt+Enter is WindowToggle's) and the pad button it reads (Select), which the controls
 ## screen's capture refuses to bind: a key bound to a game action would be taken here first and never reach the fight.
-const OWN_KEYS: Array[Key] = [KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8, KEY_F9, KEY_F11]
+const OWN_KEYS: Array[Key] = [KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8, KEY_F9, KEY_F10, KEY_F11]
 const OWN_BUTTONS: Array[JoyButton] = [JOY_BUTTON_BACK]
 ## How far Abarax walks toward the Knuckle in the self-test before he waits for it, and the stick's push.
 const SELFTEST_APPROACH := 2.0
@@ -92,6 +95,7 @@ func _ready() -> void:
 	camera_rig.target = player
 	camera_rig.stage = stage
 	camera_rig.snap_now()
+	Director.watch_moments(player, camera_rig, hud)  # the finisher's camera dip
 	overlay.actor = player
 	Settings.apply_window(window)
 	Settings.changed.connect(_on_setting_changed)
@@ -137,7 +141,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key != null and key.pressed and not key.echo:
 		# (not while the pause menu is open: the game ignores them there, and a key that did nothing changed no fight)
-		if _recorder != null and Game.state != Game.State.PAUSE and key.keycode >= KEY_F5 and key.keycode <= KEY_F9:
+		if _recorder != null and Game.state != Game.State.PAUSE and key.keycode >= KEY_F5 and key.keycode <= KEY_F10:
 			_recorder.recording().debug_keys = true  # these change the fight and are not controls: the recording says so
 		match key.keycode:
 			KEY_F3:
@@ -160,11 +164,17 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 				return
 			KEY_F6, KEY_F7, KEY_F8, KEY_F9:
-				if Game.state == Game.State.PAUSE:
-					return
+				if Game.state == Game.State.PAUSE or Game.state == Game.State.CUTSCENE:
+					return  # nor in a scene
 				# The arena lives in the stage's own viewport, which the window's keys never reach.
 				if arena() != null and arena().debug_key(key.keycode):
 					get_viewport().set_input_as_handled()
+				return
+			KEY_F10:
+				if Game.state == Game.State.PAUSE:
+					return  # the debug keys are for the fight, not the menu
+				play_fixture()  # nothing is said of a refusal beyond its line: it is a debug key
+				get_viewport().set_input_as_handled()
 				return
 			KEY_F1:
 				hud.toggle_hints()
@@ -181,7 +191,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed(&"menu"):
-		if Game.state == Game.State.PLAY:
+		if Game.state == Game.State.PLAY or Game.state == Game.State.CUTSCENE:  # a scene can be paused as the fight is
 			Game.change(Game.State.PAUSE)
 		get_viewport().set_input_as_handled()
 
@@ -319,6 +329,44 @@ func _on_replay_diverged(at: int, recorded: int, got: int) -> void:
 		get_tree().quit(EXIT_DIVERGED)
 
 
+## F10: plays the fixture scene where Abarax stands, and returns its Director; null (and a line says why) when it cannot be played
+## now: the game is not in play (a pause, a scene already on, a moment's dip, a replay playing the fight) or there is no room for it here.
+func play_fixture() -> Director:
+	var why := ""
+	if Game.state != Game.State.PLAY:
+		why = "the game is not in play"
+	elif _replayer != null and _replayer.playing():
+		why = "a replay is playing the fight"
+	elif Director.current() != null or Director.moment_playing() != null:
+		why = "a scene is on"
+	else:
+		why = fixture_refusal()
+	if not why.is_empty():
+		print("F10: the fixture is not played: %s" % why)
+		return null
+	var director := Director.play(FIXTURE, self)
+	if director == null:
+		print("F10: the fixture is not played: %s" % Director.last_refusal)
+		return null
+	director.refused.connect(func(reason: StringName) -> void: print("F10: the fixture was given up: %s" % reason))
+	return director
+
+
+## Why the fixture scene has no room where Abarax stands, or "" if it has: the shot checker's place rules (floor under each mark, room for
+## a body, a clear walk, a way in from the region's Spawn) on the scene with its rehearsal mark moved to where he stands and faces.
+func fixture_refusal() -> String:
+	var shots := load("res://scenes/story/%s/shots.tres" % FIXTURE) as SceneShots
+	if shots == null:
+		return "the fixture scene is missing"
+	var scene := shots.duplicate_deep() as SceneShots
+	var rehearsal: SceneMark = scene.mark(&"rehearsal.abarax")
+	if rehearsal != null:
+		rehearsal.position = player.global_position
+		rehearsal.yaw_deg = rad_to_deg(player.rotation.y)
+	var lines := ShotChecker.new().check_place(scene, region.get_world_3d().direct_space_state, region.spawn().origin)
+	return lines[0] if not lines.is_empty() else ""
+
+
 ## The arena of the region, or null when it is not one (the courtyard).
 func arena() -> Arena:
 	return region as Arena
@@ -333,6 +381,10 @@ func switch_region() -> void:
 
 # Replaces the region with the scene `to` (switch_region says what it does).
 func _go_to(to: String) -> void:
+	if Director.current() != null:
+		Director.current().abort()  # a scene cannot go on in another place: it gives the fight back first
+	if Director.moment_playing() != null:
+		Director.moment_playing().abort()
 	var old := region
 	if old is Arena:
 		(old as Arena).clear_foes()  # ends what holds them (pairs, the lock) before they go with the region
@@ -435,7 +487,7 @@ func _apply_look() -> void:
 
 # Any way out of the pause leaves the buttons held and pressed in it out of the fight (Inputs.quarantine).
 func _on_game_state_changed(from: Game.State, to: Game.State) -> void:
-	if from == Game.State.PAUSE and to == Game.State.PLAY:
+	if from == Game.State.PAUSE and (to == Game.State.PLAY or to == Game.State.CUTSCENE):
 		Inputs.quarantine()
 
 
