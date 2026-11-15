@@ -24,8 +24,10 @@ extends RefCounted
 ##       of a paired move, is a target only in a MOMENT; a beat does something; an actor has one clip a frame
 ##   a clip is a clip of the actor's rig (a LIVE_PLAYER's def is abarax); one that is not is an error, or, when the beat
 ##       says `placeholder`, a line that begins PLACEHOLDER (listed, not an error in a draft)
-##   a line has text of at most 160 characters and 3 lines in a speaker's portrait, holds at least its typing time plus
-##       20 frames and fits in its shot, and lines of one shot do not overlap
+##   a line has a speaker, and a portrait of its expression: one that is in the speaker's `placeholder_exprs` is a stand-in,
+##       listed, once for each speaker and expression of the scene however many lines use it, as `placeholder: <speaker>'s
+##       portrait '<expr>' is a stand-in (<n> lines, the first is line <i> of <shot>)` (a placeholder, like a clip not made); one the speaker has no word of is an error. It has text of at most 160 characters and 3 lines, holds at
+##       least its typing time plus 20 frames and fits in its shot, and lines of one shot do not overlap
 ##   a sound cue is in the Registry kind `sounds`
 ##   the camera fields fit the move (STATIC none, PAN aim_to, DOLLY a zoom_to unlike its zoom, CRANE a pitch_to_deg
 ##       unlike its pitch, ORBIT a yaw_to_deg unlike its yaw, HANDHELD a shake) and the framing (OVER_SHOULDER names the
@@ -117,6 +119,8 @@ var _problems := PackedStringArray()
 var _scene: SceneShots
 var _folder := ""
 var _placeholders := 0
+# The stand-in portraits met, once for each speaker and expression: "speaker/expression" -> {shot, line, text, lines}.
+var _stand_ins := {}
 # Objects (by instance id) whose enums are bad: the rules that would read them skip them.
 var _bad := {}
 # The walks that were measured, for the place check: {actor, shot, from, to (Vector3, region space), from_mark, to_mark}.
@@ -250,6 +254,7 @@ func _run_check(scene: SceneShots, folder: String) -> PackedStringArray:
 	_folder = folder
 	_problems = PackedStringArray()
 	_placeholders = 0
+	_stand_ins = {}
 	_bad = {}
 	_rests = []
 	_walks = []
@@ -264,6 +269,7 @@ func _run_check(scene: SceneShots, folder: String) -> PackedStringArray:
 		stopped = _t.broken.trim_prefix("_check_")
 		_add("-", "the checker stopped before it finished: in %s (a script error; see the engine's lines above)" % _described(_t.broken))
 		return _leave(&"_run_check", _problems)
+	_list_stand_ins()
 	if scene.status == SceneShots.Status.APPROVED and _placeholders > 0:
 		_add("-", "an approved scene has no placeholder, this one has %d" % _placeholders)
 	finished = true
@@ -868,8 +874,18 @@ func _check_line(shot: Shot, line: DialogueLine) -> bool:
 		_add(where, "speaker '%s' is not in the Registry" % line.speaker)
 	else:
 		speaker = Registry.fetch(&"speakers", line.speaker) as Speaker
-	if speaker != null and not speaker.portraits.has(line.expr):
-		_add(where, "speaker '%s' has no '%s' portrait" % [line.speaker, line.expr])
+	if speaker != null:
+		if speaker.placeholder_exprs.has(line.expr):
+			# a stand-in (or none yet: the blank card) is listed once for the speaker and expression, however many lines use it,
+			# and refused in an approved scene and by --final
+			var key := "%s/%s" % [line.speaker, line.expr]
+			if _stand_ins.has(key):
+				_stand_ins[key].lines += 1
+			else:
+				_placeholders += 1
+				_stand_ins[key] = {shot = where, line = shot.lines.find(line) + 1, speaker = line.speaker, expr = line.expr, lines = 1}
+		elif not speaker.portraits.has(line.expr):
+			_add(where, "speaker '%s' has no '%s' portrait" % [line.speaker, line.expr])
 	if line.text.strip_edges() == "":
 		_add(where, "the line at frame %d has no text" % line.at)
 		return _leave(&"_check_line", true)
@@ -1303,6 +1319,16 @@ func _earlier_line(a: DialogueLine, b: DialogueLine) -> bool:
 func _name(shot: Shot, index: int) -> String:
 	_enter(&"_name")
 	return _leave(&"_name", String(shot.id) if shot.id != &"" else "shot %d" % (index + 1))
+
+
+# One `placeholder:` line for each stand-in portrait of the scene (a speaker and an expression), with how many lines use it.
+func _list_stand_ins() -> void:
+	_enter(&"_list_stand_ins")
+	for key: String in _stand_ins:
+		var found: Dictionary = _stand_ins[key]
+		_add(found.shot, "%s%s's portrait '%s' is a stand-in (%d line%s, the first is line %d of %s)" % [
+			PLACEHOLDER, found.speaker, found.expr, found.lines, "" if found.lines == 1 else "s", found.line, found.shot])
+	_leave(&"_list_stand_ins")
 
 
 func _add(shot: String, problem: String) -> void:
