@@ -141,3 +141,20 @@ func _steps(job: PackedStringArray) -> PackedStringArray:
 		elif inside and not line.begins_with("      "):
 			inside = false
 	return steps
+
+
+func test_the_render_job_installs_ffmpeg_so_the_animatic_is_made_in_ci_and_not_skipped() -> void:
+	# tests/render/test_story_shots.gd makes the animatic with tools/animatic.sh, which needs ffmpeg (and ffprobe, which comes with
+	# it). The render job installs its own packages and the runner image is not promised to have it: the test fails there, and does
+	# not skip, when it is missing, so the install line must name it.
+	var steps := _steps(_block(_lines(), "  render:", 2))
+	var installs: Array = Array(steps).filter(func(text: String) -> bool: return text.contains("apt-get install"))
+	assert_eq(installs.size(), 1, "the render job installs its packages in one step")
+	if installs.size() != 1:
+		return
+	var words := PackedStringArray()
+	for line: String in String(installs[0]).split("\n"):
+		if line.strip_edges().begins_with("sudo apt-get install"):
+			words = line.strip_edges().split(" ")
+	assert_true(words.has("xvfb"), "it still installs the virtual display: %s" % [words])
+	assert_true(words.has("ffmpeg"), "and ffmpeg, for the animatic: %s" % [words])

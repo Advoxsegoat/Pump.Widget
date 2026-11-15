@@ -63,8 +63,10 @@ func _frame(i: int) -> Image:
 	return Image.load_from_file(_out().path_join("board/frames/shot-%02d.png" % i))
 
 
+# Whether the animatic can be made here: ffmpeg (the one animatic.sh uses: $FFMPEG, else ffmpeg) and ffprobe are installed.
 func _ffmpeg() -> bool:
-	return OS.execute("sh", ["-c", "command -v ffmpeg ffprobe >/dev/null"]) == 0
+	var tool := OS.get_environment("FFMPEG") if OS.get_environment("FFMPEG") != "" else "ffmpeg"
+	return OS.execute("sh", ["-c", "command -v '%s' ffprobe >/dev/null" % tool]) == 0
 
 
 func test_the_storyboard_tool_writes_a_frame_per_shot_of_exactly_640_by_360() -> void:
@@ -125,7 +127,7 @@ func test_no_frame_is_black_and_the_mini_has_no_bars() -> void:
 			assert_true(_row_distinct_colours(image, y) > 4, "frame %d: row %d is the world's, not a bar" % [i, y])
 
 
-func test_the_page_is_made_and_the_animatic_has_the_right_length() -> void:
+func test_the_page_is_made() -> void:
 	var board := _storyboard()
 	assert_eq(board.code, 0, board.text)
 	var page := Image.load_from_file(_out().path_join("board/storyboard-1.png"))
@@ -133,8 +135,16 @@ func test_the_page_is_made_and_the_animatic_has_the_right_length() -> void:
 	if page != null:
 		assert_eq(page.get_width(), 1280)
 		assert_true(page.get_height() > 1000, "three rows tall")
+
+
+func test_the_animatic_has_the_right_length() -> void:
 	if not _ffmpeg():
-		print("SKIPPED the animatic half of test_the_page_is_made_and_the_animatic_has_the_right_length: ffmpeg is not installed here")
+		# CI's runner is given ffmpeg by the workflow, and must prove the animatic: there a missing ffmpeg is a failure. On a
+		# machine without it (an owner's, a lane's) the test says it was skipped, and passes.
+		if OS.get_environment("CI") != "":
+			fail("ffmpeg (or ffprobe) is not installed, and CI must make the animatic: the render job installs it (.github/workflows/all-divine.yml)")
+		else:
+			print("SKIPPED test_the_animatic_has_the_right_length: ffmpeg is not installed here")
 		return
 	var run := _run("animatic.sh", PackedStringArray([SCENE, _out().path_join("video")]))
 	assert_eq(run.code, 0, run.text)

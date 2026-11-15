@@ -103,7 +103,7 @@ jobs:
       - name: Virtual display and software OpenGL
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb mesa-utils libgl1-mesa-dri
+          sudo apt-get install -y --no-install-recommends xvfb mesa-utils libgl1-mesa-dri ffmpeg
 
       - name: Install Godot
         run: bash tools/setup.sh
