@@ -33,9 +33,12 @@ func _remove(path: String) -> void:
 	DirAccess.remove_absolute(path)
 
 
-# Runs tools/<script> with `args` (and STORY_EMPTY=1, which has the storyboard tool also save each frame without Abarax in it); {code, text}.
-func _run(script: String, args: PackedStringArray) -> Dictionary:
-	var argv := PackedStringArray(["-k", "10", str(SHOT_LIMIT), "env", "STORY_EMPTY=1", _root().path_join("tools").path_join(script)])
+# Runs tools/<script> with `args` (and STORY_EMPTY=1, which has the storyboard tool also save each frame without Abarax in it, and
+# `env`'s KEY=VALUE pairs); {code, text}.
+func _run(script: String, args: PackedStringArray, env := PackedStringArray()) -> Dictionary:
+	var argv := PackedStringArray(["-k", "10", str(SHOT_LIMIT), "env", "STORY_EMPTY=1"])
+	argv.append_array(env)
+	argv.append(_root().path_join("tools").path_join(script))
 	argv.append_array(args)
 	var output := []
 	var code := OS.execute("timeout", argv, output, true)
@@ -93,6 +96,20 @@ func test_the_frames_show_the_framings() -> void:
 			var b := _frame(j)
 			if a != null and b != null:
 				assert_true(_differing(a, b) > 2000, "frame %d is not blank or the same as frame %d" % [i, j])
+
+
+func test_playing_the_scene_undrawn_between_the_key_frames_takes_the_pictures_of_drawing_every_frame() -> void:
+	# The storyboard plays the scene with the render loop off and draws a key frame and its neighbours only (a long scene would take
+	# a quarter of an hour otherwise); the pictures must be what a run that draws every tick takes, byte for byte.
+	_storyboard()
+	var full := _run("storyboard.sh", PackedStringArray([SCENE, _out().path_join("full")]), PackedStringArray(["STORY_DRAW_ALL=1"]))
+	assert_eq(full.code, 0, full.text)
+	for i in range(1, 5):
+		var name := "frames/shot-%02d.png" % i
+		var lazy := FileAccess.get_file_as_bytes(_out().path_join("board").path_join(name))
+		var every := FileAccess.get_file_as_bytes(_out().path_join("full").path_join(name))
+		assert_true(lazy.size() > 1000, "frame %d is there" % i)
+		assert_true(lazy == every, "frame %d is the same picture drawn lazily and drawn every tick (%d and %d bytes)" % [i, lazy.size(), every.size()])
 
 
 func test_no_frame_is_black_and_the_mini_has_no_bars() -> void:

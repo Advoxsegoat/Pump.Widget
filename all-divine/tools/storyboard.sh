@@ -6,6 +6,8 @@
 #   2. plays the scene in the game under the virtual display, 60 physics ticks a second so that a frame is a tick, and saves
 #      the picture of each shot's key frame at 640x360 to <out>/frames/shot-NN.png (tools/story/story_reel.gd);
 #   3. lays the frames and the shot's words out in <out>/storyboard-1.png, -2.png ... (tools/story/storyboard_page.gd).
+# Only the key frames and their neighbours are drawn (the scene is played with the render loop off in between): a three-minute scene
+# takes about a minute, and the pictures are those a run that drew every frame takes (STORY_DRAW_ALL=1 is that run).
 # Prints the pages' paths. Exit 0 when the pages are made; 1 when the checker refuses the scene or a step fails; 2 for a wrong
 # command line (no scene, or one that does not exist).
 # Like record_reel.sh it gives the run a temporary override.cfg (removed at the end) that makes the window the 640x360 picture
@@ -59,6 +61,9 @@ stage="$(mktemp -d "$OUT/.making-XXXXXX")"
 extra=()
 # STORY_EMPTY=1 also saves each frame without Abarax (frames/empty-NN.png): the tests use it to measure his silhouette.
 [ -z "${STORY_EMPTY:-}" ] || extra=(--empty-too)
+# STORY_DRAW_ALL=1 draws every frame of the scene instead of the key frames and their neighbours only (slow: the test that holds the
+# two to the same pictures uses it).
+[ -z "${STORY_DRAW_ALL:-}" ] || extra+=(--draw-all)
 quiet "$ROOT/tools/godot.sh" --render --fixed-fps 60 res://tools/story/story_reel.tscn -- --no-player-settings --scene="$SCENE" --capture --out="$stage" ${extra[@]+"${extra[@]}"} || { echo "storyboard.sh: the scene could not be played (see above)" >&2; exit 1; }
 override_release
 quiet "$ROOT/tools/godot.sh" --render -s res://tools/story/storyboard_page.gd -- --scene="$SCENE" --out="$stage" || { echo "storyboard.sh: the sheet could not be made (see above)" >&2; exit 1; }
