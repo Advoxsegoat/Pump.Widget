@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="StoryTuning" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://story/story_tuning.gd" id="1_tuning"]
+
+[resource]
+script = ExtResource("1_tuning")
+moment_dip_on = true
+moment_zoom = 2
+moment_frames = 60
+moment_slow_frames = 0
+moment_hold_share = 0.4
