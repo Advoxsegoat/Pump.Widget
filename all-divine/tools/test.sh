@@ -4,7 +4,8 @@
 # A test id looks like res://tests/area/test_x.gd::test_y.
 #   --render        also runs tests/**/render/, under xvfb with gl_compatibility
 #   --forward-plus  the same, but requires the forward_plus renderer (needs Vulkan)
-#   --shard=<i>/<n> runs every n-th test file from the i-th: the n shards cover the suite between them
+#   --shard=<i>/<n> runs the i-th of n shares of the test files, dealt by tests/shard_weights.txt so that the shares take
+#                   about the same time: the n shards cover the suite between them
 # The run is stopped after $TEST_TIMEOUT seconds (default 900).
 set -euo pipefail
 
