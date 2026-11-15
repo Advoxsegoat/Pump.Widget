@@ -68,6 +68,14 @@ static func shard(files: PackedStringArray, index: int, count: int, weights := {
 
 
 const WEIGHTS := "res://tests/shard_weights.txt"
+const TESTS_ROOT := "res://tests/"
+## What a run prints for each file at its end, for tools/test/shard_weights.py to read (a CI log has it, a person can grep it).
+const TIME_TAG := "FILE-SECONDS"
+
+
+## The line a run prints for a test file that took `seconds`: `FILE-SECONDS <seconds to a tenth> <path under tests/>`.
+static func time_line(path: String, seconds: float) -> String:
+	return "%s %.1f %s" % [TIME_TAG, seconds, path.trim_prefix(TESTS_ROOT)]
 
 
 ## The split a run of the suite uses (tools/test/run.gd): by the weights in tests/shard_weights.txt.
