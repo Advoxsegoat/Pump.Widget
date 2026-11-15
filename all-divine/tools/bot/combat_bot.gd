@@ -220,6 +220,14 @@ func finish() -> void:
 		save_replay()
 
 
+# A bot that leaves the tree while it plays lets the controls go, as finish() does: a caller that frees it without finishing would
+# otherwise leave its last presses down and its stick given, for whatever reads the controls next. One that never began, or has
+# finished, holds nothing.
+func _exit_tree() -> void:
+	if _player != null and is_physics_processing():
+		InputFeed.release()
+
+
 ## Where this run's recording is saved.
 func replay_path(kind := "") -> String:
 	var suffix := "" if policy == Policy.MIXED else "_%s" % POLICIES.find_key(policy)
