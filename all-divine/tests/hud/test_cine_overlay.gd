@@ -210,3 +210,17 @@ func test_a_line_break_is_a_line_break() -> void:
 	overlay.advance(2)
 	overlay.close()
 	assert_eq(overlay.rows_shown().size(), 0)
+
+
+func test_a_burn_in_of_several_lines_is_drawn_a_row_each_under_the_upper_bar_and_clear_of_the_box() -> void:
+	overlay.burn_in = "S2/4 MEDIUM DOLLY 2>3 f090 0:01.50\nSFX cloth_move\nPLACEHOLDER guard_hold"
+	assert_eq(overlay.burn_in_rows(), PackedStringArray(["S2/4 MEDIUM DOLLY 2>3 f090 0:01.50", "SFX cloth_move", "PLACEHOLDER guard_hold"]))
+	overlay.letterbox = 1.0
+	var area := overlay.burn_in_rect()
+	assert_true(area.position.y >= CineOverlay.BAR, "under the upper bar: %s" % area)
+	assert_eq(area.size.y, 3 * CineOverlay.BURN_LINE)
+	overlay.show_line(abarax, "A line.", &"neutral", 0)
+	assert_false(area.intersects(overlay.box_rect()), "clear of the box")
+	assert_false(area.intersects(overlay.portrait_rect()), "clear of the card")
+	overlay.burn_in = ""
+	assert_eq(overlay.burn_in_rows().size(), 0)
