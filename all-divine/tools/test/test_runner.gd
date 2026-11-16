@@ -73,6 +73,12 @@ const TESTS_ROOT := "res://tests/"
 const TIME_TAG := "FILE-SECONDS"
 
 
+## What a run prints once, first: `RUN-KIND render` or `RUN-KIND headless`, so that shard_weights.py can tell a render shard's log (the
+## weights are its seconds) from the headless job's (an eighth of them).
+static func kind_line(headless: bool) -> String:
+	return "RUN-KIND %s" % ("headless" if headless else "render")
+
+
 ## The line a run prints for a test file that took `seconds`: `FILE-SECONDS <seconds to a tenth> <path under tests/>`.
 static func time_line(path: String, seconds: float) -> String:
 	return "%s %.1f %s" % [TIME_TAG, seconds, path.trim_prefix(TESTS_ROOT)]
