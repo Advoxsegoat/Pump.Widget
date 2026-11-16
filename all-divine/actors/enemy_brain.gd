@@ -93,6 +93,8 @@ const SPREAD_REACH_MARGIN := 0.3
 ## for a body ROUND_PAD either side of it. He walks the way (ROUND_GIVE_UP seconds at most, or until the target has moved ROUND_MOVED), then
 ## goes on as ever. Two ends about as near (ROUND_EVEN_CELLS): the one with room (the open side, as Task 14f's way round a neighbour).
 ## A swing round a neighbour is refused when a wall stands within ROOM_REACH (a stride) ahead on the way it takes a body ROOM_BODY wide, for NO_ROOM_FRAMES.
+## The most the target's height may differ from his for the lines to a wall (see _same_level).
+const LEVEL_GAP := 0.6
 const ROOM_REACH := 0.8
 const ROOM_BODY := 0.35
 const NO_ROOM_FRAMES := 30
@@ -398,7 +400,7 @@ func _track_progress(error: float, delta: float) -> void:
 # Tries another angle: the circling turns the other way and the heading swings REANGLE_DEG that way.
 func _reangle() -> void:
 	# Task 15c: stuck where the line is clear but a body cannot walk it (a wall's corner in the way): that is a wall, and he goes round it.
-	if _self != null and target != null and is_instance_valid(target) and not _goal_at(_self.get_world_3d().direct_space_state,
+	if _self != null and target != null and is_instance_valid(target) and _same_level(_self) and not _goal_at(_self.get_world_3d().direct_space_state,
 			Vector2(_self.global_position.x, _self.global_position.z), _self.global_position.y, [_self.get_rid(), target.get_rid()]):
 		_snagged = true
 	var open := _open_side(_self) if _self != null else 0.0
@@ -717,7 +719,7 @@ func _line_is_clear(actor: Actor) -> bool:
 	var length := line.length()
 	if length < 1e-3:
 		return true
-	if not HitScanner.line_clear(actor, target):
+	if _same_level(actor) and not HitScanner.line_clear(actor, target):
 		return false  # a wall between: he could not use the token
 	for node in actor.get_tree().get_nodes_in_group(Actor.GROUP):
 		var other := node as Actor
@@ -734,6 +736,8 @@ func _line_is_clear(actor: Actor) -> bool:
 
 # Whether the world lets a blow through to the target from here this frame (HitScanner.line_clear), asked once a frame per kind.
 func _clear(actor: Actor, low: bool) -> bool:
+	if not _same_level(actor):
+		return true  # a target well above or below him (falling off the world's edge, say) is not behind a wall: the old brain's way
 	var frame := Engine.get_physics_frames()
 	if frame != _clear_frame:
 		_clear_frame = frame
@@ -742,6 +746,11 @@ func _clear(actor: Actor, low: bool) -> bool:
 	if _clear_cache[i] == null:
 		_clear_cache[i] = HitScanner.line_clear(actor, target, low)
 	return _clear_cache[i]
+
+
+# Whether the target stands within LEVEL_GAP metres of his height: the lines a wall may cut are asked on one level only.
+func _same_level(actor: Actor) -> bool:
+	return absf(target.global_position.y - actor.global_position.y) <= LEVEL_GAP
 
 
 # Whether `option`'s first move has a low blow (a sweep: HitProfile.Height.LOW).
