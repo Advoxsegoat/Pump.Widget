@@ -20,6 +20,7 @@ damping_max = 3.0
 color_ramp = SubResource("GradientTexture1D_3uvin")
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_r5nqn"]
+render_priority = 1
 transparency = 1
 cull_mode = 2
 shading_mode = 0
@@ -33,6 +34,23 @@ particles_anim_loop = false
 material = SubResource("StandardMaterial3D_r5nqn")
 size = Vector2(0.0625, 0.0625)
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ink"]
+transparency = 1
+cull_mode = 2
+no_depth_test = false
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(0.04, 0.03, 0.06, 1)
+render_priority = -1
+billboard_mode = 3
+particles_anim_h_frames = 1
+particles_anim_v_frames = 1
+particles_anim_loop = false
+
+[sub_resource type="QuadMesh" id="QuadMesh_ink"]
+material = SubResource("StandardMaterial3D_ink")
+size = Vector2(0.1, 0.1)
+
 [node name="RollDust" type="GPUParticles3D" unique_id=1609263576]
 cast_shadow = 0
 amount = 9
@@ -41,3 +59,5 @@ one_shot = true
 explosiveness = 0.85
 process_material = SubResource("ParticleProcessMaterial_48e8y")
 draw_pass_1 = SubResource("QuadMesh_b7oh8")
+draw_passes = 2
+draw_pass_2 = SubResource("QuadMesh_ink")

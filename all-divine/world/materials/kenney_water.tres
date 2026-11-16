@@ -5,7 +5,7 @@
 [sub_resource type="Gradient" id="water_colour"]
 interpolation_mode = 1
 offsets = PackedFloat32Array(0)
-colors = PackedColorArray(0.3529412, 0.6509804, 0.78431374, 1)
+colors = PackedColorArray(0.28, 0.4, 0.5, 1)
 
 [sub_resource type="GradientTexture2D" id="water"]
 gradient = SubResource("water_colour")

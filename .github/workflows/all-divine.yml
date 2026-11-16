@@ -1,5 +1,5 @@
 # Tests and builds The All-Divine (the Godot project in all-divine/) on GitHub's runners.
-#   test                the headless suite, the clip checker and the Python tools' tests
+#   test                the headless suite, the clip checker, the combat bot (mixed, counter, a masher) and the Python tools' tests
 #   render              the suite again with the tests that need a display (xvfb, Compatibility renderer),
 #                       split over five jobs side by side
 #   render-forward-plus the render tests whose shaders have a Forward+ branch, on a software Vulkan device
@@ -70,6 +70,10 @@ jobs:
       - name: Combat bot, the other policies
         run: tools/godot.sh -s res://tools/bot/run_bot.gd -- --seeds=1-2 --frames=3600 --policy=counter
 
+      # A player who only mashes sway and palm must not crash the game or soft-lock a fight: one short seed of the masher.
+      - name: Combat bot, the masher
+        run: tools/godot.sh -s res://tools/bot/run_bot.gd -- --seeds=1 --frames=3600 --policy=mash
+
       # The sketch tool needs Pillow and numpy at the versions its portraits were made with. They go into a venv of
       # this step's own: a plain pip install on a runner lands in the user's site folder, which the isolated mode
       # the tests run in (-I) does not read.
@@ -79,6 +83,7 @@ jobs:
           "$RUNNER_TEMP/tools-venv/bin/python" -m pip install --quiet pillow==12.3.0 numpy==2.5.3
           python3 -I -m unittest discover -s tools/assets/tests
           python3 -I -m unittest discover -s tools/audio/tests
+          python3 -I -m unittest discover -s tools/test/tests
           "$RUNNER_TEMP/tools-venv/bin/python" -I -m unittest discover -s tools/portraits/tests
 
   render:
@@ -103,15 +108,17 @@ jobs:
       - name: Virtual display and software OpenGL
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb mesa-utils libgl1-mesa-dri
+          sudo apt-get install -y --no-install-recommends xvfb mesa-utils libgl1-mesa-dri ffmpeg
 
       - name: Install Godot
         run: bash tools/setup.sh
 
       # Here a software renderer draws every frame of every test, so the run takes about ten times the headless
-      # one. The suite is split over five jobs side by side (each takes every third test file, so a folder's
-      # slow files are spread); between them they run every test. test.sh's cap is a guard against a hung test,
-      # not a budget: a shard that nears it means another shard is due (add it to the matrix and to this line).
+      # one. The suite is split over five jobs side by side: the files are dealt by their weights in
+      # tests/shard_weights.txt, slowest first, so that the shards take about the same time; between them they
+      # run every test. test.sh's cap is a guard against a hung test, not a budget: a test in
+      # tests/tools/test_ci_workflow.gd fails when a shard is dealt more than three quarters of it (then another
+      # shard is due: add it to the matrix and to this line, or refresh the weights).
       - name: Test suite with the render tests
         run: tools/test.sh --render --shard=${{ matrix.shard }}/5
         env:
