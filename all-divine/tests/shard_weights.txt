@@ -14,6 +14,7 @@
 90   bot/test_feel_ordering.gd   # 87 s here: it plays its fights in headless children, so a render run costs the same
 85   feel/test_press_to_motion.gd   # 85 s in a filtered render run here
 55   perf/test_frame_budget.gd   # 55 s in a filtered render run here
+190  perf/test_bilibara_budget.gd   # 192 s in a filtered render run here (load 2), an estimate
 257  actors/test_enemy_brain.gd   # render log
 158  actors/test_blade_knuckle.gd   # render log
 125  demo/test_demo_reel.gd   # render log
