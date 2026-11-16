@@ -101,6 +101,8 @@ const NO_ROOM_FRAMES := 30
 const ROUND_CELL := 0.6
 const ROUND_RADIUS := 10.0
 const ROUND_BODY := 0.35
+## How far below his feet (metres) ground still counts as ground a body steps down to (a kerb, a stair): further is a drop, not a way.
+const ROUND_STEP_DOWN := 0.5
 const ROUND_EVEN_CELLS := 2
 ## A place within this many metres of where another foe stands or is going is crowded.
 const ROUND_CROWD := 0.9
@@ -1080,7 +1082,7 @@ func _advance_search(actor: Actor, s: RoundSearch) -> bool:
 				if not s.free.has(n):
 					var pos := s.start + Vector2(n) * ROUND_CELL
 					s.query.transform = Transform3D(Basis(), Vector3(pos.x, s.y + 0.5, pos.y))
-					s.free[n] = space.intersect_shape(s.query, 1).is_empty()
+					s.free[n] = space.intersect_shape(s.query, 1).is_empty() and _ground_at(space, pos, s.y)
 				if not s.free[n]:
 					continue
 				if step.x != 0 and step.y != 0 and not (_free_cell(s.free, c + Vector2i(step.x, 0)) and _free_cell(s.free, c + Vector2i(0, step.y))):
@@ -1093,7 +1095,7 @@ func _advance_search(actor: Actor, s: RoundSearch) -> bool:
 			if s.i >= s.cells.size() - 1:
 				s.phase = 2
 				return true
-			if s.j > s.i + 1 and not _walkable(space, s.cells[s.i], s.cells[s.j], s.y, s.exclude):
+			if s.j > s.i + 1 and not _walkable(space, s.cells[s.i], s.cells[s.j], s.y, s.exclude, ROUND_BODY, true):
 				s.j -= 1
 				continue
 			s.legs.append(s.cells[s.j])
@@ -1165,8 +1167,21 @@ func _goal_at(space: PhysicsDirectSpaceState3D, at: Vector2, y: float, exclude: 
 	return to.length() < 0.8 or _walkable(space, at, at + in_line * (to.length() - 0.8), y, exclude, ROUND_BODY + 0.1)
 
 
-# Whether a body can walk the straight way from `a` to `b` (x, z): no `world` collider in the way at knee height for its width.
-func _walkable(space: PhysicsDirectSpaceState3D, a: Vector2, b: Vector2, y: float, exclude: Array[RID], room := ROUND_BODY) -> bool:
+# Whether the world has ground under `at` (x, z) within ROUND_STEP_DOWN below the height `y` of the feet: a ray down from knee height on the `world`
+# layer. Where it has none a body would fall, not step: a floor's edge, a pit.
+func _ground_at(space: PhysicsDirectSpaceState3D, at: Vector2, y: float) -> bool:
+	var ray := PhysicsRayQueryParameters3D.create(Vector3(at.x, y + 0.5, at.y), Vector3(at.x, y - ROUND_STEP_DOWN, at.y), Layers.WORLD)
+	return not space.intersect_ray(ray).is_empty()
+
+
+# Whether a body can walk the straight way from `a` to `b` (x, z): no `world` collider in the way at knee height for its width, and, with
+# `on_ground`, ground under every ROUND_CELL of it.
+func _walkable(space: PhysicsDirectSpaceState3D, a: Vector2, b: Vector2, y: float, exclude: Array[RID], room := ROUND_BODY, on_ground := false) -> bool:
+	if on_ground:
+		var steps := ceili(a.distance_to(b) / ROUND_CELL)
+		for k in range(1, steps):
+			if not _ground_at(space, a.lerp(b, float(k) / steps), y):
+				return false  # the leg crosses a drop (a corner cut over a pit or a floor's edge)
 	var side := (b - a).normalized().rotated(PI * 0.5) * room
 	for pad: float in [0.0, -1.0, 1.0]:
 		var from := Vector3(a.x + side.x * pad, y + 0.5, a.y + side.y * pad)
