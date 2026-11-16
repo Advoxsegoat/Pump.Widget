@@ -108,6 +108,13 @@ const ROUND_PAD := 0.3
 const ROUND_REACHED := 0.15
 const ROUND_GIVE_UP := 8.0
 const ROUND_MOVED := 1.0
+## The cells of search all the foes together may open on one physics frame (about 7 us each: a step's cost over the base stays under 1 ms), the
+## frames a foe who found no way waits before he searches again (doubled with each failure, ROUND_BACK_OFF_DOUBLINGS times at most), and after
+## how many frames of waiting he searches again though the target has not moved.
+const ROUND_CELLS_PER_FRAME := 100
+const ROUND_BACK_OFF := 60
+const ROUND_BACK_OFF_DOUBLINGS := 2
+const ROUND_RECHECK := 600
 ## How much further than an attack's back_up_margin (metres) a back-up may go before the attack is given up.
 const BACK_UP_SPARE := 0.1
 ## How far beyond a warped blow's strike_distance and MoveRunner.MAX_WARP the target may stand when it lands and the combo
@@ -178,6 +185,10 @@ var _round_to := Vector2.INF  # the waypoint he walks to for a line to his targe
 var _round_path: Array[Vector2] = []  # the points after _round_to
 var _no_room_until := -1  # the physics frame until which a swing round a neighbour is refused for want of room
 var plans := 0  # how many ways round he has planned (a search begun), for a test and the report
+var _search: RoundSearch  # a search for a way round that is not over (it goes on a few cells a frame: see _advance_search)
+var _no_way := false  # no way to a line was found: he waits at the nearest place he can reach (see _wait_round)
+var _plan_after := 0  # the physics frame before which a waiting foe does not search again
+var _fails := 0  # searches in a row that found no way
 var _snagged := false  # blocked where a body could not walk the way in: _go_round plans a way though the line is clear
 var _round_at := Vector2.INF  # where the target stood when it was found
 var _round_for := 0.0  # seconds he has been going to it
@@ -776,15 +787,17 @@ func _forget_plan(actor: Actor) -> void:
 
 
 # With no line to the target within sight he goes to where he has one, instead of circling, closing in or standing at the wall. True while
-# he does (his plan is off and his token back: he cannot attack from here). Without a way found (no place within ROUND_RADIUS has a line he can
-# walk to) he plays as before, and _choose and _fire still refuse a swing at the wall.
+# he does (his plan is off and his token back: he cannot attack from here). While his way is being searched for (a few frames: see
+# _advance_search) he plays as before, and _choose and _fire still refuse a swing at the wall. With no way to be found (a shut gate, a closed
+# room, a wall longer than the grid) he goes to the nearest place to the target he can reach and waits there facing him (see _wait_round).
 func _go_round(actor: Actor, intent: Intent, delta: float) -> bool:
 	var here := Vector2(actor.global_position.x, actor.global_position.z)
 	var there := Vector2(target.global_position.x, target.global_position.z)
 	if here.distance_to(there) > def.sight_range:
-		_round_to = Vector2.INF
-		_round_path.clear()
+		_stop_round()
 		return false
+	if _no_way:
+		return _wait_round(actor, intent, delta, here, there)
 	if _round_to != Vector2.INF:
 		_round_for += delta
 		if here.distance_to(_round_to) < ROUND_REACHED:
@@ -797,43 +810,108 @@ func _go_round(actor: Actor, intent: Intent, delta: float) -> bool:
 			_round_path.clear()
 	if _round_to == Vector2.INF:
 		if _clear(actor, false) and not _snagged:
+			_search = null
 			return false
-		_snagged = false
-		_round_path = _plan_round(actor)
-		_round_at = there
-		_round_for = 0.0
-		if _round_path.is_empty():
+		if not _begin_or_advance(actor, there):
 			return false
-		_round_to = _round_path.pop_front()
+		if _no_way:
+			return _wait_round(actor, intent, delta, here, there)
+		if _round_to == Vector2.INF:
+			return false
 	if _plan != null:
 		_forget_plan(actor)
-	var way := _round_to - here
-	intent.move = way.normalized() * (JOG_PUSH if way.length() > 0.6 else WALK_PUSH)
-	if _watch_blocked(actor, intent, delta):
-		_round_to = Vector2.INF
-		_round_path.clear()
+	_walk_to_round(intent, delta, here)
 	return true
 
 
-# The points to walk through to a place with a line to the target: a breadth-first search over a grid of ROUND_CELL cells round him, a cell
-# free where a ball of ROUND_BODY (a body) touches no `world` collider, a goal a cell from which a body ROUND_PAD either side of its middle
-# has a line (HitScanner.clear_between). The nearest goals are taken (those within ROUND_EVEN_CELLS of the first), the one on the open side
-# (_open_side) if the two sides are about as near. The way is smoothed to the fewest straight legs a body can walk. Empty if there is none.
-func _plan_round(actor: Actor) -> Array[Vector2]:
-	plans += 1
-	var space := actor.get_world_3d().direct_space_state
-	var start := Vector2(actor.global_position.x, actor.global_position.z)
-	var y := actor.global_position.y
-	var along := Vector2(target.global_position.x, target.global_position.z) - start
-	if along.length() < 0.1:
-		return []
-	var perp := along.normalized().rotated(PI * 0.5)  # circling with _circle = 1 goes this way
-	var exclude: Array[RID] = [actor.get_rid(), target.get_rid()]
-	var ball := SphereShape3D.new()
-	ball.radius = ROUND_BODY
-	var query := PhysicsShapeQueryParameters3D.new()
-	query.shape = ball
-	query.collision_mask = Layers.WORLD
+# Walks the way: the stick at the next point of it, a jog until the last 0.6 m.
+func _walk_to_round(intent: Intent, delta: float, here: Vector2) -> void:
+	var way := _round_to - here
+	intent.move = way.normalized() * (JOG_PUSH if way.length() > 0.6 else WALK_PUSH)
+	if _watch_blocked(_self, intent, delta):
+		_round_to = Vector2.INF
+		_round_path.clear()
+
+
+# He has no way to a line (a search found none): he goes to the nearest place he can reach and stands there facing the target, which _face
+# does; a search again only when the target has moved (ROUND_MOVED) after a back-off that doubles with each failure (ROUND_BACK_OFF), or
+# after ROUND_RECHECK frames of waiting.
+func _wait_round(actor: Actor, intent: Intent, delta: float, here: Vector2, there: Vector2) -> bool:
+	if _clear(actor, false) and _goal_at(actor.get_world_3d().direct_space_state, here, actor.global_position.y, [actor.get_rid(), target.get_rid()]):
+		_stop_round()  # the target came out from behind it (or the world changed): the old brain's way
+		return false  # (a line through a slit he cannot walk to is not a way: he goes on waiting)
+	var frame := Engine.get_physics_frames()
+	if _search != null:
+		_begin_or_advance(actor, there)
+	elif frame >= _plan_after and (there.distance_to(_round_at) > ROUND_MOVED or frame >= _plan_after + ROUND_RECHECK):
+		_begin_or_advance(actor, there)
+	if not _no_way:
+		return _go_round(actor, intent, delta)  # the search found a way after all
+	if _plan != null:
+		_forget_plan(actor)
+	if _round_to != Vector2.INF:
+		_round_for += delta
+		if here.distance_to(_round_to) < ROUND_REACHED:
+			_round_to = _round_path.pop_front() if not _round_path.is_empty() else Vector2.INF
+		if _round_to != Vector2.INF:
+			_walk_to_round(intent, delta, here)
+	return true
+
+
+# Forgets the way, the search and the wait.
+func _stop_round() -> void:
+	_round_to = Vector2.INF
+	_round_path.clear()
+	_search = null
+	_no_way = false
+
+
+# Starts a search for a way (if none is under way) and spends this frame's share of the cells on it (the foes together may open
+# ROUND_CELLS_PER_FRAME a frame: _spend). When it ends: a way found is the path he walks; none found, he waits (_no_way) at the nearest place
+# he can reach. False while it goes on.
+func _begin_or_advance(actor: Actor, there: Vector2) -> bool:
+	if _search != null and (_search as RoundSearch).at.distance_to(there) > ROUND_MOVED:
+		_search = null  # the target has moved on: what was found is for another place
+	if _search == null:
+		if Engine.get_physics_frames() < _plan_after and there.distance_to(_round_at) <= ROUND_MOVED:
+			return false  # a search found no way a moment ago and the target has not moved: no new one yet
+		var s := _start_search(actor)
+		if s == null:
+			return false
+		_search = s
+	var s := _search as RoundSearch
+	if not _advance_search(actor, s):
+		return false
+	_search = null
+	_round_at = s.at
+	_round_for = 0.0
+	_snagged = false
+	var frame := Engine.get_physics_frames()
+	if s.found:
+		_fails = 0
+		_no_way = false
+		_round_path = s.legs
+		_round_to = _round_path.pop_front() if not _round_path.is_empty() else Vector2.INF
+		return true
+	_fails += 1
+	_plan_after = frame + ROUND_BACK_OFF * (1 << mini(_fails - 1, ROUND_BACK_OFF_DOUBLINGS))
+	_no_way = true
+	_round_path = s.legs
+	_round_to = _round_path.pop_front() if not _round_path.is_empty() else Vector2.INF
+	return true
+
+
+## What a search for a way round keeps from frame to frame: the breadth-first search over the grid (phase 0), then the smoothing of the way
+## found to the fewest straight legs a body can walk (phase 1).
+class RoundSearch extends RefCounted:
+	var start := Vector2.ZERO
+	var y := 0.0
+	var at := Vector2.ZERO  # where the target stood when it began
+	var perp := Vector2.ZERO
+	var exclude: Array[RID] = []
+	var query: PhysicsShapeQueryParameters3D
+	var open := 0.0
+	var crowd: Array[Vector2] = []
 	var free := {Vector2i.ZERO: true}
 	var depth := {Vector2i.ZERO: 0}
 	var parent := {}
@@ -842,60 +920,136 @@ func _plan_round(actor: Actor) -> Array[Vector2]:
 	var first := -1
 	var best_cost := INF
 	var best := Vector2i.ZERO
-	var open := _open_side(actor)
-	var reach := int(ROUND_RADIUS / ROUND_CELL)
-	var tp := Vector2(target.global_position.x, target.global_position.z)
-	var crowd := _neighbour_spots(actor)
-	while head < queue.size():
-		var c := queue[head]
-		head += 1
-		var d: int = depth[c]
-		if first >= 0 and d > first + ROUND_EVEN_CELLS:
-			break
-		var at := start + Vector2(c) * ROUND_CELL
-		if c != Vector2i.ZERO and at.distance_to(tp) >= 0.8 and _goal_at(space, at, y, exclude):
-			first = d if first < 0 else first
-			var side := signf(perp.dot(at - start))
-			var cost := float(d) + (0.0 if open == 0.0 or side == open else float(ROUND_EVEN_CELLS))
-			for other in crowd:
-				if other.distance_to(at) < ROUND_CROWD:
-					cost += float(ROUND_EVEN_CELLS)  # a place a neighbour stands in or goes to: another, if one is about as near
-			if cost < best_cost:
-				best_cost = cost
-				best = c
-			continue
-		for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
-			var n: Vector2i = c + step
-			if depth.has(n) or maxi(absi(n.x), absi(n.y)) > reach:
-				continue
-			if not free.has(n):
-				var pos := start + Vector2(n) * ROUND_CELL
-				query.transform = Transform3D(Basis(), Vector3(pos.x, y + 0.5, pos.y))
-				free[n] = space.intersect_shape(query, 1).is_empty()
-			if not free[n]:
-				continue
-			if step.x != 0 and step.y != 0 and not (_free_cell(free, c + Vector2i(step.x, 0)) and _free_cell(free, c + Vector2i(0, step.y))):
-				continue  # no cutting a corner
-			depth[n] = d + 1
-			parent[n] = c
-			queue.append(n)
-	if best_cost == INF:
-		return []
+	var nearest := Vector2i.ZERO  # the cell reached that is nearest the target
+	var nearest_distance := INF
+	var phase := 0
+	var found := false
 	var cells: Array[Vector2] = []
-	var c := best
-	while c != Vector2i.ZERO:
-		cells.push_front(start + Vector2(c) * ROUND_CELL)
-		c = parent[c]
-	cells.push_front(start)
-	var legs: Array[Vector2] = []
 	var i := 0
-	while i < cells.size() - 1:
-		var j := cells.size() - 1
-		while j > i + 1 and not _walkable(space, cells[i], cells[j], y, exclude):
-			j -= 1
-		legs.append(cells[j])
-		i = j
-	return legs
+	var j := 0
+	var legs: Array[Vector2] = []
+
+
+# The cells the foes together may open on one physics frame (a cell: a shape query for each new neighbour, a goal test, and the rays of
+# the ground under it), and what is left of them this frame.
+static var _spent_frame := -1
+static var _spent := 0
+
+
+# How many cells of search this frame still allows, of `want`.
+static func _spend(want: int) -> int:
+	var frame := Engine.get_physics_frames()
+	if frame != _spent_frame:
+		_spent_frame = frame
+		_spent = 0
+	var got := mini(want, ROUND_CELLS_PER_FRAME - _spent)
+	_spent += maxi(got, 0)
+	return maxi(got, 0)
+
+
+# Begins a search from where the actor stands for a way to a line to the target; null if the target is too near to have a way.
+func _start_search(actor: Actor) -> RoundSearch:
+	var s := RoundSearch.new()
+	s.start = Vector2(actor.global_position.x, actor.global_position.z)
+	s.y = actor.global_position.y
+	s.at = Vector2(target.global_position.x, target.global_position.z)
+	var along := s.at - s.start
+	if along.length() < 0.1:
+		return null
+	plans += 1
+	s.perp = along.normalized().rotated(PI * 0.5)  # circling with _circle = 1 goes this way
+	s.exclude = [actor.get_rid(), target.get_rid()]
+	var ball := SphereShape3D.new()
+	ball.radius = ROUND_BODY
+	s.query = PhysicsShapeQueryParameters3D.new()
+	s.query.shape = ball
+	s.query.collision_mask = Layers.WORLD
+	s.open = _open_side(actor)
+	s.crowd = _neighbour_spots(actor)
+	return s
+
+
+# Spends what this frame allows on the search `s`. True when it is over (found a way, or found none: s.found).
+#
+# Phase 0: a breadth-first search over a grid of ROUND_CELL cells round him, a cell free where a ball of ROUND_BODY (a body) touches no
+# `world` collider, a goal a cell from which a body ROUND_PAD either side of its middle has a line (HitScanner.clear_between). The nearest goals
+# are taken (those within ROUND_EVEN_CELLS of the first), the one on the open side (_open_side) if the two sides are about as near.
+# Phase 1: the way is smoothed to the fewest straight legs a body can walk. With no goal, the way is to the cell nearest the target.
+func _advance_search(actor: Actor, s: RoundSearch) -> bool:
+	var space := actor.get_world_3d().direct_space_state
+	var reach := int(ROUND_RADIUS / ROUND_CELL)
+	var budget := _spend(ROUND_CELLS_PER_FRAME)
+	while budget > 0:
+		if s.phase == 0:
+			if s.head >= s.queue.size():
+				_end_search_phase(s)
+				continue
+			var c: Vector2i = s.queue[s.head]
+			s.head += 1
+			budget -= 1
+			var d: int = s.depth[c]
+			if s.first >= 0 and d > s.first + ROUND_EVEN_CELLS:
+				_end_search_phase(s)
+				continue
+			var at := s.start + Vector2(c) * ROUND_CELL
+			var to_target := at.distance_to(s.at)
+			if to_target < s.nearest_distance - 0.01:
+				s.nearest_distance = to_target
+				s.nearest = c
+			if c != Vector2i.ZERO and to_target >= 0.8 and _goal_at(space, at, s.y, s.exclude):
+				s.first = d if s.first < 0 else s.first
+				var side := signf(s.perp.dot(at - s.start))
+				var cost := float(d) + (0.0 if s.open == 0.0 or side == s.open else float(ROUND_EVEN_CELLS))
+				for other in s.crowd:
+					if other.distance_to(at) < ROUND_CROWD:
+						cost += float(ROUND_EVEN_CELLS)  # a place a neighbour stands in or goes to: another, if one is about as near
+				if cost < s.best_cost:
+					s.best_cost = cost
+					s.best = c
+				continue
+			for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
+				var n: Vector2i = c + step
+				if s.depth.has(n) or maxi(absi(n.x), absi(n.y)) > reach:
+					continue
+				if not s.free.has(n):
+					var pos := s.start + Vector2(n) * ROUND_CELL
+					s.query.transform = Transform3D(Basis(), Vector3(pos.x, s.y + 0.5, pos.y))
+					s.free[n] = space.intersect_shape(s.query, 1).is_empty()
+				if not s.free[n]:
+					continue
+				if step.x != 0 and step.y != 0 and not (_free_cell(s.free, c + Vector2i(step.x, 0)) and _free_cell(s.free, c + Vector2i(0, step.y))):
+					continue  # no cutting a corner
+				s.depth[n] = d + 1
+				s.parent[n] = c
+				s.queue.append(n)
+		else:
+			budget -= 1
+			if s.i >= s.cells.size() - 1:
+				s.phase = 2
+				return true
+			if s.j > s.i + 1 and not _walkable(space, s.cells[s.i], s.cells[s.j], s.y, s.exclude):
+				s.j -= 1
+				continue
+			s.legs.append(s.cells[s.j])
+			s.i = s.j
+			s.j = s.cells.size() - 1
+	return s.phase == 2
+
+
+# The grid is searched: the way to the goal chosen (or, with none, to the cell nearest the target) as cells, to be smoothed.
+func _end_search_phase(s: RoundSearch) -> void:
+	s.found = s.best_cost != INF
+	var end := s.best if s.found else s.nearest
+	var c := end
+	while c != Vector2i.ZERO:
+		s.cells.push_front(s.start + Vector2(c) * ROUND_CELL)
+		c = s.parent[c]
+	s.cells.push_front(s.start)
+	s.phase = 1
+	s.i = 0
+	s.j = s.cells.size() - 1
+	if s.cells.size() < 2:
+		s.phase = 2
 
 
 # Where the other foes of this target stand, or are going (their waypoint's end).
