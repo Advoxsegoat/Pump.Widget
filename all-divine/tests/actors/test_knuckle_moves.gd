@@ -6,6 +6,8 @@ extends TestCase
 
 const RIG := "res://actors/knuckle/knuckle_rig.tscn"
 const TIERS := ["res://data/actors/knuckle_1.tres", "res://data/actors/knuckle_2.tres", "res://data/actors/knuckle_3.tres"]
+## Tier I's jab is the long one (Task 17: 20 frames from the glint to the blow, see test_tier_one_jab.gd); II and III keep the jab.
+const TIER_ONE_PALM := &"knuckle_jab_long"
 const MOVESET := {&"palm": &"knuckle_jab", &"heavy": &"knuckle_thrust", &"gift": &"knuckle_sweep",
 		&"interact": &"knuckle_grab", &"dodge": &"knuckle_feint"}
 const O := MoveData.Kind
@@ -13,6 +15,7 @@ const P := HitProfile.Perilous
 ## Each move: its kind, and its profiles' damage, poise, posture and guard stamina damage, hit-stop, height and peril.
 const MOVES := {
 	&"knuckle_jab": [O.ATTACK, [10.0, 6.0, 6.0, 10.0, 3, HitProfile.Height.MID, P.NONE]],
+	&"knuckle_jab_long": [O.ATTACK, [10.0, 6.0, 6.0, 10.0, 3, HitProfile.Height.MID, P.NONE]],
 	&"knuckle_cross": [O.ATTACK, [12.0, 8.0, 8.0, 12.0, 4, HitProfile.Height.MID, P.NONE]],
 	&"knuckle_hook": [O.ATTACK, [15.0, 12.0, 12.0, 15.0, 5, HitProfile.Height.MID, P.NONE]],
 	&"knuckle_hook_2": [O.ATTACK, [15.0, 12.0, 12.0, 15.0, 5, HitProfile.Height.MID, P.NONE]],
@@ -51,7 +54,10 @@ func test_the_knuckles_moves_have_their_numbers() -> void:
 
 func test_the_tiers_share_the_moveset() -> void:
 	for path: String in TIERS:
-		assert_eq((load(path) as ActorDef).moveset, MOVESET, "%s's moveset" % path)
+		var want := MOVESET.duplicate()
+		if path.ends_with("knuckle_1.tres"):
+			want[&"palm"] = TIER_ONE_PALM
+		assert_eq((load(path) as ActorDef).moveset, want, "%s's moveset" % path)
 
 
 func test_every_knuckle_attack_strikes_as_its_bone_arrives() -> void:
@@ -73,7 +79,7 @@ func test_every_knuckle_attack_strikes_as_its_bone_arrives() -> void:
 			assert_true(absi(on - arrives[0]) <= CONTACT_SLACK, "%s: %s comes on at f%d, its %s is out (within %.2f m of its %.2f m) from f%d"
 					% [id, hitbox, on, bone, PLATEAU_TIE, arrives[1], arrives[0]])
 			checked += 1
-	assert_eq(checked, 7, "every attack's hitbox was checked")
+	assert_eq(checked, 8, "every attack's hitbox was checked")
 
 
 func test_no_knuckle_clip_pops() -> void:
