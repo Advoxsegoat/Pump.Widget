@@ -48,6 +48,8 @@ static func _walls(place: String) -> Array:
 			return [[Vector3(-3, 1.5, 0), Vector3(6, 3, 0.2)]]
 		"door":  # a doorway 1.2 m wide in a long wall
 			return [[Vector3(-5.6, 1.5, 0), Vector3(10, 3, 0.2)], [Vector3(5.6, 1.5, 0), Vector3(10, 3, 0.2)]]
+		"gate":  # a gap 2 m wide in a wall 0.8 m thick (Task 14f's gate), the player in the gap
+			return [[Vector3(-6.0, 1.5, 0), Vector3(10, 3, 0.8)], [Vector3(6.0, 1.5, 0), Vector3(10, 3, 0.8)]]
 	return []
 
 
@@ -360,9 +362,10 @@ func test_survey_for_the_report() -> void:
 	if OS.get_environment("FOE_WALLS_SURVEY") == "":
 		return
 	var out := ""
-	var places := OS.get_environment("FOE_WALLS_PLACES").split(",") if OS.get_environment("FOE_WALLS_PLACES") != "" else PackedStringArray(["wall1", "wall3", "wall6", "low", "kerb", "counter", "post", "door"])
+	var places := OS.get_environment("FOE_WALLS_PLACES").split(",") if OS.get_environment("FOE_WALLS_PLACES") != "" else PackedStringArray(["wall1", "wall3", "wall6", "low", "kerb", "counter", "post", "door", "gate"])
 	for place in places:
-		var runs: Array[Dictionary] = await _fights(place, SEEDS, 1800, 3, place != "counter", PLAYER_AT if place != "post" else Vector3(0, 0, 1.0))
+		var player_at := Vector3(0, 0, 1.0) if place == "post" else (Vector3.ZERO if place == "gate" else PLAYER_AT)
+		var runs: Array[Dictionary] = await _fights(place, SEEDS, 1800, 3, true, player_at)
 		var names := {}
 		for run in runs:
 			for x: Array in run["no_line"]:
