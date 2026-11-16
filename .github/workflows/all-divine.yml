@@ -57,7 +57,10 @@ jobs:
       - name: Install Godot
         run: bash tools/setup.sh
 
+      # The whole suite takes about fifteen minutes here now (test.sh's own cap is that); the job's is thirty.
       - name: Test suite
+        env:
+          TEST_TIMEOUT: "1500"
         run: tools/test.sh
 
       - name: Clip checker
