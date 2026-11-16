@@ -1,0 +1,66 @@
+plugins {
+    id 'com.android.application'
+}
+
+// CI sets these per run; a local build is 1 / 1.0.0.
+def appVersionCode = (System.getenv('VERSION_CODE') ?: '1') as int
+def appVersionName = System.getenv('VERSION_NAME') ?: '1.0.0'
+// A private release key, when CI has one (see all-divine-seams/README.md).
+def releaseKeystore = System.getenv('ANDROID_KEYSTORE_FILE')
+
+android {
+    namespace 'com.advoxsegoat.alldivineseams'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.advoxsegoat.alldivineseams'
+        minSdk 24
+        targetSdk 36
+        versionCode appVersionCode
+        versionName appVersionName
+    }
+
+    sourceSets {
+        main {
+            // the game itself (all-divine-seams/web/index.html) ships as assets/index.html,
+            // next to src/main/assets/android-shell.js
+            assets.srcDirs = ['src/main/assets', '../../web']
+        }
+    }
+
+    signingConfigs {
+        // Committed on purpose, so every build (local or CI) installs over the previous one
+        // and keeps the player's saves. Anyone can read it: fine for sideloading, never for a
+        // store listing. The same key as All-Divine Tactics; the package differs, so the two
+        // games install side by side.
+        sideload {
+            storeFile file('sideload.keystore')
+            storePassword 'android'
+            keyAlias 'sideload'
+            keyPassword 'android'
+        }
+        if (releaseKeystore) {
+            release {
+                storeFile file(releaseKeystore)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.sideload
+        }
+        release {
+            minifyEnabled false
+            signingConfig releaseKeystore ? signingConfigs.release : signingConfigs.sideload
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}

@@ -1,0 +1,100 @@
+# Seconds each slow test file takes in one of CI's render shards (a software renderer draws every frame there).
+# tools/test/run.gd deals the files of a --shard run by these weights (TestRunner.shard): slowest first, each to the shard that
+# holds the least, so that the shards come out even. A file not named here weighs 5 s (TestRunner.DEFAULT_WEIGHT).
+#
+# A line is: <seconds> <the file's path under tests/>. Where the number came from is said after the #:
+#   render log      the time between the file's last PASS line and the one before, in a render shard's log
+#   headless x8     eight times its time in the headless job's log (not yet seen in a render shard's log)
+#   render default  a file of tests/render not yet seen in a log
+# Give a new slow file a line when it joins (its time in a filtered render run here, times two, is near enough), and
+# refresh the numbers from CI's logs when a shard nears its cap (tests/tools/test_ci_workflow.gd says when).
+405  render/test_bilibara_cues.gd   # measured in a render shard
+289  bot/test_combat_bot.gd   # measured in a render shard
+256  actors/test_enemy_brain.gd   # measured in a render shard
+229  ui/test_pause.gd   # measured in a render shard
+193  perf/test_combat_perf.gd   # measured in a render shard
+158  actors/test_blade_knuckle.gd   # measured in a render shard
+132  replay/test_replay_settings_change.gd   # measured in a render shard
+130  actors/test_foe_come_round.gd   # 102 s here headless; played with the drawing off (DRAWS): an estimate
+124  demo/test_demo_reel.gd   # measured in a render shard
+97   actors/test_stand_about.gd   # measured in a render shard with the drawing on (it is off now: DRAWS)
+95   actors/test_foe_walls.gd   # 72 s here headless; played with the drawing off (DRAWS): an estimate
+93   world/test_bilibara_sticky.gd   # measured in a render shard
+90   actors/test_foe_ground.gd   # 70 s here headless; played with the drawing off (DRAWS): an estimate
+89   story/test_cine_camera.gd   # measured in a render shard
+87   replay/test_replay.gd   # measured in a render shard
+71   actors/test_sway_input.gd   # measured in a render shard
+68   render/test_bilibara_readability.gd   # measured in a render shard
+65   replay/test_replay_aim.gd   # measured in a render shard
+62   render/test_story_shots.gd   # measured in a render shard
+60   feel/test_press_to_motion.gd   # measured in a render shard
+60   world/test_arena_pairs.gd   # measured in a render shard
+59   render/test_bilibara_cost.gd   # measured in a render shard
+55   render/test_bilibara_readability_more.gd   # measured in a render shard
+55   actors/test_drummer.gd   # measured in a render shard
+51   actors/test_abarax_feather.gd   # measured in a render shard
+51   main/test_selftest.gd   # measured in a render shard
+51   story/test_place_reach.gd   # measured in a render shard
+50   story/test_story_walk.gd   # measured in a render shard
+47   bot/test_feel_ordering.gd   # measured in a render shard
+46   render/test_menu_shots.gd   # measured in a render shard
+43   actors/test_heavy_gait.gd   # measured in a render shard
+43   perf/test_frame_budget.gd   # measured in a render shard
+42   render/test_director_strips.gd   # measured in a render shard
+41   render/test_bilibara_hidden.gd   # measured in a render shard
+40   render/test_cine_shots.gd   # measured in a render shard
+37   tools/test_story_check.gd   # measured in a render shard
+36   world/test_bilibara.gd   # measured in a render shard
+36   hud/test_hud.gd   # measured in a render shard
+35   render/test_bilibara_tones.gd   # measured in a render shard
+34   render/test_chain_shots.gd   # measured in a render shard
+34   render/test_blade_look.gd   # measured in a render shard
+34   actors/test_heavy_tokens.gd   # measured in a render shard
+33   render/test_rim_matrix.gd   # measured in a render shard
+33   render/test_bilibara_view.gd   # measured in a render shard
+29   render/test_moment_strips.gd   # measured in a render shard
+28   render/test_yard_shot.gd   # measured in a render shard
+28   render/test_readability_shots.gd   # measured in a render shard
+23   main/test_main.gd   # measured in a render shard
+20   actors/test_foe_planning.gd   # 12 s here headless; played with the drawing off (DRAWS): an estimate
+18   actors/test_heavy_knuckle.gd   # measured in a render shard
+18   anim/test_counter_starts.gd   # measured in a render shard
+17   story/test_director_freed.gd   # measured in a render shard
+17   fx/test_readability.gd   # measured in a render shard
+17   render/test_drummer_start_shots.gd   # measured in a render shard
+17   actors/test_scarf.gd   # measured in a render shard
+16   render/test_ground_pictures.gd   # measured in a render shard
+16   render/test_menu_draw.gd   # measured in a render shard
+16   combat/test_wall_blows.gd   # measured in a render shard
+16   world/test_arena.gd   # measured in a render shard
+13   main/test_main_replay.gd   # measured in a render shard
+13   render/test_bilibara_shots.gd   # measured in a render shard
+12   combat/test_counters.gd   # measured in a render shard
+12   actors/test_foot_ik.gd   # measured in a render shard
+11   combat/test_attack_tokens.gd   # measured in a render shard
+11   world/test_courtyard.gd   # measured in a render shard
+11   tools/test_story_tools.gd   # measured in a render shard
+11   replay/test_replay_pause.gd   # measured in a render shard
+10   render/test_body_inflate_shots.gd   # measured in a render shard
+10   world/test_training_yard.gd   # measured in a render shard
+10   actors/test_abarax_portrait.gd   # measured in a render shard
+10   actors/test_spring_reset.gd   # measured in a render shard
+10   moves/test_set_marks.gd   # measured in a render shard
+10   moves/test_clip_checker.gd   # measured in a render shard
+9    story/test_director_start.gd   # measured in a render shard
+9    render/test_screen_post.gd   # measured in a render shard
+9    world/test_bilibara_textures.gd   # measured in a render shard
+9    story/test_director_skip.gd   # measured in a render shard
+8    moves/test_open_hand.gd   # measured in a render shard
+8    combat/test_dodge_chain.gd   # measured in a render shard
+8    combat/test_knuckle_staging.gd   # measured in a render shard
+8    story/test_moment_aim.gd   # measured in a render shard
+8    actors/test_corpse.gd   # measured in a render shard
+7    feel/test_sway_flow.gd   # measured in a render shard
+7    render/test_abarax_look.gd   # measured in a render shard
+7    render/test_hud_draw.gd   # measured in a render shard
+6    bot/test_run_bot.gd   # measured in a render shard
+6    actors/test_actor.gd   # measured in a render shard
+6    actors/test_body_spacing.gd   # measured in a render shard
+6    render/test_clearout_shot.gd   # measured in a render shard
+6    ui/test_controls_screen.gd   # measured in a render shard

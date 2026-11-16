@@ -1,0 +1,51 @@
+[gd_scene format=3]
+
+[sub_resource type="Gradient" id="Gradient_sde6q"]
+interpolation_mode = 1
+offsets = PackedFloat32Array(0, 0.34, 0.67)
+colors = PackedColorArray(0.9098039, 0.3764706, 0.49411765, 1, 0.95686275, 0.6392157, 0.70980394, 1, 0.72156864, 0.24705882, 0.36078432, 1)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_l0xu3"]
+gradient = SubResource("Gradient_sde6q")
+
+[sub_resource type="Gradient" id="Gradient_y7e1k"]
+offsets = PackedFloat32Array(0, 0.6, 1)
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_vkjb6"]
+gradient = SubResource("Gradient_y7e1k")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_tsplu"]
+direction = Vector3(0, 1, 0)
+spread = 180.0
+initial_velocity_min = 0.8
+initial_velocity_max = 1.8
+gravity = Vector3(0, -1.5, 0)
+damping_min = 1.0
+damping_max = 2.0
+color_ramp = SubResource("GradientTexture1D_vkjb6")
+color_initial_ramp = SubResource("GradientTexture1D_l0xu3")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_do7op"]
+transparency = 1
+cull_mode = 2
+no_depth_test = true
+shading_mode = 0
+vertex_color_use_as_albedo = true
+billboard_mode = 3
+particles_anim_h_frames = 1
+particles_anim_v_frames = 1
+particles_anim_loop = false
+
+[sub_resource type="QuadMesh" id="QuadMesh_kvvsb"]
+material = SubResource("StandardMaterial3D_do7op")
+size = Vector2(0.0625, 0.0625)
+
+[node name="PerilousRose" type="GPUParticles3D" unique_id=1463255065]
+cast_shadow = 0
+amount = 10
+lifetime = 0.45
+one_shot = true
+explosiveness = 1.0
+process_material = SubResource("ParticleProcessMaterial_tsplu")
+draw_pass_1 = SubResource("QuadMesh_kvvsb")

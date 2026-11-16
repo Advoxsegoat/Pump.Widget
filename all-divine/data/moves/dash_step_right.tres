@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://moves/move_data.gd" id="1_move"]
+
+[resource]
+script = ExtResource("1_move")
+id = &"dash_step_right"
+kind = 1
+clip = &"dash_step_right"
+stamina_cost = 8.0

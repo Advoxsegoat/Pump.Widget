@@ -1,0 +1,520 @@
+# The Bilibara stretch, as tools/world/build_region.gd read it, once:
+#   tools/godot.sh -s res://tools/world/build_region.gd -- res://world/bilibara/layout.txt res://world/bilibara/bilibara.tscn
+# wrote world/bilibara/bilibara.tscn. THE SCENE IS THE SOURCE FROM NOW ON (Task 5 of the stretch's plan, 2026-11-16): do not run the builder on
+# this layout again, and change the scene (in the editor, or by a script that edits it) and not this file. The layout is kept as the record of how
+# the scene was made: on that day the layout built a scene the same as the committed one in every node, transform, collider, mesh and property.
+# The commands are the courtyard's (world/courtyard/layout.txt) and the stretch's (the builder's own header lists them all).
+#
+# One stretch of the city of Bilibara, cold snow-noon, flat (y = 0 throughout): a place Abarax can walk and cannot leave.
+# From the first shrine site in court A (behind the Lazyman's) east along the cobbled Rue Caillou, north up the Tanneries
+# lane, and into the 25 x 20 m Tanneries yard; and a loop (the lane, west along the Rack Walk, south down the loop lane) that
+# comes back to the street's west end at a low gate, shut: the shortcut. x runs east, z south (toward the camera, which looks
+# north); metres. This task lays the ground, the solid masses, the kerbs and low walls, the gate, the markers and a pale sky
+# and sun; the dressing (Task 3), the backdrop (Task 3) and the light (Task 4) come after, so it is bare.
+#
+# The camera looks north from the south, so a tall thing south of a body hides it: every edge that faces south is a kerb
+# (0.3 m, slate), a low wall (0.6 m) or the gate (a 0.6 m board in an open frame); the tall masses stand north of the ground they close, or at
+# least 9 m south of any other.
+#
+# One character is 5 m, the left column starts at x = -45 and a row is labelled with its north edge (the camera looks up the
+# page). A = court A (slate), s = Rue Caillou (cobble), l = the Tanneries lane, R = the Rack Walk, o = the loop lane (tan
+# earth), B = alcove B (slate), Y = the Tanneries yard (tan earth), # = a tall mass, w = a low wall (0.6 m), . = nothing to
+# walk on. The kerbs (south of the street, the Rack Walk, the alcove and the yard), the gate (south end of the loop lane,
+# between court A and the street's north row) and the pillar posts are too thin to show.
+#
+#   z=-80    . . . . . . . . . . . # # # # # # # 
+#   z=-75    . . . . . . . . . . . # Y Y Y Y Y # 
+#   z=-70    . . . . . . . . . . . # Y Y Y Y Y # 
+#   z=-65    . . . . . . . . . . . # Y Y Y Y Y # 
+#   z=-60    . . . . . . . . . . . # Y Y Y Y Y # 
+#   z=-55    . . . . . . . . . . . . . w l w . . 
+#   z=-50    . . . . . . . . . . . . . w l w . . 
+#   z=-45    . # # # # # # # # # # # # # l # # . 
+#   z=-40    . # # # # # # # # # # # # # l # # . 
+#   z=-35    . # # # # # # # # # # # # # l B # . 
+#   z=-30    . # # # # # # # # # # # # # l w . . 
+#   z=-25    . # R R R R R R R R R R R R l w . . 
+#   z=-20    . # o w . . . . . . . . . w l # . . 
+#   z=-15    . # o w . . . . . . . . . w l # . . 
+#   z=-10    . # o # # # # # # # # # # # l # . . 
+#   z=-5     # A A s s s s s s s s s s s s # . . 
+#   z=0      # A A s s s s s s s s s s s s # . . 
+#
+# Where the plan's table and the builder part (listed in the Task 2 report): T6 is two blocks (the builder's
+# longest block is 60 m, T6 is 65); T7b stops at the alcove (its north end is T7's, and two blocks may not overlap); the low
+# walls are 0.6 m boxes of slate (`curb`), which the builder gives a footprint as wide as the table's, where a row of
+# wall-half pieces would be 1 m deep.
+
+kit bilibara
+# The light is the book's cold snow-noon, overcast: a cool soft ambient, a gentle sun (it gives the shapes their shadows and
+# nothing hot), a haze that is also the grade's fog, and a bodies-only fill, so that a fighter is the same brightness on cobble, earth
+# and slate (the fill is the moon of the training yard under a day's name). The lamps are the only warm light, and light the world only.
+sky #aebbcc
+ambient #bccadf 0.62
+sun -80 30 #f4f7ff 0.25 ortho
+fill -40 20 #f4f7ff 1.1
+script res://world/bilibara/bilibara_region.gd
+grade res://data/render/grades/bilibara_noon.tres
+deflect
+
+# --- The ground: the seven places, in plates of at most 12.5 m a side, exactly tiling each ---
+# W1 court A, "Behind the Lazyman's" (slate)
+ground -40 -5 -30 5 slate_cold
+# W2 Rue Caillou (cobble): five plates of 10 m and the last 12.5
+ground -30 -5 -20 5 cobble
+ground -20 -5 -10 5 cobble
+ground -10 -5 0 5 cobble
+ground 0 -5 10 5 cobble
+ground 10 -5 20 5 cobble
+ground 20 -5 32.5 5 cobble
+# W3 the Tanneries lane (tan earth): four plates of 12.5
+ground 25 -55 30 -42.5 tan_earth
+ground 25 -42.5 30 -30 tan_earth
+ground 25 -30 30 -17.5 tan_earth
+ground 25 -17.5 30 -5 tan_earth
+# W4 the Rack Walk (tan earth)
+ground -35 -25 -22.5 -20 tan_earth
+ground -22.5 -25 -10 -20 tan_earth
+ground -10 -25 2.5 -20 tan_earth
+ground 2.5 -25 15 -20 tan_earth
+ground 15 -25 25 -20 tan_earth
+# W5 the loop lane (tan earth)
+ground -35 -20 -30 -12.5 tan_earth
+ground -35 -12.5 -30 -5 tan_earth
+# W6 alcove B, "Lamp and a chair" (slate)
+ground 30 -37.5 37.5 -30 slate_pale
+# W7 the Tanneries yard (tan earth): a centre where the fights are (YardPlateCentre: one line changes its stone) and margins
+ground 22.25 -69 32.75 -61 flagstone_cold name=YardPlateCentre
+ground 21.25 -70 33.75 -69 slate_cold name=YardPlateBorderNorth
+ground 21.25 -61 33.75 -60 slate_cold name=YardPlateBorderSouth
+ground 21.25 -69 22.25 -61 slate_cold name=YardPlateBorderWest
+ground 32.75 -69 33.75 -61 slate_cold name=YardPlateBorderEast
+ground 15 -75 27.5 -70 tan_earth name=YardPlateNorth
+ground 27.5 -75 40 -70 tan_earth name=YardPlateNorth
+ground 15 -70 21.25 -60 tan_earth name=YardPlateWest
+ground 33.75 -70 40 -60 tan_earth name=YardPlateEast
+ground 15 -60 27.5 -55 tan_earth name=YardPlateSouth
+ground 27.5 -60 40 -55 tan_earth name=YardPlateSouth
+
+# --- The solid masses: three storeys under a flat roof (7.83 m) where they stand within 9 m south of walkable ground in their column
+# (T2, T3, T6, T7), under a sloping or a high roof where nothing walkable lies north of them in the line of sight; the yard's flanks two.
+# frontage: stone fronts with shops and shutters (the street's north row, the court, the Lazyman's back); tannery: wooden works. ---
+# The Lazyman's back and the court's west cap, the street's north row (the lane mouth is x 25..30) and the lane's east flank
+# The seams where two grounds meet are not straight: one ground reaches into the other in slabs and tongues of uneven length (no run of
+# a seam's edge is straight for more than half a metre). Court A's slate into the street, the street into the lane's mouth, the alcove's
+# slate into the lane; the yard's tan margins into its border, and its stone square into the border. (Under a kerb, the gate's, a seam
+# is hidden and has none.)
+fringe -30 -5 -29.1 5 slate_cold w seed=1
+fringe 25 -5.9 30 -5 cobble s seed=2
+fringe 29.1 -37.5 30 -30 slate_pale e seed=3
+fringe 21.25 -70 33.75 -69.6 tan_earth n seed=4
+fringe 21.25 -60.4 33.75 -60 tan_earth s seed=5
+fringe 21.25 -69.6 21.65 -60.4 tan_earth w seed=6
+fringe 33.35 -69.6 33.75 -60.4 tan_earth e seed=7
+fringe 22.25 -69.4 32.75 -69 flagstone_cold s seed=8
+fringe 22.25 -61 32.75 -60.6 flagstone_cold n seed=9
+fringe 21.85 -69 22.25 -61 flagstone_cold e seed=10
+fringe 32.75 -69 33.15 -61 flagstone_cold w seed=11
+block -40 -25 -35 -5 3 frontage gable solid
+block -30 -10 25 -5 3 frontage gable solid
+block 30 -20 32.5 -5 3 frontage gable solid
+block 32.5 -5 35 5 3 frontage gable solid
+block -42.5 -5 -40 5 3 frontage gable solid
+# The works north of the Rack Walk, and the walls of the alcove
+block -40 -45 -10 -25 3 tannery gable solid
+block -10 -45 25 -25 3 tannery gable solid
+block 30 -45 40 -37.5 3 tannery gable solid
+block 37.5 -37.5 40 -30 3 tannery high solid
+# The yard's north wall and its two flanks
+block 12.5 -80 42.5 -75 3 yardwall gable solid
+block 12.5 -75 15 -55 2 tannery high solid
+block 40 -75 42.5 -55 2 tannery high solid
+
+# --- The low walls (0.6 m: a body against one is hidden only below about 0.3 m), where a flank stands south of other ground ---
+curb 22.5 -55 25 -45 0.6 slate name=LowWall1
+curb 30 -55 32.5 -45 0.6 slate name=LowWall2
+curb 30 -30 32.5 -20 0.6 slate name=LowWall3
+curb 22.5 -20 25 -10 0.6 slate name=LowWall4
+curb -30 -20 -27.5 -10 0.6 slate name=LowWall5
+
+# --- The kerbs (0.3 m, slate, 0.4 m thick, south of the edge): the street and court, the Rack Walk, the alcove, the yard ---
+curb -40 5 32.5 5.4 0.3 slate
+curb -30 -20 22.5 -19.6 0.3 slate
+curb 32.5 -30 37.5 -29.6 0.3 slate
+curb 15 -55 22.5 -54.6 0.3 slate
+curb 32.5 -55 40 -54.6 0.3 slate
+
+# --- The gate: the shortcut, shut. A 0.6 m board in the slot between the Lazyman's back and the street's row, on world and
+# ik_surface (a curb is both); Task 3 dresses it. A pillar post at each of its ends and at the yard's mouth. ---
+curb -35 -5.5 -30 -4.5 0.6 slate_pale name=Gate
+# (No rail across the tops of the posts: at 2.4 m it crossed the heads of fighters standing north of the gate, seen from the camera. The gate is the
+# board, the two picket gates before it and the pilasters.)
+# Bollards (0.65 m, 0.4 square) at the low walls' north ends at the yard's mouth: nothing a fighter can stand behind.
+curb 24.675 -55.325 25.075 -54.925 0.65 slate name=Bollard
+curb 29.925 -55.325 30.325 -54.925 0.65 slate name=Bollard
+# The gate's pilasters: pillar-stone half in the wall on each face of the slot (ghosts: they are in the wall), so no body stands behind one.
+piece pillar-stone -35.2 -5.1 ghost
+piece pillar-stone -29.8 -5.1 ghost
+# Two fence-gate pieces across the slot (seen, no collider: the board is the barrier), so that it reads as a shut gate: a picket gate with
+# its round boss, 0.95 m high, standing in the board and showing 0.35 m above it.
+piece fence-gate -33.75 -3.85 90
+piece fence-gate -31.25 -3.85 90
+
+# --- The yard's vats, for cover ---
+vat 20 -66.25
+vat 35 -66.25
+
+# --- The low walls, dressed: a coping of flagstone 0.05 m thick over each (wall and coping 0.65 m, the most that stands on the south side
+# of walkable ground), and a railing of fence on top, seen through, from 2.5 m back of the wall's north end (nothing of it before a body
+# standing against that end) ---
+curb 22.5 -55 25 -45 0.05 flagstone name=Coping y=0.6
+curb 30 -55 32.5 -45 0.05 flagstone name=Coping y=0.6
+curb 30 -30 32.5 -20 0.05 flagstone name=Coping y=0.6
+curb 22.5 -20 25 -10 0.05 flagstone name=Coping y=0.6
+curb -30 -20 -27.5 -10 0.05 flagstone name=Coping y=0.6
+# NOTE: every railing below stands 3.75 m or more back from its wall's north face, so nothing of it is before a body standing against that face
+# (a ray from him passes over it); a railing moved forward must be tried again with test_bilibara_hidden.
+piece fence 23.75 -51.25 0 y=0.65
+piece fence 23.75 -48.75 0 y=0.65
+piece fence 31.25 -51.25 0 y=0.65
+piece fence 31.25 -48.75 0 y=0.65
+piece fence 31.25 -26.25 0 y=0.65
+piece fence 31.25 -23.75 0 y=0.65
+piece fence 23.75 -16.25 0 y=0.65
+piece fence 23.75 -13.75 0 y=0.65
+piece fence -28.75 -16.25 0 y=0.65
+piece fence -28.75 -13.75 0 y=0.65
+
+# --- The shrine sites as places: a plinth (solid, 0.6 m, against the south face of the nearest wall, not before a door or the gate, so
+# that whatever the shrine puts on it hides nobody), and alcove B with a bench and a stool ---
+curb -36.9 -5 -35.3 -4.4 0.6 slate name=Plinth_A
+curb 31 -37.5 32.6 -36.9 0.6 slate name=Plinth_B
+piece stall-bench 35 -35.5 90
+piece stall-stool 34 -33
+
+# --- Street props at the street's north margin, flush with the fronts, off the clear line (the south margin is the camera's side: a 3 m
+# stall there would hide a fighter and stand in front of the sight line) ---
+piece stall-red -8.75 -3.75
+piece stall-red 8.75 -3.75
+piece cart -22.5 -3.88 90
+piece stall-bench 12.5 -4.675 90
+piece stall-stool 14.1 -4.675
+piece stall-stool 14.8 -4.675
+
+# --- The yard's doors, barred: wall-door pieces on the north wall's face (a hair proud of it), banners between them ---
+piece wall-door 20 -73.98 90
+piece wall-door 27.5 -73.98 90
+piece wall-door 35 -73.98 90
+# The doors are barred: two fences across each (pickets and rails, 1.9 m of them, ghosts a hair in front of the door's face, behind where a body stands),
+# in the town's dark timber, so that a door reads as a dark door with bars and not as an arch of plaster.
+piece fence 20 -73.65 90 y=0 ghost
+piece fence 20 -73.65 90 y=0.95 ghost
+piece fence 27.5 -73.65 90 y=0 ghost
+piece fence 27.5 -73.65 90 y=0.95 ghost
+piece fence 35 -73.65 90 y=0 ghost
+piece fence 35 -73.65 90 y=0.95 ghost
+piece banner-red 23.75 -73.925 90 y=0.8
+piece banner-red 31.25 -73.925 90 y=0.8
+piece banner-red 38.75 -73.925 90 y=0.8
+
+# --- The works beyond the places (non-solid, Backdrop: no collider, no shadow). Low sheds south of the yard's kerbs and east of the lane, each
+# one storey under a flat roof and set back from the kerb it stands south of (the sight line needs 1.9 m for the 2.8 m a shed is), and the three
+# storeys of tanneries east of the lane at 10 m from the alcove's south kerb ---
+ground 15 -55 22.5 -45 tan_earth visual
+ground 32.5 -55 40 -45 tan_earth visual
+ground 32.5 -30 45 -20 snow visual
+block 15 -52.5 22.5 -47.5 1 shed flat
+block 32.5 -52.5 40 -47.5 1 shed flat
+block 32.5 -27.5 45 -22.5 1 shed flat
+block 32.5 -20 45 -10 3 tannery gable
+
+# --- The ring: rows of blocks 5 m deep (2.5 m where a place leaves half a row) and up to 20 m long, filling x -60..62.5, z -95..5 outside
+# the places, the masses and the strips above, 2 storeys at the south edge and a storey more every 5 m north, to 4; styles, roofs and chimneys
+# in turn (the chimneys are rows of one, here only). Generated from the places' rectangles; the layout is the source and may be edited by hand. ---
+block -60 -95 -42.5 -90 4 frontage slope
+row chimney -52.05 -94.4 -52.05 -94.4 0 y=10.9 backdrop
+block -42.5 -95 -25 -90 4 tannery high
+row chimney -34.55 -94.4 -34.55 -94.4 0 y=11.8 backdrop
+block -25 -95 -7.5 -90 4 shed flat
+block -7.5 -95 10 -90 4 frontage slope
+row chimney 0.45 -94.4 0.45 -94.4 0 y=10.9 backdrop
+block 10 -95 27.5 -90 4 tannery slope
+row chimney 17.95 -94.4 17.95 -94.4 0 y=10.9 backdrop
+block 27.5 -95 45 -90 4 shed high
+block 45 -95 62.5 -90 4 frontage flat
+row chimney 52.95 -94.4 52.95 -94.4 0 y=10.31 backdrop
+block -60 -90 -42.5 -85 4 tannery slope
+row chimney -52.05 -89.4 -52.05 -89.4 0 y=10.9 backdrop
+block -42.5 -90 -25 -85 4 shed high
+block -25 -90 -7.5 -85 4 frontage flat
+row chimney -17.05 -89.4 -17.05 -89.4 0 y=10.31 backdrop
+block -7.5 -90 10 -85 4 tannery slope
+row chimney 0.45 -89.4 0.45 -89.4 0 y=10.9 backdrop
+block 10 -90 27.5 -85 4 shed slope
+block 27.5 -90 45 -85 4 frontage high
+row chimney 35.45 -89.4 35.45 -89.4 0 y=11.8 backdrop
+block 45 -90 62.5 -85 4 tannery flat
+row chimney 52.95 -89.4 52.95 -89.4 0 y=10.31 backdrop
+block -60 -85 -42.5 -80 4 shed slope
+block -42.5 -85 -25 -80 4 frontage high
+row chimney -34.55 -84.4 -34.55 -84.4 0 y=11.8 backdrop
+block -25 -85 -7.5 -80 4 tannery flat
+row chimney -17.05 -84.4 -17.05 -84.4 0 y=10.31 backdrop
+block -7.5 -85 10 -80 4 shed slope
+block 10 -85 27.5 -80 4 frontage slope
+row chimney 17.95 -84.4 17.95 -84.4 0 y=10.9 backdrop
+block 27.5 -85 45 -80 4 tannery high
+row chimney 35.45 -84.4 35.45 -84.4 0 y=11.8 backdrop
+block 45 -85 62.5 -80 4 shed flat
+block -60 -80 -40 -75 4 frontage slope
+row chimney -49.55 -79.4 -49.55 -79.4 0 y=10.9 backdrop
+block -40 -80 -22.5 -75 4 tannery high
+row chimney -32.05 -79.4 -32.05 -79.4 0 y=11.8 backdrop
+block -22.5 -80 -5 -75 4 shed flat
+block -5 -80 12.5 -75 4 frontage slope
+row chimney 2.95 -79.4 2.95 -79.4 0 y=10.9 backdrop
+block 42.5 -80 62.5 -75 4 tannery slope
+row chimney 52.95 -79.4 52.95 -79.4 0 y=10.9 backdrop
+block -60 -75 -40 -70 4 shed flat
+block -40 -75 -22.5 -70 4 frontage slope
+row chimney -32.05 -74.4 -32.05 -74.4 0 y=10.9 backdrop
+block -22.5 -75 -5 -70 4 tannery slope
+row chimney -14.55 -74.4 -14.55 -74.4 0 y=10.9 backdrop
+block -5 -75 12.5 -70 4 shed high
+block 42.5 -75 62.5 -70 4 frontage flat
+row chimney 52.95 -74.4 52.95 -74.4 0 y=10.31 backdrop
+block -60 -70 -40 -65 4 tannery slope
+row chimney -49.55 -69.4 -49.55 -69.4 0 y=10.9 backdrop
+block -40 -70 -22.5 -65 4 shed high
+block -22.5 -70 -5 -65 4 frontage flat
+row chimney -14.55 -69.4 -14.55 -69.4 0 y=10.31 backdrop
+block -5 -70 12.5 -65 4 tannery slope
+row chimney 2.95 -69.4 2.95 -69.4 0 y=10.9 backdrop
+block 42.5 -70 62.5 -65 4 shed slope
+block -60 -65 -40 -60 4 frontage flat
+row chimney -49.55 -64.4 -49.55 -64.4 0 y=10.31 backdrop
+block -40 -65 -22.5 -60 4 tannery slope
+row chimney -32.05 -64.4 -32.05 -64.4 0 y=10.9 backdrop
+block -22.5 -65 -5 -60 4 shed slope
+block -5 -65 12.5 -60 4 frontage high
+row chimney 2.95 -64.4 2.95 -64.4 0 y=11.8 backdrop
+block 42.5 -65 62.5 -60 4 tannery flat
+row chimney 52.95 -64.4 52.95 -64.4 0 y=10.31 backdrop
+block -60 -60 -40 -55 4 shed slope
+block -40 -60 -22.5 -55 4 frontage high
+row chimney -32.05 -59.4 -32.05 -59.4 0 y=11.8 backdrop
+block -22.5 -60 -5 -55 4 tannery flat
+row chimney -14.55 -59.4 -14.55 -59.4 0 y=10.31 backdrop
+block -5 -60 12.5 -55 4 shed slope
+block 42.5 -60 62.5 -55 4 frontage slope
+row chimney 52.95 -59.4 52.95 -59.4 0 y=10.9 backdrop
+block -60 -55 -40 -50 4 tannery flat
+row chimney -49.55 -54.4 -49.55 -54.4 0 y=10.31 backdrop
+block -40 -55 -20 -50 4 shed slope
+block -20 -55 -2.5 -50 4 frontage slope
+row chimney -12.05 -54.4 -12.05 -54.4 0 y=10.9 backdrop
+block -2.5 -55 15 -50 4 tannery high
+row chimney 5.45 -54.4 5.45 -54.4 0 y=11.8 backdrop
+block 40 -55 52.5 -50 4 shed flat
+block 52.5 -55 62.5 -50 4 frontage slope
+row chimney 57.95 -54.4 57.95 -54.4 0 y=10.9 backdrop
+block -60 -50 -40 -45 4 tannery high
+row chimney -49.55 -49.4 -49.55 -49.4 0 y=11.8 backdrop
+block -40 -50 -20 -45 4 shed flat
+block -20 -50 -2.5 -45 4 frontage slope
+row chimney -12.05 -49.4 -12.05 -49.4 0 y=10.9 backdrop
+block -2.5 -50 15 -45 4 tannery slope
+row chimney 5.45 -49.4 5.45 -49.4 0 y=10.9 backdrop
+block 40 -50 52.5 -45 4 shed high
+block 52.5 -50 62.5 -45 4 frontage flat
+row chimney 57.95 -49.4 57.95 -49.4 0 y=10.31 backdrop
+block -60 -45 -40 -40 4 tannery slope
+row chimney -49.55 -44.4 -49.55 -44.4 0 y=10.9 backdrop
+block 40 -45 52.5 -40 4 shed high
+block 52.5 -45 62.5 -40 4 frontage flat
+row chimney 57.95 -44.4 57.95 -44.4 0 y=10.31 backdrop
+block -60 -40 -40 -35 4 tannery slope
+row chimney -49.55 -39.4 -49.55 -39.4 0 y=10.9 backdrop
+block 40 -40 52.5 -35 4 shed high
+block 52.5 -40 62.5 -35 4 frontage flat
+row chimney 57.95 -39.4 57.95 -39.4 0 y=10.31 backdrop
+block -60 -35 -40 -30 4 tannery slope
+row chimney -49.55 -34.4 -49.55 -34.4 0 y=10.9 backdrop
+block 40 -35 52.5 -30 4 shed high
+block 52.5 -35 62.5 -30 4 frontage flat
+row chimney 57.95 -34.4 57.95 -34.4 0 y=10.31 backdrop
+block -60 -30 -40 -25 4 tannery slope
+row chimney -49.55 -29.4 -49.55 -29.4 0 y=10.9 backdrop
+block 45 -30 62.5 -25 4 shed high
+block -60 -25 -40 -20 4 frontage slope
+row chimney -49.55 -24.4 -49.55 -24.4 0 y=10.9 backdrop
+block 45 -25 62.5 -20 4 tannery slope
+row chimney 52.95 -24.4 52.95 -24.4 0 y=10.9 backdrop
+block -60 -20 -40 -15 4 shed flat
+block 45 -20 62.5 -15 4 frontage slope
+row chimney 52.95 -19.4 52.95 -19.4 0 y=10.9 backdrop
+block -60 -15 -40 -10 4 tannery high
+row chimney -49.55 -14.4 -49.55 -14.4 0 y=11.8 backdrop
+block 45 -15 62.5 -10 4 shed flat
+block -60 -10 -40 -5 4 frontage slope
+row chimney -49.55 -9.4 -49.55 -9.4 0 y=10.9 backdrop
+block 32.5 -10 47.5 -5 4 tannery high
+row chimney 40.45 -9.4 40.45 -9.4 0 y=11.8 backdrop
+block 47.5 -10 62.5 -5 4 shed flat
+block -60 -5 -42.5 0 3 frontage slope
+row chimney -52.05 -4.4 -52.05 -4.4 0 y=8.4 backdrop
+block 35 -5 50 0 3 tannery high
+row chimney 42.95 -4.4 42.95 -4.4 0 y=9.3 backdrop
+block 50 -5 62.5 0 3 shed flat
+block -60 0 -42.5 5 2 frontage slope
+row chimney -52.05 0.6 -52.05 0.6 0 y=5.9 backdrop
+block 35 0 50 5 2 tannery high
+row chimney 42.95 0.6 42.95 0.6 0 y=6.8 backdrop
+block 50 0 62.5 5 2 shed flat
+
+# --- Roofs that show: their snow and shingles are on the roofs themselves (render/shaders/toon_roof.gdshader, the roof_* textures: a band
+# of snow along every ridge, rows of shingles, a dark eave), where the first version laid mounds on them. The tops of T6 and the yard's
+# and the alcove's walls are never in a picture from any walkable point (their roofs are 9 m higher up the picture than their feet). ---
+row chimney 39.0 -15.0 39.0 -15.0 0 y=8.1 backdrop
+row chimney 34.0 -15.0 34.0 -15.0 0 y=8.1 backdrop
+
+# The gabled roofs' chimneys, at the ridges, 8.1 m up (their tops stay under the sight line: the test holds it)
+row chimney -22.3 -7.5 -22.3 -7.5 0 y=8.1 backdrop
+row chimney -7.3 -7.5 -7.3 -7.5 0 y=8.1 backdrop
+row chimney 7.7 -7.5 7.7 -7.5 0 y=8.1 backdrop
+row chimney 17.7 -7.5 17.7 -7.5 0 y=8.1 backdrop
+row chimney 0.7 -35 0.7 -35 0 y=8.1 backdrop
+row chimney 14.7 -35 14.7 -35 0 y=8.1 backdrop
+row chimney 34.2 -41.2 34.2 -41.2 0 y=8.1 backdrop
+
+# Snow along the ridges of the gabled roofs (where it gathers), and on the flat decks and the sheds: one mound to about every 4 m, so that no
+# roof shows a tone of more than a few square metres (test_bilibara_view holds it at 6% of the frame).
+
+
+# --- The yard's margins, out of the fighting square: stacked hides (planks, two high: 0.3 m), and a railing of fence against each side wall (seen
+# through, 0.95 m) ---
+row planks 16.25 -72.5 16.25 -70 0 y=0
+row planks 16.25 -72.5 16.25 -70 0 y=0.15
+row planks 16.25 -62.5 16.25 -60 0 y=0
+row planks 16.25 -62.5 16.25 -60 0 y=0.15
+row planks 38.75 -72.5 38.75 -70 0 y=0
+row planks 38.75 -72.5 38.75 -70 0 y=0.15
+row planks 38.75 -62.5 38.75 -60 0 y=0
+row planks 38.75 -62.5 38.75 -60 0 y=0.15
+row fence 14.2 -73.75 14.2 -56.25 0
+row fence 40.85 -73.75 40.85 -56.25 180
+
+# --- Kit pieces no style uses, where they fit (each against a front, north of the ground it overlooks, so none stands behind a fighter):
+# ghost lanterns on the street's fronts and the yard's wall (their lamps are Task 4's), a colonnade of wooden pillars under the works'
+# galleries along the Rack Walk, balconies on the street's row, small rocks in the drying yard. Left: wall-corner (a whole tile of its own),
+# wall-doorway-round (an open arch), stairs-stone and its handrail (2.5 m high: they would hide a fighter), fountain-round (a quarter of the spawn court). ---
+# The lanterns (their lamps are the layout's only warm light): 18 posts, each with its lamp 3.45 m over it, so no lamp hangs in the air. A tall
+# post hides a fighter standing within about 2.5 m north of it, so each stands where no body is north of it: against a front or a wall
+# (the street's four, the Rack Walk's three beside the colonnade's pillars, court A's two, the yard's two on its north wall), or, where the
+# ground is open, on the top of a low wall (ghost: nobody reaches it; the wall's fences are not before a body, see the notes there), 4.1 m up
+# from the ground to the lamp. A post on the ground is solid, a slim round post a fighter slides round. Two lamps cast shadows, at the shrine
+# sites 80 m apart (ShrineLampA in court A, ShrineLampB in alcove B). Where these differ from the plan's coordinates: the report lists them.
+lamps #ffb98a 6 0 3.45 world glass
+lantern -36.1 -4.13 shadow wall=n
+lantern -28.5 -4.7 wall=n
+lantern -20 -4.72 wall=n
+lantern -5 -4.72 wall=n
+lantern 10 -4.72 wall=n
+lantern 22 -4.72 wall=n
+lantern 23.75 -15 ghost y=0.65
+lantern 31.25 -46.5 ghost y=0.65
+lantern 36.9 -37.23 shadow wall=n
+lantern 33.7 -37.23 wall=n
+lantern -18.75 -24.33 wall=n
+lantern -1.25 -24.33 wall=n
+lantern 16.25 -24.33 wall=n
+lantern -28.75 -15 ghost y=0.65
+lantern 17.5 -74.72 wall=n
+lantern 37.5 -74.72 wall=n
+lantern 23.75 -50 ghost y=0.65
+lantern 31.25 -50 ghost y=0.65
+row pillar-wood -35 -24.8 20 -24.8 0
+# The pillars stand in the wall's own thickness (z -25 to -24.6): one unseen solid there, so that no body stands inside one.
+guard -35.2 -25 20.2 -24.6 2.5 name=ColonnadeGuard
+row balcony-wall -16.25 -3.75 -11.25 -3.75 90 y=2.5
+row balcony-wall 6.25 -3.75 11.25 -3.75 90 y=2.5
+piece rock-small -26 -13.5
+piece rock-small 20 -13
+
+# --- Fronts: banners as the pink neon of the street (a banner hangs on the face, turned to the south) ---
+piece banner-red -37.5 -3.925 90 y=0.8
+piece banner-red -22.5 -3.925 90 y=0.8
+piece banner-green -10 -3.925 90 y=0.8
+piece banner-red 6.25 -3.925 90 y=0.8
+
+# --- The harbor, south of the street (unwalkable, seen only): the cobbled apron, the quay's low wall, the water, drifts of snow ---
+ground -40 5.4 -27.5 9 cobble visual
+ground -27.5 5.4 -15 9 cobble visual
+ground -15 5.4 -2.5 9 cobble visual
+ground -2.5 5.4 10 9 cobble visual
+ground 10 5.4 22.5 9 cobble visual
+ground 22.5 5.4 32.5 9 cobble visual
+ground -62.5 5 -50 9 cobble visual
+ground -50 5 -40 9 cobble visual
+ground 32.5 5 45 9 cobble visual
+ground 45 5 57.5 9 cobble visual
+ground 57.5 5 62.5 9 cobble visual
+row wall-half -61.25 8 61.25 8 -90
+water -70 9 75 32 -0.9
+drift -33.5 7 5.75 1.56 seed=53
+drift -9 7.5 6.9 1.56 seed=54
+drift 6.5 6.7 5.75 1.56 seed=55
+drift 23 7.7 6.9 1.56 seed=56
+drift -19.5 8.9 5.75 1.56 y=1.25 seed=57
+drift 11 8.9 6.9 1.56 y=1.25 seed=58
+
+# --- The drying yard, between the Rack Walk and the street's north row (unwalkable, under the line of sight): tan earth, three vats,
+# racks of poles three metres or more back from the Rack Walk's kerb, hides on the ground, two rocks, drifts ---
+ground -30 -19.6 -19.5 -10 tan_earth visual
+ground -19.5 -19.6 -9 -10 tan_earth visual
+ground -9 -19.6 1.5 -10 tan_earth visual
+ground 1.5 -19.6 12 -10 tan_earth visual
+ground 12 -19.6 22.5 -10 tan_earth visual
+vat -20 -15
+vat -5 -15
+vat 10 -15
+row poles-horizontal -28.75 -11.4 -1.25 -11.4 90
+row poles -26.25 -12.8 1.25 -12.8 90
+row poles-horizontal 3.75 -11.4 21.25 -11.4 90
+row poles 6.25 -12.8 21.25 -12.8 90
+row planks -26.25 -17.9 -21.25 -17.9 0
+row planks 2.5 -17.9 7.5 -17.9 0
+piece rock-large -12 -14.5
+piece rock-large 17 -16
+drift -27.5 -16.5 3.45 1.56 seed=59
+drift -11 -17.5 6.9 1.56 seed=60
+drift 2.5 -16 5.75 1.56 seed=61
+drift 16.5 -17.5 8.05 1.56 seed=62
+drift 0.5 -13.6 5.75 1.56 seed=63
+
+# --- Markers (yaw about +Y: 0 faces south, 90 east, 180 north, 270 west) ---
+marker Spawn -32.5 1.25 90
+marker ShrineSite_A -35 0 90
+marker ShrineSite_B 35 -33.75 270
+marker StreetEast 27.5 0 0
+marker LaneMid 27.5 -30 0
+marker RackEast 27.5 -22.5 0
+marker RackWest -32.5 -22.5 0
+marker GateFar -32.5 -6.5 0
+marker GateNear -32.5 -3.5 180
+marker YardEntry 27.5 -57.5 180
+marker KnuckleSpawn 27.5 -68 0
+marker HandDoor_1 20 -73.8 0
+marker HandDoor_2 27.5 -73.8 0
+marker HandDoor_3 35 -73.8 0
+
+# --- Points of interest (UP metres above the ground) ---
+poi ShrinePlinth_A -36.1 -4.7 0.65
+poi ShrinePlinth_B 31.8 -37.2 0.65
+poi Lazymans -38.75 -5 1.8
+poi HatShop -10 -5 1.6
+poi ShortcutGate -32.5 -5 1.0
+poi YardGate 27.5 -55 1.4
+poi YardCentre 27.5 -65 1.0
+poi VatWest 20 -66.25 1.0
+poi VatEast 35 -66.25 1.0

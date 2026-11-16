@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://moves/move_data.gd" id="1_move"]
+
+[resource]
+script = ExtResource("1_move")
+id = &"dash_step"
+kind = 1
+clip = &"dash_step"
+stamina_cost = 8.0
+directional = {
+&"back": &"dash_step_back",
+&"left": &"dash_step_left",
+&"right": &"dash_step_right"
+}
+neutral_variant = &"hop"
+side_ahead_deg = 45.0
+side_back_deg = 135.0
