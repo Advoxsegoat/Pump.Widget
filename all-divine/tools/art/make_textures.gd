@@ -65,13 +65,18 @@ const SOFT_EDGE := 4
 ## The earth's tile is 20 m a side (640 texels): the picture shows 20 m of ground across, so no pattern of it repeats in a picture (a 2 m tile
 ## showed the same blotches in rows 64 pixels apart: wallpaper).
 const EARTH_SIZE := 20 * TEXELS_PER_METRE
-## Snow (the drifts, off the ground a fighter walks on): the palest ground of the stretch, a cold near-white, with a tenth of its texels in a
-## bluer shadow tone, in soft clumps of two to five texels.
-const SNOWS: Array[Color] = [Color8(238, 242, 248), Color8(224, 230, 240)]
+## Snow (the drifts and the apron, off the ground a fighter walks on): the palest ground of the stretch, a cold near-white laid so that the stretch's light
+## (which lifts a texture by a tenth in red, a seventh in green and a quarter in blue) does not clip it: no channel over SNOW_BRIGHTEST here, 244 or so in the
+## picture. SNOW_LIGHT is its brightest tone and SNOW_SHADE the bluer, darker tone in the dips of its grain: wind ripples (a long wave across the tile, bent
+## by a slow noise) and footfall dimples (soft noise four texels across), blended between the two, never a single odd texel.
+const SNOW_LIGHT := Color8(186, 192, 197)
+const SNOW_SHADE := Color8(163, 173, 188)
+const SNOW_BRIGHTEST := 200
+## The ripples' wave across the tile (whole cycles, so that it wraps), the share of the dip they and the dimples each give, and the cell of the dimples.
+const SNOW_WAVE := Vector2i(4, 2)
+const SNOW_RIPPLE := 0.45
+const SNOW_DIMPLE_CELL := 4
 const SNOW_SEED := 19
-const SNOW_SHADOW := 0.10
-const CLUMP_MIN := 2
-const CLUMP_MAX := 5
 ## The wood of the fronts (doors, shutters, timber, boards) in the colormap: value WOOD_BASE + WOOD_SLOPE * the kit's value; the trim about TRIM_BASE.
 const WOOD_BASE := 0.20
 const WOOD_SLOPE := 0.16
@@ -279,41 +284,22 @@ static func tan_earth() -> Image:
 	return _image(softened, size)
 
 
-## Snow: a 2 m tile of a cold light blue-grey with SNOW_SHADOW of its texels in a bluer tone, in clumps of CLUMP_MIN to
-## CLUMP_MAX texels that do not touch one another (not even at a corner), so each is seen as one soft patch. It wraps. The
-## same seeded random numbers (SNOW_SEED) make the same tile.
+## Snow: a 2 m tile of SNOW_LIGHT with grain: where the ripples and the dimples dip, the tone goes toward SNOW_SHADE. It wraps. The same seeded random
+## numbers (SNOW_SEED) make the same tile.
 static func snow() -> Image:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = SNOW_SEED
 	var size := FLAGSTONE_SIZE
-	var shadowed := PackedByteArray()
-	shadowed.resize(size * size)
-	var taken := PackedByteArray()  # a clump's texels and the ring round them
-	taken.resize(size * size)
-	var left := roundi(size * size * SNOW_SHADOW)
-	var steps := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
-	while left > 0:
-		var at := Vector2i(rng.randi_range(0, size - 1), rng.randi_range(0, size - 1))
-		var cells: Array[Vector2i] = [at]
-		for i in rng.randi_range(CLUMP_MIN, CLUMP_MAX) - 1:
-			var next: Vector2i = cells[rng.randi_range(0, cells.size() - 1)] + steps[rng.randi_range(0, 3)]
-			next = Vector2i(posmod(next.x, size), posmod(next.y, size))
-			if not cells.has(next):
-				cells.append(next)
-		var free := cells.size() >= CLUMP_MIN
-		for cell in cells:
-			free = free and taken[cell.y * size + cell.x] == 0
-		if not free:
-			continue
-		for cell in cells:
-			shadowed[cell.y * size + cell.x] = 1
-			for dy in range(-1, 2):
-				for dx in range(-1, 2):
-					taken[posmod(cell.y + dy, size) * size + posmod(cell.x + dx, size)] = 1
-		left -= cells.size()
+	var bend := _soft_noise(rng, size, 16)
+	var dimples := _soft_noise(rng, size, SNOW_DIMPLE_CELL)
 	var colours: Array[Color] = []
-	for i in size * size:
-		colours.append(SNOWS[1] if shadowed[i] == 1 else SNOWS[0])
+	for y in size:
+		for x in size:
+			var i := y * size + x
+			var wave := TAU * (SNOW_WAVE.x * x + SNOW_WAVE.y * y) / size + (bend[i] - 0.5) * 3.0
+			var ripple := 0.5 + 0.5 * sin(wave)
+			var dip := clampf(SNOW_RIPPLE * ripple + (1.0 - SNOW_RIPPLE) * dimples[i] * 0.9, 0.0, 1.0)
+			colours.append(SNOW_LIGHT.lerp(SNOW_SHADE, dip))
 	return _image(colours, size)
 
 
@@ -326,7 +312,7 @@ const SLATE_COLD_SIZE := 2 * TEXELS_PER_METRE
 const SLATE_COLD_SEED := 31
 const SLATE_COLD_TONES: Array[Color] = [Color8(163, 165, 169), Color8(169, 171, 175), Color8(175, 177, 181), Color8(181, 183, 186), Color8(149, 152, 157)]
 const SLATE_COLD_JOINT := Color8(130, 134, 140)
-const SLATE_COLD_SNOW := Color8(198, 203, 210)
+const SLATE_COLD_SNOW := Color8(186, 191, 196)
 ## The alcove's slate is half in the shade of the works beside it: the same slate a hand paler (1.08 of the court's), so that its ground is in
 ## the readability band in the shade as the court's is in the sun.
 const SLATE_PALE_STONES: Array[Color] = [Color8(166, 166, 166), Color8(170, 170, 170)]

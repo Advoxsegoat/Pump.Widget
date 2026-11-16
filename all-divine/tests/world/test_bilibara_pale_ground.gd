@@ -18,7 +18,7 @@ func _luma(c: Color) -> float:
 # its mean luma's range.
 func _grounds() -> Array:
 	var made := {}
-	for name: String in ["cobble", "tan_earth", "slate_cold", "slate_pale", "flagstone_cold"]:
+	for name: String in ["cobble", "tan_earth", "slate_cold", "slate_pale", "flagstone_cold", "snow"]:
 		var img := Image.load_from_file(ProjectSettings.globalize_path("res://assets/env/textures/%s.png" % name))
 		assert_true(img != null, "%s.png loads" % name)
 		img.convert(Image.FORMAT_RGB8)
@@ -29,6 +29,8 @@ func _grounds() -> Array:
 		["slate_cold", made["slate_cold"], [MAKE_TEXTURES.SLATE_COLD_JOINT, MAKE_TEXTURES.SLATE_COLD_SNOW], 0.50, 0.80],
 		["slate_pale", made["slate_pale"], [MAKE_TEXTURES.SLATE_PALE_JOINT], 0.50, 0.80],
 		["flagstone_cold", made["flagstone_cold"], [MAKE_TEXTURES.FLAGSTONE_COLD_MORTAR], 0.55, 0.80],
+		# The snow of the drifts and the apron (seen, not stood on): the palest, all grain (no feature colour), under the clip.
+		["snow", made["snow"], [], 0.65, 0.80],
 	]
 
 
@@ -69,6 +71,8 @@ func test_the_grain_is_soft() -> void:
 
 func test_what_is_darker_than_the_grain_is_a_shape_never_a_speck() -> void:
 	for ground: Array in _grounds():
+		if (ground[2] as Array).is_empty():
+			continue  # the snow is all grain: no joint or patch to be a speck (its own test holds that no texel stands out)
 		var img := ground[1] as Image
 		var features := {}
 		for c: Color in ground[2]:
