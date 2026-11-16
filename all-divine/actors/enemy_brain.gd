@@ -177,6 +177,7 @@ var _nearest_yet := INF  # the nearest it has been to its target since it began 
 var _round_to := Vector2.INF  # the waypoint he walks to for a line to his target (x, z), INF for none
 var _round_path: Array[Vector2] = []  # the points after _round_to
 var _no_room_until := -1  # the physics frame until which a swing round a neighbour is refused for want of room
+var plans := 0  # how many ways round he has planned (a search begun), for a test and the report
 var _snagged := false  # blocked where a body could not walk the way in: _go_round plans a way though the line is clear
 var _round_at := Vector2.INF  # where the target stood when it was found
 var _round_for := 0.0  # seconds he has been going to it
@@ -819,6 +820,7 @@ func _go_round(actor: Actor, intent: Intent, delta: float) -> bool:
 # has a line (HitScanner.clear_between). The nearest goals are taken (those within ROUND_EVEN_CELLS of the first), the one on the open side
 # (_open_side) if the two sides are about as near. The way is smoothed to the fewest straight legs a body can walk. Empty if there is none.
 func _plan_round(actor: Actor) -> Array[Vector2]:
+	plans += 1
 	var space := actor.get_world_3d().direct_space_state
 	var start := Vector2(actor.global_position.x, actor.global_position.z)
 	var y := actor.global_position.y
