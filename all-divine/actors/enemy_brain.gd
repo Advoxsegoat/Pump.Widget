@@ -429,8 +429,10 @@ func _reangle() -> void:
 	if _self != null and target != null and is_instance_valid(target) and _same_level(_self) and not _goal_at(_self.get_world_3d().direct_space_state,
 			Vector2(_self.global_position.x, _self.global_position.z), _self.global_position.y, [_self.get_rid(), target.get_rid()]):
 		_snagged = true
-	var open := _open_side(_self) if _self != null else 0.0
-	_circle = open if open != 0.0 else -_circle
+	# Task 14f turned the circling toward the wider gap here. Since a foe plans a way round what blocks him (Task 15c) that rule decided nothing a
+	# test or a measured fight could see (the whole suite and every place of the stand-about fixtures play the same with and without it), and
+	# it was retired: the circling turns the other way, and the room check below keeps it out of a wall.
+	_circle = -_circle
 	_swing = _circle * deg_to_rad(REANGLE_DEG)
 	# Task 15c: the way that has a wall against it is no way (a foe at a door's jamb swung into the jamb, was blocked, and chose it again, for fifteen
 	# seconds): where there is no room a stride that way and there is the other, he goes the other. In the open there is room: nothing changes.
