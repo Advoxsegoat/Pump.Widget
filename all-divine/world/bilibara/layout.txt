@@ -1,7 +1,8 @@
-# The Bilibara stretch, as tools/world/build_region.gd reads it:
+# The Bilibara stretch, as tools/world/build_region.gd read it, once:
 #   tools/godot.sh -s res://tools/world/build_region.gd -- res://world/bilibara/layout.txt res://world/bilibara/bilibara.tscn
-# writes world/bilibara/bilibara.tscn. Unlike the older regions this scene is not hand-changed afterwards: the layout is the
-# source while the stretch is built (the plan's Tasks 2 to 5 add to it and build again), so change this file, not the scene.
+# wrote world/bilibara/bilibara.tscn. THE SCENE IS THE SOURCE FROM NOW ON (Task 5 of the stretch's plan, 2026-11-16): do not run the builder on
+# this layout again, and change the scene (in the editor, or by a script that edits it) and not this file. The layout is kept as the record of how
+# the scene was made: on that day the layout built a scene the same as the committed one in every node, transform, collider, mesh and property.
 # The commands are the courtyard's (world/courtyard/layout.txt) and the stretch's (the builder's own header lists them all).
 #
 # One stretch of the city of Bilibara, cold snow-noon, flat (y = 0 throughout): a place Abarax can walk and cannot leave.
