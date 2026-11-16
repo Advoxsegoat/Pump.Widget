@@ -44,21 +44,24 @@ static func new_game() -> SaveData:
 ## holds. No `version` and no `check`: those are the file's.
 func to_dict() -> Dictionary:
 	var item_counts := {}
-	for id: Variant in items:
-		item_counts[String(id)] = items[id]
+	# Every number goes through the filter `from_dict` uses: a NaN or an infinity never reaches the file (the engine
+	# warns when it writes one, and again each time it reads it back).
+	var clean_items := _items(items)
+	for id: Variant in clean_items:
+		item_counts[String(id)] = clean_items[id]
 	var foes: Array[String] = []
 	for id in fallen:
 		foes.append(String(id))
 	return {
 		"rest_shrine": String(rest_shrine),
 		"petals": petals,
-		"pile": pile.duplicate(),
+		"pile": _pile(pile),
 		"items": item_counts,
 		"flags": memory.to_dict(),
 		"deaths": deaths,
 		"play_frames": play_frames,
-		"at": at.duplicate(),
-		"bars": bars.duplicate(),
+		"at": _place(at),
+		"bars": _bars(bars),
 		"fallen": foes,
 	}
 
