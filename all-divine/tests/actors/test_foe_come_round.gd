@@ -184,3 +184,50 @@ func test_in_a_gate_a_foe_who_has_come_round_stays_come_round() -> void:
 
 func test_in_a_doorway_a_foe_who_has_come_round_stays_come_round() -> void:
 	await _hold_still("door")
+
+
+## The player 2.5 m behind the gate's gap, still, the three foes in front: they come through the gap and spread round him. Measured at ten seeds in
+## 1,200 frames (frames from the start): the first sustained second (60 frames) in which every two foes are over APART_DEG degrees apart seen from
+## him comes at 519, 523, 742, 637, 605, 648, 517, 826, 883 and 894 (402cf55: 308 to 830 with one at 649; the review measured 385 to 951 frames
+## after they were through, never in 3 of 10): four seeds within ten seconds, all within fifteen. What holds is SPREAD_BY.
+const SPREAD_BY := 1000
+## The longest a foe within 4 m of the player may stand still (a frame's step under 0.3 m/s, free to move): without the room check in
+## _reangle one stood 808 frames pressed against the gap's jamb (seed 3); the rest of them 40 to 141 (waiting for a turn at the mouth).
+const STILL_BY := 200
+
+
+func _behind() -> Array[Dictionary]:
+	var runs: Array[Dictionary] = []
+	for s in SEEDS:
+		runs.append(_fight("behind", s + 1, Vector3(s * FAR, 0, 0)))
+		runs[s]["still"] = [0, 0, 0]
+		runs[s]["last"] = [Vector3.ZERO, Vector3.ZERO, Vector3.ZERO]
+		runs[s]["still_max"] = 0
+	for f in 1200:
+		await frames(1)
+		for run in runs:
+			_observe(run)
+			for i in 3:
+				var foe: Actor = run["foes"][i]
+				var last: Vector3 = run["last"][i]
+				var moved := Vector2(foe.global_position.x - last.x, foe.global_position.z - last.z).length() * 60.0
+				run["last"][i] = foe.global_position
+				var near := Vector2(foe.global_position.x - run["player"].global_position.x, foe.global_position.z - run["player"].global_position.z).length() <= 4.0
+				if f > 5 and near and moved < 0.3 and not foe.runner.busy() and foe.frozen == 0:
+					run["still"][i] += 1
+					run["still_max"] = maxi(run["still_max"], run["still"][i])
+				else:
+					run["still"][i] = 0
+	_free(runs)
+	return runs
+
+
+func test_behind_a_gate_the_three_spread_round_a_still_player_and_nobody_stands_pressed_at_the_jamb() -> void:
+	var runs: Array[Dictionary] = await _behind()
+	var firsts := []
+	var late := 0
+	for run in runs:
+		firsts.append(run["apart_first"])
+		late += 1 if run["apart_first"] < 0 or run["apart_first"] > SPREAD_BY else 0
+	assert_eq(late, 0, "every two foes are over %d degrees apart for a second within %d frames in every seed (first at %s)" % [APART_DEG, SPREAD_BY, firsts])
+	assert_true(_worst(runs, "still_max") <= STILL_BY, "no foe within 4 m of him stands still more than %d frames (longest %d)" % [STILL_BY, _worst(runs, "still_max")])

@@ -435,6 +435,13 @@ func _reangle() -> void:
 	var open := _open_side(_self) if _self != null else 0.0
 	_circle = open if open != 0.0 else -_circle
 	_swing = _circle * deg_to_rad(REANGLE_DEG)
+	# Task 15c: the way that has a wall against it is no way (a foe at a door's jamb swung into the jamb, was blocked, and chose it again, for fifteen
+	# seconds): where there is no room a stride that way and there is the other, he goes the other. In the open there is room: nothing changes.
+	if _self != null and target != null and is_instance_valid(target):
+		var to := _flat(_self, target.global_position)
+		if to.length() > 0.1 and not _has_room(_self, to.rotated(_swing)) and _has_room(_self, to.rotated(-_swing)):
+			_circle = -_circle
+			_swing = -_swing
 	_failing = 0.0
 	_blocked = 0.0
 
@@ -825,7 +832,7 @@ func _go_round(actor: Actor, intent: Intent, delta: float) -> bool:
 			_round_to = Vector2.INF
 			_round_path.clear()
 			_come_round = false
-		elif _round_to != Vector2.INF and _goal_at(actor.get_world_3d().direct_space_state, here, actor.global_position.y, [actor.get_rid(), target.get_rid()], ROUND_DEEP):
+		elif _round_to != Vector2.INF and _goal_at(actor.get_world_3d().direct_space_state, here, actor.global_position.y, [actor.get_rid(), target.get_rid()]):
 			_round_to = Vector2.INF  # where he stands is already well inside the lit ground, with room to walk in: no need to go on
 			_round_path.clear()
 			_arrive(there)
@@ -1066,8 +1073,6 @@ func _advance_search(actor: Actor, s: RoundSearch) -> bool:
 				s.first = d if s.first < 0 else s.first
 				var side := signf(s.perp.dot(at - s.start))
 				var cost := float(d) + (0.0 if s.open == 0.0 or side == s.open else float(ROUND_EVEN_CELLS))
-				if not _lit_at(space, at, s.y, s.exclude, ROUND_DEEP):
-					cost += float(ROUND_EVEN_CELLS)  # a place at the lit zone's edge: another, if one a little further in is about as near
 				for other in s.crowd:
 					if other.distance_to(at) < ROUND_CROWD:
 						cost += float(ROUND_EVEN_CELLS)  # a place a neighbour stands in or goes to: another, if one is about as near
