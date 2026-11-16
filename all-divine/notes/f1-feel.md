@@ -86,3 +86,96 @@ and cannot get through the first waves.
 - A `counter` player at 14 or 18 frames cannot clear the second wave (two tier I's together) in nine seeds of ten: it starts nothing, so what it deals comes from its counters alone.
 - Its reaction is one number a blow; a person's varies with attention, and the bot never mistakes one blow for another.
 - A long single-process sweep can kill the engine (signal 11); `run_bot.gd` plays a seed per process and runs it again once it dies.
+
+
+# After the tuning of Nov 16 (Task 17)
+
+What this is: the same sweep as above (seeds 1 to 10, 7,200 frames, `--detail`, the bot not changed: its policies, its reaction and its reading of tells are
+as they were) on the game after the three changes the owner chose on Nov 16 (3.A, and "4.A-B, scaling with stamina xp, can be upgraded later"):
+
+- **The tier I's jab gives a longer warning** (`knuckle_jab_long`, tier I only): 20 frames from the glint to the blow, not 15. Tiers II and III and the Drummer keep the 15-frame jab.
+- **Timing pays more**: a foe whose blow Abarax parried, caught or perfectly dodged is *open* for 40 frames of Abarax's own clock (`CombatTuning.punish_frames`) until
+  he starts a move of his own, and Abarax's blows on him are worth 1.5 times (`punish_scale`) in HP, posture and hit-stop. It multiplies with what a counter cashes
+  (a Flurry counter is 2 x 1.5). The foes' tuning says 1.
+- **Mashing costs stamina**, scaled by 100 / max_stamina (1 today, so the stamina stat the levelling raises later is what pays for more mashing): a press of palm, heavy,
+  sway or duck made while the same action's last press is still waiting in the buffer, or while its move has not yet reached its first cancel window, is redundant; the
+  first one in a move is free and each after it costs `hammer_tax` (2.0); and a sway or duck that evades nothing makes the next cost half its base more (x1.5 to x3,
+  `strain_step` 0.5), until one evades something or 60 frames pass. The foes' tuning has both off.
+
+The "before" is the game as it stood at c52b512 (main of Nov 16 with Task 15c: foes do not swing at walls), which is not the table above (Task 15c moved how foes move).
+No number the brief named was moved: 40 frames, 1.5, 2.0 and 0.5 are the ones it gave.
+
+## Before and after (ten seeds, 7,200 frames)
+
+| policy | reaction | | waves | deaths | dealt | taken | taken per HP dealt | seeds with a wave |
+|---|---|---|---|---|---|---|---|---|
+| mash | 14 | before | 31 | 43 | 5994 | 6667 | 1.11 | 10 of 10 |
+| mash | 14 | **after** | 10 | 75 | 1216 | 8981 | 7.39 | 10 of 10 |
+| counter | 14 | before | 14 | 16 | 2191 | 2565 | 1.17 | 10 of 10 |
+| counter | 14 | **after** | 36 | 0 | 4585 | 1294 | 0.28 | 10 of 10 |
+| mixed | 14 | before | 34 | 10 | 4163 | 2757 | 0.66 | 10 of 10 |
+| mixed | 14 | **after** | 43 | 10 | 5575 | 2680 | 0.48 | 10 of 10 |
+| counter | 10 | before | 38 | 4 | 4741 | 1362 | 0.29 | 10 of 10 |
+| counter | 10 | **after** | 42 | 0 | 5751 | 1084 | 0.19 | 10 of 10 |
+| mixed | 10 | before | 44 | 7 | 5178 | 2026 | 0.39 | 10 of 10 |
+| mixed | 10 | **after** | 46 | 6 | 5888 | 2207 | 0.37 | 10 of 10 |
+| counter | 18 | before | 5 | 33 | 1632 | 4255 | 2.61 | 5 of 10 |
+| counter | 18 | **after** | 14 | 14 | 2061 | 2529 | 1.23 | 10 of 10 |
+| mixed | 18 | before | 10 | 47 | 2918 | 5868 | 2.01 | 10 of 10 |
+| mixed | 18 | **after** | 39 | 11 | 4612 | 3557 | 0.77 | 10 of 10 |
+
+0 problems (no soft-lock, no engine error) in all 70 runs of the "after" and in the 70 of the "before". The fewest frames from a tell to a defence is as it was (7, 11 and 15 at
+10, 14 and 18): the bot's reaction was not changed.
+
+## The blow that does the damage at 18 (the tier I's jab, by blow)
+
+| policy | | HP taken | share | how it met the bot |
+|---|---|---|---|---|
+| counter at 18 | before: tier I jab | 3030 | 71% | hit 303, parried 6, evaded 3 |
+| counter at 18 | **after**: tier I long jab | 1300 | 51% | hit 130, parried 119, evaded 87, guarded 1 |
+| counter at 18 | before: tier I cross | 1140 | 27% | hit 95, parried 102, evaded 65 |
+| counter at 18 | **after**: tier I cross | 984 | 39% | hit 82, parried 25, evaded 38, guarded 1 |
+| mixed at 18 | before: tier I jab | 3710 | 63% | hit 371, parried 3, evaded 2 |
+| mixed at 18 | **after**: tier I long jab | 860 | 24% | hit 86, parried 70, evaded 34 |
+| counter at 14 | before: tier I jab | 1980 | 77% | hit 198, parried 123, evaded 60, guarded 2 |
+| counter at 14 | **after**: tier I long jab | 190 | 15% | hit 19, parried 21, evaded 174, guarded 1 |
+
+## What each change did (counter and mixed; the others as the first rows of the table; the jab first, then each of the other two added to it)
+
+| | mash 14 | counter 14 | mixed 14 | counter 10 | counter 18 | tier I jab's share at 18 |
+|---|---|---|---|---|---|---|
+| before | 31 waves, 43 deaths, 1.11 | 14, 16, 1.17 | 34, 10, 0.66 | 38, 4, 0.29 | 5, 33, 2.61 | 71% |
+| the long jab alone | 25, 40, 1.26 | 34, 2, 0.30 | 40, 7, 0.49 | 44, 1, 0.19 | 12, 12, 1.44 | 56% |
+| + the open foe | 25, 40, 1.25 | 36, 0, 0.28 | 43, 10, 0.48 | 42, 0, 0.19 | 14, 14, 1.23 | 51% |
+| the long jab + the cost of mashing (no open foe) | 10, 75, 7.42 | 34, 2, 0.30 | 40, 7, 0.49 | 44, 1, 0.19 | 12, 12, 1.44 | 56% |
+| all three | 10, 75, 7.39 | 36, 0, 0.28 | 43, 10, 0.48 | 42, 0, 0.19 | 14, 14, 1.23 | 51% |
+
+(each cell: waves, deaths, HP taken per HP dealt.) **The jab did the work on the cliff**: at 14 `counter` goes from 14 waves and 16 deaths to 34 and 2 with the longer jab alone, and
+at 18 from 5 waves and 33 deaths to 12 and 12. **The open foe makes timing pay**: it takes the loss at 18 from 1.44 to 1.23 HP taken for each dealt and `counter` at 14 from 2 deaths
+to 0; it is what lifts `mixed` at 14 from 40 to 43 waves. **The cost of mashing touches the masher alone**: `mash` goes from 25 waves to 10, from 1.26 to 7.4 HP taken for each dealt, and
+no other policy moves (their presses are one for each blow and their sways mostly evade). A second try with a window of 50 and a scale of 1.7 and a tax of 1 (not kept) moved
+nothing the aims depend on: 10 waves and 80 deaths for `mash`, `counter` at 18 12 waves with the jab's share at 54%.
+
+## What the aims said, and where the numbers are
+
+1. `counter` at 14 clears at least as many waves as `mash`: **met**, 36 against 10 (before: 14 against 31).
+2. `mixed` at 14 dies at most a third as often as `mash` and clears more waves: **met**, 10 deaths against 75 and 43 waves against 10 (before: 10 against 43, 34 against 31).
+3. `mash` clears a wave in at least 8 of 10 seeds: **met**, 10 of 10 (weaker, and not worthless by that count; but it dies 7.5 times a seed, and takes 7.4 HP for each it deals: the bot's masher presses a
+   direction every fourth frame and palm every seventh, 15 and 8.6 presses a second, which a person does not, so a person who taps twice as slowly pays about half the tax).
+4. The cliff is a slope: `counter` at 18 clears a wave in 10 of 10 seeds (before 5) **met**, takes 1.23 HP for each it deals (before 2.61, bound 1.5) **met**; the tier I jab's share of the HP taken at 18 is 51%
+   (before 71%, bound under half): **not met, by a point and a half** (1300 of 2529 HP). At 18 frames the bot answers a blow only after its reaction (jittered by up to 3) and a dodge's 4-frame lead, 19 to 25
+   frames, so the 20-frame jab is still hit 130 times in 336 (parried 119 times and evaded 87: more than a third are now answered, against 3%). What would take the share under half is the jab's 22 or 23
+   frames (the brief fixed 20) or a window for the guard that opens a frame earlier; none of the three numbers the tuning could move did (the 50, 1.7 and 1 above gave 54%).
+5. `counter` at 10 loses nothing: **met**, 42 waves against 38 and 0 deaths against 4.
+
+The largest single blow now, against each tier: a Flurry counter_rise 14 x 2 x 1.5 = 42 HP and 66 posture, a charged heavy 34 x 1.5 = 51 HP and 52.5 posture, a Flurry counter_hook 36 HP and 54 posture.
+Tier I (60 HP, 60 posture) has its posture broken by the counter_rise at Flurry and not its HP emptied; tier II (90 HP, 80 posture) and tier III (130 HP, 100 posture) are neither killed nor broken by
+any single blow, from full health and full posture.
+
+## What is still not as the aims say, and what the bot cannot say
+
+- The tier I jab's share at 18 (above): 51%.
+- The long jab's wind-up moves on every drawn pose (0.7 to 2.1 degrees at the most-turned bone on each 12 fps step, the jab's own is 1.1 to 2.5) but it is the Punch_Jab clip's own quiet guard slowed, and on a
+  contact sheet the poses before the blow look alike. If the owner wants the drawing back to be seen, it wants a keyed layer on the clip (as the Drummer's first blow has), not a longer hold.
+- The bot's masher is an extreme (15 presses a second): how a person who mashes at 5 to 8 a second plays under the tax is for the owner's hands.
+- With the cost of mashing off, the masher met a foe that "never engages" in 901 frames in two seeds (9 and 10) of ten; with it on, and in every other table, nothing: the brain of that foe was not touched here.
