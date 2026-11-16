@@ -10,6 +10,9 @@ extends TestCase
 ##      within 6 s or within 3 s of the first token free after he is ready, and no foe is passed over (a fifth of the attacks each).
 ## The token rule (never more than two attack at once) stands. Twenty seeds were run for the report: STAND_ABOUT_SEEDS=20.
 
+## These fights are judged by positions, moves and clocks, never by a picture: a rendered run plays them with the drawing off (TestRunner).
+const DRAWS := false
+
 const KINDS := ["knuckle_1", "knuckle_2", "knuckle_3", "knuckle_blade", "knuckle_drummer", "knuckle_heavy"]
 const FIGHT_FRAMES := 1200
 ## The suite plays shorter fights (the rules scale: the pulse is one attack in 150 frames), to keep the file's share of the run; the twenty-seed
@@ -580,15 +583,11 @@ func test_regression_waiters_stand_off_at_a_wall() -> void:
 	assert_true(apart >= 0.5, "every two foes are over 40 degrees apart on at least half the frames after 3 s (least %.2f)" % apart)
 
 
-## Fixture: a blocked foe goes to the open side. The yard's trio and three tier I in a gate with the player circling, seeds 1-3: every two foes
-## over 40 degrees apart on 0.37 to 0.50 of the frames with the re-angle toward the wider gap, 0.00 to 0.14 with the fixed way.
-func test_regression_a_blocked_foe_goes_to_the_open_side_in_a_gate() -> void:
-	var runs: Array[Dictionary] = await _fixture([YARD_TRIO, THREE_TIER_ONES], "gate", "circle", 600)
-	var apart := 1.0
-	for run in runs:
-		apart = minf(apart, float(run["min_angle_frames"]) / maxf(run["frames_seen"], 1))
-	_free(runs)
-	assert_true(apart >= 0.25, "every two foes are over 40 degrees apart on at least a quarter of the frames after 3 s (least %.2f)" % apart)
+## The fixture "a blocked foe goes to the open side" (three foes in a gate, the player circling: every two foes over 40 degrees apart on a
+## quarter of the frames) was retired with its rule by Task 15c. Foes now plan a way round what blocks them and come through a gap one behind
+## another: a gate is a choke point, and a player who keeps circling through it is not surrounded (tests/actors/test_foe_come_round.gd holds
+## what the gate must do: nobody's legs flip, nobody stands, and three foes spread round a player who stands still beyond it). With the
+## planner in, the re-angle toward the wider gap changed no number in any place of this file, so nothing could hold it.
 
 
 ## One foe alone: the same moves on the same frames as before the fix (every kind, a still and a circling Abarax, SIGNATURE_SEEDS seeds).

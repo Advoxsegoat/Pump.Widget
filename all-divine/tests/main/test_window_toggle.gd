@@ -4,6 +4,9 @@ extends TestCase
 ## used by main/main.gd). A headless run has no real window to switch, so the switch is checked on a
 ## Window node outside the tree, which keeps the mode and size it is given.
 
+## One of the few files outside tests/render/ that a rendered run draws (TestRunner.draws): the renderer's smoke test of the whole game.
+const DRAWS := true
+
 const PROJECT := "res://project.godot"
 const SETTINGS_PATH := "user://settings_test.cfg"
 
