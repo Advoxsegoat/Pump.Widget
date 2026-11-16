@@ -23,7 +23,9 @@ const WINDOW := 180
 const TIER_I_STARTS: Array[StringName] = [&"knuckle_jab_long", &"knuckle_sweep"]  # tier I's jab is the long one (Task 17)
 ## The signature of a tier II and a tier I fighting a still Abarax for 900 frames, recorded before the brain learned to hold
 ## more than one token: the frame and name of every move started, hashed. A brain whose options hold one token plays on as it did.
-const TIER_II_SIGNATURE := 2047247070
+## Re-made for Task 17, once: it was 2047247070; the tier I's jab is now knuckle_jab_long (a move of its own, 20 frames from tell to blow), so its moves
+## are named and timed otherwise. What the signature shows is still that a brain whose options hold one token plays on as it did.
+const TIER_II_SIGNATURE := 2247974130
 
 
 static func _seeds() -> int:

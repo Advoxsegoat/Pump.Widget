@@ -285,6 +285,7 @@ const FOE_FRAMES := 540
 ## What is not yet true of the foes, with why: a place named here is held to its own ceiling (frames), and the test fails with "remove its
 ## entry" once the place meets LIMIT, so that a cure cannot go unnoticed.
 const FOES_NOT_YET := {
+	"the post at (-5, -4.72)": [45, "found by Task 17: a foe backing off at 0.45 from the player (0.9 m) along the street's first wall, a block's face, with another foe at his side, is held against it for 39 frames, from frame 494 of 540. Not new: the same jam starts at frame 484 on the base before Task 17 (a window longer than the test's shows it, and it ends within 20 frames there); tier I's longer jab moves the fight so that it falls inside the 540. The foes' retreat along a wall is the brain's (Task 15c's ground), not this task's"],
 }
 
 

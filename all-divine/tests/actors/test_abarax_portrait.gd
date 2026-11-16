@@ -9,7 +9,9 @@ const ABARAX := "res://data/actors/abarax.tres"
 ## The checkpoints (every 100 physics frames of the seeded fight below) as they were with the model before the
 ## portrait work. The hash is this file's own (positions to the millimetre, HP, posture, stamina, the move), not
 ## Arena.state_hash, which holds the engine's frame counter and so depends on the tests that ran before.
-const FIGHT_HASHES: Array[int] = [2130462679, 3661614394, 578355242, 584745297, 3329243264, 3247021830]
+## Re-made for Task 17 (tier I's jab is 20 frames long, a blow on an open foe is worth more, mashing costs stamina), once, on the final numbers: the
+## first checkpoint is as it was, the other five were [3661614394, 578355242, 584745297, 3329243264, 3247021830]; the fight is a different fight now.
+const FIGHT_HASHES: Array[int] = [2130462679, 699619844, 1272778332, 2675258740, 3583591516, 293385823]
 
 
 func before_each() -> void:
