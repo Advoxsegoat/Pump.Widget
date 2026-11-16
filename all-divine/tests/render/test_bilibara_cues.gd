@@ -20,11 +20,21 @@ const STRONG := 0.35
 ## A pixel is the cue's when the picture changes it by this much in luma or more; the cue's outline reads when this share of it changes by STRONG or more.
 const VISIBLE := 0.2
 const EDGE_SHARE := 0.85
+## The spark and the puff are particles, thrown afresh by chance on every run: at one place (the street's kerb, by the water) the puff's outline
+## was carried 83, 87, 88, 94, 100 and 100% in six runs (CI's and five on the build machine). They are held where that scatter leaves room; the
+## rims and the wave are the body's and the ground's own shapes, the same picture every time, and keep EDGE_SHARE.
+const EDGE_SHARE_PARTICLES := 0.7
+const PARTICLE_CUES: Array[String] = ["hit spark", "dust puff"]
 ## The dark edges are this dark or darker in the picture (the ink is 0.04 before the screen look).
 const INK_LUMA := 0.16
 const FOE := "res://data/actors/knuckle_1.tres"
 ## The pictures kept: a crop of these cues, in the yard and at this position of the stretch (the street's middle).
 const PICTURE_AT := "street (cobble, open)"
+
+
+# The share of a cue's outline that must be carried for it to read.
+static func _share(cue: String) -> float:
+	return EDGE_SHARE_PARTICLES if PARTICLE_CUES.has(cue) else EDGE_SHARE
 
 
 func before_each() -> void:
@@ -97,8 +107,8 @@ func _measure(with: Image, without: Image, body: Dictionary, box: Rect2i) -> Dic
 
 
 # Whether the cue reads: its outline is carried nearly all round (differs from the ground by STRONG or more, or is a dark edge), and some of it is strong.
-func _reads(m: Dictionary) -> bool:
-	return m.n >= 8 and m.edge > 0 and m.strong >= 4 and m.carried >= m.edge * EDGE_SHARE
+func _reads(m: Dictionary, cue := "") -> bool:
+	return m.n >= 8 and m.edge > 0 and m.strong >= 4 and m.carried >= m.edge * _share(cue)
 
 
 func _save(main: Main, label: String, img: Image, centre: Actor) -> void:
@@ -255,10 +265,10 @@ func _run(main: Main, foe: Actor, label: String, at: Vector3, lines: PackedStrin
 	await _cues_at(main, foe, at, made)
 	for cue: Array in made:
 		var m: Dictionary = cue[1]
-		var ok := _reads(m)
+		var ok := _reads(m, cue[0])
 		lines.append("%s | %s | cue px %d, %d change by 0.35 or more | their mean change %.3f | outline px %d, of them %d carried (%.0f%%) | %s" % [label, cue[0], m.n, m.strong, m.mean, m.edge, m.carried, 100.0 * m.carried / maxf(m.edge, 1.0), "reads" if ok else "LOST"])
 		if not ok:
-			problems.append("%s at %s: %d px (%d strong), outline %d px of which %d carried (at least %.0f%%)" % [cue[0], label, m.n, m.strong, m.edge, m.carried, 100.0 * EDGE_SHARE])
+			problems.append("%s at %s: %d px (%d strong), outline %d px of which %d carried (at least %.0f%%)" % [cue[0], label, m.n, m.strong, m.edge, m.carried, 100.0 * _share(cue[0])])
 		if not keep.is_empty():
 			_save(main, "%s_%s" % [keep, String(cue[0]).replace(" ", "_")], cue[2], foe)
 
@@ -303,3 +313,12 @@ func test_every_cue_reads_on_every_ground() -> void:
 	FileAccess.open(full, FileAccess.WRITE).store_string("\n".join(lines) + "\n")
 	print("\n".join(lines))
 	assert_eq(problems.slice(0, 10), PackedStringArray(), "every cue reads at every position and in the yard (%d lost; the table is %s)" % [problems.size(), OUT_TEXT])
+
+
+func test_a_particle_cue_is_held_where_its_scatter_leaves_room() -> void:
+	# CI's picture of the dust puff at the street's kerb, on the run that failed: 28 px, 11 strong, an outline of 18 px, 15 carried (83%).
+	var puff := {n = 28, strong = 11, edge = 18, carried = 15}
+	assert_true(_reads(puff, "dust puff"), "a puff with 15 of its 18 outline pixels carried reads")
+	assert_true(_reads(puff, "hit spark"), "and a spark the same")
+	assert_false(_reads(puff, "parry rim"), "a rim with 15 of 18 does not: its shape is the body's own, the same every time")
+	assert_false(_reads({n = 28, strong = 11, edge = 18, carried = 12}, "dust puff"), "a puff with a third of its outline lost does not read")

@@ -14,6 +14,8 @@
 
 Each line is my choice first, then the other way. Every number is data (named below) and can be changed without code.
 
+> **The owner answered on Nov 16.** Rows 1 to 5, 10 and 11 stand as written. Rows 6, 7 and 8 are changed, and row 9 waits on one question; the changes are in **"The owner's amendments"** just below the list, and where a task's text and an amendment differ, the amendment wins.
+
 1. **Petals last until you die again, not on a clock.** You drop all the petals you carry where you fall; if you reach them they are yours again; if you die before you reach them, they wilt for good (the spec's "one chance"). Other way: they also wilt after some minutes of play (the number `wilt_seconds` in `data/stretch/petals.tres` is there, set to 0 = off).
 2. **Foes come back only when you rest at a shrine, die, or load the game.** Not on a timer, not when you walk away. Other way: they also return after a few minutes. Foes you killed stay dead while you walk about; the mini-boss stays dead for good.
 3. **A shrine rest is instant** (bars full, foes back, respawn point set, game saved): no kneeling clip, no menu yet (levelling and skills are F2's). The Rose Flask does not exist yet, so there is nothing to refill beyond the bars.
@@ -25,6 +27,26 @@ Each line is my choice first, then the other way. Every number is data (named be
 9. **The mini-boss is "the Collector" (a working name):** the Hand's tithe-taker, "where the Hand collects" in the book's words. A Knuckle with a blade, a head taller (1.15 of the size), 300 HP and 140 posture, in three phases: his blade string; then the lunge (a perilous thrust, answered by the catch) and quicker feints; then the ground slam (a perilous low ring: hop it) and a blade that follows your dodges. He waits in the street's east end, in front of a toll gate that bars the Tanneries lane.
 10. **The shortcut:** the gate at the street's west end (beside the first shrine) is barred from the street side ("It will not lift from this side"); from the loop lane's side a latch lifts the bar. It joins the first shrine to the Rack Walk (about 30 m instead of 85 m). Other way: it opens by a key found in the stretch.
 11. **What the mini-boss's fall opens:** the toll gate across the lane's mouth (a low slate gate like the shortcut's, put there by the run, not by the layout). The yard beyond stays plain: First Knuckle's door is F5's.
+
+## The owner's amendments (Nov 16)
+
+**Row 6: the save holds where you stood.** ("save exact position too!")
+- `SaveData` gains `at := {}` (empty, or `{x, y, z, yaw}`: where the player last stood on safe ground), `bars := {}` (empty, or `{hp, stamina, posture}` as shares of full, 0 to 1) and `fallen := []` (the sorted ids of the placed foes killed since the last rest). `VERSION` stays 1.
+- *Safe ground*: once a second the run notes the player's place while he is alive, on the floor, in no move and no foe is awake within 12 m; that place is what is saved. A game saved in the middle of a fight loads at the last safe place, never inside the fight.
+- *Loading* puts the player at `at` when it is standing ground (`StretchGround.stands`), else at the rest shrine, with the bars he had; the foes in `fallen` stay down until he rests or dies, as they do while he walks about. A rest, a death and a new game empty `fallen`.
+- Task 1 adds the three fields and their tests (they round trip; a mistyped `at` is empty; a share outside 0 to 1 is clamped; `fallen` keeps strings only, sorted, no doubles). Task 2 writes and reads `at` and `bars` (a game saved 20 m from a shrine loads there with its bars; saved with a foe awake 5 m off it loads at the last safe place; an `at` inside a wall loads at the shrine). Task 4 writes and honours `fallen` (a foe killed, the game left and loaded: still down; after a rest: back).
+
+**Row 7: the player's game starts in the town.** ("start in town")
+- A run the player starts (no `-s` script, no `--selftest`, no test, no `--record` or `--replay` of a yard recording) begins in the stretch, continuing the save or beginning one. `--yard` starts in the training yard as today; `--stretch=new` is unchanged; F5 still goes to the yard and F2 back.
+- Everything scripted keeps what it has: a `Main` a test makes starts in the yard unless the test sets `stretch_start`; the self-test, the reel, the bot and the yard's recordings are the yard's. The constraint "the game still boots into the training yard" now reads: *a scripted run still does*.
+- **The switch lands with Task 4**, when the town has foes in it: until then the game starts in the yard and F2 enters the town, so no build opens on an empty street. Task 4's tests: `Main.parse_stretch` gives "continue" for a player's run with no flag and "" for `--yard`, a scripted run and the self-test; the exported build's self-test still plays the yard.
+
+**Row 8: the Bell slows the Pack, once and for good.** ("the bell is only needed once it slows them does not get rid of them at all"; "they can be [beaten] by skill parrying")
+- One ring; the flag is `pack_slowed` (where the tasks say `pack_broken`) and is kept across deaths, rests and loads. After it the Pack is still the Pack: three, spread round the player, no token limit. It is **slowed**: until the owner says more, the beat between one member's attack and the next one's start doubles (`chain_gap_frames` 36 to 72, a number in the squad's data) and nothing else changes. `Squad.scatter` and its tests become `Squad.slow`.
+- Without the Bell the Pack can be beaten by parrying: no blow of its chain is unblockable, and a test plays a player who parries every blow through one whole chain unhit.
+
+**Rows 9 and 11: mini-bosses are optional.** ("optional mini bosses are to expand map and time!")
+- As written the Collector bars the Tanneries lane, the way to most of the stretch. Whether he stays there or guards a side gate is asked of the owner before Task 7. Tasks 1 to 6 do not depend on it: Task 5's toll gate is a gate a flag opens, and where it stands is data.
 
 ## Global Constraints
 

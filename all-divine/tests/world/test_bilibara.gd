@@ -1637,6 +1637,32 @@ func test_no_mesh_is_reached_by_more_than_six_lamps_and_no_point_by_more_than_tw
 	assert_true(most <= 2, "no point is in the range of more than two shadow casters (%d)" % most)
 
 
+## The plan's ceilings for what the scene holds (the spec's 3.6 budget, by proxy: the container has no GPU). Counted on 2026-11-16 (the scene
+## as built): 287 MeshInstance3D and 1,065 MultiMeshInstance3D (the kit's runs: one node a run of pieces, KitRun: 1,353 nodes draw), 18 lamps (2 casting
+## shadows), 89 collision shapes. Every ceiling is the plan's, and is met: the meshes are counted as every node that draws a mesh.
+const MOST_MESHES := 2000
+const MOST_OMNI_LIGHTS := 24
+const MOST_COLLISION_SHAPES := 400
+const MOST_SHADOW_LAMPS := 2
+
+
+func test_the_scene_is_inside_the_static_budget() -> void:
+	var region := _region()
+	if region == null:
+		return
+	var meshes := region.find_children("*", "MeshInstance3D", true, false).size()
+	var drawers := region.find_children("*", "GeometryInstance3D", true, false).size()
+	var lamps := region.find_children("*", "OmniLight3D", true, false)
+	var shapes := region.find_children("*", "CollisionShape3D", true, false).size()
+	var casters := lamps.filter(func(l: OmniLight3D) -> bool: return l.shadow_enabled).size()
+	print("bilibara static: %d MeshInstance3D, %d nodes that draw (meshes and the kit's runs), %d OmniLight3D (%d casting shadows), %d CollisionShape3D" % [meshes, drawers, lamps.size(), casters, shapes])
+	assert_true(drawers <= MOST_MESHES, "%d nodes draw a mesh (a MeshInstance3D or a run of the kit's pieces; at most %d)" % [drawers, MOST_MESHES])
+	assert_true(meshes <= MOST_MESHES, "%d MeshInstance3D (at most %d)" % [meshes, MOST_MESHES])
+	assert_true(lamps.size() <= MOST_OMNI_LIGHTS, "%d OmniLight3D (at most %d)" % [lamps.size(), MOST_OMNI_LIGHTS])
+	assert_true(shapes <= MOST_COLLISION_SHAPES, "%d CollisionShape3D (at most %d)" % [shapes, MOST_COLLISION_SHAPES])
+	assert_true(casters <= MOST_SHADOW_LAMPS, "%d lamps cast shadows (at most %d)" % [casters, MOST_SHADOW_LAMPS])
+
+
 # --- Posts: a lantern's post or a colonnade's pillar is something a fighter slides round, and nothing hangs in the air ---
 
 ## A fighter sprints at a post from 4 m, in eight directions, at offsets across its width of 10 cm steps.
