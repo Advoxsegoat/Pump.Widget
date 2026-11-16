@@ -13,6 +13,9 @@ extends TestCase
 ## in the places the review found it: a wall 1 m long (the player 0.7 m behind it), Task 14f's gate (2 m wide, 0.8 m thick, the player in
 ## the gap, the foes 2.5 m out at -50, 0 and 50 degrees) and a doorway 1.2 m wide (the player 2 m inside).
 ##
+## A player who keeps circling through the gate is not surrounded, and that is no fault: a gap the foes must pass one behind another is a choke point (the
+## controller's ruling), so the gate's spacing is held only for a still player behind it (SPREAD_BY below), not for a circling one.
+##
 ## Before this round (402cf55) the legs jumped more than twice in 25 of 40 fights at the gate and the 1 m wall; the base had 0 of 40.
 
 const FAR := 40.0
