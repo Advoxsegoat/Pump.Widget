@@ -10,9 +10,10 @@ extends TestCase
 ##
 ## Each holds the quietest 120 steps' mean, the 99th percentile and the longest step, in the thread's own processor time (FrameMeter:
 ## see tests/support/frame_meter.gd for why that and not the wall clock). The walk's mean is the plan's 2.0 ms; the fight's is the
-## combat budget's headless bound (tests/perf/test_combat_perf.gd, 3.0 ms; a rendered run takes its 4.0 ms). The longest step's
-## bound is about twice what ten runs measured and under 40 ms (a hitch is what a player feels, and neither the mean nor the
-## percentile sees a rare one). PERF_REPORT=1 prints both clocks.
+## combat budget's headless bound (tests/perf/test_combat_perf.gd, 3.0 ms). The longest step's
+## bound is about twice what sixteen runs measured (ten headless, six rendered: the walk's longest 0.6 to 6.4 ms, the fight's 10.8 to 19.2 ms) and under 40 ms (a hitch is what a player feels, and neither the mean nor the
+## percentile sees a rare one). A rendered run turns the drawing off while it times (the physics step is the budget, and a minute of software
+## drawing is not), so the same bounds hold in both. PERF_REPORT=1 prints both clocks.
 
 const MAIN := "res://main/main.tscn"
 const FOE := "res://data/actors/knuckle_1.tres"
@@ -23,10 +24,8 @@ const WALK_MEAN_MS := 2.0
 const WALK_P99_MS := 4.0
 const WALK_LONGEST_MS := 13.0
 const FIGHT_MEAN_MS := 3.0
-## What a rendered run is held to (the render shards cost the physics step more), as the combat budget's.
-const FIGHT_MEAN_RENDERED_MS := 4.0
 const FIGHT_P99_MS := 8.0
-const FIGHT_LONGEST_MS := 25.0
+const FIGHT_LONGEST_MS := 36.0
 ## The yard's centre, and the laps Abarax walks in the fight (radius, metres).
 const CENTRE := Vector3(27.5, 0.0, -65.0)
 const LAP := 3.0
@@ -36,6 +35,7 @@ var _main: Main
 
 
 func after_each() -> void:
+	RenderingServer.render_loop_enabled = true
 	if _meter != null:
 		_meter.detach()
 	Game.reset()
@@ -48,6 +48,9 @@ func _stretch() -> Main:
 	await frames(5)
 	_main.enter_stretch()
 	await frames(2)
+	# The budget is the physics step's: a rendered run (the render shards) draws no frames while it is timed, as a headless run does not, so
+	# that the step is what is held and the run is not a minute of software drawing.
+	RenderingServer.render_loop_enabled = false
 	return _main
 
 
@@ -114,7 +117,7 @@ func test_three_knuckles_in_the_yard_take_the_step_no_more_than_the_combat_budge
 			alive += 1
 	var held := _meter.held()
 	_report("three Knuckles", held)
-	var mean_budget := FIGHT_MEAN_MS if DisplayServer.get_name() == "headless" else FIGHT_MEAN_RENDERED_MS
+	var mean_budget := FIGHT_MEAN_MS
 	assert_eq(alive, 3, "the three foes were still there at the end: a fight with them gone costs less")
 	assert_true(held["count"] >= FIGHT_FRAMES, "timed %d physics steps" % held["count"])
 	assert_true(held["mean"] <= mean_budget, "three Knuckles: a physics step takes %.3f ms in the quietest stretch (%s, budget %.1f ms); %s" % [held["mean"], held["basis"], mean_budget, _meter.both()])
