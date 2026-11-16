@@ -12,6 +12,8 @@ extends Node
 
 ## The arena whose state hash is written into the recording (every hash_every frames, and at close); null for none.
 var arena: Arena
+## Where the hash comes from instead of the arena (a stretch has no arena): a Callable returning an int.
+var hash_of: Callable
 ## How many frames between hashes.
 var hash_every := 60
 
@@ -53,8 +55,9 @@ func recording() -> InputRecording:
 func close() -> void:
 	_take_cursor()
 	_rec.frame_count = _rec.frames.size()
-	if arena != null and is_instance_valid(arena) and arena.is_inside_tree():
-		_rec.hashes[_rec.frames.size()] = arena.state_hash()
+	var now: Variant = _hash_now()
+	if now != null:
+		_rec.hashes[_rec.frames.size()] = now
 
 
 ## Writes the recording to `path` as a text .tres, making the folder if it is not there.
@@ -75,8 +78,10 @@ func _physics_process(_delta: float) -> void:
 	for action in Inputs.GAMEPLAY:
 		if Inputs.held(action):
 			held.append(action)
-	if arena != null and is_instance_valid(arena) and not _rec.frames.is_empty() and _rec.frames.size() % hash_every == 0:
-		_rec.hashes[_rec.frames.size()] = arena.state_hash()  # the fight after the frames recorded so far
+	if not _rec.frames.is_empty() and _rec.frames.size() % hash_every == 0:
+		var now: Variant = _hash_now()  # the fight after the frames recorded so far
+		if now != null:
+			_rec.hashes[_rec.frames.size()] = now
 	# The pause button is not a control of the fight: a pause changes nothing in it, and a replay never pauses.
 	var pressed := PackedStringArray()
 	for action in Inputs.pressed_this_frame():
@@ -107,6 +112,16 @@ func _physics_process(_delta: float) -> void:
 		entry["settings"] = changed
 	_rec.frames.append(entry)
 	_pending = _rec.frames.size() - 1
+
+
+# The state hash of the fight as it stands: the one `hash_of` gives (a stretch has no arena), else the arena's; null with neither.
+func _hash_now() -> Variant:
+	if hash_of.is_valid():
+		var source := hash_of.get_object() as Node
+		return int(hash_of.call()) if source != null and source.is_inside_tree() else null
+	if arena != null and is_instance_valid(arena) and arena.is_inside_tree():
+		return arena.state_hash()
+	return null
 
 
 # The cursor's point the brain read on the frame of the entry before this one, if it read one, goes into that entry (the brain thinks after the

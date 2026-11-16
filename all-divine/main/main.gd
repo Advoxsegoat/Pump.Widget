@@ -22,6 +22,11 @@ extends Node
 ## --replay=<path> that recording is played back into Abarax through the real input path (its seed's dice rolled first), the
 ## arena's state hash printed when it is over, and, in a headless run, the game quits (core/replay/).
 ##
+## With --stretch (a user argument: godot -- --stretch) the game starts in the Bilibara stretch, continuing the saved game (or beginning
+## one), and with --stretch=new in a new game that neither reads nor writes the save: the form a recording, a replay and the bot use. F2
+## enters the stretch from anywhere, continuing the save. The stretch has no arena: a StretchRun (world/stretch/) is its game, and the Hud
+## follows no fight but has a StretchHud line (what the interact button would do). Without either, the game starts in the training yard.
+##
 ## With --selftest (a user argument: godot -- --selftest) Abarax fights one tier I Knuckle in the yard through a
 ## scripted circuit instead (selftest_circuit: approach, jab, cross, hook, sway, duck, dash-step, guard, heavy) for SELFTEST_FRAMES
 ## physics frames, and the arena does nothing by itself but send that one Knuckle; the SelfTest autoload
@@ -76,6 +81,15 @@ var window: Window = null
 ## What the menu's Quit does: ends the game. A test puts its own here.
 var quit_game: Callable = func() -> void: get_tree().quit()
 
+## The stretch's run while the region is the stretch, else null.
+var stretch: StretchRun
+## Where the saved game is kept (a test gives its own folder).
+var save_dir := SaveStore.PLAYER_DIR
+## How the game starts: "", "continue" or "new" (a seam for tests and the bot, set before the node is ready).
+var stretch_start := ""
+
+var _stretch_hud: StretchHud  # the Hud's stretch line, while the region is the stretch
+var _stretch_new := false  # the stretch the region is to make is a new game that reads and writes no file
 var _recorder: InputRecorder  # the InputRecorder of --record, or null
 var _record_path := ""
 var _replayer: InputReplayer  # the InputReplayer playing a recording, or null
@@ -115,6 +129,15 @@ func _ready() -> void:
 			get_tree().quit(EXIT_REFUSED)
 			return
 		replaying = _load_recording(arguments["replay"])
+	var wanted := stretch_start if not stretch_start.is_empty() else parse_stretch(OS.get_cmdline_user_args())
+	if SelfTest.active:
+		wanted = ""  # the self-test fights in the yard
+	elif replaying != null and replaying.region == BILIBARA:
+		wanted = "new"  # a recording of the stretch is of a new game: it never reads the player's save
+	if not wanted.is_empty():
+		_stretch_new = wanted == "new"
+		if region.scene_file_path != BILIBARA:
+			_swap_region(BILIBARA)
 	_apply_look()
 	_enter_region()
 	if SelfTest.active:
@@ -220,6 +243,17 @@ static func parse_arguments(args: PackedStringArray) -> Dictionary:
 	return found
 
 
+## How the game is asked to start in the stretch, in the user arguments: "continue" for `--stretch` (the saved game), "new" for
+## `--stretch=new` (a new game that reads and writes no file), "" for neither (the yard), and for anything else after the =.
+static func parse_stretch(args: PackedStringArray) -> String:
+	for arg in args:
+		if arg == "--stretch":
+			return "continue"
+		if arg == "--stretch=new":
+			return "new"
+	return ""
+
+
 ## Starts writing down the controls, to be saved to `path` by save_recording (the game's end does it). The recording is of the fight
 ## from the arena's first wave: its seed is the round the dice began at (0, as the game starts) and its region this one's scene.
 func start_recording(path: String) -> void:
@@ -228,6 +262,7 @@ func start_recording(path: String) -> void:
 	_recorder.name = &"Recorder"
 	add_child(_recorder)
 	_recorder.arena = arena()
+	_recorder.hash_of = _stretch_hash_of()
 	_recorder.begin(region.scene_file_path, 0, 0)
 	# Saved as the game ends, while the arena is still in the tree to say what the fight came to (it is not by _exit_tree: the
 	# children have left by then).
@@ -253,6 +288,7 @@ func start_replay(rec: InputRecording) -> void:
 	_replayer.name = &"Replayer"
 	add_child(_replayer)
 	_replayer.arena = arena()
+	_replayer.hash_of = _stretch_hash_of()
 	_replayer.finished.connect(_on_replay_finished.bind(end_is_compared(rec)))
 	_replayer.diverged.connect(_on_replay_diverged)
 	_replayer.play(rec)
@@ -300,6 +336,7 @@ func _load_recording(path: String) -> InputRecording:
 		push_error("Main: cannot read the recording %s" % path)
 		return null
 	Arena.start_seed(rec.seed)
+	StretchRun.start_seed(rec.seed)
 	return rec
 
 
@@ -316,7 +353,7 @@ func _exit_tree() -> void:
 
 
 func _on_replay_finished(agreed: bool) -> void:
-	print(finished_line(arena().state_hash() if arena() != null else 0, agreed))
+	print(finished_line(_state_hash_now(), agreed))
 	_give_back_settings()
 	if _quit_after_replay and DisplayServer.get_name() == "headless":
 		get_tree().quit()
@@ -381,6 +418,14 @@ func switch_region() -> void:
 
 # Replaces the region with the scene `to` (switch_region says what it does).
 func _go_to(to: String) -> void:
+	_swap_region(to)
+	camera_rig.snap_now()
+	_apply_look()
+	_enter_region()
+
+
+# The first half of _go_to: the old region goes (what it holds ended first), the new one is built and the player is put at its spawn.
+func _swap_region(to: String) -> void:
 	if Director.current() != null:
 		Director.current().abort()  # a scene cannot go on in another place: it gives the fight back first
 	if Director.moment_playing() != null:
@@ -401,14 +446,13 @@ func _go_to(to: String) -> void:
 	else:
 		player.place(region.spawn())
 		player.stats.refill()
-	camera_rig.snap_now()
-	_apply_look()
-	_enter_region()
 
 
-## Enters the Bilibara stretch (F2, the debug key): what switch_region does, with that scene. It is a plain region, so no
-## arena runs and the Hud follows none.
-func enter_stretch() -> void:
+## Enters the Bilibara stretch (F2, the debug key; `--stretch`): what switch_region does, with that scene. It has no arena, so
+## no fight runs and the Hud follows none; its StretchRun puts the player where the saved game says (the last shrine, or where he
+## last stood), or, for a `new_game`, at the first shrine with nothing read from the file and nothing written to it.
+func enter_stretch(new_game := false) -> void:
+	_stretch_new = new_game
 	_go_to(BILIBARA)
 
 
@@ -473,10 +517,52 @@ func _enter_region() -> void:
 			defs.append_array(wave.defs)
 		InflatedWarm.start(player.rig, defs)
 	hud.bind(player, camera_rig, stage, fight)
+	_enter_stretch_region()
 	if fight != null:
 		fight.automatic = not SelfTest.active
 		if not SelfTest.active:
 			fight.begin(player)
+
+
+# When the region is the stretch: its run (the saved game read, unless this is a new game, which reads and writes nothing), the Hud's
+# line, and the run's hash for a recording and a replay. When it is not: the line goes.
+func _enter_stretch_region() -> void:
+	if is_instance_valid(_stretch_hud):
+		_stretch_hud.queue_free()
+	_stretch_hud = null
+	stretch = null
+	if region.scene_file_path != BILIBARA:
+		return
+	var store: SaveStore = null
+	var data: SaveData = null
+	if not _stretch_new:
+		store = SaveStore.new(save_dir)
+		data = store.read()
+	if data == null:
+		data = SaveData.new_game()
+	var def := Registry.fetch(&"stretch", &"bilibara") as StretchDef
+	stretch = StretchRun.start(region, player, def, store, data)
+	_stretch_hud = StretchHud.new()
+	hud.add_child(_stretch_hud)
+	_stretch_hud.bind(hud, stretch)
+	if _recorder != null:
+		_recorder.hash_of = _stretch_hash_of()
+	if _replayer != null:
+		_replayer.hash_of = _stretch_hash_of()
+
+
+# The stretch's hash as a Callable for a recorder or replayer, or an invalid one when the region is not the stretch.
+func _stretch_hash_of() -> Callable:
+	return stretch.state_hash if stretch != null and is_instance_valid(stretch) else Callable()
+
+
+# The hash of the fight or the stretch as it stands: the arena's, the run's, or 0 with neither.
+func _state_hash_now() -> int:
+	if arena() != null:
+		return arena().state_hash()
+	if stretch != null and is_instance_valid(stretch):
+		return stretch.state_hash()
+	return 0
 
 
 # The look on (default_settings, each strength times its Settings percent) or off (RenderSettings.off()), in the

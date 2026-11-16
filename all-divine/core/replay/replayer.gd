@@ -17,6 +17,8 @@ signal finished
 
 ## The arena whose state hash is compared with the recording's, as the replay goes; null for no comparing.
 var arena: Arena
+## Where the hash comes from instead of the arena.
+var hash_of: Callable
 
 var _rec: InputRecording
 var _at := 0
@@ -55,12 +57,23 @@ func _give_back() -> void:
 		_lent = {}
 
 
+# The state hash of the fight as it stands: the one `hash_of` gives (a stretch has no arena), else the arena's; null with neither.
+func _hash_now() -> Variant:
+	if hash_of.is_valid():
+		var source := hash_of.get_object() as Node
+		return int(hash_of.call()) if source != null and source.is_inside_tree() else null
+	if arena != null and is_instance_valid(arena):
+		return arena.state_hash()
+	return null
+
+
 func _physics_process(_delta: float) -> void:
 	if _rec == null:
 		return
 	# The fight stands as it does after `_at` frames lived: where the recording says what it was.
-	if arena != null and is_instance_valid(arena) and _rec.hashes.has(_at):
-		var got := arena.state_hash()
+	var now: Variant = _hash_now() if _rec.hashes.has(_at) else null
+	if now != null:
+		var got: int = now
 		if got != int(_rec.hashes[_at]):
 			var recorded := int(_rec.hashes[_at])
 			_rec = null

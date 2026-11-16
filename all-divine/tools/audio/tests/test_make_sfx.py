@@ -30,7 +30,7 @@ NAMES = [
     "guard_block_1", "guard_block_2", "parry_ring", "catch_snap",
     "perilous_sting", "tell_glint", "cloth_move", "foot_land",
     "surface_cloth_1", "surface_cloth_2", "body_fall", "charge_hum", "stamina_refused",
-    "evade_whoosh", "perfect_dodge", "knocked_out",
+    "evade_whoosh", "perfect_dodge", "knocked_out", "shrine_rest",
 ]
 
 

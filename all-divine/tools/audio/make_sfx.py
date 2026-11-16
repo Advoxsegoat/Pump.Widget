@@ -27,6 +27,7 @@ commit the new files, which tools/audio/tests checks are what this makes):
               up to twelve semitones higher, a step a link of the dodge chain, and not turn shrill
   perfect     a bright bell of three partials with a breath of air over it: the perfect dodge, a rung note
   knocked     a short hard low thump with a dull crack and no swell: being knocked out of a chain, plainly lost
+  shrine      a low round bell of two partials with a soft thud under it: a rest at a rose shrine
 """
 import argparse
 import io
@@ -448,6 +449,15 @@ def charge_hum(rng):
     return times(mix([(layer(out, 1.0), 0.0), (layer(breath, 0.15), 0.0)], n), swell(n, 0.4))
 
 
+def shrine_rest(rng):
+    """A rest at a rose shrine: a low bell of two partials a little more than an octave apart that rings and dies away, and a
+    soft thud of low noise where it is struck. Quiet and round: it is heard every time the player rests, never a sting."""
+    n = samples_in(0.9)
+    bell = partials(n, 196.0, [1.0, 2.01], [1.0, 0.45], [0.32, 0.17])
+    thud = times(lowpass(noise(rng, n), 500.0), decay(n, 0.012, 0.002))
+    return fade_out(mix([(layer(bell, 1.0), 0.0), (layer(thud, 0.18), 0.0)], n), 0.03)
+
+
 #: name -> (recipe taking the sound's random.Random, peak in dBFS). The names are the files, and the cues in
 #: data/sounds/ group them (impact_palm is impact_palm_1..3). The order is the order they are made in.
 SOUNDS = {
@@ -476,6 +486,7 @@ SOUNDS = {
     "evade_whoosh": (evade_whoosh, -8.0),
     "perfect_dodge": (perfect_dodge, -3.0),
     "knocked_out": (knocked_out, -10.0),
+    "shrine_rest": (shrine_rest, -12.0),
 }
 
 

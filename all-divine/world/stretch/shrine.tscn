@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://world/stretch/shrine.gd" id="1_shrine"]
+[ext_resource type="PackedScene" path="res://fx/shrine_glow.tscn" id="2_glow"]
+
+[node name="Shrine" type="Node3D"]
+script = ExtResource("1_shrine")
+
+[node name="ShrineGlow" parent="." instance=ExtResource("2_glow")]
