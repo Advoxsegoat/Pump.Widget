@@ -324,6 +324,15 @@ func test_combat_tuning_defaults_are_the_numbers_of_the_abarax_file() -> void:
 			assert_eq(tuning.get(property["name"]), plain.get(property["name"]), "the file and the class agree on %s" % property["name"])
 
 
+func test_the_tuning_of_the_fights_choices_of_nov_16() -> void:
+	# Task 17: the open foe's window and scale, and the two costs of mashing, in Abarax's file and as the class defaults; the Knuckles' file
+	# gives the foes no scale and no cost
+	var t := CombatTuning.new()
+	assert_eq([t.punish_frames, t.punish_scale, t.hammer_tax, t.strain_step, t.strain_cap, t.strain_reset_frames], [40, 1.5, 2.0, 0.5, 3.0, 60])
+	var foe := load("res://data/tuning/combat_knuckle.tres") as CombatTuning
+	assert_eq([foe.punish_scale, foe.hammer_tax, foe.strain_step], [1.0, 0.0, 0.0])
+
+
 func test_combat_tuning_numbers() -> void:
 	var t := CombatTuning.new()
 	assert_eq([t.stamina_regen_rate, t.stamina_regen_delay, t.guard_regen_scale, t.exhausted_until, t.sprint_stamina], [45.0, 0.6, 0.4, 20.0, 12.0])

@@ -184,6 +184,11 @@ var chain_slow: ChainSlow
 var cashed_tempo: DodgeChain.Tempo = DodgeChain.Tempo.SLIP
 ## Keeps its body out of other actors' (step 7): its motion on the ground stops at their capsules.
 var spacing: BodySpacing
+## The fighter whose blows are worth more on this actor now (CombatTuning.punish_scale): the one who turned (parried or caught) or
+## perfectly dodged this actor's blow, or null. It lasts until `open_until`, a frame of THAT fighter's buffer_frame clock (its frozen frames
+## do not count), or until this actor starts a move of his own (a reaction is not one).
+var open_to: Actor
+var open_until := -1
 
 # The speed the rig's locomotion layer is given. With no move it is locomotion's. A move that starts is laid over
 # that layer in its blend_in, so the layer keeps the speed it had until the move is fully in (dropping it to
@@ -195,6 +200,7 @@ var _locked: Actor = null  # the foe the brain had locked on to on the latest fr
 var _guard_held := false  # whether the brain held GUARD_ACTION on the latest frame
 var _guard_move_ended := false  # a guard move (the raise, or guard_hit) played out on this frame
 var _brain_given := false  # set_brain was called: the def's brain does not replace it when the actor is ready
+var _redundant_presses := 0  # the redundant presses (see _tax_press) made since the latest move started
 
 @onready var runner: MoveRunner = $MoveRunner
 
@@ -471,6 +477,20 @@ func hold_guard() -> void:
 		_set_guarding(true)
 
 
+## `punisher` turned or perfectly dodged this actor's blow: for the punisher's tuning's punish_frames of its own clock, this actor is open to it.
+func open_to_punisher(punisher: Actor) -> void:
+	open_to = punisher
+	open_until = punisher.buffer_frame + punisher.stats.tuning.punish_frames
+
+
+## What a blow of this actor's is worth times on `target` now: the tuning's punish_scale while `target` is open to this actor (its blow was
+## turned or perfectly dodged by it, no more than punish_frames of this actor's clock ago, and it has not begun a move of its own), else 1.
+func punish_scale_on(target: Actor) -> float:
+	if target == null or target.open_to != self or buffer_frame > target.open_until:
+		return 1.0
+	return stats.tuning.punish_scale
+
+
 ## Takes the blow `e`, which Melee judged to come to `r`, on its own: apply_hits with that one blow.
 func apply_hit(e: HitEvent, r: HitResult) -> void:
 	var events: Array[HitEvent] = [e]
@@ -516,6 +536,7 @@ func _physics_process(delta: float) -> void:
 	if intent == null:
 		intent = Intent.new()
 	for action in intent.pressed:
+		_tax_press(action)
 		buffer.push(action, buffer_frame)
 		if action == SWAY_ACTION or action == DUCK_ACTION:
 			evade_dir = intent.evade_dir
@@ -698,9 +719,31 @@ func _set_guarding(on: bool) -> void:
 	rig.set_stance(GUARD_STANCE, on)
 
 
+# The presses that can be hammered: the attacks and the two evades. The guard, the dash-step and the rest are not (a tap of guard is a parry).
+const HAMMERED: Array[StringName] = [&"palm", &"heavy", &"sway", &"duck"]
+
+
+# Mashing costs stamina (CombatTuning.hammer_tax; Task 17): a press of a hammered action made while the last press of the same action is
+# still waiting in the buffer, or while the move it started has not yet reached its first cancel window, is redundant. The first one since
+# a move started is free (a double tap); each after it costs the tax, times 100 / max_stamina, spent like any spend. The press itself
+# is taken as ever (it is pushed after this), and a foe's tuning has no tax.
+func _tax_press(action: StringName) -> void:
+	var tax := stats.tuning.hammer_tax
+	if tax <= 0.0 or not HAMMERED.has(action):
+		return
+	if not buffer.waits_for(action, buffer_frame) and not runner.started_by_and_not_yet_open(action):
+		return
+	_redundant_presses += 1
+	if _redundant_presses > 1:
+		stats.spend_stamina(tax * 100.0 / stats.max_stamina)
+
+
 # Any move but guard_hit takes the guard stance down: an attack, a sway or a dash-step out of it, a reaction, the death.
 func _on_move_started(move: MoveData) -> void:
 	_on_move_started_chain(move)
+	_redundant_presses = 0
+	if open_to != null and not def.reactions.values().has(move.id):
+		open_to = null  # a move of his own: he is no longer open
 	if guarding and move.id != def.reactions.get(GUARD_HIT, &""):
 		_set_guarding(false)
 

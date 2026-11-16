@@ -41,6 +41,14 @@ func consume(allowed: Array, frame: int) -> StringName:
 	return action
 
 
+## Whether a press of `action` made earlier still waits at `frame`: not yet consumed, and no more than WINDOW frames old.
+func waits_for(action: StringName, frame: int) -> bool:
+	for i in _actions.size():
+		if _actions[i] == action and frame - _frames[i] <= WINDOW:
+			return true
+	return false
+
+
 ## Forgets every press.
 func clear() -> void:
 	_actions.clear()

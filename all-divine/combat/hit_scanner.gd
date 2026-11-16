@@ -202,6 +202,8 @@ func _event(actor: Actor, target: Actor, activation: Activation, point: Vector3)
 		flat = Vector3(actor.facing().x, 0.0, actor.facing().z)
 	e.direction = flat.normalized()
 	_cash(e, actor, activation)
+	e.punish = actor.punish_scale_on(target)
+	e.power *= e.punish
 	return e
 
 

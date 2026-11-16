@@ -20,7 +20,7 @@ const CHAIN_GAP := 45
 ## Three seconds, in frames.
 const WINDOW := 180
 ## Moves a tier I starts an attack with.
-const TIER_I_STARTS: Array[StringName] = [&"knuckle_jab", &"knuckle_sweep"]
+const TIER_I_STARTS: Array[StringName] = [&"knuckle_jab_long", &"knuckle_sweep"]  # tier I's jab is the long one (Task 17)
 ## The signature of a tier II and a tier I fighting a still Abarax for 900 frames, recorded before the brain learned to hold
 ## more than one token: the frame and name of every move started, hashed. A brain whose options hold one token plays on as it did.
 const TIER_II_SIGNATURE := 2047247070
@@ -124,7 +124,7 @@ static func _worst_window(hits: Array) -> float:
 ## The damage of one tier I string: its jab, cross and hook.
 static func _tier_one_string() -> float:
 	var hp := 0.0
-	for id in [&"knuckle_jab", &"knuckle_cross", &"knuckle_hook"]:
+	for id in [&"knuckle_jab_long", &"knuckle_cross", &"knuckle_hook"]:
 		for profile: HitProfile in (Registry.fetch(&"moves", id) as MoveData).hits.values():
 			hp += profile.damage
 	return hp

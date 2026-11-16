@@ -8,6 +8,10 @@ extends TestCase
 ## Abarax (his own def, HP to spare) stands at the origin facing +Z, driven by a ScriptBrain or a test brain; the Knuckle
 ## stands on +Z facing him unless a test says otherwise.
 
+# Tier I's jab is the long one (Task 17), II's and III's the jab: a test about "the jab" of any tier reads either.
+const JABS: Array[StringName] = [&"knuckle_jab", &"knuckle_jab_long"]
+
+
 const ABARAX := "res://data/actors/abarax.tres"
 const KNUCKLES := ["res://data/actors/knuckle_1.tres", "res://data/actors/knuckle_2.tres", "res://data/actors/knuckle_3.tres"]
 const BRAINS := ["res://data/brains/knuckle_1.tres", "res://data/brains/knuckle_2.tres", "res://data/brains/knuckle_3.tres"]
@@ -182,10 +186,10 @@ func test_attacks_only_in_range_and_angle_and_off_cooldown() -> void:
 	var starts := []  # [frame, gap, degrees off the facing]
 	var ends := []
 	knuckle.runner.move_started.connect(func(m: MoveData) -> void:
-		if m.id == &"knuckle_jab":
+		if JABS.has(m.id):
 			starts.append([knuckle.frame, _gap(knuckle, abarax), _off_facing(knuckle, abarax)]))
 	knuckle.runner.move_ended.connect(func(m: MoveData, _c: bool) -> void:
-		if m.id == &"knuckle_jab":
+		if JABS.has(m.id):
 			ends.append(knuckle.frame))
 	await frames(60 * 10)
 	assert_true(starts.size() >= 2, "it jabbed (%s)" % [starts])
@@ -223,8 +227,8 @@ func test_tier_one_throws_three_blows_then_opens() -> void:
 	knuckle.runner.move_ended.connect(func(m: MoveData, _c: bool) -> void: ended[m.id] = knuckle.frame)
 	await frames(60 * 6)
 	var ids := log.map(func(e: Array) -> StringName: return e[1])
-	var at := ids.find(&"knuckle_jab")
-	assert_true(at >= 0 and ids.slice(at, at + 3) == [&"knuckle_jab", &"knuckle_cross", &"knuckle_hook"],
+	var at := ids.find(&"knuckle_jab_long")  # tier I's jab (Task 17)
+	assert_true(at >= 0 and ids.slice(at, at + 3) == [&"knuckle_jab_long", &"knuckle_cross", &"knuckle_hook"],
 			"three blows in a row: %s" % [ids])
 	var hook_end: int = ended.get(&"knuckle_hook", -1)
 	assert_true(hook_end > 0, "the hook played out")
@@ -244,7 +248,7 @@ func test_tier_one_lands_its_combo_from_its_preferred_range() -> void:
 	await frames(60 * 8)
 	var chain := false
 	for i in range(landed.size() - 2):
-		if landed.slice(i, i + 3) == [&"knuckle_jab", &"knuckle_cross", &"knuckle_hook"]:
+		if landed.slice(i, i + 3) == [&"knuckle_jab_long", &"knuckle_cross", &"knuckle_hook"]:  # tier I's jab is the long one (Task 17)
 			chain = true
 	assert_true(chain, "engaged at %.1f m, it lands its jab, cross and hook (%s)" % [def.preferred_range, landed])
 
@@ -466,12 +470,13 @@ func test_its_combo_lands_on_a_slow_strafe() -> void:
 		var current := [{}]
 		var all := []
 		knuckle.runner.move_started.connect(func(m: MoveData) -> void:
-			if m.id == &"knuckle_jab":
+			if JABS.has(m.id):
 				current[0] = {&"knuckle_jab": false, &"knuckle_cross": false, &"knuckle_hook": false, "at": knuckle.frame}
 				all.append(current[0]))
 		abarax.got_hit.connect(func(r: HitResult, e: HitEvent) -> void:
-			if CONNECTED.has(r.outcome) and current[0].has(e.move.id):
-				current[0][e.move.id] = true)
+			var id: StringName = &"knuckle_jab" if JABS.has(e.move.id) else e.move.id  # (the jab of any tier is the combo's first blow)
+			if CONNECTED.has(r.outcome) and current[0].has(id):
+				current[0][id] = true)
 		await frames(60 * 30)
 		var marks := ""
 		for c: Dictionary in all:
@@ -536,7 +541,7 @@ func test_a_target_that_steps_in_smothers_the_combo() -> void:
 				last_turn = knuckle.frame
 			last_step = step if not knuckle.runner.busy() else Vector2.ZERO
 		for b: Array in blows:
-			if b[1] == &"knuckle_jab":
+			if JABS.has(b[1]):
 				combos += 1
 			elif not reached.has(b[0]) and b[0] < knuckle.frame - 60:
 				air.append("tier %d %s at frame %d" % [case[0], b[1], b[0]])
@@ -573,7 +578,7 @@ class Stepper extends Brain:
 
 	func think(actor: Actor, _delta: float) -> Intent:
 		var intent := Intent.new()
-		if not stepped and watch != null and watch.runner.current != null and watch.runner.current.id == &"knuckle_jab" and watch.runner.time >= 5.0 / 60.0:
+		if not stepped and watch != null and watch.runner.current != null and JABS.has(watch.runner.current.id) and watch.runner.time >= 5.0 / 60.0:
 			var away := Vector2(actor.global_position.x - watch.global_position.x, actor.global_position.z - watch.global_position.z)
 			intent.pressed.append(&"dodge")
 			intent.move = away.normalized()
@@ -742,7 +747,7 @@ class Circler extends Brain:
 ## The whole table (twenty seeds, circling and standing at 1.2 m) was measured twice when the mix was set (Task 14b, fix round 1: every share inside
 ## its band in both stances); the suite holds a sample of it, because the twenty-seed table costs three minutes.
 const MIX_SEEDS := 6
-const MIX_STARTS: Array[StringName] = [&"knuckle_jab", &"knuckle_sweep", &"knuckle_thrust", &"knuckle_grab", &"knuckle_feint"]
+const MIX_STARTS: Array[StringName] = [&"knuckle_jab", &"knuckle_jab_long", &"knuckle_sweep", &"knuckle_thrust", &"knuckle_grab", &"knuckle_feint"]
 const MIX := {
 	1: {&"knuckle_sweep": [8, 20], "before": 140},
 	2: {&"knuckle_sweep": [8, 20], &"knuckle_thrust": [8, 20], "before": 172},
@@ -840,7 +845,7 @@ func test_tier_two_sometimes_feints_and_delays() -> void:
 	knuckle.runner.charged.connect(func(_m: MoveData) -> void: charged[0] += 1)
 	for i in 1200:
 		await frames(1)
-		if knuckle.runner.charging and knuckle.runner.current.id == &"knuckle_jab" and not holding[0]:
+		if knuckle.runner.charging and JABS.has(knuckle.runner.current.id) and not holding[0]:
 			holding[0] = true
 			delayed[0] += 1
 	assert_true(feints[0] >= 1, "it feinted (%d)" % feints[0])
