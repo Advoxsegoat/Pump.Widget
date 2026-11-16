@@ -264,6 +264,97 @@ func test_a_wind_up_already_begun_finishes_when_the_player_steps_behind_a_wall_a
 	assert_true((run["swings"] as Array).size() > 0, "he comes round and attacks again (%d swings)" % (run["swings"] as Array).size())
 
 
+## Fix round 1: the checks are held by tests. The brain asks the world in four places (when it chooses, when it presses, at the combo's next
+## press, and when a foe is offered the token); the first three overlap, so a test that holds one has to take the others out of the way: the
+## foe's go-round forgets a plan the moment the line is cut, but only once it has searched (a few frames), and each test below cuts the line
+## in one of the frames the go-round has not yet seen. Each goes red when its check is removed (the lines are in the report).
+
+func test_over_a_counter_one_metre_high_no_swing_is_begun_with_no_line_at_the_hand() -> void:
+	# The review's own case: a counter 1.0 m high across a 5 m lane; the chest line (1.1 m) passes over it and the hand line (0.72 m) does not.
+	# Engaged foes, the player 0.7 m behind it: 104 swings of 109 begun with no line on the base, 0 now.
+	var runs: Array[Dictionary] = await _fights("counter", 4, 900, 3, true)
+	assert_true(_sum(runs, "swings") > 0, "they fight (%d swings)" % _sum(runs, "swings"))
+	assert_eq(_sum(runs, "no_line"), 0, "no swing is begun with no line at the hand (of %d swings)" % _sum(runs, "swings"))
+
+
+func test_a_foe_whose_line_is_cut_between_the_choice_and_the_press_does_not_swing() -> void:
+	# A wall goes up between a foe who has chosen his attack and the player, on the frame before he presses it (a gate shut, a door slammed): the
+	# way round has not been searched yet, and the press itself asks the world.
+	var swung_at_wall := 0
+	var cases := 0
+	for seed_value in range(1, 9):
+		var run := _fight("none", seed_value, Vector3.ZERO, 1, true, Vector3(0, 0, 0.0), [Vector2(0.0, -1.2)])
+		var foe: Actor = (run["foes"] as Array)[0]
+		var brain: EnemyBrain = foe.brain
+		var player: Actor = run["player"]
+		var walled := -1
+		for i in 400:
+			await frames(1)
+			_observe(run)
+			if walled < 0 and brain.plan() != null and brain.mode == EnemyBrain.Mode.ENGAGED and not foe.runner.busy() and foe.locomotion.speed <= EnemyBrain.PRESS_SPEED:
+				var d := Vector2(foe.global_position.x - player.global_position.x, foe.global_position.z - player.global_position.z).length()
+				if d >= brain.plan().min_range and d <= brain.plan().max_range:
+					TestArena.wall(run["arena"], Vector3(0, 1.5, -0.6), Vector3(3, 3, 0.2))  # between them: it is on the physics server for the next step
+					walled = i
+					cases += 1
+			if walled >= 0 and i <= walled + 3 and foe.runner.current != null and foe.runner.current.kind == MoveData.Kind.ATTACK:
+				swung_at_wall += 1
+		(run["arena"] as Node).free()
+	assert_true(cases > 0, "he had a blow chosen and was about to press it in %d of 8 fights" % cases)
+	assert_eq(swung_at_wall, 0, "no blow is pressed in the three frames after the wall went up (%d fights)" % cases)
+
+
+func test_a_foe_mid_combo_does_not_throw_the_next_press_when_the_player_steps_behind_a_walls_end() -> void:
+	# The jab is a combo of palms. The player steps behind the end of a wall the frame the first is pressed: the second would be thrown at the wall
+	# (the world's ray from his chest is cut) unless the press asks again. Counted: attack moves that begin in the 60 frames after the step, with
+	# no line at that moment.
+	var thrown := 0
+	var cases := 0
+	for seed_value in range(1, 13):
+		var run := _fight("end", seed_value, Vector3.ZERO, 1, true, Vector3(0.3, 0, 0.7), [Vector2(0.3, -0.6)])
+		var foe: Actor = (run["foes"] as Array)[0]
+		var brain: EnemyBrain = foe.brain
+		var player: Actor = run["player"]
+		var stepped := -1
+		var after := {"on": false}  # (a lambda keeps its own copy of a plain local: a Dictionary is shared)
+		var begun: Array[bool] = []
+		foe.runner.move_started.connect(func(m: MoveData) -> void:
+			if after["on"] and m.kind == MoveData.Kind.ATTACK and _no_line(foe, player):
+				begun.append(true))
+		for i in 200:
+			await frames(1)
+			_observe(run)
+			if stepped < 0 and brain.mode == EnemyBrain.Mode.ATTACKING and brain._press_count == 1 and not brain._presses.is_empty() and foe.runner.busy():
+				player.place(Transform3D(Basis(Vector3.UP, PI), Vector3(-0.5, 0, 0.7)))
+				stepped = i
+				after["on"] = true
+				cases += 1
+			if stepped >= 0 and i > stepped + 60:
+				break
+		thrown += begun.size()
+		(run["arena"] as Node).free()
+	assert_true(cases >= 4, "a combo was begun in %d of 12 fights" % cases)
+	assert_eq(thrown, 0, "no later press of the combo is thrown at the wall (in %d fights)" % cases)
+
+
+func test_a_hand_over_to_a_foe_with_no_line_is_refused() -> void:
+	# A foe who holds the token and is held up offers it to a ready foe within 4 m of the player: not to one whose line is cut by a wall (he
+	# could not use it). Three foes (a third makes a crowd), the other two behind a 6 m wall, ready.
+	var run := _fight("wall6", 1, Vector3.ZERO, 3, true, Vector3(0, 0, 0.7), [Vector2(1.0, 1.6), Vector2(-1.0, -1.0), Vector2(1.0, -1.0)])
+	await frames(2)
+	var foes: Array[Actor] = run["foes"]
+	var holder := foes[0].brain as EnemyBrain
+	holder._plan = holder.def.attacks[0]
+	for i in [1, 2]:
+		var other := foes[i].brain as EnemyBrain
+		other._plan = null
+		other._rest = 0.0
+		other._backing = false
+	var offered := holder._hand_over(foes[0])
+	(run["arena"] as Node).free()
+	assert_true(not offered, "the token is not handed to a foe with a wall between him and the player")
+
+
 func test_survey_for_the_report() -> void:
 	# Not a rule: prints the table of swings (begun with no line, landed, first attack, line) for the report, BEFORE and AFTER.
 	if OS.get_environment("FOE_WALLS_SURVEY") == "":
