@@ -13,6 +13,9 @@ extends TestCase
 ## from his chest (1.1 m up) to the player's chest, or at his hand's height (0.72 m), is cut (a low move's own ray is at 0.45 m: over a
 ## kerb, under a low wall); standing is a foe within 3 m of the player, with no line, going slower than STILL_SPEED.
 
+## These fights are judged by positions, moves and clocks, never by a picture: a rendered run plays them with the drawing off (TestRunner).
+const DRAWS := false
+
 const ABARAX := "res://data/actors/abarax.tres"
 const KINDS := ["knuckle_1", "knuckle_1", "knuckle_1"]
 ## Metres between the arenas of two fights.

@@ -10,6 +10,9 @@ extends TestCase
 ##      within 6 s or within 3 s of the first token free after he is ready, and no foe is passed over (a fifth of the attacks each).
 ## The token rule (never more than two attack at once) stands. Twenty seeds were run for the report: STAND_ABOUT_SEEDS=20.
 
+## These fights are judged by positions, moves and clocks, never by a picture: a rendered run plays them with the drawing off (TestRunner).
+const DRAWS := false
+
 const KINDS := ["knuckle_1", "knuckle_2", "knuckle_3", "knuckle_blade", "knuckle_drummer", "knuckle_heavy"]
 const FIGHT_FRAMES := 1200
 ## The suite plays shorter fights (the rules scale: the pulse is one attack in 150 frames), to keep the file's share of the run; the twenty-seed

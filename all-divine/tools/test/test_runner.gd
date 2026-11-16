@@ -159,8 +159,13 @@ func _run_file(path: String, filter: String, report: TestReport) -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	tree.root.add_child(test_case)
 	_hand_on_the_keyboard(tree)
+	# A file whose tests look at no picture says so (const DRAWS := false) and is played with the drawing off, as a headless run plays it: in a
+	# rendered run (CI's render shards) the software renderer otherwise draws every frame of its fights, several times the file's own time.
+	# The drawing is on again for the next file, whatever the tests did.
+	RenderingServer.render_loop_enabled = bool(script.get_script_constant_map().get("DRAWS", true))
 	for method_name in names:
 		await _run_test(tree, test_case, path + "::" + method_name, method_name, report)
+	RenderingServer.render_loop_enabled = true
 	tree.root.remove_child(test_case)
 	test_case.free()
 

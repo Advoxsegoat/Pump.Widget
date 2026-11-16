@@ -11,6 +11,9 @@ extends TestCase
 ##          round the other end 6 m. They go the long way and fight. What is held is the way round: a foe's height until he first has a line
 ##          (once he fights, the circling and spacing of the ordinary brain know no edge, here 3 m away: that is not the planner's).
 
+## These fights are judged by positions, moves and clocks, never by a picture: a rendered run plays them with the drawing off (TestRunner).
+const DRAWS := false
+
 const FAR := 60.0
 const SEEDS := 10
 const FRAMES := 1800

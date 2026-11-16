@@ -18,6 +18,9 @@ extends TestCase
 ##
 ## Before this round (402cf55) the legs jumped more than twice in 25 of 40 fights at the gate and the 1 m wall; the base had 0 of 40.
 
+## These fights are judged by positions, moves and clocks, never by a picture: a rendered run plays them with the drawing off (TestRunner).
+const DRAWS := false
+
 const FAR := 40.0
 const SEEDS := 10
 const FRAMES := 1200

@@ -33,6 +33,13 @@ func test_a_file_begins_with_the_keyboard_and_mouse_in_hand_whatever_the_file_be
 	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "and this file is left as it was found")
 
 
+func test_a_file_that_looks_at_no_picture_is_played_with_the_drawing_off_and_the_next_with_it_on() -> void:
+	var r: TestReport = await TestRunner.new().run_files([F + "fixture_no_drawing.gd", F + "fixture_drawing_at_start.gd"])
+	var failed := r.results.filter(func(x): return not x.message.is_empty())
+	assert_eq([r.passed, r.failed], [2, 0], "the first file is played with the drawing off, the second with it on: %s" % [failed])
+	assert_true(RenderingServer.render_loop_enabled, "and this file is left with the drawing on")
+
+
 func test_filter_selects_one_test() -> void:
 	var r: TestReport = await TestRunner.new().run_files([F + "fixture_pass.gd"], "fixture_pass.gd::test_a")
 	assert_eq([r.passed, r.failed], [1, 0])
@@ -136,7 +143,11 @@ func test_weights_are_read_from_a_file_of_seconds_and_paths() -> void:
 
 func test_a_run_of_the_suite_is_dealt_by_the_weights_file() -> void:
 	var files := TestRunner.discover("res://tests", true)
-	var slow := ["res://tests/story/test_cine_camera.gd", "res://tests/bot/test_combat_bot.gd", "res://tests/actors/test_enemy_brain.gd"]
+	# The three slowest files, by the weights file as it is today (the names change when the weights are measured again from CI's logs).
+	var weights := TestRunner.read_weights(TestRunner.WEIGHTS)
+	var by_weight := weights.keys()
+	by_weight.sort_custom(func(a: String, b: String) -> bool: return weights[a] > weights[b] or (weights[a] == weights[b] and a < b))
+	var slow: Array = by_weight.slice(0, 3)
 	var where := {}
 	var seen := 0
 	for index in range(1, 6):
