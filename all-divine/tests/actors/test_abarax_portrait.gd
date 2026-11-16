@@ -157,6 +157,40 @@ func test_the_rig_springs_the_feather_and_only_the_feather_and_the_scarf() -> vo
 	assert_true(worst < 1e-4, "every other bone is where it would be without the feather's spring (%.5f m)" % worst)
 
 
+## The blade's length (the builder's FEATHER_LENGTH) and the plane of his ear (model space: +Z is front, so behind is smaller z).
+const FEATHER_LENGTH := 0.12
+const EAR_PLANE_Z := -0.016
+
+
+func test_the_feather_hangs_down_behind_the_ear_at_rest() -> void:
+	var r: Rig = track(load(RIG).instantiate())
+	var skeleton := r.skeleton
+	if not _has_feather(r):
+		return
+	# The rest pose, in the model's own space: the blade's root (the end of feather_01) and its tip (the end of feather_03).
+	var root := skeleton.get_bone_global_rest(skeleton.find_bone("feather_02")).origin
+	var last := skeleton.get_bone_global_rest(skeleton.find_bone("feather_03"))
+	var tip := last.origin + last.basis.y.normalized() * FEATHER_BONE_LENGTH
+	assert_true(root.y - tip.y >= FEATHER_LENGTH * 2.0 / 3.0, "at rest the tip is %.1f cm below the blade's root (at least two thirds of its %.0f cm)" % [(root.y - tip.y) * 100.0, FEATHER_LENGTH * 100.0])
+	assert_true(tip.z < EAR_PLANE_Z, "and behind the ear's plane (z %.3f, the ear at %.3f)" % [tip.z, EAR_PLANE_Z])
+	assert_true(tip.x > root.x - 0.02, "and not across the neck (x %.3f from %.3f)" % [tip.x, root.x])
+
+
+func test_the_feather_hangs_down_behind_the_ear_when_he_stands() -> void:
+	var r: Rig = track(load(RIG).instantiate())
+	if not _has_feather(r):
+		return
+	for i in 120:
+		await frames(1)
+		r.tick(1.0 / 60)
+	var head := r.shown_pose(&"Head")
+	var root := r.shown_pose(&"feather_02").origin
+	var tip := _tip(r)
+	assert_true(root.y - tip.y >= FEATHER_LENGTH * 2.0 / 3.0, "standing, the tip is %.1f cm below the blade's root (at least two thirds of %.0f cm)" % [(root.y - tip.y) * 100.0, FEATHER_LENGTH * 100.0])
+	assert_true(tip.z < EAR_PLANE_Z, "and behind the ear's plane (z %.3f)" % tip.z)
+	assert_true(head.origin.y > 1.5, "the head is where it should be")
+
+
 func test_the_feather_swings_in_a_dash_step_and_comes_to_rest() -> void:
 	var arena := TestArena.make(self)
 	var brain := ScriptBrain.new([{"frames": 60}, {"frames": 1, "move": Vector2(0, 1), "press": [&"dodge"]}, {"frames": 200}])
