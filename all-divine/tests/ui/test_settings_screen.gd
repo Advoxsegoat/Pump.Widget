@@ -862,3 +862,50 @@ func test_a_line_of_words_is_drawn_in_the_dim_colour_of_a_switched_off_row() -> 
 	menu.show_page(&"window")
 	_select(menu, "Back")
 	assert_eq(_row(menu, "Size").get("colour"), dim, "a row switched off is the same colour as the words")
+
+
+# A value that is Off is drawn in the menu's dim ink (the tone of a row switched off), so that a column of values does not read as one
+# block and the On ones stand out. Only the word Off dims: not a number, not a choice's name, not the label.
+func test_a_value_that_is_off_is_drawn_dim_and_one_that_is_on_in_the_full_ink() -> void:
+	var menu := _menu()
+	var dim := Color(Hud.POSTURE, Menu.DIM_ALPHA)
+	Settings.set_value("effects/heavy_wave_on", false)
+	menu.show_page(&"effects")
+	_select(menu, "Back")
+	var off := _row(menu, "Heavy-attack wave")
+	var on := _row(menu, "Perilous rim")
+	assert_eq([on.value, off.value], ["On", "Off"])
+	assert_eq(off.value_colour, dim, "Off is drawn in the dim ink")
+	assert_eq(on.value_colour, Hud.GOLD, "On in the full ink")
+	assert_eq([off.colour, on.colour], [Hud.WHITE, Hud.WHITE], "the labels of both keep their full brightness")
+	# Chosen, the row's label is rose in full; the value of an Off row still dims, an On row's goes rose with the label.
+	_select(menu, "Heavy-attack wave")
+	assert_eq(_row(menu, "Heavy-attack wave").colour, Hud.ROSE, "the chosen row's label is rose")
+	assert_eq(_row(menu, "Heavy-attack wave").value_colour, dim, "and its Off value is dim")
+	_select(menu, "Perilous rim")
+	assert_eq(_row(menu, "Perilous rim").value_colour, Hud.ROSE, "an On value of the chosen row is rose")
+	# Numbers and names are not dimmed (a slider at 0 per cent says 0%, not Off).
+	menu.show_page(&"camera")
+	_select(menu, "Camera dips")
+	assert_eq(_row(menu, "Camera shake").value_colour, Hud.GOLD, "a slider's percent is in the full ink")
+	menu.show_page(&"window")
+	assert_eq(_row(menu, "Mode").value_colour, Hud.GOLD, "a choice's name is in the full ink")
+
+
+# The dim ink is still readable: at least 3 to 1 against the panel (WCAG contrast of the ink laid over the panel's ink).
+func test_the_dim_ink_of_an_off_value_is_readable_against_the_panel() -> void:
+	var panel := Color(Hud.INK.r * Hud.INK.a, Hud.INK.g * Hud.INK.a, Hud.INK.b * Hud.INK.a)  # over black: the darkest the world can be
+	var dim := Color(Hud.POSTURE, Menu.DIM_ALPHA)
+	var shown := Color(dim.r * dim.a + panel.r * (1.0 - dim.a), dim.g * dim.a + panel.g * (1.0 - dim.a), dim.b * dim.a + panel.b * (1.0 - dim.a))
+	# over a bright world the panel is lighter: take a mid grey one, too (the panel is 90 per cent ink)
+	var light_panel := Color(Hud.INK.r * Hud.INK.a + 0.5 * (1.0 - Hud.INK.a), Hud.INK.g * Hud.INK.a + 0.5 * (1.0 - Hud.INK.a), Hud.INK.b * Hud.INK.a + 0.5 * (1.0 - Hud.INK.a))
+	for ground in [panel, light_panel]:
+		var lit := Color(dim.r * dim.a + ground.r * (1.0 - dim.a), dim.g * dim.a + ground.g * (1.0 - dim.a), dim.b * dim.a + ground.b * (1.0 - dim.a))
+		var ratio := (_relative(lit) + 0.05) / (_relative(ground) + 0.05)
+		assert_true(ratio >= 3.0, "the dim ink against the panel is %.1f to 1 (at least 3)" % ratio)
+	assert_true(shown.get_luminance() > 0.2, "and not near black")
+
+
+static func _relative(c: Color) -> float:
+	var lin := func(v: float) -> float: return v / 12.92 if v <= 0.03928 else pow((v + 0.055) / 1.055, 2.4)
+	return 0.2126 * lin.call(c.r) + 0.7152 * lin.call(c.g) + 0.0722 * lin.call(c.b)

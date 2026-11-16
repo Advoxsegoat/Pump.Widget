@@ -220,7 +220,7 @@ func test_a_slider_is_drawn_with_a_gold_fill_of_its_percent() -> void:
 		assert_eq(bar.end.y <= row.rect.end.y and bar.position.y >= row.rect.position.y, true, "the bar is inside its row")
 
 
-func test_a_toggle_shows_On_in_gold_and_Off_in_gold() -> void:
+func test_a_toggle_shows_On_in_gold_and_Off_dim() -> void:
 	var main := await _paused()
 	Settings.set_value("effects/heavy_wave_on", false)
 	_page(main, &"effects", "Back")
@@ -228,17 +228,30 @@ func test_a_toggle_shows_On_in_gold_and_Off_in_gold() -> void:
 	var on := _row(main, "Perilous rim")
 	var off := _row(main, "Heavy-attack wave")
 	assert_eq([on.value, off.value], ["On", "Off"])
+	var on_area := Rect2i(on.value_at.x - 1, on.rect.position.y, 24, 10)
+	var off_area := Rect2i(off.value_at.x - 1, off.rect.position.y, 24, 10)
+	assert_true(_count_tone(img, on_area, &"gold") > 6, "On is drawn in gold")
+	assert_eq(_count_tone(img, on_area, &"white") + _count_tone(img, on_area, &"rose"), 0, "and in no other colour")
+	# Off is the dim ink (Hud.POSTURE at Menu.DIM_ALPHA): no gold, still readable, and measurably darker than the On beside it.
+	assert_eq(_count_tone(img, off_area, &"gold") + _count_tone(img, off_area, &"rose"), 0, "Off is not gold or rose")
+	var on_peak := _peak(img, on_area)
+	var off_peak := _peak(img, off_area)
+	assert_true(off_peak.get_luminance() > 0.25, "Off can be read (%s)" % off_peak.to_html(false))
+	assert_true(off_peak.get_luminance() < 0.8 * on_peak.get_luminance(), "and is plainly darker than the On beside it: %.2f against %.2f" % [off_peak.get_luminance(), on_peak.get_luminance()])
+	assert_true(off_peak.b >= off_peak.r * 0.95, "in Hud.POSTURE's cool white (%s)" % off_peak.to_html(false))
 	for row in [on, off]:
-		var text := Rect2i(row.value_at.x - 1, row.rect.position.y, 24, 10)
-		assert_true(_count_tone(img, text, &"gold") > 6, "%s: %s is drawn in gold" % [row.label, row.value])
-		assert_eq(_count_tone(img, text, &"white") + _count_tone(img, text, &"rose"), 0, "%s: and in no other colour" % row.label)
 		var label := Rect2i(row.text_at.x, row.rect.position.y, 60, 10)
-		assert_true(_count_tone(img, label, &"white") > 6, "%s: the label is white" % row.label)
-	# Selected, the value takes the row's rose with the label.
+		assert_true(_count_tone(img, label, &"white") > 6, "%s: the label is white, Off or On" % row.label)
+	# Selected, the label is rose; the value of an On row goes rose with it, that of an Off row stays dim.
 	_page(main, &"effects", "Perilous rim")
 	var picked := await _picture(main)
 	var row := _row(main, "Perilous rim")
 	assert_true(_count_tone(picked, Rect2i(row.value_at.x - 1, row.rect.position.y, 24, 10), &"rose") > 4, "a selected row's value is rose")
+	_page(main, &"effects", "Heavy-attack wave")
+	var picked_off := await _picture(main)
+	var chosen := _row(main, "Heavy-attack wave")
+	assert_true(_count_tone(picked_off, Rect2i(chosen.text_at.x, chosen.rect.position.y, 60, 10), &"rose") > 6, "the chosen Off row's label is rose")
+	assert_eq(_count_tone(picked_off, Rect2i(chosen.value_at.x - 1, chosen.rect.position.y, 24, 10), &"rose"), 0, "and its Off value is not")
 
 
 func test_a_dim_row_is_drawn_in_the_dim_colour_label_and_value() -> void:
