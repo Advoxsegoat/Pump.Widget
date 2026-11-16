@@ -164,7 +164,7 @@ nothing the aims depend on: 10 waves and 80 deaths for `mash`, `counter` at 18 1
    direction every fourth frame and palm every seventh, 15 and 8.6 presses a second, which a person does not, so a person who taps twice as slowly pays about half the tax).
 4. The cliff is a slope: `counter` at 18 clears a wave in 10 of 10 seeds (before 5) **met**, takes 1.23 HP for each it deals (before 2.61, bound 1.5) **met**; the tier I jab's share of the HP taken at 18 is 51%
    (before 71%, bound under half): **not met, by a point and a half** (1300 of 2529 HP). At 18 frames the bot answers a blow only after its reaction (jittered by up to 3) and a dodge's 4-frame lead, 19 to 25
-   frames, so the 20-frame jab is still hit 130 times in 336 (parried 119 times and evaded 87: more than a third are now answered, against 3%). What would take the share under half is the jab's 22 or 23
+   frames, so the 20-frame jab is still hit 130 times in 337 (parried 119 times and evaded 87: three in five are now answered, against 3 in 312 before). What would take the share under half is the jab's 22 or 23
    frames (the brief fixed 20) or a window for the guard that opens a frame earlier; none of the three numbers the tuning could move did (the 50, 1.7 and 1 above gave 54%).
 5. `counter` at 10 loses nothing: **met**, 42 waves against 38 and 0 deaths against 4.
 
