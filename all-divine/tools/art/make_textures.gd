@@ -72,6 +72,10 @@ const SNOW_SEED := 19
 const SNOW_SHADOW := 0.10
 const CLUMP_MIN := 2
 const CLUMP_MAX := 5
+## The wood of the fronts (doors, shutters, timber, boards) in the colormap: value WOOD_BASE + WOOD_SLOPE * the kit's value; the trim about TRIM_BASE.
+const WOOD_BASE := 0.20
+const WOOD_SLOPE := 0.16
+const TRIM_BASE := 0.23
 
 
 func _initialize() -> void:
@@ -566,10 +570,12 @@ static func bilibara_colour(c: Color) -> Color:
 	if h >= 0.93 or h < 0.02:
 		return Color.from_hsv(0.77, 0.31, 0.10 + 0.17 * v)
 	if h < 0.12:
-		# Boards, doors and the tannery's walls: brown wood, dark. Trim and shutters: a dull rose-gold, darker than the plaster they sit in (and than any head: the heads' tones are 0.28 to 0.55, the darkest a tier III's, and a door or a shutter behind a head must not be within 0.08 of one: so under 0.16 here).
+		# Boards, doors and the tannery's walls: brown wood, a mid tone (0.20 to 0.28 in the picture: a cool grey-brown between the pale plaster and the dark
+		# window glass; a black front was the first thing seen in the lane). Trim and shutters: the same grey-brown a hand paler or darker, never paler than the
+		# plaster they sit in. A head's tone is 0.28 to 0.55 (the darkest a tier III's): see the readability tests for what this tone may be near a head.
 		if v < 0.66:
-			return Color.from_hsv(0.07, 0.38, 0.04 + 0.18 * v)
-		return Color.from_hsv(0.04, 0.30, clampf(0.12 + 0.4 * (v - 0.70), 0.11, 0.16))
+			return Color.from_hsv(0.07, 0.30, WOOD_BASE + WOOD_SLOPE * v)
+		return Color.from_hsv(0.05, 0.26, clampf(TRIM_BASE + 0.15 * (v - 0.70), TRIM_BASE - 0.02, TRIM_BASE + 0.03))
 	if h < 0.445:
 		return Color.from_hsv(0.40, 0.25, 0.20 + 0.30 * v)
 	if h < 0.55 or s >= 0.35:
