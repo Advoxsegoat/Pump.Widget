@@ -5,6 +5,9 @@ extends TestCase
 ## and its thrust a guard that catches it, so he is never hurt; a charged heavy, a dash-step in, a jab and a cross break its
 ## posture; and the Open Hand finisher kills it.
 
+## One of the few files outside tests/render/ that a rendered run draws (TestRunner.draws): the renderer's smoke test of the whole game.
+const DRAWS := true
+
 const REEL := "res://demo/demo_reel.tscn"
 const O := HitResult.Outcome
 

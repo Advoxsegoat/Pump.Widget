@@ -159,15 +159,23 @@ func _run_file(path: String, filter: String, report: TestReport) -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	tree.root.add_child(test_case)
 	_hand_on_the_keyboard(tree)
-	# A file whose tests look at no picture says so (const DRAWS := false) and is played with the drawing off, as a headless run plays it: in a
-	# rendered run (CI's render shards) the software renderer otherwise draws every frame of its fights, several times the file's own time.
+	# In a rendered run (CI's render shards) only the files that look at a picture are drawn (see draws): the software renderer otherwise draws
+	# every frame of every fight, hundreds of times a file's own time (the cine camera's tests: half a second headless, eight minutes drawn).
 	# The drawing is on again for the next file, whatever the tests did.
-	RenderingServer.render_loop_enabled = bool(script.get_script_constant_map().get("DRAWS", true))
+	RenderingServer.render_loop_enabled = draws(path, script.get_script_constant_map())
 	for method_name in names:
 		await _run_test(tree, test_case, path + "::" + method_name, method_name, report)
 	RenderingServer.render_loop_enabled = true
 	tree.root.remove_child(test_case)
 	test_case.free()
+
+
+## Whether a file's tests are played with the drawing on in a rendered run. The picture tests (res://tests/render/) are, and any file that
+## says `const DRAWS := true` (a few that boot the whole game, kept as the renderer's smoke test). Every other file is played as the headless
+## job plays it, with nothing drawn: it passes there with no renderer at all, so it looks at no drawn frame. A picture test that needs no
+## drawing may say `const DRAWS := false`.
+static func draws(path: String, constants: Dictionary) -> bool:
+	return bool(constants.get("DRAWS", path.contains("/tests/render/")))
 
 
 ## A file begins with the keyboard and mouse in hand, as a fresh game has them. The last device used is the Inputs autoload's

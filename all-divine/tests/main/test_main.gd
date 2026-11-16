@@ -5,6 +5,9 @@ extends TestCase
 ## tests/main/test_window_toggle.gd's.
 ## The self-test (--selftest) is tests/main/test_selftest.gd's.
 
+## One of the few files outside tests/render/ that a rendered run draws (TestRunner.draws): the renderer's smoke test of the whole game.
+const DRAWS := true
+
 const MAIN := "res://main/main.tscn"
 const DEFAULT_SETTINGS := "res://data/render/default_settings.tres"
 const YARD := "res://world/training_yard/training_yard.tscn"

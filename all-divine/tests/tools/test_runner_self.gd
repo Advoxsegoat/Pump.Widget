@@ -33,11 +33,17 @@ func test_a_file_begins_with_the_keyboard_and_mouse_in_hand_whatever_the_file_be
 	assert_eq(Inputs.last_device(), Inputs.Device.KEYBOARD_MOUSE, "and this file is left as it was found")
 
 
-func test_a_file_that_looks_at_no_picture_is_played_with_the_drawing_off_and_the_next_with_it_on() -> void:
-	var r: TestReport = await TestRunner.new().run_files([F + "fixture_no_drawing.gd", F + "fixture_drawing_at_start.gd"])
+func test_only_a_file_that_looks_at_a_picture_is_drawn_and_the_run_leaves_the_drawing_on() -> void:
+	var r: TestReport = await TestRunner.new().run_files([F + "fixture_no_drawing.gd", F + "fixture_drawing_at_start.gd", F + "fixture_plain_no_drawing.gd"])
 	var failed := r.results.filter(func(x): return not x.message.is_empty())
-	assert_eq([r.passed, r.failed], [2, 0], "the first file is played with the drawing off, the second with it on: %s" % [failed])
+	assert_eq([r.passed, r.failed], [3, 0], "DRAWS false: off; DRAWS true: on; a plain file outside tests/render/: off: %s" % [failed])
 	assert_true(RenderingServer.render_loop_enabled, "and this file is left with the drawing on")
+	# Made-up files: their paths are put together here, not written whole (tests/tools/test_paths.gd reads every whole path a script names).
+	var tests := "res:" + "//tests/"
+	assert_true(TestRunner.draws(tests + "render/test_some_shots.gd", {}), "a picture test is drawn")
+	assert_false(TestRunner.draws(tests + "actors/test_some_fight.gd", {}), "a file elsewhere is not")
+	assert_true(TestRunner.draws(tests + "main/test_some_boot.gd", {"DRAWS": true}), "unless it asks")
+	assert_false(TestRunner.draws(tests + "render/test_some_numbers.gd", {"DRAWS": false}), "and a picture test may decline")
 
 
 func test_filter_selects_one_test() -> void:
