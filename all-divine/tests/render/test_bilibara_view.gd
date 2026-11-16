@@ -184,6 +184,62 @@ func test_nine_views_are_saved_for_a_person_to_look_at() -> void:
 	print("bilibara views with eight bodies: %s (worst %d, with two: %d)" % ["; ".join(lines), worst_eight, worst])
 
 
+## The owner's sheet: nine of the stretch's views in a 3 x 3 sheet of 640 x 360 tiles (1,920 x 1080), left to right and top to bottom: the spawn, Rue Caillou's
+## east end, the gate from far, the lane, the Rack Walk's west end, the loop lane, alcove B, the yard's entry and the yard's centre. Each is the picture the game
+## draws (Abarax and a tier I Knuckle two metres east of him, the screen look on), as the nine views are.
+const SHEET := "out/shots/bilibara_sheet.png"
+const SHEET_VIEWS: Array[String] = ["Spawn", "StreetEast", "GateFar", "LaneMid", "RackWest", "LoopLane", "ShrineSite_B", "YardEntry", "YardCentre"]
+const SHEET_SIZE := Vector2i(1920, 1080)
+const TILE := Vector2i(640, 360)
+
+
+func test_the_owners_sheet_is_saved() -> void:
+	Game.reset()
+	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
+	await frames(5)
+	main.enter_stretch()
+	var region := main.region
+	var foe := (load("res://actors/actor.tscn") as PackedScene).instantiate() as Actor
+	foe.def = load(FOE) as ActorDef
+	foe.set_brain(Brain.new())
+	region.add_child(foe)
+	main.player.set_brain(Brain.new())
+	var sheet := Image.create(SHEET_SIZE.x, SHEET_SIZE.y, false, Image.FORMAT_RGB8)
+	var tiles: Array[Image] = []
+	for i in SHEET_VIEWS.size():
+		var view_name := SHEET_VIEWS[i]
+		var at := Transform3D(Basis(), EXTRA_VIEWS[view_name]) if EXTRA_VIEWS.has(view_name) else (region.find_child(view_name, true, false) as Marker3D).global_transform
+		main.player.place(at)
+		foe.place(Transform3D(Basis(Vector3.UP, -PI / 2), at.origin + Vector3(2.0, 0.0, 0.0)))
+		main.camera_rig.snap_now()
+		await frames(6)
+		for k in 4:
+			await RenderingServer.frame_post_draw
+		var picture := main.stage.world.get_texture().get_image().get_region(Rect2i(PixelSnap.MARGIN, PixelSnap.MARGIN, TILE.x, TILE.y))
+		picture.convert(Image.FORMAT_RGB8)
+		assert_eq(picture.get_size(), TILE, "%s is a 640 x 360 tile" % view_name)
+		sheet.blit_rect(picture, Rect2i(Vector2i.ZERO, TILE), Vector2i(i % 3, i / 3) * TILE)
+		tiles.append(picture)
+	var path := ProjectSettings.globalize_path("res://").path_join(SHEET)
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	assert_eq(sheet.save_png(path), OK, "saved %s" % SHEET)
+	var back := Image.load_from_file(path)
+	assert_true(back != null, "%s can be read back" % SHEET)
+	if back == null:
+		return
+	assert_eq(back.get_size(), Vector2i(1920, 1080), "the sheet is 1,920 x 1,080")
+	for i in tiles.size():
+		var tile := back.get_region(Rect2i(Vector2i(i % 3, i / 3) * TILE, TILE))
+		var colours := {}
+		for y in range(0, TILE.y, 3):
+			for x in range(0, TILE.x, 3):
+				colours[tile.get_pixel(x, y).to_rgba32()] = true
+		assert_true(colours.size() > LEAST_COLOURS, "%s's tile is a real picture (%d colours in a 3 px sample)" % [SHEET_VIEWS[i], colours.size()])
+		assert_true(tile.get_data() == tiles[i].get_data(), "%s's tile is the picture the game drew" % SHEET_VIEWS[i])
+		for j in i:
+			assert_false(tile.get_data() == tiles[j].get_data(), "%s and %s are not the same picture" % [SHEET_VIEWS[i], SHEET_VIEWS[j]])
+
+
 ## Where the tone test looks besides the nine views: the loop lane (a roof fills its left third), and the lane's north end.
 const EXTRA_VIEWS := {"LoopLane": Vector3(-32.5, 0.0, -12.5), "LaneNorth": Vector3(27.5, 0.0, -48.0), "StreetMid": Vector3(0.0, 0.0, 0.0), "RackColonnade": Vector3(-10.0, 0.0, -22.5)}
 ## The most of the frame one flat tone of a roof may fill: the share of the 640 x 360 frame, and the 12/255 a channel the tone may vary by
