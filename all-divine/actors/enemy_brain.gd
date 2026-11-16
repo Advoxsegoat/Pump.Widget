@@ -119,9 +119,6 @@ const ROUND_BACK_OFF_DOUBLINGS := 2
 const ROUND_RECHECK := 600
 ## After he has come round: no new search for ROUND_HOLD frames, and how far ahead (metres) a step is looked at for the line (COME_LOOK).
 const ROUND_HOLD := 30
-## A goal this far (metres, a body's room either side of its line) inside the lit ground is better than one at its edge by ROUND_EVEN_CELLS, and
-## he stops short of it only once he stands as far in: a target who is nudged a few centimetres moves the edge of the lit ground by ten times that.
-const ROUND_DEEP := 0.8
 const COME_LOOK := 0.8
 ## How much further than an attack's back_up_margin (metres) a back-up may go before the attack is given up.
 const BACK_UP_SPARE := 0.1
