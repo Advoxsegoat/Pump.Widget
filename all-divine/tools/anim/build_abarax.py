@@ -336,20 +336,24 @@ def build_scarf(armature, neck, back):
 # His left is +X (he faces -Y with Z up, and the GLB keeps +X). All measured on the kept head: the ear's vertices run
 # x 0.079-0.091, y 0.006-0.032, z 1.668-1.715, so the lobe hangs at about (0.082, 0.016, 1.666).
 LOBE_LEFT = (0.082, 0.016, 1.666)
+# Where the feather is tied: on the back edge of his left ear, 2.4 cm above the lobe and a little behind it (the ear's vertices run y 0.006-0.032).
+FEATHER_TIE = (0.090, 0.028, 1.712)
 LOBE_RIGHT = (-0.087, 0.016, 1.659)  # the ring's centre: it hangs round the lobe, a little below it
 FEATHER_BONES = ("feather_01", "feather_02", "feather_03")
-# feather_01 carries the link, ring, beads and cord: 3.5 cm leaning 15 degrees out from straight down, from the lobe. feather_02
-# and feather_03 carry the feather, as the drawing has it: it trails out to the side (and a little back), clear of the neck and the
-# collar, 12 cm long and, at its widest, 4.1 cm across (round two's 15 by 6.8 cm crossed a fist raised beside his ear in a fight; at this
-# size the springs' capsules can keep it clear of fists, scarf and head in every fight tried). FEATHER_WIDTH is the blade's widths as a
-# fraction of FEATHER_BLADE's rows, which are those of a 15 cm blade of 6.8 cm.
-CHAIN_LENGTH, CHAIN_TILT = 0.035, 15.0
-FEATHER_LENGTH = 0.12
+# feather_01 carries the link, ring, beads and cord: 3.5 cm leaning 45 degrees out from straight down, from the tie. feather_02
+# and feather_03 carry the feather, as the owner draws it: it hangs from its tie on the back edge of the ear, down and a little out
+# and back (FEATHER_DIRECTION: Z is up, so its last number is negative), over the shoulder and clear of the neck, the collar and the
+# sleeve; 8 cm long and, at its widest, 4.1 cm across. (It stood up from the ear when it was 12 cm: a feather that hangs that long from
+# the lobe lies on the scarf's collar, and from the ear's top it still crossed the collar when a blow tipped his head; 8.5 cm crossed it
+# in one seeded fight. The tie's height, the length and the springs' stiffness were tried against the feather's tests.) FEATHER_WIDTH
+# is the blade's widths as a fraction of FEATHER_BLADE's rows, which are those of a 15 cm blade of 6.8 cm.
+CHAIN_LENGTH, CHAIN_TILT = 0.035, 45.0
+FEATHER_LENGTH = 0.08
 FEATHER_WIDTH = 0.6
 # feather_02 carries the blade up to this far along it, feather_03 the rest; the blade's weights blend 2 cm either side of it.
-FEATHER_SPLIT = 0.06
+FEATHER_SPLIT = 0.04
 FEATHER_SPLIT_FROM, FEATHER_SPLIT_TO = FEATHER_SPLIT - 0.02, FEATHER_SPLIT + 0.02
-FEATHER_DIRECTION = (0.70, 0.35, 0.60)
+FEATHER_DIRECTION = (0.55, 0.20, -0.81)
 # The blade, as (distance along the bone, half width above the quill, half width below it): it widens from the quill's base, is cut
 # into three notches along its lower edge and narrows to the tip. The faces twist about the bone from facing front at its root to
 # FEATHER_TWIST degrees round at the tip, so that some of it is face on from every side. FEATHER_BULGE: the quill's ridge stands
@@ -459,7 +463,7 @@ def smoothstep(lo, hi, x):
 def feather_joints():
     """The four joints of the feather's chain, from the left lobe: out of the lobe, to the end of feather_01 (leaning
     CHAIN_TILT degrees out from straight down), to the blade's middle and to its tip (along FEATHER_DIRECTION)."""
-    start = Vector(LOBE_LEFT)
+    start = Vector(FEATHER_TIE)
     down = lambda tilt: Vector((math.sin(math.radians(tilt)), 0.0, -math.cos(math.radians(tilt))))
     middle = start + down(CHAIN_TILT) * CHAIN_LENGTH
     out = Vector(FEATHER_DIRECTION).normalized()
