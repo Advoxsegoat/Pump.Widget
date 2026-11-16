@@ -23,6 +23,11 @@ const BACKUP := "save.bak.json"
 ## Where a write is made and checked before it replaces anything.
 const TEMP := "save.tmp"
 
+## The one file a bad main file is kept as when the next write replaces it.
+const BAD := "save.bad.json"
+## The largest file that is looked at; a bigger one is a bad file ("too large"), not scanned.
+const MAX_BYTES := 8 * 1024 * 1024
+
 ## Which file the last `read` took its game from.
 enum Source { NONE, MAIN, BACKUP }
 
@@ -42,7 +47,7 @@ func _init(save_dir: String = PLAYER_DIR) -> void:
 ## Whether this run may read and write the files in `dir`. The player's folder is not for the self-test, a script run
 ## with -s (the tests and the tools) or a run that says it is not the player's game; any other folder is anyone's.
 func may_use() -> bool:
-	if dir != PLAYER_DIR:
+	if _folder_key(dir) != _folder_key(PLAYER_DIR):
 		return true
 	return not SelfTest.active and not Settings.scripted_run and not Settings.user_args.has(Settings.NO_PLAYER_SETTINGS)
 
@@ -71,12 +76,17 @@ func write(data: SaveData) -> Error:
 	if stored != OK:
 		DirAccess.remove_absolute(temp)
 		return stored
-	if decode(_text_of(temp)) == null:
+	if not _verify(temp):
 		DirAccess.remove_absolute(temp)
 		return ERR_FILE_CORRUPT
-	if FileAccess.file_exists(main):
-		var seen := _inspect(_text_of(main))
-		var moved := OK
+	# A newer game's file in the backup slot goes aside first, whatever becomes of main: it is never removed.
+	var moved := OK
+	if FileAccess.file_exists(backup):
+		var in_backup := _inspect_file(backup)
+		if int(in_backup["newer"]) > 0:
+			moved = DirAccess.rename_absolute(backup, _free_name(int(in_backup["newer"])))
+	if moved == OK and FileAccess.file_exists(main):
+		var seen := _inspect_file(main)
 		if int(seen["newer"]) > 0:
 			moved = DirAccess.rename_absolute(main, _free_name(int(seen["newer"])))
 		elif seen["data"] != null:
@@ -85,10 +95,14 @@ func write(data: SaveData) -> Error:
 			DirAccess.remove_absolute(backup)
 			moved = DirAccess.rename_absolute(main, backup)
 		else:
-			DirAccess.remove_absolute(main)
-		if moved != OK:
-			DirAccess.remove_absolute(temp)
-			return moved
+			# A main file that cannot be read may still be someone's (a format this game does not know): it is kept
+			# as save.bad.json, one file, replaced each time.
+			var bad := dir.path_join(BAD)
+			DirAccess.remove_absolute(bad)
+			moved = DirAccess.rename_absolute(main, bad)
+	if moved != OK:
+		DirAccess.remove_absolute(temp)
+		return moved
 	var renamed := DirAccess.rename_absolute(temp, main)
 	if renamed != OK:
 		DirAccess.remove_absolute(temp)
@@ -107,13 +121,13 @@ func read() -> SaveData:
 	var backup := dir.path_join(BACKUP)
 	var main_exists := FileAccess.file_exists(main)
 	if main_exists:
-		var seen := _inspect(_text_of(main))
+		var seen := _inspect_file(main)
 		if seen["data"] != null:
 			last_source = Source.MAIN
 			return seen["data"]
 		problems.append("%s: %s" % [MAIN, seen["problem"]])
 	if FileAccess.file_exists(backup):
-		var seen := _inspect(_text_of(backup))
+		var seen := _inspect_file(backup)
 		if seen["data"] != null:
 			last_source = Source.BACKUP
 			if not main_exists:
@@ -168,9 +182,12 @@ static func _inspect(text: String) -> Dictionary:
 		out["problem"] = "written by a newer game (version %d)" % version
 		return out
 	var check: Variant = d.get("check")
-	var prefix := "{\"check\":\"%s\"," % check
-	if typeof(check) != TYPE_STRING or not trimmed.begins_with(prefix) \
-			or ("{" + trimmed.substr(prefix.length())).sha256_text() != check:
+	if typeof(check) != TYPE_STRING:
+		out["problem"] = "fails its check (cut short or changed)"
+		return out
+	# Built with + from a value that was read from the file: a `%` here would take an array as its argument list.
+	var prefix := "{\"check\":\"" + String(check) + "\","
+	if not trimmed.begins_with(prefix) or ("{" + trimmed.substr(prefix.length())).sha256_text() != check:
 		out["problem"] = "fails its check (cut short or changed)"
 		return out
 	d.erase("check")
@@ -182,15 +199,40 @@ static func _inspect(text: String) -> Dictionary:
 	return out
 
 
-# The text of the file at `path`, "" when it is not valid UTF-8 (a file of random bytes): the engine prints an error for
-# each bad byte when it is asked to make text of them, and a bad file must cost the player nothing, not even a log line.
-static func _text_of(path: String) -> String:
-	var bytes := FileAccess.get_file_as_bytes(path)
-	return bytes.get_string_from_utf8() if _is_utf8(bytes) else ""
+# What the file at `path` is (see `_inspect`): a file over MAX_BYTES is "too large" and is not read; bytes that are not
+# well-formed UTF-8 are "not text" (the engine prints an error for each bad byte when it is asked to make text of them,
+# and a bad file must cost the player nothing, not even a log line).
+static func _inspect_file(path: String) -> Dictionary:
+	var out := {"data": null, "problem": "", "newer": 0}
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		out["problem"] = "cannot be opened"
+		return out
+	var length := file.get_length()
+	if length > MAX_BYTES:
+		file.close()
+		out["problem"] = "too large"
+		return out
+	var bytes := file.get_buffer(length)
+	file.close()
+	if not is_utf8(bytes):
+		out["problem"] = "not text"
+		return out
+	return _inspect(bytes.get_string_from_utf8())
+
+
+# Whether the temp file at `path` holds a game that decodes. A seam: a test makes it fail to see the write stop.
+func _verify(path: String) -> bool:
+	return _inspect_file(path)["data"] != null
+
+
+# `folder` made absolute and simplified, so every spelling of the player's folder is the same string.
+static func _folder_key(folder: String) -> String:
+	return ProjectSettings.globalize_path(folder).simplify_path().trim_suffix("/")
 
 
 # Whether `bytes` is well-formed UTF-8 (no stray, truncated or overlong sequence, no surrogate, nothing past U+10FFFF).
-static func _is_utf8(bytes: PackedByteArray) -> bool:
+static func is_utf8(bytes: PackedByteArray) -> bool:
 	var i := 0
 	var n := bytes.size()
 	while i < n:
