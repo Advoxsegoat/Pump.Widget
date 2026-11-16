@@ -200,6 +200,9 @@ var _brain_given := false  # set_brain was called: the def's brain does not repl
 
 
 func _ready() -> void:
+	# Engine default is 15 degrees: a body walking straight into a round post, within 9 degrees of dead on, would not slide at all and
+	# stand there pressing (nothing in the game is sticky): it slides at any angle, round a post and along a wall.
+	wall_min_slide_angle = 0.0
 	if def == null or def.rig_scene == null:
 		push_error("Actor: '%s' has no def with a rig_scene" % name)
 		set_physics_process(false)
@@ -550,6 +553,7 @@ func _physics_process(delta: float) -> void:
 	velocity = spaced
 	var before := global_position
 	move_and_slide()
+	_deflect(planar, intent, before, delta)
 	var kept := spacing.settle(before)
 	# How fast the body went on the ground, less the knockback: other bodies (the spacing and the settle) and walls
 	# block it; a floor's slope does not (going up a ramp is slower on the ground plane, and is no block).
@@ -569,6 +573,88 @@ func _physics_process(delta: float) -> void:
 	rig.tick(delta)
 	for e in scanner.scan(self):
 		Melee.post(e)
+
+
+## A solid thing a world marks with this metadata ("slim" for a post against a wall, "free" for a free-standing one such as a vat, "smooth" for a wall) does not hold a body that runs at it: the
+## body goes along it at its own speed instead of at the speed it slides at (which, as the legs follow it, falls at every frame:
+## a body at 45 degrees to a wall crawls along it), and dead on a slim thing it goes round on the side it is offset to.
+const DEFLECTS := &"deflects"
+## The least speed, m/s, a body goes along what deflects it with, when the stick pushes at it.
+const DEFLECT_FLOOR := 4.0
+
+
+# After move_and_slide: if the body pushed into things that deflect, goes the rest of the way it meant to go along the one
+# it pushed against most squarely (a slim one first), and on along what stops that.
+func _deflect(planar: Vector3, intent: Intent, before: Vector3, delta: float) -> void:
+	var want := Vector2(planar.x, planar.z)
+	# A body stopped dead by the thing has no speed to go round with: the stick still says where it means to go, at a jogging pace.
+	if want.length() < DEFLECT_FLOOR and not runner.busy() and intent.move.length() > 0.3:
+		want = intent.move.normalized() * DEFLECT_FLOOR
+	if want.length() < 0.5 or delta <= 0.0:
+		return
+	var dir := want.normalized()
+	var n := Vector2.ZERO
+	var best := 1.0
+	var slim: Node3D = null
+	var hit_thing: Node3D = null
+	var free_standing := false
+	var middle := Vector3.ZERO  # where the shape it pushed against most squarely has its origin (a post's axis, a vat's middle)
+	for i in get_slide_collision_count():
+		var hit := get_slide_collision(i)
+		var thing := hit.get_collider() as Node3D
+		var flat := Vector2(hit.get_normal().x, hit.get_normal().z)
+		if thing == null or not thing.has_meta(DEFLECTS) or flat.length() < 0.5:
+			continue
+		flat = flat.normalized()
+		var is_slim: bool = thing.get_meta(DEFLECTS) != &"smooth"
+		var squareness := dir.dot(flat)
+		if (is_slim and slim == null) or (is_slim == (slim != null) and squareness < best):
+			n = flat
+			best = squareness
+			hit_thing = thing
+			free_standing = thing.get_meta(DEFLECTS) == &"free"
+			middle = thing.global_transform * PhysicsServer3D.body_get_shape_transform(hit.get_collider_rid(), hit.get_collider_shape_index()).origin
+			if is_slim:
+				slim = thing
+	if n.is_zero_approx() or best > -0.05:
+		return
+	var t := dir - n * dir.dot(n)
+	# Within 8 degrees of dead on a slim thing (20 degrees of a free-standing one, which has no wall behind it to be pushed back from), or dead on the point of a corner (a normal that is not square to the thing's own sides), a
+	# body goes round the side it is offset to (where several come at one thing, each to its own side); at the flat face of a wall it stands.
+	var local := hit_thing.global_transform.basis.inverse() * Vector3(n.x, 0.0, n.y)
+	var at_a_point := maxf(absf(local.x), absf(local.z)) / maxf(local.length(), 0.0001) <= 0.98
+	if (slim != null and best < (-0.94 if free_standing else -0.989)) or (t.length() < 0.02 and at_a_point):
+		var lateral := Vector2(global_position.x - middle.x, global_position.z - middle.z).dot(dir.orthogonal())
+		t = n.orthogonal()
+		var side := signf(lateral) if absf(lateral) > 1e-4 else 1.0
+		if t.dot(dir.orthogonal()) * side < 0.0:
+			t = -t
+		# Where the world has no room for it that way (a cart beside the post: other bodies do not count), the other way.
+		if _no_room_at(global_position + Vector3(t.x, 0.0, t.y).normalized() * 0.9):
+			t = -t
+	elif t.length() < 0.02:
+		return
+	var moved := Vector2(global_position.x - before.x, global_position.z - before.z).length()
+	var rest := want.length() * delta - moved
+	if rest > 1e-4:
+		var along := t.normalized() * rest
+		var stopped := move_and_collide(Vector3(along.x, 0.0, along.y))
+		if stopped != null:
+			var more := stopped.get_remainder().slide(stopped.get_normal())
+			more.y = 0.0
+			if more.length() > 1e-4:
+				move_and_collide(more)
+
+
+# Whether a ball the size of the body's, at `point` (and a half metre up), overlaps the world.
+func _no_room_at(point: Vector3) -> bool:
+	var ball := SphereShape3D.new()
+	ball.radius = 0.22
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = ball
+	query.transform = Transform3D(Basis(), Vector3(point.x, 0.5, point.z))
+	query.collision_mask = Layers.WORLD
+	return not get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
 
 
 # Where glide(offset) would leave the actor if it stood at `from`, found without moving it: the motion is tried

@@ -114,6 +114,9 @@ var deaths := 0
 ## The same numbers by the foe's def id: {dealt, taken, tempo, cleared, deaths}, HP taken off a foe of that def and off him by one,
 ## the highest tempo reached with one the nearest, the waves cleared that held one (each def in a wave has it), his deaths to one.
 var by_foe := {}
+## What met the player, by blow: {"<foe def id>/<move id>": {taken, outcomes: {OUTCOME name: times}}} (HP the blow took off him; how each
+## time it was met ended: HIT, EVADED, GUARDED ...), for the tables of how the fight plays.
+var by_attack := {}
 ## Where a failing run's recording is saved.
 var replay_dir := ProjectSettings.globalize_path("res://").path_join("out/replays")
 ## Whether engine errors and warnings count as problems (they are heard through TestLogger from begin to finish).
@@ -217,6 +220,14 @@ func finish() -> void:
 		save_replay()
 
 
+# A bot that leaves the tree while it plays lets the controls go, as finish() does: a caller that frees it without finishing would
+# otherwise leave its last presses down and its stick given, for whatever reads the controls next. One that never began, or has
+# finished, holds nothing.
+func _exit_tree() -> void:
+	if _player != null and is_physics_processing():
+		InputFeed.release()
+
+
 ## Where this run's recording is saved.
 func replay_path(kind := "") -> String:
 	var suffix := "" if policy == Policy.MIXED else "_%s" % POLICIES.find_key(policy)
@@ -234,6 +245,21 @@ func summary() -> String:
 	return "bot seed %d: waves %d, deaths %d, problems %d (%s, aiming as a pad player, reaction %d: dealt %d, taken %d, highest tempo %s, fewest frames from a tell to a defence %d%s)" % [
 			rng_seed, waves_cleared, deaths, problems.size(), POLICIES.find_key(policy), reaction_frames, roundi(damage_dealt), roundi(damage_taken),
 			DodgeChain.Tempo.keys()[highest_tempo].to_lower(), fewest_reaction, round_note]
+
+
+## One line for each blow in by_attack, the one that took most first.
+func attack_lines() -> PackedStringArray:
+	var lines := PackedStringArray()
+	var ids := by_attack.keys()
+	ids.sort_custom(func(a: StringName, b: StringName) -> bool:
+		return by_attack[a]["taken"] > by_attack[b]["taken"] or (by_attack[a]["taken"] == by_attack[b]["taken"] and a < b))
+	for id: StringName in ids:
+		var row: Dictionary = by_attack[id]
+		var ended := PackedStringArray()
+		for outcome: String in row["outcomes"]:
+			ended.append("%s %d" % [outcome.to_lower(), row["outcomes"][outcome]])
+		lines.append("bot seed %d blow %s: taken %d (%s)" % [rng_seed, id, roundi(row["taken"]), ", ".join(ended)])
+	return lines
 
 
 ## The numbers of the run by the foe's def id (by_foe).
@@ -807,6 +833,12 @@ func _on_got_hit(result: HitResult, event: HitEvent) -> void:
 	damage_taken += result.hp_damage
 	_last_attacker = event.attacker
 	_row(event.attacker)["taken"] += result.hp_damage
+	var blow := StringName("%s/%s" % [event.attacker.def.id if is_instance_valid(event.attacker) else &"none", event.move.id if event.move != null else &"none"])
+	if not by_attack.has(blow):
+		by_attack[blow] = {"taken": 0.0, "outcomes": {}}
+	by_attack[blow]["taken"] += result.hp_damage
+	var outcome: String = HitResult.Outcome.keys()[result.outcome]
+	by_attack[blow]["outcomes"][outcome] = int(by_attack[blow]["outcomes"].get(outcome, 0)) + 1
 	if result.outcome != HitResult.Outcome.EVADED or policy == Policy.MASH:
 		return
 	_evaded_at = frame

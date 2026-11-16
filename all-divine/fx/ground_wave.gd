@@ -10,6 +10,8 @@ extends Node3D
 const SHADER := preload("res://render/shaders/ground_ring.gdshader")
 ## A wave lies this high above the ground, so the floor does not cut it, and below a body's feet.
 const LIFT := 0.02
+## The quad is this much wider than the ring, for the ring's dark edge (the shader's `edge`).
+const EDGE_ROOM := 0.16
 ## The part of a wave's time it shows at full strength before it fades.
 const FADE_FROM := 0.45
 ## The group every wave is in: for tests.
@@ -65,7 +67,7 @@ func _physics_process(delta: float) -> void:
 
 func _build(color: Color, ring_width: float, fill_alpha: float) -> void:
 	var plane := PlaneMesh.new()
-	var extent := max_radius * 1.05
+	var extent := max_radius * 1.05 + EDGE_ROOM
 	plane.size = Vector2(extent * 2.0, extent * 2.0)
 	if billboard:
 		plane.orientation = PlaneMesh.FACE_Z

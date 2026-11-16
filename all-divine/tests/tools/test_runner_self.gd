@@ -176,3 +176,22 @@ func test_shard_argument_is_read_as_index_of_count() -> void:
 	for bad in ["", "2", "0/3", "4/3", "a/b", "2/3/4", "2/0", "-1/3"]:
 		assert_eq(TestRunner.shard_of(bad), Vector2i.ZERO, "'%s' is not a shard" % bad)
 
+
+
+# CI's render shards are dealt by each file's seconds (tests/shard_weights.txt). A run prints them, one line a file, in a form
+# tools/test/shard_weights.py reads from CI's logs: the weights are measured, not estimated.
+func test_a_run_names_each_files_seconds_in_a_line_a_script_can_read() -> void:
+	assert_eq(TestRunner.time_line(TestRunner.TESTS_ROOT + "bot/test_made_up.gd", 12.34), "FILE-SECONDS 12.3 bot/test_made_up.gd")
+	assert_eq(TestRunner.time_line(TestRunner.TESTS_ROOT + "test_top.gd", 0.04), "FILE-SECONDS 0.0 test_top.gd")
+	assert_eq(TestRunner.kind_line(true), "RUN-KIND headless")
+	assert_eq(TestRunner.kind_line(false), "RUN-KIND render")
+	var child := _run_in_child("res://tools/test/run.gd", ["--files=" + F + "fixture_pass.gd"])
+	assert_true(child.lines.has("RUN-KIND headless"), "a headless run says so: %s" % ["\n".join(child.lines)])
+	var found := PackedStringArray()
+	for line in child.lines:
+		if line.begins_with("FILE-SECONDS "):
+			found.append(line)
+	assert_eq(found.size(), 1, "one line for the one file: %s" % ["\n".join(child.lines)])
+	if found.size() == 1:
+		var words := found[0].split(" ")
+		assert_true(words.size() == 3 and words[1].is_valid_float() and words[2] == "fixtures/runner/fixture_pass.gd", found[0])
