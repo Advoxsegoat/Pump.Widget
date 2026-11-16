@@ -115,6 +115,12 @@ const ROUND_CELLS_PER_FRAME := 100
 const ROUND_BACK_OFF := 60
 const ROUND_BACK_OFF_DOUBLINGS := 2
 const ROUND_RECHECK := 600
+## After he has come round: no new search for ROUND_HOLD frames, and how far ahead (metres) a step is looked at for the line (COME_LOOK).
+const ROUND_HOLD := 30
+## A goal this far (metres, a body's room either side of its line) inside the lit ground is better than one at its edge by ROUND_EVEN_CELLS, and
+## he stops short of it only once he stands as far in: a target who is nudged a few centimetres moves the edge of the lit ground by ten times that.
+const ROUND_DEEP := 0.8
+const COME_LOOK := 0.8
 ## How much further than an attack's back_up_margin (metres) a back-up may go before the attack is given up.
 const BACK_UP_SPARE := 0.1
 ## How far beyond a warped blow's strike_distance and MoveRunner.MAX_WARP the target may stand when it lands and the combo
@@ -189,6 +195,8 @@ var _search: RoundSearch  # a search for a way round that is not over (it goes o
 var _no_way := false  # no way to a line was found: he waits at the nearest place he can reach (see _wait_round)
 var _plan_after := 0  # the physics frame before which a waiting foe does not search again
 var _fails := 0  # searches in a row that found no way
+var _come_round := false  # he has come round a wall and holds the lit ground (see _hold_lit)
+var _come_at := Vector2.INF  # where the target stood when he came round
 var _snagged := false  # blocked where a body could not walk the way in: _go_round plans a way though the line is clear
 var _round_at := Vector2.INF  # where the target stood when it was found
 var _round_for := 0.0  # seconds he has been going to it
@@ -204,6 +212,13 @@ func _init(brain_def: BrainDef, seed_value: int) -> void:
 
 
 func think(actor: Actor, delta: float) -> Intent:
+	var intent := _think(actor, delta)
+	if _come_round:
+		_hold_lit(actor, intent)
+	return intent
+
+
+func _think(actor: Actor, delta: float) -> Intent:
 	var intent := Intent.new()
 	if _last_at != Vector3.INF and delta > 0.0:
 		_speed = _flat(actor, _last_at).length() / delta
@@ -802,12 +817,16 @@ func _go_round(actor: Actor, intent: Intent, delta: float) -> bool:
 		_round_for += delta
 		if here.distance_to(_round_to) < ROUND_REACHED:
 			_round_to = _round_path.pop_front() if not _round_path.is_empty() else Vector2.INF
+			if _round_to == Vector2.INF:
+				_arrive(there)
 		if _round_for > ROUND_GIVE_UP or there.distance_to(_round_at) > ROUND_MOVED:
 			_round_to = Vector2.INF
 			_round_path.clear()
-		elif _round_to != Vector2.INF and _goal_at(actor.get_world_3d().direct_space_state, here, actor.global_position.y, [actor.get_rid(), target.get_rid()]):
-			_round_to = Vector2.INF  # where he stands is already a place with a line and room to walk in: no need to go on
+			_come_round = false
+		elif _round_to != Vector2.INF and _goal_at(actor.get_world_3d().direct_space_state, here, actor.global_position.y, [actor.get_rid(), target.get_rid()], ROUND_DEEP):
+			_round_to = Vector2.INF  # where he stands is already well inside the lit ground, with room to walk in: no need to go on
 			_round_path.clear()
+			_arrive(there)
 	if _round_to == Vector2.INF:
 		if _clear(actor, false) and not _snagged:
 			_search = null
@@ -820,8 +839,49 @@ func _go_round(actor: Actor, intent: Intent, delta: float) -> bool:
 			return false
 	if _plan != null:
 		_forget_plan(actor)
+	else:
+		_reset_spacing()  # a heading swung by a re-angle (the snag that sent him round) is not taken along the way or on arrival
 	_walk_to_round(intent, delta, here)
 	return true
+
+
+# He has come round: from here on, while the target stands where he stood, the ordinary brain may not take him back into the shadow (_hold_lit),
+# and no new search begins for ROUND_HOLD frames.
+func _arrive(there: Vector2) -> void:
+	_come_round = true
+	_come_at = there
+	_plan_after = maxi(_plan_after, Engine.get_physics_frames() + ROUND_HOLD)
+
+
+# A foe who has come round does not step back behind what he came round: a stick that would take him where, COME_LOOK metres on, he has no line
+# is let go, and he stands (the line itself, not the room for a body either side of it: the way in through a gap is narrow). Released when the target has moved ROUND_MOVED from where it was.
+func _hold_lit(actor: Actor, intent: Intent) -> void:
+	if target == null or not is_instance_valid(target) or mode == Mode.IDLE or mode == Mode.NOTICING:
+		_come_round = false
+		return
+	var there := Vector2(target.global_position.x, target.global_position.z)
+	if there.distance_to(_come_at) > ROUND_MOVED or not _same_level(actor):
+		_come_round = false
+		return
+	if intent.move.length() < 0.01 or actor.runner.busy():
+		return
+	var here := Vector2(actor.global_position.x, actor.global_position.z)
+	var space := actor.get_world_3d().direct_space_state
+	var exclude: Array[RID] = [actor.get_rid(), target.get_rid()]
+	var way := intent.move.normalized()
+	if _lit_step(space, actor, here + way * COME_LOOK, exclude):
+		return
+	# A swing round a neighbour or a circling that would leave the lit ground becomes a step straight in, if that keeps the line; else he stands.
+	var straight := (there - here).normalized()
+	if _lit_at(space, here + straight * COME_LOOK, actor.global_position.y, exclude):
+		intent.move = straight * intent.move.length()  # (with the room for a body either side: not grazing the edge)
+		return
+	intent.move = Vector2.ZERO
+
+
+# Whether a body that stood at `ahead` (x, z) would have the line (not the room either side of it) to the target.
+func _lit_step(space: PhysicsDirectSpaceState3D, actor: Actor, ahead: Vector2, exclude: Array[RID]) -> bool:
+	return HitScanner.clear_between(space, Vector3(ahead.x, actor.global_position.y, ahead.y), target, exclude)
 
 
 # Walks the way: the stick at the next point of it, a jog until the last 0.6 m.
@@ -849,6 +909,8 @@ func _wait_round(actor: Actor, intent: Intent, delta: float, here: Vector2, ther
 		return _go_round(actor, intent, delta)  # the search found a way after all
 	if _plan != null:
 		_forget_plan(actor)
+	else:
+		_reset_spacing()
 	if _round_to != Vector2.INF:
 		_round_for += delta
 		if here.distance_to(_round_to) < ROUND_REACHED:
@@ -860,6 +922,7 @@ func _wait_round(actor: Actor, intent: Intent, delta: float, here: Vector2, ther
 
 # Forgets the way, the search and the wait.
 func _stop_round() -> void:
+	_come_round = false
 	_round_to = Vector2.INF
 	_round_path.clear()
 	_search = null
@@ -887,6 +950,7 @@ func _begin_or_advance(actor: Actor, there: Vector2) -> bool:
 	_round_for = 0.0
 	_snagged = false
 	var frame := Engine.get_physics_frames()
+	_come_round = false
 	if s.found:
 		_fails = 0
 		_no_way = false
@@ -1000,6 +1064,8 @@ func _advance_search(actor: Actor, s: RoundSearch) -> bool:
 				s.first = d if s.first < 0 else s.first
 				var side := signf(s.perp.dot(at - s.start))
 				var cost := float(d) + (0.0 if s.open == 0.0 or side == s.open else float(ROUND_EVEN_CELLS))
+				if not _lit_at(space, at, s.y, s.exclude, ROUND_DEEP):
+					cost += float(ROUND_EVEN_CELLS)  # a place at the lit zone's edge: another, if one a little further in is about as near
 				for other in s.crowd:
 					if other.distance_to(at) < ROUND_CROWD:
 						cost += float(ROUND_EVEN_CELLS)  # a place a neighbour stands in or goes to: another, if one is about as near
@@ -1078,14 +1144,22 @@ static func _free_cell(free: Dictionary, cell: Vector2i) -> bool:
 	return free.get(cell, false)
 
 
-# Whether a body standing at `at` (x, z) would have a line to the target, with ROUND_PAD of room either side of it.
-func _goal_at(space: PhysicsDirectSpaceState3D, at: Vector2, y: float, exclude: Array[RID]) -> bool:
+# Whether a body standing at `at` (x, z) would have a line to the target with ROUND_PAD of room either side of it (the lit ground).
+func _lit_at(space: PhysicsDirectSpaceState3D, at: Vector2, y: float, exclude: Array[RID], pad_room := ROUND_PAD) -> bool:
 	var feet := Vector3(at.x, y, at.y)
 	var to := Vector2(target.global_position.x, target.global_position.z) - at
-	var side := to.normalized().rotated(PI * 0.5) * ROUND_PAD
+	var side := to.normalized().rotated(PI * 0.5) * pad_room
 	for pad: float in [0.0, -1.0, 1.0]:
 		if not HitScanner.clear_between(space, feet + Vector3(side.x, 0.0, side.y) * pad, target, exclude):
 			return false
+	return true
+
+
+# Whether a body standing at `at` (x, z) would have a line to the target, with ROUND_PAD of room either side of it, and a way in it can walk.
+func _goal_at(space: PhysicsDirectSpaceState3D, at: Vector2, y: float, exclude: Array[RID], pad_room := ROUND_PAD) -> bool:
+	if not _lit_at(space, at, y, exclude, pad_room):
+		return false
+	var to := Vector2(target.global_position.x, target.global_position.z) - at
 	# and the way in from there is one a body can walk (the line is clear for a ray; a corner's end face is not for a body)
 	var in_line := to.normalized()
 	return to.length() < 0.8 or _walkable(space, at, at + in_line * (to.length() - 0.8), y, exclude, ROUND_BODY + 0.1)

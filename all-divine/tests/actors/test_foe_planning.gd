@@ -9,15 +9,17 @@ extends TestCase
 ## FrameMeter.WINDOW steps' mean is within QUIET_OVER ms of the base's. A foe plans at most PLAN_RATE ways a second, and one who has
 ## no way at all (a shut gate, a closed room) goes to the nearest place to his target he can reach and waits there.
 ##
-## The base's numbers, thread time, ms, three runs each on a machine at a load of 1 (the longest step / the quietest 120 steps; BASE holds
-## the largest of the three runs of each). The head before this round (402cf55, three runs, the range) is beside them.
+## The base's numbers, thread time, ms, on a machine at a load of 1: the range of its longest step and of its quietest 120 steps over eight runs
+## (nine for the 6 m wall), and the head before this round (402cf55, three runs).
 ##   place                       base longest   base quiet    402cf55 longest   402cf55 quiet
-##   40 m wall, 3 foes           10.0 - 11.3    1.32 - 1.37   27.3 - 35.8       14.7 - 15.7
-##   40 m wall, 8 foes            4.2 - 7.3     2.74 - 2.94   75.1 - 83.6       43.7
-##   closed room, 8 foes          4.6 - 5.7     2.65 - 2.94   130.7 - 139.6     75.8 - 76.3
-##   6 m wall, 8 foes step in     4.7 - 7.5     2.66 - 2.82   46.6 - 51.1       2.7 - 3.1
-##   gate, 8 foes step in         6.7 - 7.3     2.76 - 2.90   5.5 - 9.7         2.9 - 3.0
-##   town shut gate, 3 foes       2.8 - 3.6     1.27 - 1.42   23.7 - 29.2       1.7 - 1.9
+##   40 m wall, 3 foes           9.8 - 16.6     1.32 - 1.47   27.3 - 35.8       14.7 - 15.7
+##   40 m wall, 8 foes           4.2 - 7.8      2.71 - 3.07   75.1 - 83.6       43.7
+##   closed room, 8 foes         4.6 - 8.1      2.65 - 3.10   130.7 - 139.6     75.8 - 76.3
+##   6 m wall, 8 foes step in    4.7 - 15.4     2.66 - 3.11   46.6 - 51.1       2.7 - 3.1
+##   gate, 8 foes step in        6.4 - 11.4     2.70 - 2.96   5.5 - 9.7         2.9 - 3.0
+##   town shut gate, 3 foes      3.1 - 4.3      1.37 - 1.61   23.7 - 29.2       1.7 - 1.9
+## BASE holds the largest of each, so a bound is the worst the base was seen to do, plus the rule's allowance. The base's rare long step (a
+## sound or a hit effect starting) is in it: it is 5 to 10 ms where it happens.
 
 const FAR := 40.0
 const FRAMES := 600
@@ -31,14 +33,14 @@ const FOES_AT := [Vector2(-1.2, -2.3), Vector2(0.0, -2.6), Vector2(1.2, -2.3)]
 const TOWN_FRAMES := 800
 const BILIBARA := "res://world/bilibara/bilibara.tscn"
 
-## [longest step, quietest window] of the base (d11e1b7) in each place: the largest of its three runs, ms of thread time.
+## [longest step, quietest window] of the base (d11e1b7) in each place: the largest of its runs, ms of thread time.
 const BASE := {
-	"wall40x3": [11.3, 1.37],
-	"wall40x8": [7.3, 2.94],
-	"room8": [5.7, 2.94],
-	"wall6x8": [7.5, 2.82],
-	"gate8": [7.3, 2.90],
-	"town": [3.6, 1.42],
+	"wall40x3": [16.6, 1.47],
+	"wall40x8": [7.8, 3.07],
+	"room8": [8.1, 3.10],
+	"wall6x8": [15.4, 3.11],
+	"gate8": [11.4, 2.96],
+	"town": [4.3, 1.61],
 }
 
 
