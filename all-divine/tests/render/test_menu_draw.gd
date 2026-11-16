@@ -228,12 +228,14 @@ func test_a_toggle_shows_On_in_gold_and_Off_dim() -> void:
 	var on := _row(main, "Perilous rim")
 	var off := _row(main, "Heavy-attack wave")
 	assert_eq([on.value, off.value], ["On", "Off"])
-	var on_area := Rect2i(on.value_at.x - 1, on.rect.position.y, 24, 10)
-	var off_area := Rect2i(off.value_at.x - 1, off.rect.position.y, 24, 10)
+	# (the area stops short of the panel's gold border)
+	var wide: int = main.menu.panel().end.x - Menu.PADDING - on.value_at.x + 1
+	var on_area := Rect2i(on.value_at.x - 1, on.rect.position.y, wide, 10)
+	var off_area := Rect2i(off.value_at.x - 1, off.rect.position.y, wide, 10)
 	assert_true(_count_tone(img, on_area, &"gold") > 6, "On is drawn in gold")
 	assert_eq(_count_tone(img, on_area, &"white") + _count_tone(img, on_area, &"rose"), 0, "and in no other colour")
 	# Off is the dim ink (Hud.POSTURE at Menu.DIM_ALPHA): no gold, still readable, and measurably darker than the On beside it.
-	assert_eq(_count_tone(img, off_area, &"gold") + _count_tone(img, off_area, &"rose"), 0, "Off is not gold or rose")
+	assert_eq(_count(img, off_area, Hud.GOLD) + _count(img, off_area, Hud.ROSE), 0, "Off is not drawn in gold or rose")
 	var on_peak := _peak(img, on_area)
 	var off_peak := _peak(img, off_area)
 	assert_true(off_peak.get_luminance() > 0.25, "Off can be read (%s)" % off_peak.to_html(false))
@@ -251,7 +253,7 @@ func test_a_toggle_shows_On_in_gold_and_Off_dim() -> void:
 	var picked_off := await _picture(main)
 	var chosen := _row(main, "Heavy-attack wave")
 	assert_true(_count_tone(picked_off, Rect2i(chosen.text_at.x, chosen.rect.position.y, 60, 10), &"rose") > 6, "the chosen Off row's label is rose")
-	assert_eq(_count_tone(picked_off, Rect2i(chosen.value_at.x - 1, chosen.rect.position.y, 24, 10), &"rose"), 0, "and its Off value is not")
+	assert_eq(_count(picked_off, Rect2i(chosen.value_at.x - 1, chosen.rect.position.y, wide, 10), Hud.ROSE), 0, "and its Off value is not")
 
 
 func test_a_dim_row_is_drawn_in_the_dim_colour_label_and_value() -> void:

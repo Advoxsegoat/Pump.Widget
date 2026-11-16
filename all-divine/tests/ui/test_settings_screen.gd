@@ -889,6 +889,7 @@ func test_a_value_that_is_off_is_drawn_dim_and_one_that_is_on_in_the_full_ink() 
 	_select(menu, "Camera dips")
 	assert_eq(_row(menu, "Camera shake").value_colour, Hud.GOLD, "a slider's percent is in the full ink")
 	menu.show_page(&"window")
+	_select(menu, "Back")
 	assert_eq(_row(menu, "Mode").value_colour, Hud.GOLD, "a choice's name is in the full ink")
 
 
