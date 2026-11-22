@@ -25,3 +25,22 @@ func test_the_shrine_data_loads_through_the_registry() -> void:
 	assert_eq(stretch.region, "res://world/bilibara/bilibara.tscn")
 	assert_eq(stretch.start_shrine, &"rose_a")
 	assert_eq(stretch.shrines.map(func(s: ShrineDef) -> StringName: return s.id), [&"rose_a", &"rose_b"])
+
+
+# The picture tests stand bodies at 26 reference places and hold every body and cue readable, and the lamp test holds two captures of a view
+# equal but for the lamps: a glow that moves, or sits within a few metres of a place a body stands, breaks them (the first glow did: its petals
+# rose in a ring on a point a test stands bodies on). The glow's petals lie where they are and fade; the shrines keep 3 m from those places.
+func test_the_glow_does_not_move_and_keeps_off_the_places_bodies_are_read_at() -> void:
+	var glow := (load("res://fx/shrine_glow.tscn") as PackedScene).instantiate() as GPUParticles3D
+	var material := glow.process_material as ParticleProcessMaterial
+	assert_eq(material.initial_velocity_max, 0.0, "the petals do not move")
+	assert_eq(material.gravity, Vector3.ZERO, "and do not fall")
+	glow.free()
+	var places: Array = []
+	places.append_array(load("res://tests/render/test_bilibara_readability.gd").POSITIONS)
+	places.append_array(load("res://tests/render/test_bilibara_readability_more.gd").POSITIONS)
+	for id: StringName in [&"rose_a", &"rose_b"]:
+		var shrine := Registry.fetch(&"stretch", id) as ShrineDef
+		for place: Array in places:
+			var flat := Vector2(shrine.plinth.x - float(place[1]), shrine.plinth.z - float(place[2])).length()
+			assert_true(flat >= 3.0, "%s is %.1f m from '%s' (at least 3)" % [id, flat, place[0]])
