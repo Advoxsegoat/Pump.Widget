@@ -6,7 +6,7 @@
 script = ExtResource("1_def")
 id = &"rose_b"
 title = "Rose shrine, the lamp and the chair"
-plinth = Vector3(36.25, 0, -33.75)
-respawn = Vector3(35, 0, -33.75)
-respawn_yaw_deg = 270.0
+plinth = Vector3(31.8, 0, -37.2)
+respawn = Vector3(31.8, 0, -35.6)
+respawn_yaw_deg = 180.0
 radius = 2.0

@@ -37,9 +37,11 @@ func test_the_prompt_line_is_the_interactors_and_is_empty_with_nothing_near() ->
 	assert_true(hud != null, "the stretch has a stretch hud")
 	if hud == null:
 		return
+	main.player.place(Transform3D(Basis(), Vector3.ZERO))  # (he starts a step from the first shrine: the street is nowhere near one)
+	await frames(3)
 	assert_eq(hud.prompt_line(), "", "nothing near, no line")
 	var plinth := main.stretch.def.shrines[1].plinth
-	main.player.place(Transform3D(Basis(), plinth + Vector3(-1.5, 0, 0)))
+	main.player.place(Transform3D(Basis(), plinth + Vector3(0, 0, 1.5)))
 	await frames(3)
 	assert_eq(hud.prompt_line(), "%s  Rest" % ControlsList.shown(&"interact", false), "near a shrine: the key and what it does")
 	assert_eq(hud.prompt_line(), main.stretch.interactor.prompt_line(), "and it is the interactor's line")
@@ -53,7 +55,7 @@ func test_it_draws_nothing_while_the_hud_is_hidden_by_a_scene() -> void:
 		fail("no stretch hud")
 		return
 	var plinth := main.stretch.def.shrines[1].plinth
-	main.player.place(Transform3D(Basis(), plinth + Vector3(-1.5, 0, 0)))
+	main.player.place(Transform3D(Basis(), plinth + Vector3(0, 0, 1.5)))
 	await frames(3)
 	assert_true(hud.draws(), "it draws a line near a shrine")
 	main.hud.suppressed = true

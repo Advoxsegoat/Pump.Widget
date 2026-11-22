@@ -226,7 +226,7 @@ func test_death_stands_him_up_at_the_last_shrine_after_three_seconds() -> void:
 	player.die()
 	await frames(182)
 	assert_false(player.dead, "up again")
-	assert_vec_near(player.global_position, Vector3(35, 0, -33.75), 0.01, "at rose_b's respawn")
+	assert_vec_near(player.global_position, Vector3(31.8, 0, -35.6), 0.01, "at rose_b's respawn")
 	assert_eq(back[0], 2, "respawned twice in all")
 
 
@@ -368,8 +368,8 @@ func test_an_at_inside_a_wall_loads_at_the_shrine_with_the_saved_bars() -> void:
 	data.bars = {hp = 0.5, stamina = 0.25, posture = 1.0}
 	_start(bare, data)
 	var player: Actor = bare.player
-	assert_vec_near(player.global_position, Vector3(35, 0, -33.75), 0.01, "he stands at rose_b's respawn")
-	assert_vec_near(player.facing(), _forward(270.0), 0.01, "facing as the shrine says")
+	assert_vec_near(player.global_position, Vector3(31.8, 0, -35.6), 0.01, "he stands at rose_b's respawn")
+	assert_vec_near(player.facing(), _forward(180.0), 0.01, "facing as the shrine says")
 	assert_near(player.stats.hp, player.stats.max_hp * 0.5, 0.01, "with the saved HP")
 	assert_near(player.stats.stamina, player.stats.max_stamina * 0.25, 0.01, "and the saved stamina")
 
@@ -435,8 +435,8 @@ func test_a_rest_notes_the_place_he_rests_at_and_a_new_games_file_has_neither() 
 	assert_eq(w.run.save_now(), OK)
 	var fresh := store.read()
 	assert_true(fresh.at.is_empty() and fresh.bars.is_empty(), "a new game's file has no place and no bars")
-	var spot := _shrine(&"rose_b").plinth + Vector3(-1.5, 0, 0)
-	_at(player, spot, 270.0)
+	var spot := _shrine(&"rose_b").plinth + Vector3(0, 0, 1.5)
+	_at(player, spot, 180.0)
 	player.stats.hp = 20.0
 	await frames(2)
 	w.run.rest(_shrine(&"rose_b"))
@@ -486,3 +486,17 @@ func test_moving_half_a_metre_or_turning_fifteen_degrees_is_a_change_and_less_is
 		_at(player, Vector3(-15, 0, 0), 90.0)
 		await frames(300)
 		written = FileAccess.get_file_as_bytes(main_file)
+
+
+# A store that may not use its folder (the player's, in a test) answers OK and writes nothing: nothing the run does may count that OK as a
+# saved game (no line in this task says "saved"; this holds the folder untouched and the answer honest about being OK).
+func test_a_store_that_may_not_use_its_folder_writes_nothing_even_when_a_rest_asks() -> void:
+	var store := SaveStore.new()
+	assert_false(store.may_use(), "(the player's folder is not for a test)")
+	var main_file := store.dir.path_join(SaveStore.MAIN)
+	var before := FileAccess.file_exists(main_file)
+	var w := await _world(null, store)
+	var run: StretchRun = w.run
+	run.rest(_shrine(&"rose_b"))
+	assert_eq(run.save_now(), OK, "the answer is OK")
+	assert_eq(FileAccess.file_exists(main_file), before, "and no file appeared in the player's folder")

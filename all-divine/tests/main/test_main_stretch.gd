@@ -71,7 +71,7 @@ func test_f2_continues_the_saved_game_and_new_reads_and_writes_nothing() -> void
 	await frames(2)
 	assert_true(main.stretch != null, "a run began")
 	assert_eq(main.stretch.data.petals, 5, "it is the saved game")
-	assert_vec_near(main.player.global_position, Vector3(35, 0, -33.75), 0.01, "he stands at rose_b's respawn")
+	assert_vec_near(main.player.global_position, Vector3(31.8, 0, -35.6), 0.01, "he stands at rose_b's respawn")
 	main.enter_stretch(true)
 	await frames(2)
 	assert_eq(main.stretch.data.petals, 0, "a new game has no petals")
