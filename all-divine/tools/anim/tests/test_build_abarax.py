@@ -138,17 +138,27 @@ class BuildAbarax(unittest.TestCase):
         ear = at["feather_01"]
         self.assertGreater(ear[0], 0.07, "feather_01 is on his left (+X)")
         self.assertLess(ear[0], 0.10)
-        self.assertTrue(1.64 < ear[1] < 1.69, f"at the lobe's height ({ear[1]:.3f})")
-        self.assertLess(abs(ear[2] - (-0.015)), 0.02, "level with the ear, not the face")
+        self.assertTrue(1.64 < ear[1] < 1.72, f"at the ear's height, tied to its back edge ({ear[1]:.3f}; the ear runs to 1.715)")
+        self.assertLess(abs(ear[2] - (-0.025)), 0.02, "level with the ear, not the face")
         self.assertLess(at["feather_02"][1], ear[1], "the feather hangs below the ring and beads")
         self.assertGreater(at["feather_02"][0], ear[0] - 1e-6, "and leans out past the jaw, never in toward the neck")
-        # the blade (12 cm) has a joint at its root and one at its middle: 6 cm apart along the blade, which stands off up and out
+        # the blade (8 cm) has a joint at its root and one at its middle: 4 cm apart along the blade, which hangs down behind the ear
         root, middle = at["feather_02"], at["feather_03"]
-        self.assertLess(abs(math.dist(root, middle) - 0.06), 0.002, "feather_03 is at the middle of the blade (6 cm along it)")
-        self.assertGreater(middle[1], root[1], "and the blade goes up from its root")
+        self.assertLess(abs(math.dist(root, middle) - 0.04), 0.002, "feather_03 is at the middle of the blade (4 cm along it)")
+        self.assertLess(middle[1], root[1], "and the blade goes down from its root")
+
+    def test_the_feather_hangs_down_behind_the_ear_at_rest(self):
+        # The owner's drawing: it hangs from its tie behind the left ear (it stood up from it before: the tip was 5 cm above its root).
+        at = gltf_inspect.joint_positions(self.j)
+        tie, root, middle = np.array(at["feather_01"]), np.array(at["feather_02"]), np.array(at["feather_03"])
+        tip = root + (middle - root) * 2.0  # the blade is straight: its tip is as far past the middle as the middle is past the root
+        length = float(np.linalg.norm(tip - root))
+        self.assertGreaterEqual(root[1] - tip[1], length * 2.0 / 3.0, f"the tip is {100 * (root[1] - tip[1]):.1f} cm below the blade's root (at least two thirds of {100 * length:.0f} cm)")
+        self.assertLess(tip[2], tie[2], "and the tip is behind the ear's plane")
 
     def test_the_blade_is_the_size_the_springs_can_keep_clear(self):
-        # 12 cm by 4 cm (the brief): at 15 by 6.8 cm it crossed a fist raised beside his ear in a fight whatever the springs did.
+        # 8 cm by 4 cm: at 15 by 6.8 cm it crossed a fist raised beside his ear in a fight whatever the springs did, and the 12 cm one that
+        # hung from the ear (to the owner's drawing) went through the scarf's collar when he was struck, whatever the springs did.
         at = gltf_inspect.joint_positions(self.j)
         root, middle = np.array(at["feather_02"]), np.array(at["feather_03"])
         axis = (middle - root) / np.linalg.norm(middle - root)
@@ -158,9 +168,9 @@ class BuildAbarax(unittest.TestCase):
             if math.dist(p, at["feather_01"]) > 0.05:  # the blade (the link, ring, beads and cord are within 5 cm of the lobe)
                 along.append(float(v @ axis))
                 across.append(float(np.linalg.norm(v - axis * (v @ axis))))
-        self.assertLessEqual(max(along), 0.125, "the blade is at most 12.5 cm long")
+        self.assertLessEqual(max(along), 0.085, "the blade is at most 8.5 cm long")
         self.assertLessEqual(2 * max(across), 0.045, "and at most 4.5 cm across")
-        self.assertGreater(max(along), 0.10, "but it is a feather and not a stub")
+        self.assertGreater(max(along), 0.07, "but it is a feather and not a stub")
 
     def test_the_blade_is_carried_by_its_two_bones_and_the_chain_by_the_first(self):
         names = gltf_inspect.joint_names(self.j)

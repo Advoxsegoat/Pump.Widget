@@ -334,13 +334,21 @@ func _colour_of(row: MenuRow, selected: bool) -> Color:
 
 
 # The colour of a row's right-hand text: the label's when selected or switched off, dim for "Not bound" (the absence of a key, not a
-# key's name), else gold.
+# key's name) and for a setting that is Off (the word, not a number or a choice's name: so that a column of values does not read as one
+# block and the On ones stand out; a chosen row's label stays rose, only its Off value dims), else gold.
 func _value_colour_of(row: MenuRow, selected: bool) -> Color:
+	if row.enabled and _is_off(row):
+		return Color(Hud.POSTURE, DIM_ALPHA)
 	if selected or not row.enabled:
 		return _colour_of(row, selected)
 	if row.kind == MenuRow.Kind.BINDING and row.value() == ControlsList.NOT_BOUND:
 		return Color(Hud.POSTURE, DIM_ALPHA)
 	return Hud.GOLD
+
+
+# Whether the row's value is the word Off (a toggle's, or a choice's that says so; a binding's name or a slider's percent never is).
+func _is_off(row: MenuRow) -> bool:
+	return (row.kind == MenuRow.Kind.TOGGLE or row.kind == MenuRow.Kind.CHOICE) and row.value() == "Off"
 
 
 func _selected() -> MenuRow:
