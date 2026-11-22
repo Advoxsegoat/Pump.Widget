@@ -9,10 +9,10 @@ const ABARAX := "res://data/actors/abarax.tres"
 const YARD := "res://world/training_yard/training_yard.tscn"
 ## What the feather's edges are tested against.
 const SOLIDS: Array[String] = ["Abarax_Scarf", "Male_Peasant_Body", "Male_Peasant_Arms", "Abarax_Head"]
-## The feather's mesh vertices farther than this from the left lobe (at rest, model space) are its blade: the link, ring, beads and
+## The feather's mesh vertices farther than this from its tie (at rest, model space) are its blade: the link, ring, beads and
 ## cord within it hang at the ear and the jaw by design and are not tested.
 const BLADE_FROM := 0.05
-const LOBE := Vector3(0.082, 1.666, -0.016)
+const LOBE := Vector3(0.090, 1.712, -0.028)  # where the feather is tied (the builder's FEATHER_TIE), in model space
 ## The poses: clips played through at their own pace on a rig standing in place (the scarf's test does the same).
 const CLIPS: Array[StringName] = [&"idle", &"palm_jab", &"palm_cross", &"palm_hook", &"palm_heavy", &"dash_step", &"guard_hold", &"flinch", &"hop",
 		&"death", &"getup", &"sway_left_slip", &"sway_back_slip", &"duck_slip"]

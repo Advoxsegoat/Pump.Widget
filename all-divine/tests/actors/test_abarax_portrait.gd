@@ -56,7 +56,7 @@ func _fight_hashes() -> Array[int]:
 
 const RIG := "res://actors/abarax/abarax_rig.tscn"
 const PARTS: PackedStringArray = ["Abarax_Topknot", "Abarax_Forelock", "Abarax_Feather", "Abarax_EarRing"]
-const FEATHER_BONE_LENGTH := 0.06  # what the spring extends feather_03 by: the blade's second half (the builder's FEATHER_LENGTH less FEATHER_SPLIT)
+const FEATHER_BONE_LENGTH := 0.04  # what the spring extends feather_03 by: the blade's second half (the builder's FEATHER_LENGTH less FEATHER_SPLIT)
 
 
 func _def() -> ActorDef:
@@ -124,7 +124,8 @@ func test_the_feather_hangs_from_his_left_ear() -> void:
 	assert_eq(skeleton.get_bone_name(skeleton.get_bone_parent(skeleton.find_bone("feather_03"))), "feather_02")
 	var lobe := skeleton.get_bone_global_rest(skeleton.find_bone("feather_01")).origin  # at rest, in the model's own space
 	assert_true(lobe.x > 0.07 and lobe.x < 0.11, "on his left (+X): %s" % lobe)
-	assert_true(lobe.y > 1.63 and lobe.y < 1.70, "at the lobe's height: %s" % lobe)
+	# the feather is tied to the back edge of the ear, a little above the lobe (the ear runs to 1.715 m): 1.72 was 1.70
+	assert_true(lobe.y > 1.63 and lobe.y < 1.72, "at the ear's height: %s" % lobe)
 	assert_true(lobe.z > -0.03 and lobe.z < 0.05, "level with the ear, not the face: %s" % lobe)
 
 
@@ -157,6 +158,41 @@ func test_the_rig_springs_the_feather_and_only_the_feather_and_the_scarf() -> vo
 			if not String(bone_name).begins_with("feather_"):
 				worst = maxf(worst, (r.bone_global(bone_name) - plain.bone_global(bone_name)).length())
 	assert_true(worst < 1e-4, "every other bone is where it would be without the feather's spring (%.5f m)" % worst)
+
+
+## The blade's length (the builder's FEATHER_LENGTH) and the plane of his ear (model space: +Z is front, so behind is smaller z).
+const FEATHER_LENGTH := 0.08
+const EAR_PLANE_Z := -0.016
+
+
+func test_the_feather_hangs_down_behind_the_ear_at_rest() -> void:
+	var r: Rig = track(load(RIG).instantiate())
+	var skeleton := r.skeleton
+	if not _has_feather(r):
+		return
+	# The rest pose, in the model's own space: the blade's root (the end of feather_01) and its tip (the end of feather_03).
+	var root := skeleton.get_bone_global_rest(skeleton.find_bone("feather_02")).origin
+	var last := skeleton.get_bone_global_rest(skeleton.find_bone("feather_03"))
+	var tip := last.origin + last.basis.y.normalized() * FEATHER_BONE_LENGTH
+	assert_true(root.y - tip.y >= FEATHER_LENGTH * 2.0 / 3.0, "at rest the tip is %.1f cm below the blade's root (at least two thirds of its %.0f cm)" % [(root.y - tip.y) * 100.0, FEATHER_LENGTH * 100.0])
+	assert_true(tip.z < EAR_PLANE_Z, "and behind the ear's plane (z %.3f, the ear at %.3f)" % [tip.z, EAR_PLANE_Z])
+	assert_true(tip.x > root.x - 0.02, "and not across the neck (x %.3f from %.3f)" % [tip.x, root.x])
+
+
+func test_the_feather_hangs_down_behind_the_ear_when_he_stands() -> void:
+	var r: Rig = track(load(RIG).instantiate())
+	if not _has_feather(r):
+		return
+	for i in 120:
+		await frames(1)
+		r.tick(1.0 / 60)
+	var head := r.shown_pose(&"Head")
+	var root := r.shown_pose(&"feather_02").origin
+	var tip := _tip(r)
+	assert_true(root.y - tip.y >= FEATHER_LENGTH * 2.0 / 3.0, "standing, the tip is %.1f cm below the blade's root (at least two thirds of %.0f cm; root %s tip %s)" % [(root.y - tip.y) * 100.0, FEATHER_LENGTH * 100.0, root, tip])
+	var tie := r.shown_pose(&"feather_01").origin  # the lobe, in the same frame (the head leans a little in the idle)
+	assert_true(tip.z < tie.z, "and behind the ear's plane (z %.3f, the ear's %.3f)" % [tip.z, tie.z])
+	assert_true(head.origin.y > 1.5, "the head is where it should be")
 
 
 func test_the_feather_swings_in_a_dash_step_and_comes_to_rest() -> void:
