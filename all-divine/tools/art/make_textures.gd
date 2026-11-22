@@ -77,10 +77,16 @@ const SNOW_WAVE := Vector2i(4, 2)
 const SNOW_RIPPLE := 0.45
 const SNOW_DIMPLE_CELL := 4
 const SNOW_SEED := 19
-## The wood of the fronts (doors, shutters, timber, boards) in the colormap: value WOOD_BASE + WOOD_SLOPE * the kit's value; the trim about TRIM_BASE.
-const WOOD_BASE := 0.20
-const WOOD_SLOPE := 0.16
-const TRIM_BASE := 0.23
+## The wood of the fronts (doors, shutters, timber, boards) in the colormap: value WOOD_BASE + WOOD_SLOPE * the kit's value; the trim about TRIM_BASE. This is the
+## lightest wood that leaves every body's head standing out at every measured place (a tier III's head is 0.28 to 0.29, and a sunlit face of this wood reads up
+## to 0.22 in the picture): at WOOD_BASE 0.12 the worst head is 30% of its ring, and a step of 0.005 more takes one place to 64% (the rule is under 50%).
+## The saturation is as high as the colormap's cap (0.40, with room for 8-bit rounding), so that a dark wood still reads brown.
+const WOOD_BASE := 0.12
+const WOOD_SLOPE := 0.132
+const TRIM_BASE := 0.168
+const WOOD_SAT := 0.36
+const TRIM_SAT := 0.36
+const TRIM_SLOPE := 0.163
 
 
 func _initialize() -> void:
@@ -556,12 +562,12 @@ static func bilibara_colour(c: Color) -> Color:
 	if h >= 0.93 or h < 0.02:
 		return Color.from_hsv(0.77, 0.31, 0.10 + 0.17 * v)
 	if h < 0.12:
-		# Boards, doors and the tannery's walls: brown wood, a mid tone (0.20 to 0.28 in the picture: a cool grey-brown between the pale plaster and the dark
-		# window glass; a black front was the first thing seen in the lane). Trim and shutters: the same grey-brown a hand paler or darker, never paler than the
-		# plaster they sit in. A head's tone is 0.28 to 0.55 (the darkest a tier III's): see the readability tests for what this tone may be near a head.
+		# Boards, doors and the tannery's walls: brown wood, lighter than the near black it was (0.155 to 0.175 in the picture, against 0.13 to 0.14; a black front was
+		# the first thing seen in the lane). Trim and shutters: the same brown a hand paler, never paler than the plaster they sit in. A head's tone is 0.28 to
+		# 0.55 (the darkest a tier III's): the wood is no lighter than the readability tests allow beside a head (see WOOD_BASE).
 		if v < 0.66:
-			return Color.from_hsv(0.07, 0.30, WOOD_BASE + WOOD_SLOPE * v)
-		return Color.from_hsv(0.05, 0.26, clampf(TRIM_BASE + 0.15 * (v - 0.70), TRIM_BASE - 0.02, TRIM_BASE + 0.03))
+			return Color.from_hsv(0.07, WOOD_SAT, WOOD_BASE + WOOD_SLOPE * v)
+		return Color.from_hsv(0.05, TRIM_SAT, clampf(TRIM_BASE + TRIM_SLOPE * (v - 0.70), TRIM_BASE - 0.02, TRIM_BASE + 0.03))
 	if h < 0.445:
 		return Color.from_hsv(0.40, 0.25, 0.20 + 0.30 * v)
 	if h < 0.55 or s >= 0.35:

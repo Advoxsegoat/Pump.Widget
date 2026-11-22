@@ -249,9 +249,10 @@ func test_the_town_round_the_pale_ground_has_the_right_tones() -> void:
 ## The wood of the fronts (doors, shutters, timber, the tannery's boards: every texel of the Bilibara colormap that is a brown, r > g > b and
 ## saturated; the iron bars and the window glass are other colours and stay dark) is a mid tone in the final picture, WOOD_LOW to WOOD_HIGH, at
 ## the lane, the Rack Walk and the street (the median of the wood's pixels at each view; the tannery's boards, at the lane, are warmer and no
-## darker than WOOD_LOW). A black front is the first thing the eye lands on; a pale one loses the heads (the readability tests hold that).
-const WOOD_LOW := 0.20
-const WOOD_HIGH := 0.28
+## darker than WOOD_LOW). A black front (0.13 to 0.14 it was) is the first thing the eye lands on; a paler one loses a tier III's head, whose tone is 0.28 to 0.29: the lightest wood that keeps every head
+## under half at every measured place is this one (the readability tests hold that), so the range stops at 0.19.
+const WOOD_LOW := 0.15
+const WOOD_HIGH := 0.19
 const WOOD_VIEWS: Array[String] = ["LaneMid", "RackWest", "Spawn", "StreetEast"]
 const WOOD_SHADER := """
 shader_type spatial;
