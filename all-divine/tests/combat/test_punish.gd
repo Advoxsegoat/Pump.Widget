@@ -39,11 +39,14 @@ func _world(a_steps: Array, b_def: ActorDef = null) -> Dictionary:
 	var a: Actor = run["a"]
 	run["opened"] = []
 	run["landed"] = []
+	run["turned"] = []  # the outcome of every blow a was dealt that opened the foe: PARRIED, CAUGHT or EVADED
+	run["stops"] = []  # [a.buffer_frame, b.frozen] for every frame a's palm had landed on b, from the landing on
 	var opened: Array = run["opened"]
 	var landed: Array = run["landed"]
 	a.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void:
 		if r.outcome == O.PARRIED or r.outcome == O.CAUGHT or (r.outcome == O.EVADED and r.perfect):
-			opened.append(a.buffer_frame))
+			opened.append(a.buffer_frame)
+			(run["turned"] as Array).append(O.keys()[r.outcome]))
 	a.hit_landed.connect(func(r: HitResult, e: HitEvent) -> void:
 		if r.outcome == O.HIT:
 			landed.append({"scale": r.hp_damage / e.profile.damage, "posture": r.posture_damage / e.profile.posture_damage,
@@ -257,3 +260,58 @@ func test_a_foes_blows_on_abarax_are_never_scaled() -> void:
 	assert_eq(b2.punish_scale_on(a2), 1.5, "the same with a body of Abarax's tuning")
 	await _free(run)
 	await _free(other)
+
+
+# A thrust that Abarax's guard meets in its parry window is CAUGHT (not parried); the foe whose blow was caught is open too
+# (Task 17: "a foe whose blow was just turned (parried or caught)").
+func test_a_blow_that_is_caught_opens_him_too() -> void:
+	var blow := [[10, {"perilous": HitProfile.Perilous.THRUST}]]
+	var results := await _landings(func(p: int) -> Array: return _script(PARRY + [[p, [&"palm"]]]), blow, range(36, 48))
+	for r: Dictionary in results:
+		assert_false((r["opened"] as Array).is_empty(), "the thrust opened him (press %d)" % r["press"])
+	var rows := _offsets(results)
+	assert_true(rows.size() >= 8, "the palms landed: %s" % [rows])
+	assert_false(rows.filter(func(r: Array) -> bool: return r[0] <= WINDOW).is_empty(), "some landed in the window: %s" % [rows])
+	assert_false(rows.filter(func(r: Array) -> bool: return r[0] > WINDOW).is_empty(), "some after it: %s" % [rows])
+	for r: Array in rows:
+		assert_near(r[1], 1.5 if r[0] <= WINDOW else 1.0, 1e-4, "a palm %d frames after the catch (%s)" % [r[0], r])
+	# and it was a catch, not a parry
+	var run := _world(_script(PARRY))
+	await _play(run, blow, 30)
+	assert_eq(run["turned"], ["CAUGHT"], "the thrust was caught")
+	await _free(run)
+
+
+# The bigger blow is felt: the hit-stop of a palm on an open foe is the profile's times punish_scale (3 frames, 4.5 rounded: 5), one a
+# frame after the window is the profile's own.
+func test_the_hit_stop_of_a_blow_on_an_open_foe_is_scaled_too() -> void:
+	var seen := {}  # offset from the parry -> the freeze b was left with the frame the palm landed
+	for press in range(36, 48):
+		var run := _world(_script(PARRY + [[press, [&"palm"]]]))
+		var a: Actor = run["a"]
+		var b: Actor = run["b"]
+		var landing := [-1, 0, 0.0]  # [frame, offset, freeze after]
+		var opened: Array = run["opened"]
+		a.hit_landed.connect(func(r: HitResult, e: HitEvent) -> void:
+			if r.outcome == O.HIT and landing[0] < 0:
+				landing[0] = a.frame
+				landing[1] = a.buffer_frame - opened[0]
+				landing[2] = e.punish)
+		var peak := 0
+		while a.frame < 110:
+			if a.frame + 1 == 10:
+				Blows.post(b, a, {})
+			await frames(1)
+			if landing[0] >= 0 and a.frame <= landing[0] + 1:
+				peak = maxi(peak, b.frozen)
+		if landing[0] >= 0:
+			seen[landing[1]] = peak
+		await _free(run)
+	assert_true(seen.size() >= 6, "palms landed at several offsets: %s" % [seen])
+	var inside := seen.keys().filter(func(k: int) -> bool: return k <= WINDOW)
+	var outside := seen.keys().filter(func(k: int) -> bool: return k > WINDOW)
+	assert_false(inside.is_empty() or outside.is_empty(), "both sides of the window: %s" % [seen])
+	for k: int in inside:
+		assert_eq(seen[k], 5, "inside the window (%d) he is held for 5 frames, 3 x 1.5 rounded: %s" % [k, seen])
+	for k: int in outside:
+		assert_eq(seen[k], 3, "after it (%d) for the profile's 3: %s" % [k, seen])
