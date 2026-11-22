@@ -92,6 +92,10 @@ func test_the_warning_has_a_red_rim_of_at_least_150_pixels_on_every_frame_from_t
 		if f < FROM:
 			continue
 		foe.freeze(12)
+		# Abarax stands inside the measured box and is alive: he breathes and looks, and what moved of him between the pictures was counted
+		# as rim that is not red (64 of 324 pixels on one frame, with the floor at four in five: the test passed or failed by what ran before it).
+		# He is held by the same hit-stop for the pictures.
+		main.player.freeze(12)
 		await _draw()
 		assert_true(foe.rig.aura_active(), "the rim is on at frame %d" % f)
 		var with_rim := _world(main)
@@ -125,6 +129,7 @@ func test_the_warning_has_a_red_rim_of_at_least_150_pixels_on_every_frame_from_t
 		if f in [4, 12, 23]:
 			strip.append(with_rim.get_region(box))
 		foe.frozen = 0
+		main.player.frozen = 0
 		await frames(1)
 	for row: Array in counts:
 		assert_true(row[1] >= MIN_RIM_PIXELS, "frame %d: %d rim pixels round him (at least %d): %s" % [row[0], row[1], MIN_RIM_PIXELS, counts])
