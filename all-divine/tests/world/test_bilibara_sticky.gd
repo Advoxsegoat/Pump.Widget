@@ -285,7 +285,6 @@ const FOE_FRAMES := 540
 ## What is not yet true of the foes, with why: a place named here is held to its own ceiling (frames), and the test fails with "remove its
 ## entry" once the place meets LIMIT, so that a cure cannot go unnoticed.
 const FOES_NOT_YET := {
-	"the post at (-5, -4.72)": [40, "with three foes the go-round swing (EnemyBrain._spread_swing) walks one of them into the pocket between the post's wedge and the front, where he creeps a millimetre a frame, in bursts, for about a second (22 frames by this measure; 2 before the three-foe brain): the brain does not know walls yet"],
 }
 
 

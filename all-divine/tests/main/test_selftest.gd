@@ -8,6 +8,9 @@ extends TestCase
 ## engine does not hand the error to loggers either, and with printing on it would show in this run's output.
 ## So the counting is checked through child runs of fixture scenes, and the exit code's rule on its own.
 
+## One of the few files outside tests/render/ that a rendered run draws (TestRunner.draws): the renderer's smoke test of the whole game.
+const DRAWS := true
+
 const MAIN := "res://main/main.tscn"
 const SELF_TEST := "res://core/self_test.gd"
 ## The main scene with a node that raises an error while it boots, before Main is ready.

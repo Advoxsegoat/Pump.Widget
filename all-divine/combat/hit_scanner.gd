@@ -32,6 +32,11 @@ const MAX_RESULTS := 32
 ## How far above its feet a body's chest is, for the two lines a wall may cut (see _walled_off): 1.1 m, what every fighter's
 ## chest is near enough, and high enough to pass over a kerb or a low wall.
 const CHEST := 1.1
+## Where a foe's hand goes at its lowest in a blow that is not a low one (the hook's, 0.72 m), and the height a low blow (a sweep: the foot
+## at 0.08 m, swung from a body that stands against a wall) is asked at: over a 0.3 m kerb, under a 0.6 m low wall. What a foe asks of the
+## world before he begins an attack (line_clear).
+const HAND := 0.72
+const FOOT := 0.45
 ## The step for a shape that has no radius to go by (none of ours): 5 cm.
 const DEFAULT_STEP := 0.05
 
@@ -148,15 +153,39 @@ func _walled_off(actor: Actor, target: Actor, point: Vector3, space: PhysicsDire
 	if _ray == null:
 		_ray = PhysicsRayQueryParameters3D.new()
 		_ray.collision_mask = Layers.WORLD
-	_ray.exclude = [actor.get_rid(), target.get_rid()]
+	var exclude: Array[RID] = [actor.get_rid(), target.get_rid()]
 	var chest := Vector3.UP * CHEST
-	_ray.from = actor.global_position + chest
-	_ray.to = point
-	if not space.intersect_ray(_ray).is_empty():
-		return true
-	_ray.from = point
-	_ray.to = target.global_position + chest
-	return not space.intersect_ray(_ray).is_empty()
+	return _cut(space, _ray, actor.global_position + chest, point, exclude) or _cut(space, _ray, point, target.global_position + chest, exclude)
+
+
+# Whether a `world` collider cuts the straight line from `from` to `to` (`ray` is reused).
+static func _cut(space: PhysicsDirectSpaceState3D, ray: PhysicsRayQueryParameters3D, from: Vector3, to: Vector3, exclude: Array[RID]) -> bool:
+	ray.exclude = exclude
+	ray.from = from
+	ray.to = to
+	return not space.intersect_ray(ray).is_empty()
+
+
+## Whether a blow thrown from where an attacker stands (`feet`) at `target` would not be stopped by the world: the lines the scanner asks
+## about, with the hitbox at the target's body. A blow that is not low is asked at the chest (CHEST: attacker's to target's) and at the hand
+## (HAND), so that a counter a metre high, which a hook cannot get over, is a wall; a low one (a sweep) at the chest and at the foot's
+## (FOOT), so that a 0.3 m kerb is not a wall and a 0.6 m one is. Neither body's own colliders count. Used by the foes' brains, which
+## must not begin what the world will stop: the height and the layer are the scanner's own.
+static func clear_between(space: PhysicsDirectSpaceState3D, feet: Vector3, target: Actor, exclude: Array[RID], low := false) -> bool:
+	var ray := PhysicsRayQueryParameters3D.new()
+	ray.collision_mask = Layers.WORLD
+	var chest := Vector3.UP * CHEST
+	var goal := target.global_position
+	if _cut(space, ray, feet + chest, goal + chest, exclude):
+		return false
+	if low:
+		return not _cut(space, ray, feet + Vector3.UP * FOOT, goal + Vector3.UP * FOOT, exclude)
+	return not _cut(space, ray, feet + Vector3.UP * HAND, goal + Vector3.UP * HAND, exclude)
+
+
+## clear_between from where `actor` stands.
+static func line_clear(actor: Actor, target: Actor, low := false) -> bool:
+	return clear_between(actor.get_world_3d().direct_space_state, actor.global_position, target, [actor.get_rid(), target.get_rid()], low)
 
 
 func _event(actor: Actor, target: Actor, activation: Activation, point: Vector3) -> HitEvent:
