@@ -6,7 +6,7 @@
 script = ExtResource("1_def")
 id = &"gate_shortcut"
 opens_on = &"shortcut_open"
-nodes = PackedStringArray("Gate")
+nodes = PackedStringArray("Gate", "FenceGate", "FenceGate2")
 latch_centre = Vector3(-32.5, 0, -5)
 latch_radius = 3.0
 open_side = Vector2(0, -1)

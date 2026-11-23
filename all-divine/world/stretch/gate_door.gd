@@ -71,13 +71,6 @@ func is_released() -> bool:
 	return _open or _sinking
 
 
-## Whether a body at `at` (x, z) would stand in a board that is still shut (a built board's rectangle grown by the body).
-func shuts(at: Vector2) -> bool:
-	if _open or _sinking or def.board.size == Vector2.ZERO:
-		return false
-	return def.board.grow(StretchGround.BODY).has_point(at)
-
-
 func _physics_process(_delta: float) -> void:
 	if not _sinking or Game.play_frames == _counted:
 		return

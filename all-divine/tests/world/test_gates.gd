@@ -126,7 +126,7 @@ func test_the_gate_data_loads() -> void:
 		return
 	assert_eq(shortcut.opens_on, &"shortcut_open", "the shortcut opens on shortcut_open")
 	assert_eq(toll.opens_on, &"collector_down", "the toll gate opens on collector_down")
-	assert_eq(Array(shortcut.nodes), ["Gate"], "the shortcut lowers the layout's Gate")
+	assert_eq(Array(shortcut.nodes), ["Gate", "FenceGate", "FenceGate2"], "the shortcut lowers the layout's Gate and the two picket gates across it")
 	assert_eq(shortcut.board, Rect2(), "and builds no board")
 	assert_eq(toll.board, Rect2(25, -5.5, 5, 1.0), "the toll board is across the lane's mouth")
 	assert_eq(shortcut.drop, 1.3, "a board sinks 1.3 m")
@@ -236,6 +236,56 @@ func test_setting_the_flag_opens_a_gate_over_forty_five_frames_without_a_pop() -
 	assert_false(board.visible, "and is hidden")
 	assert_true(door.is_open(), "is_open is true")
 	assert_eq(changed[0], 1, "the world changed once")
+
+
+# The layout's two picket gates across the gateway (no collider): they go with the board, or the open gateway still looks fenced shut.
+func _pickets(region: Region) -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	for picket_name in ["FenceGate", "FenceGate2"]:
+		var picket := region.find_child(picket_name, true, false) as Node3D
+		assert_true(picket != null, "the layout has %s" % picket_name)
+		if picket != null:
+			out.append(picket)
+	return out
+
+
+func test_the_picket_gates_across_the_gateway_stand_while_it_is_shut_and_are_gone_when_it_is_open() -> void:
+	var w := await _world()
+	var pickets := _pickets(w.region)
+	assert_eq(pickets.size(), 2, "both pickets are in the layout")
+	for picket in pickets:
+		assert_true(picket.is_visible_in_tree(), "%s stands and is visible in a new game" % picket.name)
+	_door(w.run, &"gate_shortcut").open(false)
+	for picket in pickets:
+		assert_false(picket.is_visible_in_tree(), "%s is not visible after open(false)" % picket.name)
+
+
+func test_the_pickets_sink_over_the_same_frames_as_the_board_and_are_hidden_when_it_ends() -> void:
+	var w := await _world()
+	var board := (w.region as Region).get_node("Gate") as StaticBody3D
+	var pickets := _pickets(w.region)
+	var rests: Array[float] = []
+	for picket in pickets:
+		rests.append(picket.position.y)
+	var board_rest := board.position.y
+	(w.run as StretchRun).set_flag(&"shortcut_open")
+	for step in [1, 10, 25]:
+		await frames(step if step == 1 else 9 if step == 10 else 15)
+		var board_drop := board_rest - board.position.y
+		for i in pickets.size():
+			var drop := rests[i] - pickets[i].position.y
+			assert_true(drop > 0.0, "%s has started down on frame %d" % [pickets[i].name, step])
+			assert_near(drop, board_drop, 0.001, "%s is as far down as the board on frame %d (no pop)" % [pickets[i].name, step])
+			assert_true(pickets[i].visible, "%s is still shown while it sinks (frame %d)" % [pickets[i].name, step])
+	await frames(25)
+	for picket in pickets:
+		assert_false(picket.visible, "%s is hidden when the sinking ends" % picket.name)
+
+
+func test_a_game_loaded_with_the_shortcut_open_has_the_pickets_down_on_its_first_frame() -> void:
+	var w := await _world(_data_with([&"shortcut_open"]))
+	for picket in _pickets(w.region):
+		assert_false(picket.is_visible_in_tree(), "%s is not visible" % picket.name)
 
 
 func test_an_open_gate_is_open_at_once_when_it_is_opened_without_animation() -> void:
