@@ -468,6 +468,7 @@ func test_a_write_stopped_after_any_step_leaves_a_game_that_reads_and_the_next_w
 	var b := SaveStore.encode(_with_petals(12))
 	var z := SaveStore.encode(_with_petals(10))
 	var half := b.substr(0, b.length() / 2)
+	# (the rubbish temp is bytes with a NUL in them: a string literal holding a NUL makes the engine print an error at every run)
 	var states := {
 		"temp half written": {"files": {"save.json": a, "save.bak.json": z, "save.tmp": half}, "reads": 11},
 		"temp empty": {"files": {"save.json": a, "save.bak.json": z, "save.tmp": ""}, "reads": 11},
@@ -475,7 +476,7 @@ func test_a_write_stopped_after_any_step_leaves_a_game_that_reads_and_the_next_w
 		"old backup gone": {"files": {"save.json": a, "save.tmp": b}, "reads": 11},
 		"main renamed onto the backup": {"files": {"save.bak.json": a, "save.tmp": b}, "reads": 11},
 		"done": {"files": {"save.json": b, "save.bak.json": a}, "reads": 12},
-		"a dead run's rubbish temp": {"files": {"save.json": a, "save.tmp": "garbage \u0000\u0001"}, "reads": 11},
+		"a dead run's rubbish temp": {"files": {"save.json": a, "save.tmp": "garbage ".to_utf8_buffer() + PackedByteArray([0, 1])}, "reads": 11},
 	}
 	var n := 0
 	for name: String in states:
@@ -483,7 +484,10 @@ func test_a_write_stopped_after_any_step_leaves_a_game_that_reads_and_the_next_w
 		var store := _store("steps%d" % n)
 		var files: Dictionary = states[name]["files"]
 		for file: String in files:
-			_put(_path(store, file), files[file])
+			if files[file] is PackedByteArray:
+				_put_bytes(_path(store, file), files[file])
+			else:
+				_put(_path(store, file), files[file])
 		var got := store.read()
 		assert_true(got != null, "after '%s' a game reads" % name)
 		if got != null:
