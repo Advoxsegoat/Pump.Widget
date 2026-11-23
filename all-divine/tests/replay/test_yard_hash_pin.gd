@@ -7,8 +7,11 @@ extends TestCase
 ## claim that the yard's fight can never change: a change of the fight on purpose (its tuning, a new foe, a new move) re-makes
 ## the two numbers, once, in the same change, and says so in its message.
 
-const YARD_STATE_HASH := 3889759578
-const YARD_FRAMES_HASH := 4294644534
+# Re-made on 2026-11-23 when the fight's tuning was joined (it was 3889759578 and 4294644534). The rule that moved them is the tier I
+# foe's longer jab warning (knuckle_1 plays knuckle_jab_long, five more frames of drawing back, not knuckle_jab): with its palm put
+# back to knuckle_jab the old numbers came back, so neither the mashing cost nor the strain (the yard bot does not mash) moved them.
+const YARD_STATE_HASH := 1561874147
+const YARD_FRAMES_HASH := 3110548667
 const SEED := 1
 const FRAMES := 120
 
