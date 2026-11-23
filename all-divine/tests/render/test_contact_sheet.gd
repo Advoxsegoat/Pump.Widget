@@ -1,5 +1,5 @@
 extends TestCase
-## Contact sheets (tools/sheets/contact_sheet.gd) on a real display (xvfb, gl_compatibility): a cell
+## Contact sheets (tools/sheets/sheet_maker.gd, ContactSheet) on a real display (xvfb, gl_compatibility): a cell
 ## per frame, six to a row, each cell 160x120 internal pixels drawn x2.
 
 const RIG := "res://actors/abarax/abarax_rig.tscn"
