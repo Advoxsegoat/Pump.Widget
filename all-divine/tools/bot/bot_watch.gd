@@ -6,7 +6,8 @@ extends RefCounted
 ##                     step, for stuck_frames while he is alive and free; no wave started or cleared for progress_frames (only once
 ##                     the bot says there are waves, note_progress)
 ##   broken encounter  an actor outside `bounds` (the yard's walls) or below `floor_y`; a foe with an enemy brain that has not
-##                     engaged within engage_frames of being first seen
+##                     engaged in engage_frames of the frames its target stood within engage_within of it (a foe that has not
+##                     noticed a player out of its sight is waiting, not broken: the player has to come)
 ## The numbers are in physics frames at 60 a second: 10 s, 90 s and 15 s. A move's charge holds are short (a few frames) and are
 ## in the second it is given.
 
@@ -23,13 +24,17 @@ var slack_frames := 60
 var stuck_frames := 600
 ## The fight is stuck after this many frames with no wave started or cleared.
 var progress_frames := 5400
-## A foe has this many frames to engage.
+## A foe has this many frames to engage, counted over the frames its target is within engage_within of it.
 var engage_frames := 900
+## How near the foe's target must be for the foe to have been able to come: the brains' sight range (12 m, BrainDef). The masher
+## stands where it is and a foe that came on 13 m away never saw it: he was named "never engages" for it (seeds 5 and 9, Nov 23).
+var engage_within := 12.0
 
 var _moves := {}  # actor id -> [the move, its actor's buffer_frame when it started]
 var _said := {}  # a problem's key -> true
 var _first_seen := {}  # actor id -> the frame it was first seen on
 var _engaged := {}  # actor id -> true
+var _in_reach := {}  # actor id -> frames its target stood within engage_within of it while it had not engaged
 var _last_position := Vector3.INF  # the player's, last frame
 var _idle := 0  # frames the player has done nothing
 var _started_this_frame := false  # the player started a move since the last check
@@ -115,8 +120,15 @@ func _check_engaged(foe: Actor, frame: int, found: PackedStringArray) -> void:
 		_first_seen[id] = frame
 	if brain.mode == EnemyBrain.Mode.ENGAGED or brain.mode == EnemyBrain.Mode.ATTACKING or brain.mode == EnemyBrain.Mode.RETREATING:
 		_engaged[id] = true
-	if not _engaged.has(id) and frame - int(_first_seen[id]) > engage_frames:
-		_say("engage %d" % id, "%s never engages: %d frames since it was first seen" % [foe.name, frame - int(_first_seen[id])], found)
+	if _engaged.has(id):
+		return
+	var target := brain.target
+	if target != null and is_instance_valid(target) and not target.dead and target.is_inside_tree():
+		var flat := Vector2(target.global_position.x - foe.global_position.x, target.global_position.z - foe.global_position.z)
+		if flat.length() <= engage_within:
+			_in_reach[id] = int(_in_reach.get(id, 0)) + 1
+	if int(_in_reach.get(id, 0)) > engage_frames:
+		_say("engage %d" % id, "%s never engages: the player was within %d m of it for %d frames (first seen on frame %d)" % [foe.name, int(engage_within), int(_in_reach[id]), int(_first_seen[id])], found)
 
 
 func _check_player(_frame: int, player: Actor, found: PackedStringArray) -> void:
