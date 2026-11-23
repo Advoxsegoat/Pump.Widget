@@ -66,6 +66,25 @@ reads the code again and will find afresh whatever those lists held. F0's record
 - Task 2 pins the yard's hash on its own base and Task 17 (the tuning) re-makes the pin when the two meet, whichever merges second: the
   pin proves Task 2 moved nothing, and that proof is made inside Task 2's lane. Cost if wrong: one extra re-make.
 
+### After the build machine was replaced (Nov 22)
+
+- The Drummer's rim picture test was fixed on the main branch without a whole headless run (a render-test-only commit: the standing
+  ruling). Cost if wrong: a red cloud run (it was green: run 643).
+- The saved game (systems Task 1) was staged on the main branch of the day in an idle lane for its cloud run (run 644: green, 2094
+  passed) and merged from there: its own lane had moved on to Task 2. Cost if wrong: none.
+- The texture pass: **the heads come first**. The finishing brief asks for the lightest wood at which every head passes at every
+  measured place, with no list of known misses: the owner's words were "lighten the wood, re-check that heads still stand out", and the
+  range 0.20 to 0.28 was the controller's number. Cost if wrong: the wood is a little darker than a mid tone at two fronts; one number
+  in the texture tool.
+- The three tasks that were mid-flight when the machine was lost (the fight's tuning, the shrines, the texture pass) are finished by
+  fresh implementers from the commits that were pushed, each with a finishing brief, and then reviewed; every Critical or Important
+  finding is reproduced by a second agent before it is fixed (one workflow: finish, review, verify, fix). Cost if wrong: a finding that
+  could not be reproduced is dropped; the final whole-branch review is the backstop.
+- Review and implementer models stay as before (the cheaper tier for implementers and task reviewers, the most capable for the final
+  whole-branch review), though the session was switched to its most thorough mode on Nov 22: the weekly limit stopped all work for five
+  days on Nov 16, and that is the cost that matters most to the owner's schedule. Cost if wrong: a task review misses what the stronger
+  model would have caught; the final review is on the stronger model.
+
 ## Deferred minors
 
 - Systems Task 1: a whole new game verified in `save.tmp` is ignored when the main file is missing after a crash between the last two
