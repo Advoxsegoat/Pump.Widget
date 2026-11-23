@@ -328,7 +328,7 @@ func test_the_tuning_of_the_fights_choices_of_nov_16() -> void:
 	# Task 17: the open foe's window and scale, and the two costs of mashing, in Abarax's file and as the class defaults; the Knuckles' file
 	# gives the foes no scale and no cost
 	var t := CombatTuning.new()
-	assert_eq([t.punish_frames, t.punish_scale, t.hammer_tax, t.strain_step, t.strain_cap, t.strain_reset_frames], [40, 1.5, 2.0, 0.5, 3.0, 60])
+	assert_eq([t.punish_frames, t.punish_scale, t.hammer_tax, t.strain_step, t.strain_cap, t.strain_reset_frames], [40, 1.5, 1.0, 0.25, 2.0, 60])  # fix round 1: the cost of mashing gentled from 2.0, 0.5 and 3.0
 	var foe := load("res://data/tuning/combat_knuckle.tres") as CombatTuning
 	assert_eq([foe.punish_scale, foe.hammer_tax, foe.strain_step], [1.0, 0.0, 0.0])
 

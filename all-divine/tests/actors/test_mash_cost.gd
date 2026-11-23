@@ -3,8 +3,8 @@ extends TestCase
 ## every foe's stays off), each times 100 / max_stamina (1 today; a stamina of 150 pays two thirds).
 ##   Hammering: a press of palm, heavy, sway or duck made while the same action's last press still waits in the buffer, or while the move
 ##   it started has not yet reached its first cancel window, is redundant. The first one in a move is free (a double tap); each after it
-##   costs CombatTuning.hammer_tax (2.0), spent like any spend. The press itself is taken as ever.
-##   Strain: a sway or duck that evades nothing makes the next one cost half its base cost more (x1.5, x2, x2.5, at most x3; the added part
+##   costs CombatTuning.hammer_tax (1.0), spent like any spend. The press itself is taken as ever.
+##   Strain: a sway or duck that evades nothing makes the next one cost a quarter of its base cost more (x1.25, x1.5, x1.75, at most x2; the added part
 ##   times the factor), until one evades something or 60 frames pass with no sway or duck.
 ## A player who presses once for each blow, and a chain of clean sways, pay what they paid before: the same script against the same
 ## actor with the rules switched off must cost the same.
@@ -14,6 +14,10 @@ const KNUCKLE_TUNING := "res://data/tuning/combat_knuckle.tres"
 const JAB := 12.0
 const SWAY := 6.0
 const DUCK := 8.0
+## The tuning's numbers (data/tuning/combat_abarax.tres; fix round 1 gentled them from 2.0, 0.5 and 3.0: see notes/f1-feel.md).
+const TAX := 1.0
+const STEP := 0.25
+const CAP := 2.0
 
 
 # A copy of Abarax's def of `team` whose tuning has the rules `on` or off, and whose stamina bar is `stamina` large.
@@ -96,7 +100,7 @@ func test_two_presses_in_one_move_cost_no_more() -> void:
 func test_four_presses_cost_two_taxes() -> void:
 	var run := _world(_def(true), _script([[1, [&"palm"]], [2, [&"palm"]], [3, [&"palm"]], [4, [&"palm"]]]))
 	await _play(run, 20)
-	assert_near((run["a"] as Actor).stats.stamina, 100.0 - JAB - 2.0 * 2.0, 1e-4, "the jab and two taxes of 2")
+	assert_near((run["a"] as Actor).stats.stamina, 100.0 - JAB - 2.0 * TAX, 1e-4, "the jab and two taxes")
 	await _free(run)
 
 
@@ -104,7 +108,7 @@ func test_the_tax_follows_the_stamina_stat() -> void:
 	# a stamina of 150: the factor is 100 / 150, two thirds
 	var run := _world(_def(true, 150.0), _script([[1, [&"palm"]], [2, [&"palm"]], [3, [&"palm"]], [4, [&"palm"]]]))
 	await _play(run, 20)
-	assert_near((run["a"] as Actor).stats.stamina, 150.0 - JAB - 2.0 * 2.0 * (100.0 / 150.0), 1e-3, "the jab and two thirds of two taxes")
+	assert_near((run["a"] as Actor).stats.stamina, 150.0 - JAB - 2.0 * TAX * (100.0 / 150.0), 1e-3, "the jab and two thirds of two taxes")
 	await _free(run)
 
 
@@ -115,7 +119,7 @@ func test_a_press_of_a_heavy_a_sway_and_a_duck_is_hammered_too() -> void:
 		await _play(run, 3)
 		var after_three := a.stats.stamina
 		await _play(run, 4)
-		assert_near(after_three - a.stats.stamina, 2.0, 1e-4, "%s: the fourth press (the second redundant one) costs a tax" % action)
+		assert_near(after_three - a.stats.stamina, TAX, 1e-4, "%s: the fourth press (the second redundant one) costs a tax" % action)
 		await _free(run)
 
 
@@ -153,14 +157,14 @@ func test_a_tax_does_not_restart_the_wait_before_stamina_comes_back() -> void:
 	await _play(off, 12)
 	var a_on: Actor = on["a"]
 	var a_off: Actor = off["a"]
-	assert_near(a_off.stats.stamina - a_on.stats.stamina, 2.0 * 2.0, 1e-4, "two taxes were paid")
+	assert_near(a_off.stats.stamina - a_on.stats.stamina, 2.0 * TAX, 1e-4, "two taxes were paid")
 	assert_near(a_on.stats.save().stamina_idle, a_off.stats.save().stamina_idle, 1e-6, "the wait since the jab ran on through both taxes")
 	await _free(on)
 	await _free(off)
 
 
 func test_a_strained_sways_extra_cost_does_not_restart_the_wait_either() -> void:
-	# the second sway costs 1.5 times: the move's own spend restarts the wait as it always did, and the extra half is stamina only
+	# the second sway costs a step more: the move's own spend restarts the wait as it always did, and the extra is stamina only
 	var on := _world(_def(true), _script([[1, [&"sway"]], [40, [&"sway"]]]))
 	await _play(on, 60)
 	var started: Array = on["started"]
@@ -168,6 +172,48 @@ func test_a_strained_sways_extra_cost_does_not_restart_the_wait_either() -> void
 	var a: Actor = on["a"]
 	assert_near(a.stats.save().stamina_idle, float(60 - started[1][0]) / 60.0, 0.02, "the wait counts from the second sway's start")
 	await _free(on)
+
+
+# --- by hand speed (fix round 1, I3): "weaker, not worthless" ---
+
+const TIER_ONE := "res://data/actors/knuckle_1.tres"
+const TIER_ONE_BRAIN := "res://data/brains/knuckle_1.tres"
+
+
+# Frames of 600 (ten seconds) in which Abarax cannot start a move (out of stamina, or exhausted), tapping palm every `period` frames beside
+# a tier I (the foe at `gap` metres, driven by its own brain, seed 7). The base (the rules off) is the same script on the same fight.
+func _unable_frames(period: int, on: bool, gap := 2.0) -> int:
+	var presses := []
+	var frame := 1
+	while frame < 600:
+		presses.append([frame, [&"palm"]])
+		frame += period
+	var run := _world(_def(on), _script(presses))
+	var tier := load(TIER_ONE) as ActorDef
+	var foe := TestArena.spawn(run["arena"], tier, EnemyBrain.new(load(TIER_ONE_BRAIN) as BrainDef, 7), Vector3(0, 0, gap), "Tier")
+	foe.place(Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, gap)))
+	var a: Actor = run["a"]
+	var unable := 0
+	while a.frame < 600:
+		await frames(1)
+		if not a.stats.can_act():
+			unable += 1
+	await _free(run)
+	return unable
+
+
+func test_a_steady_tapper_at_two_a_second_is_barely_held_back() -> void:
+	var base := await _unable_frames(30, false)
+	var taxed := await _unable_frames(30, true)
+	print("HANDSPEED tapper 2/s unable base=%d taxed=%d" % [base, taxed])
+	assert_true(taxed <= 140, "a person tapping twice a second cannot act for at most 140 of 600 frames (base %d): %d" % [base, taxed])
+
+
+func test_a_masher_at_six_a_second_can_still_act_half_the_time() -> void:
+	var base := await _unable_frames(10, false)
+	var taxed := await _unable_frames(10, true)
+	print("HANDSPEED masher 6/s unable base=%d taxed=%d" % [base, taxed])
+	assert_true(taxed <= 300, "a masher at six a second can act for at least half of 600 frames (base %d): unable %d" % [base, taxed])
 
 
 # --- strain ---
@@ -190,7 +236,7 @@ func test_a_sway_that_evades_nothing_makes_the_next_cost_one_and_a_half_times_th
 	var costs := []
 	for s: Array in started:
 		costs.append(snappedf(_spent(run, s[0] - 1, s[0]), 0.001))
-	assert_eq(costs, [SWAY, SWAY * 1.5, SWAY * 2.0, SWAY * 2.5, SWAY * 3.0, SWAY * 3.0], "x1, x1.5, x2, x2.5, x3 and no more: %s" % [costs])
+	assert_eq(costs, [SWAY, SWAY * 1.25, SWAY * 1.5, SWAY * 1.75, SWAY * CAP, SWAY * CAP], "x1, x1.25, x1.5, x1.75, x2 and no more: %s" % [costs])
 	await _free(run)
 
 
@@ -200,7 +246,7 @@ func test_the_strain_follows_the_stamina_stat_in_its_added_part() -> void:
 	var started: Array = run["started"]
 	assert_eq(started.size(), 2, "two sways")
 	var second := _spent(run, started[1][0] - 1, started[1][0])
-	assert_near(second, SWAY + SWAY * 0.5 * (100.0 / 150.0), 1e-3, "the added half, two thirds of it")
+	assert_near(second, SWAY + SWAY * STEP * (100.0 / 150.0), 1e-3, "the added step, two thirds of it")
 	await _free(run)
 
 
@@ -209,19 +255,19 @@ func test_a_duck_that_evades_nothing_strains_the_next_sway_or_duck() -> void:
 	await _play(run, 70)
 	var started: Array = run["started"]
 	assert_eq(started.size(), 2, "a duck and a sway")
-	assert_near(_spent(run, started[1][0] - 1, started[1][0]), SWAY * 1.5, 1e-3, "the sway after a duck that avoided nothing costs half again")
+	assert_near(_spent(run, started[1][0] - 1, started[1][0]), SWAY * (1.0 + STEP), 1e-3, "the sway after a duck that avoided nothing costs a step more")
 	await _free(run)
 
 
 func test_an_evade_resets_the_strain() -> void:
-	# sway 1 evades nothing, sway 2 (x1.5) evades a blow (straight: a perfect dodge, which also refunds), sway 3 costs the base again
+	# sway 1 evades nothing, sway 2 (strained) evades a blow (straight: a perfect dodge, which also refunds), sway 3 costs the base again
 	var run := _world(_def(true), _script([[1, [&"sway"]], [40, [&"sway"]], [90, [&"sway"]]]))
 	var foe := TestArena.spawn(run["arena"], Duel.def(ActorDef.Team.ENEMY, 5.0), ScriptBrain.new([]), Vector3(0, 0, 1.0), "B")
 	foe.place(Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, 1.0)))
 	await _play(run, 140, [44], foe)
 	var started: Array = run["started"]
 	assert_eq(started.size(), 3, "three sways: %s" % [started])
-	assert_near(_spent(run, started[1][0] - 1, started[1][0]), SWAY * 1.5, 1e-3, "the second is strained")
+	assert_near(_spent(run, started[1][0] - 1, started[1][0]), SWAY * (1.0 + STEP), 1e-3, "the second is strained")
 	assert_near(_spent(run, started[2][0] - 1, started[2][0]), SWAY, 1e-3, "the third, after an evade, is not")
 	await _free(run)
 

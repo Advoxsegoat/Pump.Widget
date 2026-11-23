@@ -76,12 +76,13 @@ extends Resource
 # --- mashing costs stamina (Task 17) ---
 ## Stamina a redundant press costs (a press of palm, heavy, sway or duck made while the same action's last press is still waiting in the
 ## buffer, or while the move it started has not yet reached its first cancel window), after the first redundant press of a move, which
-## is free. Times 100 / max_stamina, so a larger stamina bar pays less. 0 turns the rule off: every foe's tuning says 0.
-@export var hammer_tax := 2.0
-## Each sway or duck that evades nothing makes the next one cost this much of its base cost more (0.5: x1.5, x2, x2.5), until one evades
+## is free. Times 100 / max_stamina, so a larger stamina bar pays less. 0 turns the rule off: every foe's tuning says 0. It is stamina and
+## nothing else: it does not restart the wait before stamina comes back (fix round 1; 1.0, the gentlest of the range the controller gave: see notes/f1-feel.md).
+@export var hammer_tax := 1.0
+## Each sway or duck that evades nothing makes the next one cost this much of its base cost more (0.25: x1.25, x1.5, x1.75), until one evades
 ## something or `strain_reset_frames` pass with no sway or duck. The added part is times 100 / max_stamina. 0 turns the rule off (the foes').
-@export var strain_step := 0.5
+@export var strain_step := 0.25
 ## The most a strained sway or duck costs, times its base cost.
-@export var strain_cap := 3.0
+@export var strain_cap := 2.0
 ## Frames (on the actor's own clock) with no sway or duck before the strain is gone.
 @export var strain_reset_frames := 60
