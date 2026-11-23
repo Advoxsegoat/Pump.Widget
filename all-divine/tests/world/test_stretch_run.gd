@@ -90,6 +90,14 @@ func _forward(yaw_deg: float) -> Vector3:
 	return Vector3(sin(deg_to_rad(yaw_deg)), 0.0, cos(deg_to_rad(yaw_deg)))
 
 
+# What is walked to from the spawn with every gate open (the toll board shuts the lane's mouth until its flag is set: Task 5).
+func _reached_with_gates_open(w: Dictionary) -> Dictionary:
+	for door: GateDoor in (w.run as StretchRun).gates:
+		door.open(false)
+	await frames(2)
+	return StretchGround.reached(w.region)
+
+
 func _store() -> SaveStore:
 	return SaveStore.new(DIR)
 
@@ -255,7 +263,7 @@ func test_the_three_seconds_stand_still_in_a_pause_and_in_a_scene() -> void:
 func test_every_shrine_is_standing_ground_and_clear_of_the_foes() -> void:
 	var w := await _world()
 	var region: Region = w.region
-	var reached := StretchGround.reached(region)
+	var reached := await _reached_with_gates_open(w)
 	for id: StringName in [&"rose_a", &"rose_b"]:
 		var shrine := _shrine(id)
 		assert_true(StretchGround.stands(region, shrine.respawn), "%s: the respawn is standing ground" % id)
@@ -292,7 +300,7 @@ func test_each_shrine_stands_on_its_own_stone_and_its_respawn_faces_it() -> void
 func test_the_places_a_body_is_read_at_beside_each_shrine_are_standing_ground() -> void:
 	var w := await _world()
 	var region: Region = w.region
-	var reached := StretchGround.reached(region)
+	var reached := await _reached_with_gates_open(w)
 	for entry: Array in load("res://tests/render/test_bilibara_readability_more.gd").BESIDE_SHRINES:
 		var shrine := _shrine(entry[0])
 		var point := shrine.plinth + Vector3(0.0, 0.0, float(entry[1]))

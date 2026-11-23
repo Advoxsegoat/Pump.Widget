@@ -31,6 +31,7 @@ NAMES = [
     "perilous_sting", "tell_glint", "cloth_move", "foot_land",
     "surface_cloth_1", "surface_cloth_2", "body_fall", "charge_hum", "stamina_refused",
     "evade_whoosh", "perfect_dodge", "knocked_out", "shrine_rest",
+    "gate_unlatch",
 ]
 
 
@@ -219,6 +220,18 @@ class MakeSfx(unittest.TestCase):
             self.assertEqual(sorted(p.stem for p in Path(out).glob("*.wav")), sorted(NAMES))
         done = subprocess.run([sys.executable, "-I", str(TOOL / "make_sfx.py"), "--bogus"], capture_output=True, text=True)
         self.assertEqual(done.returncode, 2)
+
+
+    def test_the_gate_unlatch_is_half_a_second_of_a_clunk_and_a_slide_at_minus_fourteen(self):
+        # Task 5: the latch of a gate lifted, heard once per gate: a dry knock at the start (its loudest point within 30 ms), then a quieter slide.
+        rate, _, _, samples = read(self.files["gate_unlatch"])
+        self.assertAlmostEqual(len(samples) / rate, 0.5, delta=0.01)
+        self.assertAlmostEqual(peak_db(samples), -14.0, delta=0.2)
+        top = max(abs(s) for s in samples)
+        first = next(i for i, s in enumerate(samples) if abs(s) >= 0.9 * top)
+        self.assertLess(first / rate, 0.03, "the knock is the loudest thing in it")
+        tail = samples[int(0.2 * rate):int(0.4 * rate)]
+        self.assertGreater(rms(tail), 0.0, "and the slide is there under it")
 
 
 if __name__ == "__main__":

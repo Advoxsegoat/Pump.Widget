@@ -23,6 +23,13 @@ func prompt(_actor: Actor) -> String:
 	return ""
 
 
+## Whether the press would do something for `actor` (a line that only says why not, like a barred latch's, is not usable). When two are in
+## reach the Interactor offers a usable one before one that is not, whichever is nearer, so that a line that does nothing never takes away
+## a press that does.
+func usable(_actor: Actor) -> bool:
+	return true
+
+
 ## The press: `actor` used this.
 func interact(_actor: Actor) -> void:
 	pass

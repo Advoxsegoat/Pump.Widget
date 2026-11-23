@@ -58,6 +58,9 @@ var interactor: Interactor
 ## Play frames between two autosaves (a test shortens it).
 var autosave_frames := AUTOSAVE_FRAMES
 
+# Task 5: gates. One door per gate of the def, made before the player is placed (a board built here is in the world he is placed in).
+var gates: Array[GateDoor] = []
+
 var _lived := 0  # physics frames this run has lived (state_hash): the same in a replay, not a clock
 var _counted := -1  # the Game.play_frames the timers last counted
 var _since_save := 0
@@ -92,6 +95,7 @@ static func start(region_node: Region, who: Actor, stretch_def: StretchDef, save
 		shrine.def = shrine_def
 		run.add_child(shrine)
 		shrine.global_position = shrine_def.plinth
+	run._make_gates()
 	who.died.connect(run._on_player_died)
 	run._place_player()
 	return run
@@ -339,3 +343,19 @@ func _snap_camera() -> void:
 	var rig := get_tree().get_first_node_in_group(CameraRig.GROUP) as CameraRig
 	if rig != null:
 		rig.snap_now()
+
+
+# --- Task 5: gates ---
+
+# A door for each gate of the def, and a latch for each that has one (at the latch's centre; the doors and latches are children of the run).
+func _make_gates() -> void:
+	for gate_def in def.gates:
+		var door := GateDoor.make(self, gate_def)
+		gates.append(door)
+		if gate_def.latch_radius > 0.0:
+			var latch := Latch.new()
+			latch.name = "Latch_%s" % gate_def.id
+			latch.def = gate_def
+			latch.door = door
+			add_child(latch)
+			latch.global_position = gate_def.latch_centre

@@ -9,3 +9,6 @@ extends Resource
 @export var shrines: Array[ShrineDef] = []
 ## The shrine a game that has rested nowhere stands up at.
 @export var start_shrine: StringName = &"rose_a"
+
+# Task 5: gates
+@export var gates: Array[GateDef] = []

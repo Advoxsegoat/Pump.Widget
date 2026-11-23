@@ -30,7 +30,7 @@
 60   feel/test_press_to_motion.gd   # measured in a render shard
 60   world/test_arena_pairs.gd   # measured in a render shard
 59   render/test_bilibara_cost.gd   # measured in a render shard
-55   render/test_bilibara_readability_more.gd   # measured in a render shard
+75   render/test_bilibara_readability_more.gd   # was 55 (measured in a render shard); Task 5 adds two more runs of the rig (the lane's mouth with the toll gate open, shrine A's heads with the gates open)
 55   actors/test_drummer.gd   # measured in a render shard
 51   actors/test_abarax_feather.gd   # measured in a render shard
 51   main/test_selftest.gd   # measured in a render shard
@@ -99,3 +99,4 @@
 6    actors/test_body_spacing.gd   # measured in a render shard
 6    render/test_clearout_shot.gd   # measured in a render shard
 6    ui/test_controls_screen.gd   # measured in a render shard
+11   world/test_gates.gd   # 5.1 s headless here, times two
