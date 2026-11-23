@@ -205,8 +205,52 @@ func _run_test(tree: SceneTree, test_case: TestCase, id: String, method_name: St
 	var logger := TestLogger.shared()
 	test_case._begin()
 	logger.push_context()
+	# The test is played beside a watch (see _watch_for_a_drawn_frame): whichever ends first ends the test.
+	var race := _Race.new()
+	var before := RenderingServer.frame_post_draw.get_connections()
+	_play(test_case, method_name, race)
+	_watch_for_a_drawn_frame(tree, race, before)
+	if not race.done:
+		await race.finished
+	var raised := logger.pop_context()
+	test_case._free_tracked()
+	if race.stuck:
+		report.add(id, PackedStringArray(["this test awaits a drawn frame but its file is not under tests/render and does not say DRAWS: the drawing is off for it, so the frame never comes. Move the file to tests/render, or put `const DRAWS := true` in it"]))
+		return
+	report.add(id, test_case._finish(raised))
+
+
+func _play(test_case: TestCase, method_name: String, race: _Race) -> void:
 	await test_case.call(&"before_each")
 	await test_case.call(method_name)
 	await test_case.call(&"after_each")
-	test_case._free_tracked()
-	report.add(id, test_case._finish(logger.pop_context()))
+	race.end(false)
+
+
+## While a test is played with the drawing off (see draws), a wait for RenderingServer.frame_post_draw never ends: nothing fails, the run
+## stands still until its timeout. The wait shows as a connection to that signal that was not there when the test began, so the watch
+## ends the test as stuck on the first physics frame that finds one, and takes the connection away so that the drawing, on again for the
+## next file, does not wake a test that is gone. A test that the drawing is on for is not watched.
+func _watch_for_a_drawn_frame(tree: SceneTree, race: _Race, before: Array) -> void:
+	while not race.done:
+		await tree.physics_frame
+		if race.done or RenderingServer.render_loop_enabled:
+			continue
+		for connection: Dictionary in RenderingServer.frame_post_draw.get_connections():
+			if not before.has(connection):
+				RenderingServer.frame_post_draw.disconnect(connection["callable"])
+				race.end(true)
+
+
+## The end of one test played beside its watch: `done` once either has ended it, `stuck` if it was the watch.
+class _Race extends RefCounted:
+	signal finished
+	var done := false
+	var stuck := false
+
+	func end(was_stuck: bool) -> void:
+		if done:
+			return
+		done = true
+		stuck = was_stuck
+		finished.emit()
