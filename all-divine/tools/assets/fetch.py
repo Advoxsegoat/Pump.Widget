@@ -100,6 +100,27 @@ def parse_kenney_zip(html):
     return htmllib.unescape(found.group(1) if found.group(1) is not None else found.group(2))
 
 
+def parse_kenney_download_id(html):
+    """The pack's download id on a Kenney asset page as it is written now: no .zip link in the page, a button
+    with data-download-id (the hex of the pack's path) that a script turns into a signed link."""
+    found = re.search(r"""\bdata-download-id\s*=\s*(?:"([^"]+)"|'([^']+)')""", html, re.IGNORECASE)
+    if not found:
+        raise ValueError("no download id in the page")
+    return htmllib.unescape(found.group(1) if found.group(1) is not None else found.group(2))
+
+
+def parse_kenney_file_reference(html):
+    """("zip", link) when the page holds a .zip link (the old form, taken first), else ("id", download id)."""
+    try:
+        return "zip", parse_kenney_zip(html)
+    except ValueError:
+        pass
+    try:
+        return "id", parse_kenney_download_id(html)
+    except ValueError:
+        raise ValueError("no .zip link and no download id in the page") from None
+
+
 # --- hashing ---
 
 def sha256_file(path):
@@ -225,7 +246,22 @@ def itch_file_url(page, opener):
 
 
 def kenney_file_url(page, opener):
-    return urllib.parse.urljoin(page, parse_kenney_zip(http_get(opener, page)))
+    """The link to a Kenney pack's zip. The old page held it in the markup; the page now has a download id that its own
+    script gives to /download-link/<id> (with the page as Referer, as the browser does: a bare request gets a 403),
+    which answers {"url": a signed link}."""
+    kind, value = parse_kenney_file_reference(http_get(opener, page))
+    if kind == "zip":
+        return urllib.parse.urljoin(page, value)
+    request = urllib.request.Request(
+        urllib.parse.urljoin(page, "/download-link/" + urllib.parse.quote(value, safe="")),
+        headers={"Referer": page, "Accept": "application/json"},
+    )
+    require_web_url(request.full_url)
+    with opener.open(request, timeout=TIMEOUT) as reply:
+        link = json.loads(reply.read().decode("utf-8")).get("url")
+    if not link:
+        raise ValueError("the download-link answer holds no url")
+    return urllib.parse.urljoin(page, link)
 
 
 def download_file(opener, url, dest, label):
