@@ -32,11 +32,12 @@ func _clean() -> void:
 
 
 # A Main with its save folder and start set before it is ready.
-func _main(start := "") -> Main:
+func _main(start := "", args := PackedStringArray()) -> Main:
 	Game.reset()
 	var main := (load(MAIN) as PackedScene).instantiate() as Main
 	main.save_dir = DIR
 	main.stretch_start = start
+	main.user_args = args
 	return track(main) as Main
 
 
@@ -83,6 +84,35 @@ func test_f2_continues_the_saved_game_and_new_reads_and_writes_nothing() -> void
 	main.stretch.rest(main.stretch.def.shrines[0])
 	await frames(60)
 	assert_eq(_bytes(), before, "the files are byte for byte as they were")
+
+
+# A recording made with --stretch is of a new game: it never reads the player's save (it starts at the first shrine, not where the save
+# has him) and never writes it, whatever the save holds (the same bytes before and after, the run's end included).
+func test_a_recording_made_with_stretch_starts_a_new_game_and_leaves_the_save_alone() -> void:
+	var store := SaveStore.new(DIR)
+	var saved := SaveData.new_game()
+	saved.petals = 5
+	saved.rest_shrine = &"rose_b"
+	saved.at = {x = -15.0, y = 0.0, z = 0.0, yaw = 217.0}
+	assert_eq(store.write(saved), OK)
+	assert_eq(store.write(saved), OK)  # the file and its backup
+	var before := _bytes()
+	var file := "user://main_stretch_record_test.tres"
+	var main := _main("continue", PackedStringArray(["--stretch", "--record=" + file]))
+	await frames(2)
+	assert_eq(main.region.scene_file_path, "res://world/bilibara/bilibara.tscn", "the region is the stretch")
+	var first := Registry.fetch(&"stretch", &"rose_a") as ShrineDef
+	assert_vec_near(main.player.global_position, first.respawn, 0.01, "he starts at the new game's start, not at the saved place")
+	assert_eq(main.stretch.data.petals, 0, "the run is a new game, not the saved one")
+	assert_eq(main.stretch.store, null, "and has no store to write to")
+	await frames(1900)  # past an autosave
+	main.stretch.rest(first)
+	main.stretch.set_flag(&"x")
+	assert_eq(_bytes().hash(), before.hash(), "the save folder is byte for byte as it was")
+	main.queue_free()
+	await frames(3)
+	assert_eq(_bytes().hash(), before.hash(), "and as it was after the game's end")
+	DirAccess.remove_absolute(file)
 
 
 func test_the_yards_arena_never_begins_when_the_game_starts_in_the_stretch() -> void:

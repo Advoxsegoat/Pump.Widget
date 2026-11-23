@@ -87,6 +87,8 @@ var stretch: StretchRun
 var save_dir := SaveStore.PLAYER_DIR
 ## How the game starts: "", "continue" or "new" (a seam for tests and the bot, set before the node is ready).
 var stretch_start := ""
+## The user arguments the game was started with (a seam for tests: empty means the process's own, OS.get_cmdline_user_args).
+var user_args := PackedStringArray()
 
 var _stretch_hud: StretchHud  # the Hud's stretch line, while the region is the stretch
 var _stretch_new := false  # the stretch the region is to make is a new game that reads and writes no file
@@ -117,7 +119,8 @@ func _ready() -> void:
 	menu.quit_requested.connect(func() -> void: quit_game.call())
 	window.min_size = Vector2i(PixelSnap.INTERNAL)
 	Game.state_changed.connect(_on_game_state_changed)
-	var arguments := parse_arguments(OS.get_cmdline_user_args())
+	var given := user_args if not user_args.is_empty() else OS.get_cmdline_user_args()
+	var arguments := parse_arguments(given)
 	var replaying: InputRecording = null
 	if arguments["replaying"]:
 		lend_replay_defaults()
@@ -129,11 +132,13 @@ func _ready() -> void:
 			get_tree().quit(EXIT_REFUSED)
 			return
 		replaying = _load_recording(arguments["replay"])
-	var wanted := stretch_start if not stretch_start.is_empty() else parse_stretch(OS.get_cmdline_user_args())
+	var wanted := stretch_start if not stretch_start.is_empty() else parse_stretch(given)
 	if SelfTest.active:
 		wanted = ""  # the self-test fights in the yard
 	elif replaying != null and replaying.region == BILIBARA:
 		wanted = "new"  # a recording of the stretch is of a new game: it never reads the player's save
+	elif not wanted.is_empty() and not arguments["record"].is_empty():
+		wanted = "new"  # and so is a recording being made: it never reads or writes the player's save
 	if not wanted.is_empty():
 		_stretch_new = wanted == "new"
 		if region.scene_file_path != BILIBARA:
@@ -244,7 +249,7 @@ static func parse_arguments(args: PackedStringArray) -> Dictionary:
 
 
 ## How the game is asked to start in the stretch, in the user arguments: "continue" for `--stretch` (the saved game), "new" for
-## `--stretch=new` (a new game that reads and writes no file), "" for neither (the yard), and for anything else after the =.
+## `--stretch=new` (a new game that reads and writes no file; so is `--stretch` with `--record=` or `--replay=`), "" for neither (the yard), and for anything else after the =.
 static func parse_stretch(args: PackedStringArray) -> String:
 	for arg in args:
 		if arg == "--stretch":
