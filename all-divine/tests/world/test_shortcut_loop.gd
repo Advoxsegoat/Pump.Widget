@@ -5,7 +5,7 @@ extends TestCase
 
 const BILIBARA := "res://world/bilibara/bilibara.tscn"
 const ABARAX := "res://data/actors/abarax.tres"
-## Measured from rose_a's respawn (-36.1, -3.1) to RackWest with the toll gate open: the way round with the shortcut shut is 142.0 m, with it
+## Measured from rose_a's respawn (-36.1, -3.1) to RackWest in the town as it is (the toll board is not placed): the way round with the shortcut shut is 142.0 m, with it
 ## open 23.0 m, and RouteBrain over GateNear, GateFar, RackWest takes 4.08 s. Each bound has a fifth of room: the shut way at least 113 m (a
 ## fifth under 142), the open way at most 27.6 m (a fifth over 23), the walk at most 4.9 s (a fifth over 4.08).
 const SHUT_AT_LEAST := 113.0
@@ -84,7 +84,7 @@ func _walk(w: Dictionary, points: Array[Vector3], budget_frames := -1) -> Dictio
 
 
 func test_the_shortcut_cuts_the_first_shrines_way_to_the_rack_walk() -> void:
-	var w := await _world([&"collector_down"])
+	var w := await _world([] as Array[StringName])
 	var region: Region = w.region
 	var run: StretchRun = w.run
 	var rack_west := _flat(_marker(region, "RackWest"))
@@ -100,7 +100,7 @@ func test_the_shortcut_cuts_the_first_shrines_way_to_the_rack_walk() -> void:
 
 
 func test_abarax_walks_the_loop_from_its_far_side_and_opens_the_gate() -> void:
-	var w := await _world([&"collector_down"])
+	var w := await _world([] as Array[StringName])
 	var region: Region = w.region
 	var player: Actor = w.player
 	var run: StretchRun = w.run
@@ -125,7 +125,7 @@ func test_abarax_walks_the_loop_from_its_far_side_and_opens_the_gate() -> void:
 
 
 func test_the_same_walk_with_the_gate_shut_stops_at_the_board() -> void:
-	var w := await _world([&"collector_down"])
+	var w := await _world([] as Array[StringName])
 	var region: Region = w.region
 	var player: Actor = w.player
 	player.place(Transform3D(Basis.IDENTITY, _marker(region, "GateFar")))
@@ -137,7 +137,7 @@ func test_the_same_walk_with_the_gate_shut_stops_at_the_board() -> void:
 
 
 func test_after_it_is_open_the_first_shrine_to_the_rack_walk_is_a_short_walk() -> void:
-	var w := await _world([&"collector_down", &"shortcut_open"])
+	var w := await _world([&"shortcut_open"])
 	var region: Region = w.region
 	var player: Actor = w.player
 	player.place(Transform3D(Basis.IDENTITY, _respawn()))

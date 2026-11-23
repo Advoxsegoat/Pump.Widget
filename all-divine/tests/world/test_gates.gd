@@ -1,7 +1,8 @@
 extends TestCase
 ## The stretch's gates (world/stretch/gate_def.gd, gate_door.gd, latch.gd): two low slate boards that a flag takes away. The street's west
 ## gate (the layout's own `Gate` node) is lifted by a latch from the loop lane's side only; the toll board across the lane's mouth is built by
-## the run and waits for the mini-boss's flag. An open gate stays open through a rest, a death and a load, and nothing about opening one
+## the run and waits for the mini-boss's flag. The real town has the shortcut alone (the toll board is not placed until the owner says where
+## the mini-boss stands: its data is loaded and tested here, and a test that needs the board builds a run whose def has it added). An open gate stays open through a rest, a death and a load, and nothing about opening one
 ## is sticky: one press, the bar stops blocking on that very frame, and he keeps control while the board sinks.
 ##
 ## The world is the real stretch region with Abarax in it and a StretchRun started on it, as in test_stretch_run.
@@ -56,16 +57,28 @@ func _bare() -> Dictionary:
 	return {region = region, player = player}
 
 
-func _start(bare: Dictionary, data: SaveData = null, store: SaveStore = null) -> StretchRun:
+# The real town's def, or, `with_toll`, a copy of it with the toll board added to its gates (the town does not place it yet).
+func _def(with_toll := false) -> StretchDef:
 	var def := Registry.fetch(&"stretch", &"bilibara") as StretchDef
+	if not with_toll:
+		return def
+	var copy := def.duplicate() as StretchDef
+	var gates: Array[GateDef] = def.gates.duplicate()
+	gates.append(_gate(&"gate_toll"))
+	copy.gates = gates
+	return copy
+
+
+func _start(bare: Dictionary, data: SaveData = null, store: SaveStore = null, with_toll := false) -> StretchRun:
+	var def := _def(with_toll)
 	var run := StretchRun.start(bare.region, bare.player, def, store, data if data != null else SaveData.new_game())
 	_runs.append(run)
 	return run
 
 
-func _world(data: SaveData = null, store: SaveStore = null) -> Dictionary:
+func _world(data: SaveData = null, store: SaveStore = null, with_toll := false) -> Dictionary:
 	var bare := await _bare()
-	bare["run"] = _start(bare, data, store)
+	bare["run"] = _start(bare, data, store, with_toll)
 	await frames(2)
 	return bare
 
@@ -123,8 +136,32 @@ func test_the_gate_data_loads() -> void:
 	assert_eq(shortcut.latch_prompt, "Lift the bar")
 	assert_eq(shortcut.barred_prompt, "Barred from the other side")
 	assert_eq(toll.latch_radius, 0.0, "nothing lifts the toll gate but its flag")
+	assert_eq(toll.drop, 1.3, "the toll board sinks 1.3 m too")
+	assert_eq(toll.latch_prompt, "Lift the bar")
+
+
+# The toll board is not placed in the town yet: the stretch's own list is the shortcut alone, and the lane's mouth is open in a new game.
+func test_the_real_towns_gates_are_the_shortcut_alone_and_the_lanes_mouth_is_walkable_in_a_new_game() -> void:
 	var stretch := Registry.fetch(&"stretch", &"bilibara") as StretchDef
-	assert_eq(stretch.gates.map(func(g: GateDef) -> StringName: return g.id), [&"gate_shortcut", &"gate_toll"], "the stretch has both")
+	assert_eq(stretch.gates.map(func(g: GateDef) -> StringName: return g.id), [&"gate_shortcut"], "the town's gates are the shortcut alone")
+	var w := await _world()
+	var run: StretchRun = w.run
+	var region: Region = w.region
+	assert_eq(run.gates.size(), 1, "the run makes one door")
+	assert_true(region.get_node_or_null("gate_toll") == null, "and builds no toll board")
+	for x: float in [25.6, 27.5, 29.4]:
+		assert_true(StretchGround.stands(region, Vector3(x, 0.0, -5.0)), "the lane's mouth at x %.1f is standing ground in a new game" % x)
+	var reached: Dictionary = StretchGround.reached(region)
+	for place: Vector2 in [Vector2(27.5, -30.0), Vector2(27.5, -65.0), Vector2(-32.5, -22.5), Vector2(-32.5, -6.5)]:
+		assert_true(reached.has(StretchGround.cell_of(place)), "%s is walked to from the spawn with only the shortcut's gate shut" % place)
+	assert_false(reached.has(StretchGround.cell_of(Vector2(-32.5, -5.0))), "(the shut shortcut's gateway is not)")
+	# and a body walks in through the mouth in a new game
+	var player: Actor = w.player
+	_at(player, Vector3(27.5, 0.0, -2.0))
+	await frames(2)
+	player.set_brain(ScriptBrain.new([{frames = 90, move = Vector2(0, -1)}]))
+	await frames(100)
+	assert_true(player.global_position.z < -8.0, "he walks up the lane from the street (z %.2f)" % player.global_position.z)
 
 
 # --- shut and open at the start ---
@@ -137,6 +174,24 @@ func test_a_gate_whose_flag_is_set_loads_open_and_one_without_loads_shut() -> vo
 	assert_eq(shortcut_board.collision_layer, 0, "the shortcut's flag is set: its board has no collision at the first frame")
 	assert_false(shortcut_board.visible, "and is not shown")
 	assert_true(_door(run, &"gate_shortcut").is_open(), "the door says open")
+	assert_true(run.gates.size() == 1, "(the town has the shortcut alone)")
+	var plain := await _world()
+	var fresh_run: StretchRun = plain.run
+	var fresh_region: Region = plain.region
+	assert_eq((fresh_region.get_node("Gate") as StaticBody3D).collision_layer, Layers.WORLD | Layers.IK_SURFACE, "no flags: the shortcut is shut")
+	assert_false(_door(fresh_run, &"gate_shortcut").is_open(), "the shortcut door says shut")
+
+
+func test_a_built_toll_board_is_shut_without_its_flag_and_open_with_it() -> void:
+	var w := await _world(_data_with([&"collector_down"]), null, true)
+	var open_board := (w.region as Region).get_node_or_null("gate_toll") as StaticBody3D
+	assert_true(open_board != null and open_board.collision_layer == 0 and not open_board.visible, "with collector_down set the toll board loads open: no collision, hidden")
+	assert_true(_door(w.run, &"gate_toll").is_open(), "the door says open")
+	(w.region as Node).queue_free()
+	await frames(2)
+	w = await _world(null, null, true)
+	var region: Region = w.region
+	var run: StretchRun = w.run
 	var toll_board := region.get_node_or_null("gate_toll") as StaticBody3D
 	assert_true(toll_board != null, "the toll board is built by the run, named for its gate")
 	if toll_board != null:
@@ -148,12 +203,7 @@ func test_a_gate_whose_flag_is_set_loads_open_and_one_without_loads_shut() -> vo
 		assert_near(shape.global_position.x, 27.5, 0.001, "centred across the lane")
 		assert_near(shape.global_position.z, -5.0, 0.001, "on the lane's mouth")
 	assert_false(_door(run, &"gate_toll").is_open(), "the toll door says shut")
-	var plain := await _world()
-	var fresh_run: StretchRun = plain.run
-	var fresh_region: Region = plain.region
-	assert_eq((fresh_region.get_node("Gate") as StaticBody3D).collision_layer, Layers.WORLD | Layers.IK_SURFACE, "no flags: the shortcut is shut")
-	assert_false(_door(fresh_run, &"gate_shortcut").is_open(), "the shortcut door says shut")
-	assert_true(_door(fresh_run, &"gate_toll") != null and not _door(fresh_run, &"gate_toll").is_open(), "and the toll door")
+	assert_eq((region.get_node("Gate") as StaticBody3D).collision_layer, Layers.WORLD | Layers.IK_SURFACE, "and the shortcut too")
 
 
 func test_setting_the_flag_opens_a_gate_over_forty_five_frames_without_a_pop() -> void:
@@ -351,7 +401,7 @@ func test_walking_from_the_respawn_to_gatenear_the_prompt_changes_once_and_never
 # --- a built board is solid ---
 
 func test_a_built_board_holds_a_shove_and_a_dash_step_until_its_flag() -> void:
-	var w := await _world()
+	var w := await _world(null, null, true)
 	var region: Region = w.region
 	var run: StretchRun = w.run
 	_at(w.player, Vector3(10, 0, 0))
@@ -397,10 +447,10 @@ func test_an_open_gate_changes_the_walkable_set_by_no_more_than_the_gate_board()
 	plain.queue_free()  # two regions in one world would be solid to each other
 	await frames(2)
 	var bare := await _bare()
-	var run := _start(bare)
+	var run := _start(bare, null, null, true)
 	await frames(2)
 	var shut_set: Dictionary = StretchGround.reached(bare.region)
-	# both gates shut: the toll board cuts the lane, the yard, the Rack Walk, the loop lane and the alcove off from the street
+	# with the toll board added to the town and both gates shut: the toll board cuts the lane, the yard, the Rack Walk, the loop lane and the alcove off from the street
 	var lane := StretchGround.cell_of(Vector2(27.5, -30.0))
 	var rack_west := StretchGround.cell_of(Vector2(-32.5, -22.5))
 	var yard := StretchGround.cell_of(Vector2(27.5, -65.0))
@@ -432,7 +482,7 @@ func test_an_open_gate_changes_the_walkable_set_by_no_more_than_the_gate_board()
 
 func test_the_gates_survive_a_rest_a_death_and_a_load() -> void:
 	var store := SaveStore.new(DIR)
-	var first := await _world(null, store)
+	var first := await _world(null, store, true)
 	var run: StretchRun = first.run
 	run.set_flag(&"shortcut_open")
 	run.set_flag(&"collector_down")
@@ -449,7 +499,7 @@ func test_the_gates_survive_a_rest_a_death_and_a_load() -> void:
 	assert_true(saved != null and saved.memory.has(&"shortcut_open") and saved.memory.has(&"collector_down"), "the file has both flags")
 	(first.region as Node).queue_free()
 	await frames(2)
-	var second := await _world(saved)
+	var second := await _world(saved, null, true)
 	var again: StretchRun = second.run
 	assert_true(_door(again, &"gate_shortcut").is_open() and _door(again, &"gate_toll").is_open(), "open after a load")
 	assert_eq((second.region as Region).get_node("Gate").collision_layer, 0, "the shortcut board does not block after the load")
@@ -467,7 +517,7 @@ func test_a_saved_place_on_a_shut_boards_line_loads_him_on_standing_ground() -> 
 		var data := SaveData.new_game()
 		data.at = {x = place.x, y = place.y, z = place.z, yaw = 0.0}
 		data.bars = {hp = 1.0, stamina = 1.0, posture = 1.0}
-		var run := _start(bare, data)
+		var run := _start(bare, data, null, true)
 		await frames(2)
 		var player: Actor = bare.player
 		assert_true(StretchGround.stands(bare.region, player.global_position), "saved at %s with the gates shut: he stands on standing ground" % place)
@@ -483,7 +533,7 @@ func test_a_saved_place_in_the_gateway_of_an_open_gate_is_kept() -> void:
 	var data := _data_with([&"collector_down"])
 	data.at = {x = 27.5, y = 0.0, z = -5.0, yaw = 0.0}
 	data.bars = {hp = 1.0, stamina = 1.0, posture = 1.0}
-	_start(bare, data)
+	_start(bare, data, null, true)
 	await frames(2)
 	assert_vec_near((bare.player as Actor).global_position, Vector3(27.5, 0, -5.0), 0.01, "with the toll gate open the mouth of the lane is a place to stand")
 
@@ -496,3 +546,14 @@ func test_a_saved_place_in_the_shortcuts_gateway_is_kept_once_its_flag_is_set() 
 	_start(bare, data)
 	await frames(2)
 	assert_vec_near((bare.player as Actor).global_position, Vector3(-32.5, 0, -5.0), 0.01, "with the shortcut open its gateway is a place to stand, at the first frame of the load")
+
+
+# In the real town (no toll board) a place saved at the lane's mouth is kept: nothing there is a wall.
+func test_a_saved_place_at_the_lanes_mouth_is_kept_in_the_real_town() -> void:
+	var bare := await _bare()
+	var data := SaveData.new_game()
+	data.at = {x = 27.5, y = 0.0, z = -5.0, yaw = 0.0}
+	data.bars = {hp = 1.0, stamina = 1.0, posture = 1.0}
+	_start(bare, data)
+	await frames(2)
+	assert_vec_near((bare.player as Actor).global_position, Vector3(27.5, 0, -5.0), 0.01, "the mouth of the lane is a place to stand in the town as it is")

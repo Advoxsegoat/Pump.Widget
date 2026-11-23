@@ -12,10 +12,6 @@ extends TestCase
 
 const OUT_TEXT := "out/shots/bilibara_readability_more.txt"
 const OUT_SHEET := "out/shots/bilibara_readability_more.png"
-## The place the toll board stands on, read with the toll gate open (Task 5), and where that is written.
-const LANE_MOUTH := "two grounds meet, lane mouth"
-const OUT_TEXT_MOUTH := "out/shots/bilibara_readability_more_mouth.txt"
-const OUT_SHEET_MOUTH := "out/shots/bilibara_readability_more_mouth.png"
 ## The reviewer's twelve more positions (x, z): in a front's shade, under the colonnade, on the yard's slate border, beside a low wall, at the street's
 ## kerb on the water side, beside each vat, at both sides of the gate's board, in alcove B, where two grounds meet, at the street's far end.
 const POSITIONS := [
@@ -44,16 +40,9 @@ func after_each() -> void:
 
 
 func test_a_body_reads_at_the_twelve_more_places() -> void:
-	# The toll board (Task 5) stands across the lane's mouth, on the very place where the street's and the lane's grounds meet, so a body cannot
-	# stand there while it is shut: that one place is read with the toll gate open (the board sunk and gone, the same ground, the same picture
-	# of the join), the other eleven as they were, with every gate shut.
-	var shut: Array = POSITIONS.filter(func(entry: Array) -> bool: return entry[0] != LANE_MOUTH)
-	var mouth: Array = POSITIONS.filter(func(entry: Array) -> bool: return entry[0] == LANE_MOUTH)
-	assert_eq(mouth.size(), 1, "the lane's mouth is one of the places")
 	var rig := BilibaraRead.new(self)
-	var problems: PackedStringArray = await rig.stretch(shut, OUT_TEXT, OUT_SHEET)
-	problems.append_array(await rig.stretch(mouth, OUT_TEXT_MOUTH, OUT_SHEET_MOUTH, {open_gates = true}))
-	assert_eq(problems.slice(0, 12), PackedStringArray(), "every body reads on every ground (%d problems; the tables are %s and %s)" % [problems.size(), OUT_TEXT, OUT_TEXT_MOUTH])
+	var problems: PackedStringArray = await rig.stretch(POSITIONS, OUT_TEXT, OUT_SHEET)
+	assert_eq(problems.slice(0, 12), PackedStringArray(), "every body reads on every ground (%d problems; the table is %s)" % [problems.size(), OUT_TEXT])
 
 
 ## A glow that hides a fighter breaks the rule that a fighter reads everywhere: the first glow's dark ink pass and its petals drew over a head
