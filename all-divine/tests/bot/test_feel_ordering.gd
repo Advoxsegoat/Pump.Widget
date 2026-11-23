@@ -52,17 +52,21 @@ func test_timing_beats_mashing_and_mashing_is_not_worthless() -> void:
 	var counter := _play("counter", 10)
 	# The rules are the aims of the fight's tuning (Task 17, the owner's choices of Nov 16), each with room: the same seed does not play the
 	# same on every machine (CI's is not the one these were measured on), so no bound sits within a fifth of the number measured. Measured
-	# here, seeds 1 to 3 at 3,600 frames:  mash at 14: 3 waves, 9 deaths, 264 dealt, 1238 taken, a wave in 3 seeds;  mixed at 14: 8 waves,
+	# here, seeds 1 to 3 at 3,600 frames (re-measured in fix round 1, after the cost of mashing was made stamina only and gentled to a tax of 1.0, a step of
+	# 0.25 and a cap of 2.0; the masher dealt 264 before that):  mash at 14: 3 waves, 9 deaths, 627 dealt, 1187 taken, a wave in 3 seeds;  mixed at 14: 8 waves,
 	# 1 death, 1028 dealt, 317 taken;  counter at 14: 6 waves, 0 deaths, 804 dealt, 157 taken;  counter at 10: 9 waves, 0 deaths, 1008 dealt, 135 taken.
 	# Aim 3: the masher is weaker, not worthless: a wave in at least 2 of the 3 seeds (3 measured; 8 of 10 in the notes' ten).
 	assert_true(mash["seeds_with_a_wave"] >= 2, "the masher still clears a wave in most seeds (3 of 3 measured, 2 needed): %s" % [mash])
+	# and what a worthless masher fails (fix round 1, I3): he deals at least 0.48 of what the mixed player deals (627 against 1028 is 0.61: the bound is
+	# a fifth under it; the controller asked for at least 0.35). With the tax as first built (2.0, restarting the wait) he dealt 264 against 1028, a quarter.
+	assert_true(mash["dealt"] >= 0.48 * mixed["dealt"], "the masher deals at least 0.48 of what the mixed player deals (0.61 measured): %s against %s" % [mash, mixed])
 	# Aim 1: a player who only counters, at a person's reaction, clears at least as many waves as the masher (counter at 14: 6
 	# waves measured against 3).
 	assert_true(counter_14["waves"] >= mash["waves"], "the counter player at 14 frames clears at least as many waves as the masher: %s against %s" % [counter_14, mash])
 	# Aim 2: the mixed player dies at most a third as often as the masher (1 against 9: the bound is 3 of 9) and clears more waves (8 against 3).
 	assert_true(mixed["deaths"] * 3 <= mash["deaths"], "the mixed player dies at most a third as often as the masher: %s against %s" % [mixed, mash])
 	assert_true(mixed["waves"] > mash["waves"], "and clears more waves: %s against %s" % [mixed, mash])
-	# What was held before, with the same room: the masher takes more than it deals (4.7 times measured, once needed), the mixed player takes
+	# What was held before, with the same room: the masher takes more than it deals (1.9 times measured, once needed), the mixed player takes
 	# less than it deals (0.31 measured, under 1), the quick counter player takes under half of what it deals (0.13 measured, under 0.5),
 	# clears as many waves as the masher (9 against 3) and dies no more often (0 against 9).
 	assert_true(mash["taken"] >= mash["dealt"], "the masher takes as much as it deals or more: %s" % [mash])
