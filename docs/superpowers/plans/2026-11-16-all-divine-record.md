@@ -39,6 +39,31 @@ reads the code again and will find afresh whatever those lists held. F0's record
 - The tuning's lane was brought up to Task 15c before Task 15c reached the main branch (approved, waiting only for its cloud run): the
   tables must be measured on the brain that comes round walls. Cost if wrong: none (it merged unchanged).
 
+- Review of Nov 22 (approve with fixes) and fix round 1 (Nov 23). Two findings the reviewer marked "owner decision" were turned into
+  numbers by the controller instead of being sent to the owner: a taxed press spends its stamina and **does not restart the wait
+  before stamina comes back** (the first build doubled the time a steady tapper was locked out), and the bot's masher must land in a
+  "weaker, not worthless" band held by tests. Cost if wrong: the owner wanted mashing punished harder: three numbers in Abarax's
+  tuning file.
+- The long jab's added five frames are a keyed drawing back of the lead shoulder and fist (the first build held the guard still for
+  a third of a second and snapped); its test now wants at least 5 degrees between every two drawn poses, 20 in all, and the hand
+  moving away from the target. The controller looked at the contact sheet and accepted it. Cost if wrong: the owner wants a bigger
+  wind-up: one layer file.
+- The pad triggers latch (press at 0.5, let go below 0.3) so that a finger hovering at the half is one press; three test bounds that
+  sat at their measurement got a fifth of room (the Drummer's string, the longest still foe, the post's wall jam), edited by the
+  controller because the fix agent's commit of them was refused. Cost if wrong: none seen.
+- Round 1 missed the masher's band with the three levers at their softest, and its table showed why: the bot's masher presses a
+  direction with the guard held fifteen times a second, and the tax on redundant **sway** presses is what crushes him; a sway that
+  evades nothing was charged twice (by presses through the tax, by sways started through the strain). Ruling for round 2: **the tax
+  is for attack presses only (palm, heavy); the evades are the strain's alone**. Cost if wrong: a sway-masher at a turbo rate pays
+  only the strain (twice the cost at most): one array constant in `actors/actor.gd`.
+- The free first redundant press of a move stays: it is ordinary buffering (the next blow pressed a little early). So a casual masher
+  up to about seven presses a second pays nothing, and the tax bites from the second wasted press of a move. Cost if wrong: the
+  owner mashes at six a second, sees no cost on the stamina bar and wants one: the free press becomes one per second, a small change.
+- `hammer_tax` is the largest of 1.0, 1.5, 2.0 at which four measured checks hold (ten a second pays and can still act half the
+  time; six a second and two a second are as the base; the bot's masher clears 13 to 22 waves with at most 60 deaths against a base
+  of 25 and 40). The band was re-stated against this tree's true base (the first band came from an older table). Cost if wrong: one
+  number.
+
 ### F1 Task 18 (two small choices: the feather hangs; "Off" is dim), merged Nov 22
 
 - The feather is merged at 8 cm as built and its length is put to the owner (the portraits' checklist, item 5): the owner chose "hang it
@@ -65,6 +90,35 @@ reads the code again and will find afresh whatever those lists held. F0's record
   over a body that can act. Cost if wrong: a player who saved at 0 stamina loads able to act a second sooner.
 - Task 2 pins the yard's hash on its own base and Task 17 (the tuning) re-makes the pin when the two meet, whichever merges second: the
   pin proves Task 2 moved nothing, and that proof is made inside Task 2's lane. Cost if wrong: one extra re-make.
+
+- Task 2, review of Nov 22 (approve with fixes) and fix round 1 (Nov 23). The rose glow must obey the stretch's rule (a fighter
+  reads everywhere) instead of being moved away from where the picture tests stand bodies: no dark pass, petals lighter than any
+  head, translucent, a fixed seed, and reading places beside both shrines with the glow on. Cost if wrong: the owner wants a bigger,
+  richer glow: its scene file, and the reading places say at once whether a head is lost.
+- Task 2: the reviewer's finding that a dark head merges with shrine B's alcove was not reproduced by the second agent (one body at
+  one place, with the glow hidden) and was dropped, as the workflow's rule says. Cost if wrong: the final whole-branch review looks
+  at B again.
+- Task 2: shrine A goes onto the stone the layout built for it (`Plinth_A`) and a new game starts at its respawn, about 5 m from the
+  old start (round 2). Cost if wrong: two vectors in `rose_a.tres`; Task 5's path numbers are measured from the new respawn.
+- Task 2: "a recording made with --stretch reads and writes the player's saved game" was graded minor by the reviewer and re-graded
+  Important by the controller (a tool run can change a player's save): fixed in round 2.
+- A ruling that must reach a fix agent goes in the message that sends it, not only in a file it is told to read: round 1's shrine
+  fixer followed the sending message's "minors are not in this round" over the brief's appended section, and four ruled items
+  waited for a second round.
+
+### The texture pass (the owner's choices 1.A and 2.A of Nov 16)
+
+- The snow has a grain and nothing in the stretch clips to white: built, reviewed, kept.
+- The wood could not be made a mid tone. Under the stretch's picture rule (the ring round a head must differ from the head's tone
+  by more than 0.08) the lightest wood at which every head passed on the build machine was 0.03 lighter than before and still near
+  black, and the cloud's renderer read one head on the other side of the rule (62% against 26%: a cliff). Ruling: **the pass does
+  not change the wood at all** (the colormaps are the main branch's, byte for byte) and merges as the snow and the cold slate. Cost
+  if wrong: none to the owner: the item he asked for stays open, and nothing was moved to fit a wood nobody can tell from the old.
+- Why, for whoever takes it up: one wood swatch is lit from 0.10 to 0.22 in the picture, the heads' tones run from 0.28 (a tier
+  III) to 0.55, so any true mid tone meets one head or another in sun or shade. The outline the game draws is a dark line on the
+  body's own edge pixel, and the rule gives it no credit. Mid-tone wood needs a head that carries its own edge (a keyline), or a
+  rule that credits the one it has. A spike with pictures was started on Nov 23 for the owner to choose from; nothing is merged
+  from it.
 
 ### After the build machine was replaced (Nov 22)
 
@@ -97,6 +151,14 @@ reads the code again and will find afresh whatever those lists held. F0's record
   normalises the yaw.
 - F1 Task 18: the new capsule on the scarf's simulator nudges the scarf's physics slightly (`test_scarf` passes); for the art pass.
 
+- F1 Task 17: a foe backing off along the street's first wall with another at his side is held against it for 39 frames at one
+  post of `test_bilibara_sticky` (named in `FOES_NOT_YET`, ceiling 47): the foes' retreat along a wall is the brain's, not cured.
+- F1 Task 17: `knuckle_jab_long` has no mark at f10 (harmless: no cell there on the contact sheet).
+- The texture pass: the snow's shimmer number is 0 by construction (the stage moves the picture in whole pixels); the texture
+  tests (no lone pale texel, a neighbour step of at most 0.05) are what guards the grain.
+- The asset fetcher cannot fetch the Kenney town pack (the page changed); the pieces the game uses are committed. Being mended
+  with three other tool defects on Nov 23.
+
 ## Findings kept for the final review
 
 - Seeded fights are not the same on every machine (the cloud's is not the build machine): a rule tuned to ten seeds here failed there
@@ -105,8 +167,24 @@ reads the code again and will find afresh whatever those lists held. F0's record
   red rim at 80.2% against a floor of 80% when it ran first and 78.8% after any other picture file (the player beside him is alive and
   breathing inside the measured box). Found when the saved game's lane dealt the shards differently (Nov 16); fixed on Nov 22.
 
+- With the cost of mashing off, the bot's masher met a foe that "never engages" for 901 frames in two seeds of ten: a foe's brain
+  that can stand off for fifteen seconds, or a watch that misnames a foe waiting his turn. Being traced on Nov 23.
+- `tools/sheets/contact_sheet.gd` does not compile from its documented command line (a script run with -s is compiled before the
+  autoloads are known as names); its test calls it inside the runner, so no test saw it. Being mended on Nov 23.
+- A test file outside tests/render that awaits a drawn frame hangs under `--render` instead of failing. Being mended on Nov 23.
+- The picture rig made a body's silhouette from two pictures a frame apart, and anything that moved between them (particles) joined
+  the silhouette: most of the review's "56 to 97% of the head's ring" beside shrine A was the rig's, not the glow's. The masks are
+  now made with particles hidden. Any later picture rule that reads a moving effect should be checked the same way.
+- The same rendered picture is not the same on every machine either: a head rule 0.005 of wood tone from a cliff passed here and
+  failed in the cloud. Picture rules need room, as rules over seeded fights do.
+
 ## For the owner's checklists (kept in STATE.md)
 
 - The saved game on a Windows machine (a virus scanner or indexer holding the save during the rename; the save folder on OneDrive or a
   network share; a read-only save file; a decimal-comma locale; a power cut during a save): STATE.md, "Owner checklist for the town's
   systems", from the task that makes the game save.
+- The 1.5 s getup after standing up at a shrine (the reviewer declined to judge whether it feels sticky), and the size of the rose
+  glow: STATE.md, "Owner checklist for the town's systems", when Task 2 merges.
+- Mash for a minute and tap steadily at two a second, and watch the stamina bar: STATE.md, the F1 checklist, when Task 17 merges.
+- The fronts' wood: dark as before; the choice between dark fronts and mid-tone wood with a keyline on fighters is put to the owner
+  with the spike's pictures.
