@@ -161,7 +161,7 @@ nothing the aims depend on: 10 waves and 80 deaths for `mash`, `counter` at 18 1
 1. `counter` at 14 clears at least as many waves as `mash`: **met**, 36 against 10 (before: 14 against 31).
 2. `mixed` at 14 dies at most a third as often as `mash` and clears more waves: **met**, 10 deaths against 75 and 43 waves against 10 (before: 10 against 43, 34 against 31).
 3. `mash` clears a wave in at least 8 of 10 seeds: **met**, 10 of 10 (weaker, and not worthless by that count; but it dies 7.5 times a seed, and takes 7.4 HP for each it deals: the bot's masher presses a
-   direction every fourth frame and palm every seventh, 15 and 8.6 presses a second, which a person does not, so a person who taps twice as slowly pays about half the tax).
+   direction every fourth frame and palm every seventh, 15 and 8.6 presses a second, which a person does not; the next section corrects what this said of a person who taps more slowly).
 4. The cliff is a slope: `counter` at 18 clears a wave in 10 of 10 seeds (before 5) **met**, takes 1.23 HP for each it deals (before 2.61, bound 1.5) **met**; the tier I jab's share of the HP taken at 18 is 51%
    (before 71%, bound under half): **not met, by a point and a half** (1300 of 2529 HP). At 18 frames the bot answers a blow only after its reaction (jittered by up to 3) and a dodge's 4-frame lead, 19 to 25
    frames, so the 20-frame jab is still hit 130 times in 337 (parried 119 times and evaded 87: three in five are now answered, against 3 in 312 before). What would take the share under half is the jab's 22 or 23
@@ -175,7 +175,68 @@ any single blow, from full health and full posture.
 ## What is still not as the aims say, and what the bot cannot say
 
 - The tier I jab's share at 18 (above): 51%.
-- The long jab's wind-up moves on every drawn pose (0.7 to 2.1 degrees at the most-turned bone on each 12 fps step, the jab's own is 1.1 to 2.5) but it is the Punch_Jab clip's own quiet guard slowed, and on a
-  contact sheet the poses before the blow look alike. If the owner wants the drawing back to be seen, it wants a keyed layer on the clip (as the Drummer's first blow has), not a longer hold.
+- (Mended in fix round 1, below: the long jab's added five frames were the Punch_Jab clip's own quiet guard slowed, 0.7 to 2.1 degrees a step, and a held pose; they now have a keyed layer that draws the lead arm back.)
 - The bot's masher is an extreme (15 presses a second): how a person who mashes at 5 to 8 a second plays under the tax is for the owner's hands.
 - With the cost of mashing off, the masher met a foe that "never engages" in 901 frames in two seeds (9 and 10) of ten; with it on, and in every other table, nothing: the brain of that foe was not touched here.
+
+# After fix round 1 (the review of Task 17)
+
+The review found three things the notes above had wrong or too kind about; this section is what was done and measured. The bot, its policies and its reaction are as they were.
+
+## What changed
+
+- **The tax is stamina and nothing else (I2).** Before, every taxed press, and the extra cost of a strained sway or duck, went through `spend_stamina` and restarted the 0.6 s wait before stamina comes back,
+  so a tax of 2 cost far more than 2: a person tapping palm twice a second was out of stamina for 212 frames of 600 where the base game had 122. Now a tax and a strain's extra spend without restarting the wait
+  (`Stats.spend_stamina(amount, false)`); a move, a sway, a block still restart it. **What was said above of a person who taps half as fast ("pays about half the tax") was true of the tax count (10 against 33
+  in the review's probe) and not of the time lost (319 against 393 frames of 600), because of this restart.**
+- **The cost of mashing gentled (I3), to the softest of the range the controller gave:** `hammer_tax` 2.0 to 1.0, `strain_step` 0.5 to 0.25, `strain_cap` 3.0 to 2.0 (x1.25, x1.5, x1.75, at most x2). Nothing else moved: not the 40 frames, the 1.5, the jab, the foes.
+- **The long jab's wind-up is a drawing back (I1):** a hand-keyed layer (`assets/anim/layers/knuckle_jab_long.json`, laid over the clip by the clip tools) turns the lead shoulder back 20 degrees and folds the lead forearm 46 degrees
+  toward it across the five drawn poses from the tell (f5, no layer) to f20, and is nothing at the blow (f25): the marks, the blow and everything after it are as they were (the clip checker passes with 68 moves; after the blow no bone is
+  more than 1.1 degrees from the jab's pose five frames earlier, which is the warp's own).
+- **A pad trigger hovering at 0.5 is one press (M1):** the triggers press at 0.5 and let go below 0.3, as a flick of the stick does.
+
+## The masher, measured (bot, reaction 14, ten seeds, 7,200 frames)
+
+| the cost of mashing | waves | deaths | dealt | taken | taken per HP dealt |
+|---|---|---|---|---|---|
+| none (hammer_tax 0, strain 0): the game as it was before the cost | 25 | 40 | 5036 | 6294 | 1.25 |
+| first build (tax 2.0, strain 0.5, cap 3.0, restarting the wait) | 10 | 75 | 1216 | 8981 | 7.39 |
+| tax 2.0, strain 0.5, cap 3.0, stamina only (I2 alone) | 10 | 78 | 2858 | 9123 | 3.19 |
+| tax 1.0, no strain | 10 | 75 | 3866 | 8809 | 2.28 |
+| no tax, strain 0.25, cap 2.0 | 20 | 52 | 5202 | 7254 | 1.39 |
+| **tax 1.0, strain 0.25, cap 2.0, stamina only (kept)** | **10** | **76** | **3639** | **8799** | **2.42** |
+
+**The band the controller set (15 to 26 waves, at most 60 deaths, 2,700 to 4,800 dealt) is NOT reached with the three levers.** The nearest is the kept row: dealt 3,639 is inside the band; waves 10 is under it (by 5) and deaths 76 is over it (by 16). The tax is what does it
+(the row with the tax alone gives the same 10 waves and 75 deaths; the strain alone gives 20 and 52, inside the band), and the tax's softest allowed value, 1.0, is already too much for the bot, which presses palm every seventh frame. What the kept row does hold: the masher still
+clears a wave in 10 of 10 seeds, stays below `mixed` (43) and `counter` (36) in waves, and takes 2.42 HP for each it deals against `mixed`'s 0.48 (five times as much; the band asked for twice). What would reach the band, which is not one of the three levers: a tax that starts at the
+third redundant press, or one that is not paid on a press in a move's own first frames; or a lower floor than 1.0 on `hammer_tax` (the strain alone, at 0.25, gives 20 waves and 52 deaths).
+
+## By hand speed (10 s of palm taps beside a tier I; frames of 600 in which Abarax cannot start a move)
+
+| | steady tapper, 2 a second | masher, 6 a second |
+|---|---|---|
+| the base game (no cost) | 130 | 195 |
+| the first build, in the review's probe | 212 | 365 (61% of ten seconds) |
+| the tax restarting the wait, tuning as now (tests/actors/test_mash_cost.gd, foe 2 m off, seed 7) | 130 | 314 |
+| **now** (stamina only, tuning as now) | **130** | **195** |
+
+The bounds the controller set (a tapper at 2 a second out for at most 140 of 600, a masher at 6 a second able to act at least half the time) both hold, and both are tests (`test_a_steady_tapper_at_two_a_second_is_barely_held_back`,
+`test_a_masher_at_six_a_second_can_still_act_half_the_time`). At these speeds the tax costs a person nothing of the time he is able to act: it is the bot's 8.6 and 15 presses a second that pay it.
+
+## All the rows again (ten seeds, 7,200 frames; the by-blow table at 18 is as it was)
+
+| policy | reaction | waves | deaths | dealt | taken | taken per HP dealt |
+|---|---|---|---|---|---|---|
+| mash | 14 | 10 | 76 | 3639 | 8799 | 2.42 |
+| counter | 14 | 36 | 0 | 4585 | 1294 | 0.28 |
+| mixed | 14 | 43 | 10 | 5575 | 2680 | 0.48 |
+| counter | 10 | 42 | 0 | 5751 | 1084 | 0.19 |
+| mixed | 10 | 46 | 6 | 5888 | 2207 | 0.37 |
+| counter | 18 | 14 | 14 | 2061 | 2529 | 1.23 |
+| mixed | 18 | 39 | 11 | 4612 | 3557 | 0.77 |
+
+Every row but the masher is the same to the unit as the table above (the others do not mash), and the long jab's layer changed none of them (mash at 14 and counter at 18 were run again after it was built). Aim 4's jab share is measured again: the tier I long jab took
+1,300 of the 2,529 HP taken at 18, 51%: still not under half, reported only.
+
+`tests/bot/test_feel_ordering.gd` (seeds 1 to 3, 3,600 frames) measured again: mash 3 waves, 9 deaths, 627 dealt, 1187 taken; mixed 8, 1, 1028, 317; counter at 14 6, 0, 804, 157; counter at 10 9, 0, 1008, 135. It gained a bound a worthless masher fails: he deals at least 0.48 of what the mixed player
+deals (0.61 measured; a fifth under it; at least the 0.35 asked).
