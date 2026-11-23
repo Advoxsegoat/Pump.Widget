@@ -144,6 +144,32 @@ func test_a_press_for_each_blow_of_a_combo_costs_what_it_did() -> void:
 	await _free(off)
 
 
+# The tax is stamina and nothing else (fix round 1, I2): it must not restart the wait before stamina comes back; a move still does.
+func test_a_tax_does_not_restart_the_wait_before_stamina_comes_back() -> void:
+	var presses := [[1, [&"palm"]], [2, [&"palm"]], [3, [&"palm"]], [4, [&"palm"]]]
+	var on := _world(_def(true), _script(presses))
+	var off := _world(_def(false), _script(presses))
+	await _play(on, 12)
+	await _play(off, 12)
+	var a_on: Actor = on["a"]
+	var a_off: Actor = off["a"]
+	assert_near(a_off.stats.stamina - a_on.stats.stamina, 2.0 * 2.0, 1e-4, "two taxes were paid")
+	assert_near(a_on.stats.save().stamina_idle, a_off.stats.save().stamina_idle, 1e-6, "the wait since the jab ran on through both taxes")
+	await _free(on)
+	await _free(off)
+
+
+func test_a_strained_sways_extra_cost_does_not_restart_the_wait_either() -> void:
+	# the second sway costs 1.5 times: the move's own spend restarts the wait as it always did, and the extra half is stamina only
+	var on := _world(_def(true), _script([[1, [&"sway"]], [40, [&"sway"]]]))
+	await _play(on, 60)
+	var started: Array = on["started"]
+	assert_eq(started.size(), 2, "two sways")
+	var a: Actor = on["a"]
+	assert_near(a.stats.save().stamina_idle, float(60 - started[1][0]) / 60.0, 0.02, "the wait counts from the second sway's start")
+	await _free(on)
+
+
 # --- strain ---
 
 # a's evade window opens 3 frames after the sway, and a blow from `foe` is posted to meet it

@@ -49,12 +49,14 @@ func can_act() -> bool:
 
 ## Takes `amount` of stamina (not below 0) and restarts the wait before it comes back. Running out
 ## makes the actor exhausted. A spend of nothing (0 or less, as a guard pays for a blow of no guard_stamina)
-## changes nothing, and does not hold the regen back.
-func spend_stamina(amount: float) -> void:
+## changes nothing, and does not hold the regen back. `restarts_wait` false is a cost that is stamina and nothing else (the tax on a
+## mashed press and the strain's extra: Task 17, fix round 1): the wait before regeneration runs on as it was.
+func spend_stamina(amount: float, restarts_wait := true) -> void:
 	if amount <= 0.0:
 		return
 	stamina = maxf(stamina - amount, 0.0)
-	_stamina_idle = 0.0
+	if restarts_wait:
+		_stamina_idle = 0.0
 	if stamina <= 0.0:
 		exhausted = true
 

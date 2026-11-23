@@ -726,7 +726,7 @@ const HAMMERED: Array[StringName] = [&"palm", &"heavy", &"sway", &"duck"]
 # Mashing costs stamina (CombatTuning.hammer_tax; Task 17): a press of a hammered action made while the last press of the same action is
 # still waiting in the buffer, or while the move it started has not yet reached its first cancel window, is redundant. The first one since
 # a move started is free (a double tap); each after it costs the tax, times 100 / max_stamina, spent like any spend. The press itself
-# is taken as ever (it is pushed after this), and a foe's tuning has no tax.
+# is taken as ever (it is pushed after this), and a foe's tuning has no tax. The tax does not restart the wait before stamina comes back.
 func _tax_press(action: StringName) -> void:
 	var tax := stats.tuning.hammer_tax
 	if tax <= 0.0 or not HAMMERED.has(action):
@@ -735,7 +735,7 @@ func _tax_press(action: StringName) -> void:
 		return
 	_redundant_presses += 1
 	if _redundant_presses > 1:
-		stats.spend_stamina(tax * 100.0 / stats.max_stamina)
+		stats.spend_stamina(tax * 100.0 / stats.max_stamina, false)  # stamina only: no restart of the wait
 
 
 # Any move but guard_hit takes the guard stance down: an attack, a sway or a dash-step out of it, a reaction, the death.

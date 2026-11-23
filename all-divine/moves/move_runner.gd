@@ -295,7 +295,10 @@ func _start(move: MoveData, intent: Intent, force := false) -> void:
 		push_error("MoveRunner: '%s' has no clip '%s' for move '%s'" % [actor.name, move.clip, move.id])
 		return
 	if move.stamina_cost > 0.0:
-		actor.stats.spend_stamina(move.stamina_cost + _strain_extra(move))
+		# the move's own cost restarts the wait before stamina comes back; the strain's extra is stamina and nothing else
+		var extra := _strain_extra(move)
+		actor.stats.spend_stamina(move.stamina_cost)
+		actor.stats.spend_stamina(extra, false)
 	if current != null:
 		_end(true)
 	current = move
