@@ -74,7 +74,7 @@ extends Resource
 @export var punish_scale := 1.5
 
 # --- mashing costs stamina (Task 17) ---
-## Stamina a redundant press costs (a press of palm, heavy, sway or duck made while the same action's last press is still waiting in the
+## Stamina a redundant press costs (a press of palm or heavy, the attacks only (fix round 2: the evades are the strain's alone), made while the same action's last press is still waiting in the
 ## buffer, or while the move it started has not yet reached its first cancel window), after the first redundant press of a move, which
 ## is free. Times 100 / max_stamina, so a larger stamina bar pays less. 0 turns the rule off: every foe's tuning says 0. It is stamina and
 ## nothing else: it does not restart the wait before stamina comes back (fix round 1; 1.0, the gentlest of the range the controller gave: see notes/f1-feel.md).

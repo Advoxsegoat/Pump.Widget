@@ -1,7 +1,7 @@
 extends TestCase
 ## Mashing costs stamina (Task 17, the owner's "4.B"), by the stamina stat: two rules for an actor whose tuning turns them on (Abarax's;
 ## every foe's stays off), each times 100 / max_stamina (1 today; a stamina of 150 pays two thirds).
-##   Hammering: a press of palm, heavy, sway or duck made while the same action's last press still waits in the buffer, or while the move
+##   Hammering: a press of palm or heavy (the attacks only: the evades are the strain's alone) made while the same action's last press still waits in the buffer, or while the move
 ##   it started has not yet reached its first cancel window, is redundant. The first one in a move is free (a double tap); each after it
 ##   costs CombatTuning.hammer_tax (1.0), spent like any spend. The press itself is taken as ever.
 ##   Strain: a sway or duck that evades nothing makes the next one cost a quarter of its base cost more (x1.25, x1.5, x1.75, at most x2; the added part
@@ -112,14 +112,26 @@ func test_the_tax_follows_the_stamina_stat() -> void:
 	await _free(run)
 
 
-func test_a_press_of_a_heavy_a_sway_and_a_duck_is_hammered_too() -> void:
-	for action: StringName in [&"heavy", &"sway", &"duck"]:
+func test_a_repeated_press_of_a_heavy_is_hammered_too() -> void:
+	var run := _world(_def(true), _script([[1, [&"heavy"]], [2, [&"heavy"]], [3, [&"heavy"]], [4, [&"heavy"]]]))
+	var a: Actor = run["a"]
+	await _play(run, 3)
+	var after_three := a.stats.stamina
+	await _play(run, 4)
+	assert_near(after_three - a.stats.stamina, TAX, 1e-4, "heavy: the fourth press (the second redundant one) costs a tax")
+	await _free(run)
+
+
+# Fix round 2, ruling 1: the tax is for attack presses only. The evades are the strain's alone (a sway that evades nothing is already made
+# dearer by the strain, which counts sways started: charging presses for it as well made an evade pay twice).
+func test_repeated_presses_of_a_sway_and_a_duck_pay_no_tax() -> void:
+	for action: StringName in [&"sway", &"duck"]:
 		var run := _world(_def(true), _script([[1, [action]], [2, [action]], [3, [action]], [4, [action]]]))
 		var a: Actor = run["a"]
 		await _play(run, 3)
 		var after_three := a.stats.stamina
 		await _play(run, 4)
-		assert_near(after_three - a.stats.stamina, TAX, 1e-4, "%s: the fourth press (the second redundant one) costs a tax" % action)
+		assert_near(after_three - a.stats.stamina, 0.0, 1e-4, "%s: the fourth press (the second redundant one) costs no tax" % action)
 		await _free(run)
 
 
@@ -209,11 +221,20 @@ func test_a_steady_tapper_at_two_a_second_is_barely_held_back() -> void:
 	assert_true(taxed <= 140, "a person tapping twice a second cannot act for at most 140 of 600 frames (base %d): %d" % [base, taxed])
 
 
-func test_a_masher_at_six_a_second_can_still_act_half_the_time() -> void:
+func test_a_masher_at_six_a_second_is_within_ten_frames_of_the_base() -> void:
 	var base := await _unable_frames(10, false)
 	var taxed := await _unable_frames(10, true)
 	print("HANDSPEED masher 6/s unable base=%d taxed=%d" % [base, taxed])
-	assert_true(taxed <= 300, "a masher at six a second can act for at least half of 600 frames (base %d): unable %d" % [base, taxed])
+	assert_true(taxed <= base + 10, "a masher at six a second is held back for at most 10 frames more than the base (%d): %d" % [base, taxed])
+
+
+# Mashing has to cost something a person can see on the stamina bar, without locking him out.
+func test_a_masher_at_ten_a_second_pays_and_can_still_act_half_the_time() -> void:
+	var base := await _unable_frames(6, false)
+	var taxed := await _unable_frames(6, true)
+	print("HANDSPEED masher 10/s unable base=%d taxed=%d" % [base, taxed])
+	assert_true(taxed >= base + 15, "a masher at ten a second pays: unable at least 15 frames more than the base (%d): %d" % [base, taxed])
+	assert_true(taxed <= 300, "and can still act for at least half of 600 frames: unable %d" % taxed)
 
 
 # --- strain ---

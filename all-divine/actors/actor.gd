@@ -719,11 +719,12 @@ func _set_guarding(on: bool) -> void:
 	rig.set_stance(GUARD_STANCE, on)
 
 
-# The presses that can be hammered: the attacks and the two evades. The guard, the dash-step and the rest are not (a tap of guard is a parry).
-const HAMMERED: Array[StringName] = [&"palm", &"heavy", &"sway", &"duck"]
+# The presses that can be hammered: the attacks only (fix round 2). The evades are the strain's alone (it counts sways started, so a charge by
+# presses would make an evade pay twice, and grow with a press rate no hand has); the guard and the dash-step are not (a tap of guard is a parry).
+const HAMMERED: Array[StringName] = [&"palm", &"heavy"]
 
 
-# Mashing costs stamina (CombatTuning.hammer_tax; Task 17): a press of a hammered action made while the last press of the same action is
+# Mashing costs stamina (CombatTuning.hammer_tax; Task 17): a press of an attack (palm, heavy) made while the last press of the same action is
 # still waiting in the buffer, or while the move it started has not yet reached its first cancel window, is redundant. The first one since
 # a move started is free (a double tap); each after it costs the tax, times 100 / max_stamina, spent like any spend. The press itself
 # is taken as ever (it is pushed after this), and a foe's tuning has no tax. The tax does not restart the wait before stamina comes back.
