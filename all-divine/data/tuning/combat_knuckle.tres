@@ -24,3 +24,7 @@ aim_assist_deg = 30.0
 aim_assist_range = 3.5
 aim_turn_rate_deg = 540.0
 knockback_decay = 10.0
+punish_frames = 40
+punish_scale = 1.0
+hammer_tax = 0.0
+strain_step = 0.0

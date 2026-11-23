@@ -64,3 +64,25 @@ extends Resource
 # --- knockback ---
 ## How fast the push of a hit (`HitProfile.knockback`) dies away, per second.
 @export var knockback_decay := 10.0
+
+# --- timing pays more (Task 17) ---
+## Frames (on the punisher's own clock, which stands still while it is frozen) a foe is open after his blow was turned (parried or
+## caught) or perfectly dodged by this actor, until he starts a move of his own: the tuning of the one who punishes.
+@export var punish_frames := 40
+## What a blow of this actor's is worth times (its HP and posture damage and its hit-stop) while the foe it lands on is open to it. The foes'
+## tunings say 1: they get no such bonus against Abarax.
+@export var punish_scale := 1.5
+
+# --- mashing costs stamina (Task 17) ---
+## Stamina a redundant press costs (a press of palm or heavy, the attacks only (fix round 2: the evades are the strain's alone), made while the same action's last press is still waiting in the
+## buffer, or while the move it started has not yet reached its first cancel window), after the first redundant press of a move, which
+## is free. Times 100 / max_stamina, so a larger stamina bar pays less. 0 turns the rule off: every foe's tuning says 0. It is stamina and
+## nothing else: it does not restart the wait before stamina comes back (fix round 1; 1.0, the gentlest of the range the controller gave: see notes/f1-feel.md).
+@export var hammer_tax := 1.0
+## Each sway or duck that evades nothing makes the next one cost this much of its base cost more (0.25: x1.25, x1.5, x1.75), until one evades
+## something or `strain_reset_frames` pass with no sway or duck. The added part is times 100 / max_stamina. 0 turns the rule off (the foes').
+@export var strain_step := 0.25
+## The most a strained sway or duck costs, times its base cost.
+@export var strain_cap := 2.0
+## Frames (on the actor's own clock) with no sway or duck before the strain is gone.
+@export var strain_reset_frames := 60

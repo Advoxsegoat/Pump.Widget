@@ -1,15 +1,16 @@
 extends TestCase
 ## Does timing beat mashing, without mashing being worthless? The combat bot plays the yard for three seeds (1 to 3), a minute of play
-## each (3,600 frames), as a masher (reaction 14, which it does not use: it reads nothing), as a mixed player at a reaction of 14 frames
-## (a person's, about 230 ms) and as a counter player at 10 frames (a quick person). What is held is the ordering, not the numbers:
-##
-##   the masher still clears a wave in most seeds (it is not worthless), and takes as much as it deals;
-##   the mixed player takes less than it deals and dies less than half as often as the masher;
-##   the counter player at 10 frames takes under half of what it deals, and clears about as many waves as the masher (one wave of slack) with no more deaths.
+## each (3,600 frames), as a masher (reaction 14, which it does not use: it reads nothing), as a mixed player and a counter player at a
+## reaction of 14 frames (a person's, about 230 ms) and as a counter player at 10 frames (a quick person). What is held is the ordering, not
+## the numbers, and it is the aims of the fight's tuning of Nov 16 (Task 17): the counter player at 14 clears at least as many waves as the
+## masher (1), the mixed player dies at most a third as often and clears more waves (2), the masher still clears a wave in most seeds (3);
+## and, as before, the quick counter player takes under half of what it deals and loses nothing to the masher.
+## Re-made for Task 17: until then the counter player at 14 cleared fewer waves than the masher (12 against 31 in the ten seeds), which is what
+## the tuning changed (tier I's 20-frame jab, the open foe, the cost of mashing).
 ##
 ## The full tables (ten seeds, two minutes each, the reaction swept from 10 to 18 and the attack that does the damage) are in notes/f1-feel.md;
-## this holds the ordering so that a change to the foes, the defence or the bot that overturns it is seen. It costs about a minute of processor, in three child Godots.
-## FEEL_REPORT=1 prints the numbers.
+## this holds the ordering so that a change to the foes, the defence or the bot that overturns it is seen. It costs about a minute and a half
+## of processor, in four child Godots. FEEL_REPORT=1 prints the numbers.
 
 const FRAMES := 3600
 const SEEDS := "1-3"
@@ -47,16 +48,31 @@ func _play(policy: String, reaction: int) -> Dictionary:
 func test_timing_beats_mashing_and_mashing_is_not_worthless() -> void:
 	var mash := _play("mash", 14)
 	var mixed := _play("mixed", 14)
+	var counter_14 := _play("counter", 14)
 	var counter := _play("counter", 10)
-	assert_true(mash["seeds_with_a_wave"] >= 2, "the masher clears a wave in most seeds: %s" % [mash])
-	assert_true(mash["taken"] >= 0.9 * mash["dealt"], "the masher takes about as much as it deals or more: %s" % [mash])
+	# The rules are the aims of the fight's tuning (Task 17, the owner's choices of Nov 16), each with room: the same seed does not play the
+	# same on every machine (CI's is not the one these were measured on), so no bound sits within a fifth of the number measured. Measured
+	# here, seeds 1 to 3 at 3,600 frames (re-measured in fix round 2, after the tax was made for attack presses only; fix round 1 had gentled the cost to a tax of 1.0, a step of
+	# 0.25 and a cap of 2.0, and the masher dealt 627 then, 264 before that):  mash at 14: 3 waves, 9 deaths, 680 dealt, 1298 taken, a wave in 3 seeds;  mixed at 14: 8 waves,
+	# 1 death, 1028 dealt, 317 taken;  counter at 14: 6 waves, 0 deaths, 804 dealt, 157 taken;  counter at 10: 9 waves, 0 deaths, 1008 dealt, 135 taken.
+	# Aim 3: the masher is weaker, not worthless: a wave in at least 2 of the 3 seeds (3 measured; 8 of 10 in the notes' ten).
+	assert_true(mash["seeds_with_a_wave"] >= 2, "the masher still clears a wave in most seeds (3 of 3 measured, 2 needed): %s" % [mash])
+	# and what a worthless masher fails (fix round 1, I3): he deals at least 0.53 of what the mixed player deals (680 against 1028 is 0.66: the bound is
+	# a fifth under it; the controller asked for at least 0.35). With the tax as first built (2.0, restarting the wait) he dealt 264 against 1028, a quarter.
+	assert_true(mash["dealt"] >= 0.53 * mixed["dealt"], "the masher deals at least 0.53 of what the mixed player deals (0.66 measured): %s against %s" % [mash, mixed])
+	# Aim 1: a player who only counters, at a person's reaction, clears at least as many waves as the masher (counter at 14: 6
+	# waves measured against 3).
+	assert_true(counter_14["waves"] >= mash["waves"], "the counter player at 14 frames clears at least as many waves as the masher: %s against %s" % [counter_14, mash])
+	# Aim 2: the mixed player dies at most a third as often as the masher (1 against 9: the bound is 3 of 9) and clears more waves (8 against 3).
+	assert_true(mixed["deaths"] * 3 <= mash["deaths"], "the mixed player dies at most a third as often as the masher: %s against %s" % [mixed, mash])
+	assert_true(mixed["waves"] > mash["waves"], "and clears more waves: %s against %s" % [mixed, mash])
+	# What was held before, with the same room: the masher takes more than it deals (1.9 times measured, once needed), the mixed player takes
+	# less than it deals (0.31 measured, under 1), the quick counter player takes under half of what it deals (0.13 measured, under 0.5),
+	# clears as many waves as the masher (9 against 3) and dies no more often (0 against 9).
+	assert_true(mash["taken"] >= mash["dealt"], "the masher takes as much as it deals or more: %s" % [mash])
 	assert_true(mixed["taken"] < mixed["dealt"], "the mixed player takes less than it deals: %s" % [mixed])
-	assert_true(mixed["deaths"] * 2 < mash["deaths"], "the mixed player dies less than half as often as the masher: %s against %s" % [mixed, mash])
 	assert_true(counter["taken"] < 0.5 * counter["dealt"], "the counter player at 10 frames takes under half of what it deals: %s" % [counter])
-	# What this guards: that timing does not clear fewer waves than mashing, nor die more. The waves count is small (7 against 6 in
-	# the three seeds) and one wave either way is the game's ordinary shift when a foe's numbers move a little, so it holds with one
-	# wave of slack; the deaths and the HP ratio below stay strict, and they are what orders the players.
-	assert_true(counter["waves"] + 1 >= mash["waves"], "the counter player clears about as many waves as the masher (one wave of slack): %s against %s" % [counter, mash])
+	assert_true(counter["waves"] >= mash["waves"], "the counter player at 10 clears at least as many waves as the masher: %s against %s" % [counter, mash])
 	assert_true(counter["deaths"] <= mash["deaths"], "and dies no more often: %s against %s" % [counter, mash])
 	var ratio := func(row: Dictionary) -> float: return row["taken"] / maxf(row["dealt"], 1.0)
 	assert_true(ratio.call(counter) < ratio.call(mixed) and ratio.call(mixed) < ratio.call(mash), "HP taken for each HP dealt: counter %.2f, mixed %.2f, mash %.2f" % [ratio.call(counter), ratio.call(mixed), ratio.call(mash)])

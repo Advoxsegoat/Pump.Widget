@@ -65,21 +65,21 @@ func test_seven_blows_gathering_speed_are_climbed_to_flurry_without_a_scratch() 
 
 
 func test_parry_sway_sway_duck_takes_no_damage_from_jab_cross_hook() -> void:
-	# A real tier I Knuckle on a ScriptBrain. Its first jab (on frame 1) is parried; it reels, and once it is free again (frame 60)
+	# A real tier I Knuckle on a ScriptBrain. Its first jab (on frame 1) is parried; it reels, and once it is free again (frame 65: its reel ends five frames later, the jab having been parried at 26)
 	# it throws its string: jab, cross, hook, pressed so each cancels into the next as soon as it can. Abarax sways the jab,
-	# sways the cross and ducks the hook, each pressed four frames before its blow lands (the jab lands on frame 80, the cross
-	# on 110, the hook on 155: the Knuckle's own timing; the slow-down is off here, as it would move the blows against the presses). The chain
+	# sways the cross and ducks the hook, each pressed four frames before its blow lands (the jab lands on frame 90, the cross
+	# on 120, the hook on 165: the Knuckle's own timing, its jab 20 frames from tell to blow since Task 17, which moved the parry and every press after it five to ten frames on; the slow-down is off here, as it would move the blows against the presses). The chain
 	# climbs 1, 3, 5, 7, and the whole of it fits inside sixty frames without a defence that succeeds.
 	var knuckle := load(KNUCKLE) as ActorDef
 	var a_steps := []
 	var at := 0
-	for press: Array in [[14, &"guard"], [76, &"sway"], [106, &"sway"], [151, &"duck"]]:
+	for press: Array in [[19, &"guard"], [86, &"sway"], [116, &"sway"], [161, &"duck"]]:
 		a_steps.append({"frames": press[0] - at - 1})
 		a_steps.append({"frames": 1, "press": [press[1]]})
 		at = press[0]
 	var b_steps := []
 	at = 0
-	for frame: int in [1, 60, 80, 110]:
+	for frame: int in [1, 65, 90, 120]:
 		b_steps.append({"frames": frame - at - 1})
 		b_steps.append({"frames": 1, "press": [&"palm"]})
 		at = frame
@@ -90,14 +90,15 @@ func test_parry_sway_sway_duck_takes_no_damage_from_jab_cross_hook() -> void:
 	a.got_hit.connect(func(r: HitResult, e: HitEvent) -> void: outcomes.append([a.frame, HitResult.Outcome.keys()[r.outcome], e.move.id]))
 	var started := []
 	a.runner.move_started.connect(func(move: MoveData) -> void: started.append(move.id))
-	while a.frame < 170:
+	while a.frame < 180:
 		await frames(1)
-	assert_eq(outcomes, [[21, "PARRIED", &"knuckle_jab"], [80, "EVADED", &"knuckle_jab"], [110, "EVADED", &"knuckle_cross"],
-			[155, "EVADED", &"knuckle_hook"]], "the jab parried, then each blow of the string evaded")
+	assert_eq(outcomes, [[26, "PARRIED", &"knuckle_jab_long"], [90, "EVADED", &"knuckle_jab_long"], [120, "EVADED", &"knuckle_cross"],
+			[165, "EVADED", &"knuckle_hook"]], "the jab parried, then each blow of the string evaded")
 	assert_eq(a.stats.hp, 100.0, "no damage")
 	assert_eq(started, [&"guard_raise", &"parry", &"sway_left_slip", &"sway_left_quick", &"duck_quick"], "the tempo of each dodge is the chain's at the time")
 	assert_eq([a.chain.count, a.chain.tempo()], [7, T.FLURRY], "the parry, two perfect sways and a perfect duck: 1 + 2 + 2 + 2")
-	assert_eq(b.stats.posture, 32.0, "60, less the parry's 12, less 8 for each of the cross and the hook (Quick), none for the jab (Slip)")
+	# (Re-made for Task 17: 32 and a third. The longer jab leaves the posture five frames more to mend in, a third of a point at 20 a second.)
+	assert_near(b.stats.posture, 32.0, 0.5, "60, less the parry's 12, less 8 for each of the cross and the hook (Quick), none for the jab (Slip)")
 
 
 func test_mashed_sways_evade_at_most_half_the_frames_at_every_tempo() -> void:   # Review Focus 2
@@ -148,7 +149,7 @@ func test_mashing_through_the_seven_blow_string_loses_to_timing() -> void:
 	a.got_hit.connect(func(r: HitResult, _e: HitEvent) -> void: outcomes.append(HitResult.Outcome.keys()[r.outcome]))
 	var index := 0
 	var highest := 0
-	while a.frame < 175:
+	while a.frame < 180:
 		if index < STRING.size() and STRING[index][0] == a.frame + 1:
 			Blows.post(b, a, {"line": ROUND} if STRING[index][1] == "R" else {})
 			index += 1
@@ -249,4 +250,6 @@ func test_a_flurry_counter_lands_and_staggers_with_the_slow_down_on() -> void:
 	assert_eq(counter.size(), 1, "the late palm is the counter, not the jab (started %s)" % [started])
 	assert_true(counter[0][0] - evaded_at >= 25, "though it came more than 24 wall frames after the evade (%d)" % [counter[0][0] - evaded_at])
 	assert_true(staggered, "it staggers a foe of poise 1000")
-	assert_near(b.stats.max_hp - b.stats.hp, base_damage * 2.0, 0.01, "worth twice the counter's own damage")
+	# Re-made for Task 17: the counter lands on a foe whose blow Abarax has just perfectly dodged, so it is also a punish (x1.5): it multiplies
+	# with what the Flurry cashes (x2).
+	assert_near(b.stats.max_hp - b.stats.hp, base_damage * 2.0 * 1.5, 0.01, "worth twice the counter's own damage, and one and a half times that: the foe was open")

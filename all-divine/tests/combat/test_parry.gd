@@ -91,7 +91,8 @@ func test_guard_tapped_five_frames_before_the_hit_parries() -> void:
 	assert_eq(run["b_started"].back(), [&"palm_jab", 22], "b's palm comes out at the parry's f8, 8 frames after the hit-stop")
 	assert_eq(_current(a), &"parried", "while a is still recoiling")
 	await _play_to(run, 34)
-	assert_eq(a.stats.hp, 92.0, "and the riposte lands")
+	# Re-made for Task 17: b turned a's jab back, so a is open to b (CombatTuning.punish_frames), and the riposte is worth 1.5 times its 8 HP.
+	assert_eq(a.stats.hp, 88.0, "and the riposte lands, a blow on a foe whose blow was parried: 1.5 x 8")
 
 
 func test_guard_pressed_twelve_frames_early_only_guards() -> void:

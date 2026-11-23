@@ -59,6 +59,19 @@ func test_a_straight_blow_is_swayed_and_a_perfect_dodge() -> void:
 	assert_eq((run["a"] as Actor).stats.hp, 100.0)
 
 
+func test_the_long_jab_is_met_without_the_bot_being_told_of_it() -> void:
+	# Task 17: tier I's jab is 20 frames from its tell to its blow. The bot reads that from the move's marks, as it reads every blow, and
+	# meets it as it meets the jab: swayed, a perfect dodge (no change to the bot was needed)
+	var run := _duel(CombatBot.Policy.COUNTER)
+	await _throw(run, &"knuckle_jab_long")
+	assert_eq(run["got"].map(func(g: Array) -> String: return g[1]), ["EVADED"], "evaded: %s started %s" % [run["got"], run["started"]])
+	assert_true(run["got"][0][3], "perfect: the long jab is straight and he swayed")
+	assert_true(String(_ids(run)[0]).begins_with("sway_"), "%s" % [_ids(run)])
+	var blows: Array = (run["bot"] as CombatBot)._blows
+	assert_eq((run["bot"] as CombatBot).by_attack.keys(), [&"knuckle_1/knuckle_jab_long"], "met as a blow of its own: %s" % [(run["bot"] as CombatBot).by_attack])
+	assert_true(blows.size() <= 1, "one blow was read")
+
+
 func test_a_round_blow_is_ducked() -> void:
 	var run := _duel(CombatBot.Policy.COUNTER, 1.2)  # the hook reaches a little further than the jab
 	await _throw(run, &"knuckle_hook")
@@ -339,7 +352,10 @@ func test_the_counter_policy_dodges_the_drummers_string_by_line_untouched() -> v
 	var run := _drummer_fight(CombatBot.Policy.COUNTER, 1)
 	await frames(450)
 	assert_eq((run["a"] as Actor).stats.hp, 100.0, "not a scratch: %s" % [run["got"]])
-	assert_true(run["got"].get("EVADED", 0) >= 4, "he evaded its blows: %s" % [run["got"]])
+	# (Task 17 moved this from 4 to 3: every perfect dodge now leaves the Drummer open, and the counters that land on him are worth 1.5 times, so
+	# he is broken or dead with fewer of his blows thrown in the 450 frames. What it holds is that he met every blow he threw by its line.
+	# The count measured is 3; the bound is 2, because a seeded fight is not the same on every machine and a bound at the measurement has no room.)
+	assert_true(run["got"].get("EVADED", 0) >= 2, "he evaded its blows: %s" % [run["got"]])
 	assert_false(run["got"].has("HIT"), "and none landed: %s" % [run["got"]])
 	(run["bot"] as CombatBot).finish()
 
@@ -349,7 +365,9 @@ func test_the_counter_policy_dodges_the_drummers_string_by_line_untouched() -> v
 # The bot's recorded controls against a tier I Knuckle that thinks for itself, 240 frames: with reaction 0 they are what they were before
 # reaction_frames existed (the hash of the recording, taken then). Format 2 adds the aiming device to each frame (the pad, for a bot), which
 # changed the constants once, from COUNTER 1082102833 and MIXED 1880729488: the same recordings with the device key taken out still hash to those.
-const BEFORE_REACTION := {CombatBot.Policy.COUNTER: 2472883534, CombatBot.Policy.MIXED: 816274831}
+# Re-made for Task 17 (the fight's tuning: tier I's jab is 20 frames long, a blow on an open foe is worth more, mashing costs stamina), once, on the
+# final numbers: COUNTER was 2472883534 and MIXED 816274831; the bot's code did not change, the foe it fights and what its blows come to did.
+const BEFORE_REACTION := {CombatBot.Policy.COUNTER: 4270726600, CombatBot.Policy.MIXED: 1014828495}
 
 
 func _knuckle_fight(policy: CombatBot.Policy, seed_number: int, reaction: int) -> Dictionary:

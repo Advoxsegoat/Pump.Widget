@@ -17,11 +17,24 @@ const ACTIONS: Array[StringName] = [
 ## The actions driven by an analog trigger, which count as pressed past half way.
 const TRIGGER_ACTIONS: Array[StringName] = [&"heavy", &"gift"]
 const TRIGGER_DEADZONE := 0.5
+## A trigger action presses at TRIGGER_DEADZONE and is down until its strength falls below this (the same latch as a flick's), so that a
+## finger hovering near the half is one press, not a stutter of them (Task 17 fix round 1: each re-press of a mashed heavy is taxed).
+const TRIGGER_RELEASE := 0.3
 ## The actions that are a flick of the right stick (switching the lock-on target), with the strength each lets go
 ## below. They press past FLICK_DEADZONE and are down until the stick falls below this, so that a thumb dwelling at the
 ## threshold is one press, not a stutter of them (Inputs.pressed_this_frame does the latching).
 const FLICK_RELEASE := {&"target_left": 0.35, &"target_right": 0.35}
 const FLICK_DEADZONE := 0.6
+## Whether `action` is latched: a flick or a trigger presses past its deadzone and is down until it falls below release_of(action).
+static func is_latched(action: StringName) -> bool:
+	return FLICK_RELEASE.has(action) or TRIGGER_ACTIONS.has(action)
+
+
+## The strength a latched action lets go below.
+static func release_of(action: StringName) -> float:
+	return FLICK_RELEASE[action] if FLICK_RELEASE.has(action) else TRIGGER_RELEASE
+
+
 ## The four movement actions with the screen direction each one is (x right, y down), for the presses that sway, duck and
 ## dash-step by a direction (Inputs.direction_pressed_this_frame). The left stick flicks past FLICK_DEADZONE and lets go
 ## below DIRECTION_RELEASE, the same two numbers as a target switch; a key is a press on the frame it goes down.

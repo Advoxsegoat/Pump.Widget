@@ -107,6 +107,7 @@ func take(events: Array[HitEvent], results: Array[HitResult], turned: Array[HitE
 				continue  # a blow of a string that goes on (MoveData.parry_ends): the posture was taken, the move plays on
 			strongest = maxi(strongest, REACTIONS.find(&"caught" if r.outcome == HitResult.Outcome.CAUGHT else &"parried"))
 		_feed_chain(landed, defended)
+		_open_attackers(events, results, landed)
 		if broke:
 			strongest = REACTIONS.find(&"posture_broken")
 		if _actor.paired_with != null:
@@ -197,6 +198,21 @@ func _feed_chain(landed: bool, defended: Array[HitResult]) -> void:
 			_actor.stats.refund_stamina(cost + _actor.def.chain.perfect_refund)
 		if chain != null:
 			chain.link(perfect, _actor.buffer_frame)
+
+
+# Timing pays more (Task 17): the attacker of every blow this actor turned back (parried or caught), or perfectly dodged (and no blow of the
+# frame landed: then no evade counts), is open to it for the tuning's punish_frames (Actor.open_to_punisher). An actor whose tuning scales no
+# blow (a foe's) opens no one.
+func _open_attackers(events: Array[HitEvent], results: Array[HitResult], landed: bool) -> void:
+	if _actor.stats.tuning.punish_scale <= 1.0:
+		return
+	for i in events.size():
+		var r := results[i]
+		var turned := r.outcome == HitResult.Outcome.PARRIED or r.outcome == HitResult.Outcome.CAUGHT
+		var dodged := r.outcome == HitResult.Outcome.EVADED and r.perfect and not landed
+		var attacker := events[i].attacker
+		if (turned or dodged) and not events[i].paired and is_instance_valid(attacker) and attacker != _actor:
+			attacker.open_to_punisher(_actor)
 
 
 # The reaction a blow that landed on the actor asks for (a name in REACTIONS), or &"" for none.

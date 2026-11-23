@@ -29,3 +29,6 @@ var always_staggers := false
 ## Metres the target is thrown, from the tempo a clear-out was cashed at (ChainTuning.clearout_throw); 0 when the blow throws
 ## no one, and the profile's `knockback` is its push.
 var throw := 0.0
+## What the blow is worth times for landing on a foe who is open to its attacker (Actor.punish_scale_on, CombatTuning.punish_scale): 1 for any
+## other blow. It is already in `power` (HP and posture damage); Melee reads it again for the hit-stop, which a bigger blow shows.
+var punish := 1.0

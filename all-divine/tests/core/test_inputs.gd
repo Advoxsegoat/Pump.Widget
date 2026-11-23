@@ -318,6 +318,30 @@ func test_a_stick_dwelling_at_the_flick_threshold_is_one_press() -> void:
 	await frames(1)
 	assert_false(Inputs.pressed_this_frame().has(&"target_right"))
 
+func test_a_trigger_dwelling_at_its_press_point_is_one_press() -> void:
+	# Fix round 1 (M1): the right trigger (heavy) presses at 0.5 and is let go only below 0.3, as a flick is, so that a finger hovering
+	# near the half is one press (each re-press of a mashed heavy is taxed, Task 17).
+	_axis(0, JOY_AXIS_TRIGGER_RIGHT, 0.0)
+	await frames(1)
+	Inputs.pressed_this_frame()
+	var presses := 0
+	for i in 12:
+		_axis(0, JOY_AXIS_TRIGGER_RIGHT, 0.56 if i % 2 == 0 else 0.44)
+		await frames(1)
+		if Inputs.pressed_this_frame().has(&"heavy"):
+			presses += 1
+	assert_eq(presses, 1, "twelve samples crossing 0.5 six times and never under 0.3 are one press")
+	var again := 0
+	for v in [0.2, 0.7, 0.4, 0.0, 0.9]:
+		_axis(0, JOY_AXIS_TRIGGER_RIGHT, v)
+		await frames(1)
+		if Inputs.pressed_this_frame().has(&"heavy"):
+			again += 1
+	assert_eq(again, 2, "let go below 0.3 and pressed again: a press each time")
+	_axis(0, JOY_AXIS_TRIGGER_RIGHT, 0.0)
+	await frames(1)
+	Inputs.pressed_this_frame()
+
 func test_held_follows_the_action() -> void:
 	assert_false(Inputs.held(&"palm"))
 	Input.action_press(&"palm")

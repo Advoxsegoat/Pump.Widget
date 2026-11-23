@@ -86,6 +86,20 @@ func test_a_spend_restarts_the_wait() -> void:
 	assert_true(stats.stamina > 40.0, "and 1.1 s after it, back")
 
 
+func test_a_spend_that_is_stamina_only_leaves_the_wait_where_it_was() -> void:
+	# Task 17, fix round 1 (I2): the tax on a mashed press takes stamina and does not hold the regen back; a spend still does
+	var stats := _stats()
+	stats.spend_stamina(50.0)
+	_tick(stats, 0.5)
+	stats.spend_stamina(2.0, false)
+	assert_eq(stats.stamina, 48.0, "the tax is paid")
+	_tick(stats, 0.2)
+	assert_near(stats.stamina, 48.0 + 45.0 * 0.1, 1e-6, "the wait ran on from the first spend: 0.1 s of regen")
+	stats.spend_stamina(2.0)
+	_tick(stats, 0.5)
+	assert_near(stats.stamina, 48.0 + 45.0 * 0.1 - 2.0, 1e-6, "a real spend restarts it")
+
+
 func test_a_spend_of_nothing_does_not_restart_the_wait() -> void:
 	# A guard that pays nothing for a blow (a guard_stamina of 0) must not hold its stamina back.
 	var stats := _stats()
