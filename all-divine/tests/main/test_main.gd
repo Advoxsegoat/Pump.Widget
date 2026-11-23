@@ -335,7 +335,7 @@ func test_a_region_that_loads_warms_the_afterimage_shader_too() -> void:
 	assert_eq(left, 0, "and is gone after them")
 
 
-# F2 is the debug key into the Bilibara stretch: a plain Region (no Arena, so the Hud follows none), Abarax at its Spawn; and F5
+# F2 is the debug key into the Bilibara stretch: a plain Region (no Arena, so the Hud follows none), Abarax at the first shrine's respawn; and F5
 # from there goes to the yard, as it does from any region that is not the yard.
 func test_f2_enters_the_stretch_and_f5_leaves_it_for_the_yard() -> void:
 	var main := _main()
@@ -347,7 +347,7 @@ func test_f2_enters_the_stretch_and_f5_leaves_it_for_the_yard() -> void:
 	assert_true(stretch is Region and not stretch is Arena, "a plain Region (the node keeps the name Region, as every region does)")
 	assert_false(is_instance_valid(yard) and yard.is_inside_tree(), "the yard is gone")
 	assert_eq(main.arena(), null, "no Arena")
-	assert_vec_near(player.global_position, stretch.spawn().origin, 0.01, "Abarax is at its Spawn")
+	assert_vec_near(player.global_position, (Registry.fetch(&"stretch", &"rose_a") as ShrineDef).respawn, 0.01, "Abarax is at the first shrine's respawn")
 	assert_eq(main.hud.arena, null, "the Hud is bound to none")
 	assert_eq(_rig(main).target, player, "the camera is on him")
 	await frames(2)
@@ -365,7 +365,7 @@ func test_f2_enters_the_stretch_the_menu_works_in_it_and_a_fight_runs_quietly() 
 	await frames(3)
 	assert_eq(main.region.scene_file_path, BILIBARA, "F2 enters the stretch")
 	assert_eq(Game.state, Game.State.PLAY, "and it plays")
-	assert_vec_near(main.player.global_position, main.region.spawn().origin, 0.1, "Abarax stands at its spawn")
+	assert_vec_near(main.player.global_position, (Registry.fetch(&"stretch", &"rose_a") as ShrineDef).respawn, 0.1, "Abarax stands at the first shrine's respawn")
 	_press_action(&"menu")
 	assert_eq(Game.state, Game.State.PAUSE, "the menu button pauses in the stretch")
 	assert_true(main.menu.visible, "the menu is up")
@@ -458,7 +458,7 @@ func test_pressing_f10_while_a_scene_plays_or_when_paused_does_nothing() -> void
 	_press_key(KEY_F2)
 	await frames(3)
 	assert_eq(main.fixture_refusal(), "", "(where he comes in, the stretch has room for it)")
-	_player(main).place(Transform3D(Basis.IDENTITY, _player(main).global_position + Vector3(0, 0, -9)))  # at the Gate
+	_player(main).place(Transform3D(Basis.IDENTITY, Vector3(-32.5, 0, -7.75)))  # at the Gate
 	await frames(2)
 	var in_stretch := _actor_count(main)
 	assert_true(main.fixture_refusal().contains("Gate"), "at the Gate the stretch has no room for the fixture's marks: %s" % main.fixture_refusal())

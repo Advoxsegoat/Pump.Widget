@@ -11,14 +11,12 @@ const KNUCKLE_3 := "res://data/actors/knuckle_3.tres"
 const TOON_WORLD := "res://render/shaders/toon_world.gdshader"
 const STONE := "res://world/materials/%s.tres"
 ## The body's capsule is this wide in radius (actor.tscn): its centre never gets nearer a wall than this.
-const BODY := 0.35
+const BODY := StretchGround.BODY
 const DT := 1.0 / 60
 ## A shove: the speed it is given every frame (a shove that goes on, hard enough to run through a wall that was not there).
 const SHOVE := 30.0
 ## The flood fill's cells, in metres, and where it looks: a little more than the whole stretch.
-const CELL := 0.5
-const GRID_X := Vector2i(-90, 90)
-const GRID_Z := Vector2i(-165, 25)
+const CELL := StretchGround.CELL
 ## The seven places of the plan's table (x0 z0 w d), and the stone each is laid in.
 const PLACES := {
 	"W1 court A": {rect = Rect2(-40, -5, 10, 10), stone = "slate_cold"},
@@ -46,10 +44,6 @@ const POIS := {
 	"YardGate": [27.5, -55, 1.4], "YardCentre": [27.5, -65, 1.0], "VatWest": [20, -66.25, 1.0], "VatEast": [35, -66.25, 1.0],
 	"Lazymans": [-38.75, -5, 1.8], "HatShop": [-10, -5, 1.6],
 }
-
-## The flood fill, made once for the run (the stretch does not change): {free, ground, reached} by cell.
-static var _fill_memo := {}
-
 
 func after_each() -> void:
 	Game.reset()
@@ -79,74 +73,27 @@ func _marker_at(region: Region, marker_name: String) -> Vector2:
 
 # The cell (a Vector2i) a point of the ground is in, and where its middle is.
 func _cell_of(at: Vector2) -> Vector2i:
-	return Vector2i(floori(at.x / CELL), floori(at.y / CELL))
+	return StretchGround.cell_of(at)
 
 
 func _middle(cell: Vector2i) -> Vector2:
-	return (Vector2(cell) + Vector2(0.5, 0.5)) * CELL
+	return StretchGround.middle(cell)
 
 
-# Whether the body's capsule, reduced to a ball low down (a 0.35 m capsule 0.5 m up), overlaps something on `world` at `at`
-# (x, z); `radius` is the ball's. The ground is under it, not in it.
+# Whether the body's capsule overlaps something on `world` at `at` (x, z); `radius` is the ball's (StretchGround.blocked).
 func _blocked(space: PhysicsDirectSpaceState3D, at: Vector2, radius := BODY) -> bool:
-	var capsule := CapsuleShape3D.new()
-	capsule.radius = radius
-	capsule.height = 2.0 * radius
-	var query := PhysicsShapeQueryParameters3D.new()
-	query.shape = capsule
-	query.transform = Transform3D(Basis(), Vector3(at.x, 0.5, at.y))
-	query.collision_mask = Layers.WORLD
-	return not space.intersect_shape(query, 1).is_empty()
+	return StretchGround.blocked(space, at, radius)
 
 
-# Whether `ik_surface` is under (x, z) at y = 0. The ray starts a hand's breadth up (inside a vat or a post it then finds the plate
-# under it) and a hair off the cell's middle, which is often on the very face of a box (a ray along a face finds nothing).
+# Whether `ik_surface` is under (x, z) at y = 0 (StretchGround.ground_under).
 func _ground_under(space: PhysicsDirectSpaceState3D, point: Vector2) -> bool:
-	var at := point + Vector2(0.013, 0.007)
-	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(at.x, 0.05, at.y), Vector3(at.x, -0.5, at.y), Layers.IK_SURFACE))
-	return not hit.is_empty() and absf((hit["position"] as Vector3).y) < 1e-3
+	return StretchGround.ground_under(space, point)
 
 
-# The flood fill from Spawn on CELL cells: {free: cells whose capsule overlaps no wall (true), ground: cells with ground under
-# their middle, reached: cells walked to from Spawn (a free ground cell next to a reached one)}. Made once.
+# The flood fill from Spawn on CELL cells: {free, ground, reached} (StretchGround.fill, made once for the run).
 func _fill(region: Region) -> Dictionary:
-	if not _fill_memo.is_empty():
-		return _fill_memo
 	await frames(2)
-	var space := region.get_world_3d().direct_space_state
-	var free := {}
-	var ground := {}
-	for cx in range(GRID_X.x, GRID_X.y):
-		for cz in range(GRID_Z.x, GRID_Z.y):
-			if _ground_under(space, _middle(Vector2i(cx, cz))):
-				ground[Vector2i(cx, cz)] = true
-	var reached := {}
-	var queue: Array[Vector2i] = []
-	var start := _cell_of(_marker_at(region, "Spawn"))
-	var near := func(cell: Vector2i) -> bool:
-		if not free.has(cell):
-			free[cell] = not _blocked(space, _middle(cell))
-		return free[cell]
-	if ground.has(start) and near.call(start):
-		reached[start] = true
-		queue.append(start)
-	var at := 0
-	while at < queue.size():
-		var cell := queue[at]
-		at += 1
-		for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			var next: Vector2i = cell + step
-			if not reached.has(next) and ground.has(next) and near.call(next):
-				reached[next] = true
-				queue.append(next)
-	# What the leak check asks of the neighbours of the reached cells, and which of the ground is free.
-	for cell: Vector2i in reached.keys():
-		for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			near.call(cell + step)
-	for cell: Vector2i in ground.keys():
-		near.call(cell)
-	_fill_memo = {free = free, ground = ground, reached = reached}
-	return _fill_memo
+	return StretchGround.fill(region)
 
 
 # The number of steps, over walkable cells, from `from` to `to` (-1 if there is no way), found by breadth first search.

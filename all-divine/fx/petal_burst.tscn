@@ -1,0 +1,55 @@
+[gd_scene load_steps=7 format=3]
+
+[sub_resource type="Gradient" id="Gradient_petal"]
+interpolation_mode = 1
+offsets = PackedFloat32Array(0, 0.5)
+colors = PackedColorArray(0.91, 0.38, 0.49, 1, 0.91, 0.76, 0.44, 1)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_petal"]
+gradient = SubResource("Gradient_petal")
+
+[sub_resource type="Gradient" id="Gradient_fade"]
+offsets = PackedFloat32Array(0, 0.6, 1)
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0.9, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_fade"]
+gradient = SubResource("Gradient_fade")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_petal"]
+emission_shape = 1
+emission_sphere_radius = 0.25
+direction = Vector3(0, 1, 0)
+spread = 55.0
+initial_velocity_min = 0.8
+initial_velocity_max = 2.2
+gravity = Vector3(0, -1.6, 0)
+damping_min = 0.6
+damping_max = 1.4
+color = Color(1, 1, 1, 1)
+color_ramp = SubResource("GradientTexture1D_fade")
+color_initial_ramp = SubResource("GradientTexture1D_petal")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_petal"]
+transparency = 1
+cull_mode = 2
+no_depth_test = true
+shading_mode = 0
+vertex_color_use_as_albedo = true
+billboard_mode = 3
+particles_anim_h_frames = 1
+particles_anim_v_frames = 1
+particles_anim_loop = false
+
+[sub_resource type="QuadMesh" id="QuadMesh_petal"]
+material = SubResource("StandardMaterial3D_petal")
+size = Vector2(0.0625, 0.0625)
+
+[node name="PetalBurst" type="GPUParticles3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+cast_shadow = 0
+amount = 28
+lifetime = 0.8
+one_shot = true
+explosiveness = 0.95
+process_material = SubResource("ParticleProcessMaterial_petal")
+draw_pass_1 = SubResource("QuadMesh_petal")

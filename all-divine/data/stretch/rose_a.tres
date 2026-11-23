@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ShrineDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://world/stretch/shrine_def.gd" id="1_def"]
+
+[resource]
+script = ExtResource("1_def")
+id = &"rose_a"
+title = "Rose shrine, behind the Lazyman's"
+plinth = Vector3(-36.1, 0, -4.7)
+respawn = Vector3(-36.1, 0, -3.1)
+respawn_yaw_deg = 180.0
+radius = 2.0
