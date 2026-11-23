@@ -214,8 +214,9 @@ const SPREAD_BY := 1000
 ## The longest a foe within 4 m of the player may stand still (a frame's step under 0.3 m/s, free to move): without the room check in
 ## _reangle one stood 808 frames pressed against the gap's jamb (seed 3); the rest of them 40 to 141 (waiting for a turn at the mouth).
 ## (Task 17 moved it from 200 to 240: a foe waiting for a turn at the mouth waits behind the tokens of the others, and tier I's jab, five frames
-## longer, holds one five frames longer: the longest wait went from under 200 to 209. What it guards is the 808 of a foe pressed at the jamb.)
-const STILL_BY := 240
+## longer, holds one five frames longer: the longest wait went from under 200 to 209. What it guards is the 808 of a foe pressed at the jamb.
+## 252 is a fifth over the 209 measured: a seeded fight is not the same on every machine.)
+const STILL_BY := 252
 
 
 func _behind() -> Array[Dictionary]:

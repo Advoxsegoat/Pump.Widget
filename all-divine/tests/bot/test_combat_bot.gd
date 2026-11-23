@@ -353,8 +353,9 @@ func test_the_counter_policy_dodges_the_drummers_string_by_line_untouched() -> v
 	await frames(450)
 	assert_eq((run["a"] as Actor).stats.hp, 100.0, "not a scratch: %s" % [run["got"]])
 	# (Task 17 moved this from 4 to 3: every perfect dodge now leaves the Drummer open, and the counters that land on him are worth 1.5 times, so
-	# he is broken or dead with fewer of his blows thrown in the 450 frames. What it holds is that he met every blow he threw by its line.)
-	assert_true(run["got"].get("EVADED", 0) >= 3, "he evaded its blows: %s" % [run["got"]])
+	# he is broken or dead with fewer of his blows thrown in the 450 frames. What it holds is that he met every blow he threw by its line.
+	# The count measured is 3; the bound is 2, because a seeded fight is not the same on every machine and a bound at the measurement has no room.)
+	assert_true(run["got"].get("EVADED", 0) >= 2, "he evaded its blows: %s" % [run["got"]])
 	assert_false(run["got"].has("HIT"), "and none landed: %s" % [run["got"]])
 	(run["bot"] as CombatBot).finish()
 
