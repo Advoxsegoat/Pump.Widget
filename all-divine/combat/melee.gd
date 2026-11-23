@@ -35,7 +35,7 @@ extends Node
 ## When the target's chain is at Quick or Flurry the evade also takes posture from the attacker, which reaches it as
 ## a turned blow does but with no reaction of its own, unless its posture breaks.
 ##
-## A blow that landed also has weight (_weigh): both fighters freeze for the profile's `hitstop_frames` and the
+## A blow that landed also has weight (_weigh): both fighters freeze for the profile's `hitstop_frames` (times the blow's `punish`) and the
 ## target is pushed along the blow by its `knockback`. A trade freezes both for the longer of the two blows'
 ## frames, not their sum, since a freeze that is on is only ever lengthened (Actor.freeze).
 ##
@@ -245,8 +245,9 @@ static func _note(bodies: Dictionary, body: Actor, which: int, i: int) -> void:
 func _weigh(e: HitEvent, r: HitResult) -> void:
 	if not FREEZES.has(r.outcome):
 		return
-	e.attacker.freeze(e.profile.hitstop_frames)
-	e.target.freeze(e.profile.hitstop_frames)
+	var stop := roundi(e.profile.hitstop_frames * e.punish)  # a blow on an open foe is felt more (Actor.punish_scale_on)
+	e.attacker.freeze(stop)
+	e.target.freeze(stop)
 	if e.throw > 0.0 and r.outcome == HitResult.Outcome.HIT:
 		_throw(e)
 	else:

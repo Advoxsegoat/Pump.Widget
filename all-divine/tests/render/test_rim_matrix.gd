@@ -88,6 +88,11 @@ func test_the_jab_rim_holds_everywhere() -> void:
 	await _check_move(&"knuckle_jab", [8, 19])
 
 
+func test_the_long_jab_rim_holds_everywhere() -> void:
+	# tier I's jab (Task 17): the tell at f5, the blow at f25: the rim is looked at from f8 to f24
+	await _check_move(&"knuckle_jab_long", [8, 24])
+
+
 func test_the_hook_rim_holds_everywhere() -> void:
 	await _check_move(&"knuckle_hook", [12, 39])
 

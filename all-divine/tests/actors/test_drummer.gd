@@ -534,7 +534,7 @@ func test_a_parried_jab_still_ends_a_knuckles_combo() -> void:
 	var pressed := false
 	for i in 200:
 		var move := b.runner.current
-		if not pressed and move != null and move.id == &"knuckle_jab" and a.frozen == 0 and b.frozen == 0:
+		if not pressed and move != null and move.id == &"knuckle_jab_long" and a.frozen == 0 and b.frozen == 0:
 			if _hit_frame(b, move) - roundi(b.runner.time * 60.0) <= 5:
 				presser.queue.append([&"guard", Vector2.ZERO])
 				pressed = true

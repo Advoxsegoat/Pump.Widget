@@ -594,7 +594,8 @@ func test_regression_waiters_stand_off_at_a_wall() -> void:
 const SIGNATURE_SEEDS := 2
 const SIGNATURE_FRAMES := 600
 const SIGNATURE_KINDS := ["knuckle_1", "knuckle_drummer", "knuckle_heavy"]
-const ONE_FOE_SIGNATURE := 571465325
+## Re-made for Task 17, once: it was 571465325; tier I's jab is now knuckle_jab_long, 20 frames from tell to blow, in the 57 moves it plays.
+const ONE_FOE_SIGNATURE := 214455345
 
 
 func test_one_foe_alone_plays_as_before() -> void:

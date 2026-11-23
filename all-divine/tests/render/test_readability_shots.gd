@@ -179,6 +179,11 @@ func test_the_parry_rim_is_on_the_edge_and_not_in_the_body() -> void:
 	await _check_rim(&"knuckle_jab", 15, "parry_rim", Color("bfe6ff"), 0.75)
 
 
+func test_the_long_jabs_parry_rim_is_on_the_edge_and_not_in_the_body() -> void:
+	# Task 17: tier I's jab, 20 frames from its tell to its blow: the same rim, at a frame of its longer wind-up
+	await _check_rim(&"knuckle_jab_long", 20, "parry_rim", Color("bfe6ff"), 0.75)
+
+
 func test_the_heavy_attack_rim_is_on_the_edge_and_not_in_the_body() -> void:
 	await _check_rim(&"knuckle_hook", 34, "heavy_rim", Color("bfe6ff"), 0.7)
 

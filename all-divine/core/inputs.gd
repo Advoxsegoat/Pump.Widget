@@ -201,7 +201,7 @@ func move_vector(devices: Array[int] = Input.get_connected_joypads()) -> Vector2
 	return combine(analog, digital)
 
 
-## The gameplay actions that went down this frame. A flick action (Bindings.FLICK_RELEASE) goes down past its deadzone
+## The gameplay actions that went down this frame. A flick action (Bindings.FLICK_RELEASE) or a trigger (Bindings.TRIGGER_RELEASE) goes down past its deadzone
 ## and stays down until its strength falls below its release, so a stick dwelling at the threshold presses once.
 func pressed_this_frame() -> Array[StringName]:
 	var pressed: Array[StringName] = []
@@ -211,7 +211,7 @@ func pressed_this_frame() -> Array[StringName]:
 	for action in GAMEPLAY:
 		if _held_over(action):
 			continue
-		if Bindings.FLICK_RELEASE.has(action):
+		if Bindings.is_latched(action):
 			if flicks.has(action):
 				pressed.append(action)
 		elif Input.is_action_just_pressed(action):
@@ -275,10 +275,12 @@ func _flicks_this_frame() -> Array[StringName]:
 		return _flicks
 	_flicks_frame = frame
 	_flicks = []
-	for action: StringName in Bindings.FLICK_RELEASE:
+	for action: StringName in GAMEPLAY:
+		if not Bindings.is_latched(action):
+			continue
 		var strength := Input.get_action_raw_strength(action)
 		if _latched.get(action, false):
-			if strength < Bindings.FLICK_RELEASE[action]:
+			if strength < Bindings.release_of(action):
 				_latched[action] = false
 		elif strength >= InputMap.action_get_deadzone(action) and strength > 0.0:
 			_latched[action] = true

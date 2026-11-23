@@ -105,6 +105,14 @@ var charging := false
 ## &"" until then.
 var charge_profile := &""
 
+## The action whose press started the current move (&"" for a move that nothing pressed started: a reaction, a forced move).
+var started_by := &""
+## Whether the current move's first cancel_open mark has passed.
+var window_reached := false
+
+var _strain := 0  # the sways and ducks in a row that evaded nothing (CombatTuning.strain_step)
+var _dodge_ended_at := 0  # the actor's buffer_frame when the latest sway or duck ended
+var _starts := 0  # how many moves have started
 var _refunded := false  # the current move's refund was paid (take_refund)
 var _dodge: MoveData  # the latest sway or duck started (a move with an evade), and while it bars another (see _redodge_barred)
 var _dodge_started := 0  # the actor's buffer_frame when it started
@@ -146,9 +154,16 @@ func note_evaded() -> void:
 	evaded = true
 	if current != null and current == _dodge:
 		_dodge_evaded = true
+		_strain = 0
 	if current != null and not current.counters.is_empty():
 		_counter_from = current
 		_evaded_at = actor.buffer_frame
+
+
+## Whether the current move was started by a press of `action` and has not yet reached its first cancel window: a press of the same action
+## now is a redundant one (Actor._tax_press).
+func started_by_and_not_yet_open(action: StringName) -> bool:
+	return current != null and started_by == action and not window_reached
 
 
 ## True while a move plays.
@@ -198,14 +213,41 @@ func tick(intent: Intent, delta: float) -> Vector3:
 	if current != null and not window.is_empty():
 		var action := actor.buffer.consume(_unbarred(window.keys()), actor.buffer_frame)
 		if action != &"" and not actor.start_finisher_on(action):
+			var starts := _starts
 			_start(_counter_for(action) if _counter_ready(action) else actor.move_for(action, intent, StringName(str(window[action]))), intent)
+			if _starts != starts:
+				started_by = action
 	if current != null and time >= _anim.length - Marks.EPSILON:
 		_end(false)
 	if current == null:
 		var action := actor.buffer.consume(_unbarred(actor.def.moveset.keys()), actor.buffer_frame)
 		if action != &"" and not actor.start_finisher_on(action):
+			var starts := _starts
 			_start(_counter_for(action) if _counter_ready(action) else actor.move_for(action, intent), intent)
+			if _starts != starts:
+				started_by = action
 	return velocity
+
+
+# What a sway or duck costs more than its base because the ones before it evaded nothing (CombatTuning.strain_step; Task 17): half its base
+# cost for each, at most to the tuning's strain_cap times the base, the added part times 100 / max_stamina; 0 for any other move, for an
+# actor whose tuning has no strain, after the tuning's strain_reset_frames with no sway or duck, and once one evaded. The sway or duck
+# that is playing now and is about to be cut off by this one counts, though its end has not been noted yet.
+func _strain_extra(move: MoveData) -> float:
+	var tuning := actor.stats.tuning
+	if move.evade == MoveData.Evade.NONE or tuning.strain_step <= 0.0:
+		return 0.0
+	var level := _strain
+	if current != null and current.evade != MoveData.Evade.NONE:
+		if not _dodge_evaded:
+			level += 1
+	elif level > 0 and actor.buffer_frame - _dodge_ended_at >= tuning.strain_reset_frames:
+		_strain = 0
+		level = 0
+	if level <= 0:
+		return 0.0
+	var added := minf(float(level) * tuning.strain_step, tuning.strain_cap - 1.0)
+	return move.stamina_cost * added * 100.0 / actor.stats.max_stamina
 
 
 # `actions` without the sway, duck and dodge while the whiff rule bars them (see the top).
@@ -253,10 +295,16 @@ func _start(move: MoveData, intent: Intent, force := false) -> void:
 		push_error("MoveRunner: '%s' has no clip '%s' for move '%s'" % [actor.name, move.clip, move.id])
 		return
 	if move.stamina_cost > 0.0:
+		# the move's own cost restarts the wait before stamina comes back; the strain's extra is stamina and nothing else
+		var extra := _strain_extra(move)
 		actor.stats.spend_stamina(move.stamina_cost)
+		actor.stats.spend_stamina(extra, false)
 	if current != null:
 		_end(true)
 	current = move
+	_starts += 1
+	started_by = &""
+	window_reached = false
 	time = 0.0
 	evaded = false
 	_counter_from = null
@@ -293,6 +341,10 @@ func _start(move: MoveData, intent: Intent, force := false) -> void:
 # crossfades by itself.
 func _end(cancelled: bool) -> void:
 	var ended := current
+	if ended != null and ended.evade != MoveData.Evade.NONE:
+		_dodge_ended_at = actor.buffer_frame
+		if not _dodge_evaded:
+			_strain += 1  # a sway or duck that evaded nothing: the next costs more
 	for id in _hitboxes_on:
 		actor.rig.set_hitbox_active(id, false)
 		actor.scanner.end(id)
@@ -419,6 +471,7 @@ func _act(kind: StringName, args: Dictionary) -> void:
 		&"airborne_off":
 			_set_airborne(false)
 		&"cancel_open":
+			window_reached = true
 			var into: Variant = args.get("into", {})
 			window = window_of(current, into, actor.def) if into is Dictionary else {}
 		&"cancel_close":

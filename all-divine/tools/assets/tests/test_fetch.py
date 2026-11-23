@@ -104,6 +104,27 @@ class Parsing(unittest.TestCase):
             "https://kenney.nl/media/pages/assets/fantasy-town-kit/efe948d309-1754222374/kenney_fantasy-town-kit_2.0.zip",
         )
 
+    # The page as it is written since late 2026: no .zip link in it, a button with the pack's id and a script that asks
+    # /download-link/<id> for a signed link.
+    NEW_PAGE = ("<p><a href='#inline-download' class='button button-wide' data-lity>Download</a></p>"
+                "<a id='donate-text' href='#' data-download-id='6173736574732f66616e746173792d746f776e2d6b6974' "
+                "onclick='return initiateDownload(this)'>Continue without donating...</a>")
+
+    def test_kenney_download_id_as_the_page_now_writes_it(self):
+        self.assertEqual(fetch.parse_kenney_download_id(self.NEW_PAGE), "6173736574732f66616e746173792d746f776e2d6b6974")
+        self.assertEqual(fetch.parse_kenney_download_id('<a data-download-id="ab12" href="#">'), "ab12")
+        with self.assertRaises(ValueError):
+            fetch.parse_kenney_download_id("<p>nothing</p>")
+
+    def test_kenney_page_with_neither_form_says_so(self):
+        with self.assertRaisesRegex(ValueError, "no .zip link"):
+            fetch.parse_kenney_file_reference("<p>nothing</p>")
+
+    def test_the_old_form_is_still_taken_first(self):
+        html = self.NEW_PAGE + "<a href='https://x.test/p/pack.zip'>old</a>"
+        self.assertEqual(fetch.parse_kenney_file_reference(html), ("zip", "https://x.test/p/pack.zip"))
+        self.assertEqual(fetch.parse_kenney_file_reference(self.NEW_PAGE), ("id", "6173736574732f66616e746173792d746f776e2d6b6974"))
+
     def test_kenney_zip_link_missing_raises(self):
         with self.assertRaises(ValueError):
             fetch.parse_kenney_zip('<a href="/assets/other.html">nope</a>')
@@ -162,7 +183,14 @@ class FakeSite:
             def do_GET(self):
                 site.requests.append(("GET", self.path))
                 base = site.base
-                if self.path == "/kenney/page":
+                if self.path == "/kenney/newpage":
+                    self._send("<a id='d' href='#' data-download-id='abc123' onclick='return initiateDownload(this)'>Continue</a>")
+                elif self.path == "/download-link/abc123":
+                    if self.headers.get("Referer") != base + "/kenney/newpage":
+                        self.send_error(403)  # the real site answers {"error":"forbidden"} to a request that does not come from its page
+                    else:
+                        self._send(json.dumps({"url": base + "/files/pack.zip"}), "application/json")
+                elif self.path == "/kenney/page":
                     self._send("<a id='x' href='%s/files/pack.zip' onclick='go()'>Continue</a>" % base)
                 elif self.path == "/files/pack.zip":
                     self._send(site.zip_bytes, "application/zip")
@@ -224,6 +252,10 @@ class Cli(TempDirCase):
 
     def recorded(self, source_id):
         return json.loads(self.sources.read_text())[source_id].get("sha256", "")
+
+    def test_the_pack_is_found_through_the_download_link_of_the_new_page(self):
+        page = self.site.base + "/kenney/newpage"
+        self.assertEqual(fetch.kenney_file_url(page, self.opener), self.site.base + "/files/pack.zip")
 
     def test_first_fetch_without_accept_new_exits_2_and_changes_nothing(self):
         before = self.sources.read_text()
