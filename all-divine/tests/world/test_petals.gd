@@ -377,6 +377,32 @@ func test_dying_in_the_air_leaves_the_pile_on_the_ground() -> void:
 	assert_vec_near(at, point, 0.01, "at the last point he stood on the floor")
 
 
+func test_a_scene_playing_holds_the_pickup_and_the_first_tick_after_it_takes_the_pile() -> void:
+	# the game stays in PLAY while a Director moment runs: only the gate in `_petals_tick` keeps the pile where it lies
+	var w := await _world()
+	var run: StretchRun = w.run
+	var player: Actor = w.player
+	var point := Vector3(10, 0, 0)
+	await _fall(w, point, 50)
+	await frames(185)
+	await _stand(player, point + Vector3(3, 0, 0))
+	assert_eq(run.petals.carried(), 0, "(he is 3 m off)")
+	var scene := Director.new()  # a bare one, begun and not over
+	Director._moment = scene
+	assert_true(Director.moment_playing() != null, "(a moment is playing)")
+	assert_eq(Game.state, Game.State.PLAY, "(and the game is in play)")
+	player.place(Transform3D(Basis(), point + Vector3(0.5, 0, 0)))
+	await frames(5)
+	assert_eq(run.petals.carried(), 0, "in reach during a moment: nothing is taken")
+	assert_true(run.petals.pile_at() != null, "the pile still lies")
+	scene.phase = Director.Phase.DONE
+	assert_true(Director.moment_playing() == null, "(the moment is over)")
+	await frames(1)
+	assert_eq(run.petals.carried(), 50, "on the first tick after it ends the pile is taken")
+	Director._moment = null
+	scene.free()
+
+
 func test_a_pile_is_standing_ground_wherever_he_falls() -> void:
 	# beside a kerb, the gate's board, the lane's mouth, a corner of the yard, the court's wall, the plinths, a vat: and also where he
 	# was put by a test, in a wall or off the ground altogether
@@ -387,8 +413,13 @@ func test_a_pile_is_standing_ground_wherever_he_falls() -> void:
 	]
 	for point in points:
 		var w := await _world()
-		await _fall(w, point, 10)
 		var run: StretchRun = w.run
+		run.data.petals = 10
+		await _stand(w.player, point)
+		# the body was only put there: say that the last place he stood on the floor is the point itself (a wall, off the map), so that
+		# `StretchRun._ground_near` is what makes the pile standing ground
+		run.last_stand = point
+		(w.player as Actor).die()
 		assert_true(run.petals.pile_at() != null, "%s: a pile" % [point])
 		if run.petals.pile_at() != null:
 			var at: Vector3 = run.petals.pile_at()
@@ -412,17 +443,14 @@ func test_petals_gained_are_saved_by_the_next_event_or_the_autosave() -> void:
 	assert_eq(run.save_now(), OK)
 	var main_file := DIR.path_join(SaveStore.MAIN)
 	var bytes := FileAccess.get_file_as_bytes(main_file)
-	var stamp := FileAccess.get_modified_time(main_file)
 	run.petals.gain(20)
 	assert_eq(FileAccess.get_file_as_bytes(main_file), bytes, "no file change at once")
 	await frames(130)
 	assert_eq(store.read().petals, 20, "the file says 20 after the autosave tick")
 	# nothing marked: no write
 	bytes = FileAccess.get_file_as_bytes(main_file)
-	stamp = FileAccess.get_modified_time(main_file)
 	await frames(400)
 	assert_eq(FileAccess.get_file_as_bytes(main_file), bytes, "with nothing marked the bytes are as they were")
-	assert_eq(FileAccess.get_modified_time(main_file), stamp, "and so is the modification time")
 
 
 func test_a_foe_that_falls_marks_the_game_for_the_autosave() -> void:

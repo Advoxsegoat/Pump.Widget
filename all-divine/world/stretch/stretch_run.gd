@@ -405,7 +405,7 @@ func _petals_tick() -> void:
 		last_stand = Vector3(player.global_position.x, 0.0, player.global_position.z)
 	petals.tick(1)
 	var lying: Variant = petals.pile_at()
-	if lying == null or player.dead or Game.state != Game.State.PLAY or Director.current() != null or Director.moment_playing() != null:
+	if lying == null or player.dead or Director.current() != null or Director.moment_playing() != null:
 		return
 	var there := lying as Vector3
 	if Vector2(there.x - player.global_position.x, there.z - player.global_position.z).length() <= _reach():
