@@ -115,6 +115,61 @@ func test_a_recording_made_with_stretch_starts_a_new_game_and_leaves_the_save_al
 	DirAccess.remove_absolute(file)
 
 
+func _press(main: Main, keycode: Key) -> void:
+	var key := InputEventKey.new()
+	key.keycode = keycode
+	key.pressed = true
+	main._unhandled_input(key)
+
+
+# The F2 key while a recording is being made: it is a key that changes the fight's place, so the recording says `debug_keys` (as F5 to
+# F10 do), and it enters the stretch as a new game that reads and writes no file, whatever the save holds.
+func test_f2_while_recording_marks_the_recording_and_enters_a_new_game_that_leaves_the_save_alone() -> void:
+	var store := SaveStore.new(DIR)
+	var saved := SaveData.new_game()
+	saved.petals = 5
+	saved.rest_shrine = &"rose_b"
+	saved.at = {x = -15.0, y = 0.0, z = 0.0, yaw = 217.0}
+	assert_eq(store.write(saved), OK)
+	assert_eq(store.write(saved), OK)
+	var before := _bytes()
+	var file := "user://main_f2_record_test.tres"
+	var main := _main("", PackedStringArray(["--record=" + file]))
+	await frames(2)
+	assert_true(main.arena() != null, "the recording began in the yard")
+	_press(main, KEY_F2)
+	await frames(2)
+	assert_eq(main.region.scene_file_path, "res://world/bilibara/bilibara.tscn", "F2 went to the stretch")
+	assert_true(main._recorder.recording().debug_keys, "the recording says debug_keys")
+	var first := Registry.fetch(&"stretch", &"rose_a") as ShrineDef
+	assert_vec_near(main.player.global_position, first.respawn, 0.01, "he stands at the new game's start")
+	assert_eq(main.stretch.data.petals, 0, "the run is a new game, not the saved one")
+	assert_eq(main.stretch.store, null, "with no store to write to")
+	await frames(400)
+	main.stretch.rest(first)
+	main.stretch.set_flag(&"x")
+	assert_eq(_bytes().hash(), before.hash(), "the save folder is byte for byte as it was")
+	main.queue_free()
+	await frames(3)
+	assert_eq(_bytes().hash(), before.hash(), "and as it was after the game's end")
+	DirAccess.remove_absolute(file)
+
+
+# With no recorder F2 continues the saved game (a guard: it was so before).
+func test_f2_with_no_recorder_continues_the_saved_game() -> void:
+	var store := SaveStore.new(DIR)
+	var saved := SaveData.new_game()
+	saved.petals = 5
+	saved.rest_shrine = &"rose_b"
+	assert_eq(store.write(saved), OK)
+	var main := _main()
+	await frames(2)
+	_press(main, KEY_F2)
+	await frames(2)
+	assert_eq(main.stretch.data.petals, 5, "it is the saved game")
+	assert_true(main.stretch.store != null, "with its store")
+
+
 func test_the_yards_arena_never_begins_when_the_game_starts_in_the_stretch() -> void:
 	var main := _main("new")
 	await frames(3)

@@ -169,8 +169,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key != null and key.pressed and not key.echo:
 		# (not while the pause menu is open: the game ignores them there, and a key that did nothing changed no fight)
-		if _recorder != null and Game.state != Game.State.PAUSE and key.keycode >= KEY_F5 and key.keycode <= KEY_F10:
-			_recorder.recording().debug_keys = true  # these change the fight and are not controls: the recording says so
+		if _recorder != null and Game.state != Game.State.PAUSE and (key.keycode == KEY_F2 or (key.keycode >= KEY_F5 and key.keycode <= KEY_F10)):
+			_recorder.recording().debug_keys = true  # F2 (the stretch) and these change the fight and are not controls: the recording says so
 		match key.keycode:
 			KEY_F3:
 				overlay.visible = not overlay.visible
@@ -182,7 +182,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 				return
 			KEY_F2:
-				enter_stretch()
+				enter_stretch(_recorder != null)  # a recording is of a new game: it never reads or writes the player's save
 				get_viewport().set_input_as_handled()
 				return
 			KEY_F5:
