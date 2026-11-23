@@ -1,8 +1,8 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=6 format=3]
 
 [sub_resource type="Gradient" id="Gradient_rose"]
 offsets = PackedFloat32Array(0, 0.38, 0.62, 1)
-colors = PackedColorArray(0.91, 0.38, 0.49, 0, 0.91, 0.5, 0.47, 1, 0.91, 0.62, 0.45, 1, 0.91, 0.76, 0.44, 0)
+colors = PackedColorArray(0.98, 0.72, 0.76, 0, 0.98, 0.76, 0.76, 0.55, 0.98, 0.84, 0.74, 0.55, 0.98, 0.9, 0.74, 0)
 
 [sub_resource type="GradientTexture1D" id="GradientTexture1D_rose"]
 gradient = SubResource("Gradient_rose")
@@ -31,28 +31,12 @@ particles_anim_loop = false
 material = SubResource("StandardMaterial3D_glow")
 size = Vector2(0.1, 0.1)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ink"]
-transparency = 1
-cull_mode = 2
-shading_mode = 0
-vertex_color_use_as_albedo = true
-albedo_color = Color(0.04, 0.03, 0.06, 0.5)
-render_priority = -1
-billboard_mode = 3
-particles_anim_h_frames = 1
-particles_anim_v_frames = 1
-particles_anim_loop = false
-
-[sub_resource type="QuadMesh" id="QuadMesh_ink"]
-material = SubResource("StandardMaterial3D_ink")
-size = Vector2(0.14, 0.14)
-
 [node name="ShrineGlow" type="GPUParticles3D"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.95, 0)
 cast_shadow = 0
 amount = 28
+use_fixed_seed = true
+seed = 4217
 lifetime = 4.0
 process_material = SubResource("ParticleProcessMaterial_glow")
 draw_pass_1 = SubResource("QuadMesh_glow")
-draw_passes = 2
-draw_pass_2 = SubResource("QuadMesh_ink")
