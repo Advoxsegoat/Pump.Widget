@@ -45,4 +45,5 @@ max_stamina = 100.0
 max_posture = 100.0
 poise = 20.0
 look_height = 1.664
+petals = 40
 required_clips = PackedStringArray("idle", "walk", "jog", "sprint")

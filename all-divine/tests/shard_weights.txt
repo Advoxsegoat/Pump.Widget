@@ -10,6 +10,7 @@
 # refresh the numbers from CI's logs when a shard nears its cap (tests/tools/test_ci_workflow.gd says when).
 405  render/test_bilibara_cues.gd   # measured in a render shard
 289  bot/test_combat_bot.gd   # measured in a render shard
+277  render/test_bilibara_pile.gd   # 138 s here in a filtered render run, times two: an estimate
 256  actors/test_enemy_brain.gd   # measured in a render shard
 229  ui/test_pause.gd   # measured in a render shard
 193  perf/test_combat_perf.gd   # measured in a render shard
@@ -64,6 +65,7 @@
 17   fx/test_readability.gd   # measured in a render shard
 17   render/test_drummer_start_shots.gd   # measured in a render shard
 17   actors/test_scarf.gd   # measured in a render shard
+17   world/test_petals.gd   # 8.2 s here in a filtered render run, times two: an estimate
 16   render/test_ground_pictures.gd   # measured in a render shard
 16   render/test_menu_draw.gd   # measured in a render shard
 16   combat/test_wall_blows.gd   # measured in a render shard

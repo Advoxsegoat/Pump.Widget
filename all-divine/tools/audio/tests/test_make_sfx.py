@@ -32,6 +32,7 @@ NAMES = [
     "surface_cloth_1", "surface_cloth_2", "body_fall", "charge_hum", "stamina_refused",
     "evade_whoosh", "perfect_dodge", "knocked_out", "shrine_rest",
     "gate_unlatch",
+    "petal_gain", "petal_wilt",
 ]
 
 

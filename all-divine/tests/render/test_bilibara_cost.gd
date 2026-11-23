@@ -1,7 +1,7 @@
 extends TestCase
 ## What the stretch costs to draw (xvfb, gl_compatibility): the container has no GPU, so the spec's 60 fps at 1920 x 1080 on a GTX 1060 class
 ## machine is held by proxies, and this is the drawing half (tests/perf/test_bilibara_budget.gd is the physics step). At every one of the views, with two
-## bodies in it (Abarax and a tier I Knuckle, as the owner's pictures) and with eight (Abarax and seven foes), the frame's draw calls are at most 450
+## bodies in it (Abarax and a tier I Knuckle, as the owner's pictures) and with eight (Abarax and seven foes), and a pile of petals 3 m off (and the count on the Hud), the frame's draw calls are at most 450
 ## and its primitives at most 400,000: the whole of the frame as the renderer counts it (RENDERING_INFO_TOTAL_*_IN_FRAME: the stage's world, the
 ## shadow pass, the screen's own quads). The views are the nine of test_bilibara_view and its four more (the loop lane, the lane's north end, the street's
 ## middle, the colonnade), and the 26 reference positions of the readability tests (14 and 12 more): read from those files' constants, so that a place added
@@ -71,6 +71,9 @@ func test_every_reference_view_is_inside_the_draw_budget() -> void:
 		for bodies: int in [2, 8]:
 			var at: Transform3D = view.at
 			main.player.place(at)
+			# A pile of petals lies three metres off (a death's: the run draws it, the count is on the Hud): the frame is counted with it in.
+			main.stretch.data.petals = 120
+			main.stretch.petals.fall_at(at.origin + Vector3(-3.0, 0.0, -1.5))
 			# The foes: the first two metres east of Abarax; the rest in a ring 1.5 m round him (as test_bilibara_view's eight).
 			for i in foes.size():
 				var shown: bool = i < int(bodies) - 1

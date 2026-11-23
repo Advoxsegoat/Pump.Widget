@@ -28,6 +28,7 @@ commit the new files, which tools/audio/tests checks are what this makes):
   perfect     a bright bell of three partials with a breath of air over it: the perfect dodge, a rung note
   knocked     a short hard low thump with a dull crack and no swell: being knocked out of a chain, plainly lost
   shrine      a low round bell of two partials with a soft thud under it: a rest at a rose shrine
+  petals      a soft rising two-note chime (petals gained or taken back) and a falling one (a pile wilts)
 """
 import argparse
 import io
@@ -469,6 +470,23 @@ def shrine_rest(rng):
     return fade_out(mix([(layer(bell, 1.0), 0.0), (layer(thud, 0.18), 0.0)], n), 0.03)
 
 
+def petal_gain(rng):
+    """Petals gained or taken back: a soft chime of two notes, the second a fifth above the first and a little later, each a
+    round bell of two partials that rings and dies away, with nothing sharp in it: heard at every foe that falls."""
+    n = samples_in(0.5)
+    first = partials(n, 784.0, [1.0, 2.0], [1.0, 0.3], [0.16, 0.09])
+    second = partials(n, 1174.7, [1.0, 2.0], [1.0, 0.25], [0.2, 0.1])
+    return fade_out(mix([(layer(first, 0.8), 0.0), (layer(second, 1.0), 0.13)], n), 0.03)
+
+
+def petal_wilt(rng):
+    """A pile of petals wilts: the same soft chime turned over, a falling pair of notes, the second lower and duller."""
+    n = samples_in(0.6)
+    first = partials(n, 880.0, [1.0, 2.0], [1.0, 0.25], [0.17, 0.09])
+    second = partials(n, 587.3, [1.0, 2.0], [1.0, 0.12], [0.24, 0.1])
+    return fade_out(mix([(layer(first, 0.9), 0.0), (layer(second, 1.0), 0.16)], n), 0.04)
+
+
 #: name -> (recipe taking the sound's random.Random, peak in dBFS). The names are the files, and the cues in
 #: data/sounds/ group them (impact_palm is impact_palm_1..3). The order is the order they are made in.
 SOUNDS = {
@@ -499,6 +517,8 @@ SOUNDS = {
     "knocked_out": (knocked_out, -10.0),
     "shrine_rest": (shrine_rest, -12.0),
     "gate_unlatch": (gate_unlatch, -14.0),
+    "petal_gain": (petal_gain, -14.0),
+    "petal_wilt": (petal_wilt, -14.0),
 }
 
 

@@ -27,6 +27,8 @@ const HEAD_NEAR := 0.08
 const HEAD_BLEND_MOST := 0.5
 ## A head's ring under this many pixels is too small to say anything (the rule passes it); with `strict_head` it is a problem.
 const HEAD_RING_LEAST := 60
+## Frames for a pile's column of petals to settle (its particles are made filled: they are started a lifetime ahead).
+const PILE_FILLS := 40
 ## Abarax's shirt against the ground, or an outline at least this much darker along this share of the shirt's edge.
 const SHIRT_LEAST := 0.06
 const OUTLINE_DARKER := 0.25
@@ -348,6 +350,14 @@ func _row(main: Main, at: Vector3, defs: Array[String], shot_out: Array) -> Dict
 	return result
 
 
+## A pile of petals at `at`, as a death leaves it (the run's own: `Petals.fall_at`, which the run draws), and `settle` frames for its column to
+## fill (it takes a lifetime of its petals).
+func lay_pile(main: Main, at: Vector3, settle: int) -> void:
+	main.stretch.data.petals = 120
+	main.stretch.petals.fall_at(at)
+	await t.frames(settle)
+
+
 func _write(path: String, text: String) -> void:
 	var full := ProjectSettings.globalize_path("res://").path_join(path)
 	DirAccess.make_dir_recursive_absolute(full.get_base_dir())
@@ -358,7 +368,8 @@ func _write(path: String, text: String) -> void:
 
 
 ## Measures the bodies at `positions` ([name, x, z]) in the stretch; writes the table to `out_text` and the sheet to `out_sheet`; returns the problems found.
-## `options`: `settle` (frames to wait after entering the stretch, so that a glow of petals has filled: it takes about 4 s), `head_only` (only
+## `options`: `pile` (an offset from the tier I Knuckle's place, 2.4 m east of each position: a pile of petals lies there, as it does where a
+## fighter fell, and `pile_settle` frames pass for its column to settle), `row_one_only` (only Abarax, a tier I and a tier III Knuckle: not the second row of bodies), `settle` (frames to wait after entering the stretch, so that a glow of petals has filled: it takes about 4 s), `head_only` (only
 ## the head's ring is held: beside a shrine the question is whether the glow hides a head), `strict_head` (a head ring under HEAD_RING_LEAST
 ## pixels is a problem line too: a body the glow hides reports a ring of 0 and would otherwise pass)).
 func stretch(positions: Array, out_text: String, out_sheet: String, options: Dictionary = {}) -> PackedStringArray:
@@ -382,8 +393,10 @@ func stretch(positions: Array, out_text: String, out_sheet: String, options: Dic
 	var shots: Array[Image] = []
 	for entry: Array in positions:
 		var at := Vector3(entry[1], 0.0, entry[2])
+		if options.has("pile"):
+			await lay_pile(main, at + Vector3(2.4, 0.0, 0.0) + (options["pile"] as Vector3), int(options.get("pile_settle", PILE_FILLS)))
 		var seen := {}
-		for defs: Array[String] in [ROW_ONE, ROW_TWO]:
+		for defs: Array[String] in ([ROW_ONE] if options.get("row_one_only", false) else [ROW_ONE, ROW_TWO]):
 			var one: Array = []
 			seen.merge(await _row(main, at, defs, one))
 			shots.append(one[0])
