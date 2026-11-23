@@ -108,6 +108,41 @@ func test_a_foe_that_never_engages_is_a_broken_encounter() -> void:
 	assert_true(String(problems[0]).contains("never engages"), str(problems))
 
 
+# Found in the masher's sweep (seeds 5 and 9): a foe that came on at 13.3 m from a player who stood still and did nothing stood idle
+# and was named "never engages". He is not: the player was out of his sight (12 m) and he had not noticed him. The watch counts only
+# the frames the foe's target is within engage_within of him, and names a foe that could have come and did not.
+func test_a_foe_the_player_is_too_far_from_to_notice_is_not_a_broken_encounter() -> void:
+	var arena := TestArena.make(self)
+	var player := TestArena.spawn(arena, Duel.def(ActorDef.Team.PLAYER, 5.0), Brain.new(), Vector3.ZERO, "A")
+	var foe := (load(TestArena.ACTOR) as PackedScene).instantiate() as Actor
+	foe.name = "Far"
+	foe.def = (load(KNUCKLE) as ActorDef).duplicate() as ActorDef
+	foe.def.brain = foe.def.brain.duplicate() as BrainDef
+	foe.def.brain.sight_range = 0.0  # as far as the player stands, he cannot notice (keeps the fixture quiet; the brain's own range is not the test)
+	foe.def.brain.hearing_range = 0.0
+	foe.position = Vector3(12.5, 0.0, 0.0)
+	arena.add_child(foe)
+	var watch := BotWatch.new()
+	watch.engage_frames = 60
+	watch.stuck_frames = 100000
+	var problems := PackedStringArray()
+	for i in 150:
+		await frames(1)
+		problems.append_array(watch.check(i + 1, player, [player, foe]))
+	assert_true(problems.is_empty(), "12.5 m is out of his reach for 150 frames: %s" % [problems])
+	# The player comes within reach: the frames in reach are counted from now, not from when the foe was first seen.
+	player.global_position = Vector3(foe.global_position.x - 8.0, 0.0, 0.0)
+	for i in 50:
+		await frames(1)
+		problems.append_array(watch.check(151 + i, player, [player, foe]))
+	assert_true(problems.is_empty(), "50 frames in reach is not yet 60: %s" % [problems])
+	for i in 30:
+		await frames(1)
+		problems.append_array(watch.check(201 + i, player, [player, foe]))
+	assert_eq(problems.size(), 1, "and 60 are: %s" % [problems])
+	assert_true(String(problems[0]).contains("never engages"), str(problems))
+
+
 func test_no_wave_progress_for_ninety_seconds_is_a_soft_lock() -> void:
 	var run := Duel.make(self, [], [], 3.0)
 	var a: Actor = run["a"]
