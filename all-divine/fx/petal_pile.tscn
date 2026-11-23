@@ -41,7 +41,7 @@ particles_anim_loop = false
 
 [sub_resource type="QuadMesh" id="QuadMesh_petal"]
 material = SubResource("StandardMaterial3D_petal")
-size = Vector2(0.1, 0.1)
+size = Vector2(0.125, 0.125)
 
 [node name="PetalPile" type="Node3D"]
 script = ExtResource("1_pile")
@@ -49,7 +49,7 @@ script = ExtResource("1_pile")
 [node name="Column" type="GPUParticles3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, 0)
 cast_shadow = 0
-amount = 36
+amount = 56
 lifetime = 3.2
 preprocess = 3.2
 use_fixed_seed = true
