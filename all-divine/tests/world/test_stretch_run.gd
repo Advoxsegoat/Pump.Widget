@@ -100,8 +100,9 @@ func test_a_new_game_stands_at_the_first_shrines_respawn_with_full_bars() -> voi
 	var w := await _world()
 	var player: Actor = w.player
 	var run: StretchRun = w.run
-	assert_vec_near(player.global_position, Vector3(-32.5, 0, 1.25), 0.01, "at rose_a's respawn")
-	assert_vec_near(player.facing(), _forward(90.0), 0.01, "facing 90 degrees")
+	var first := _shrine(&"rose_a")
+	assert_vec_near(player.global_position, first.respawn, 0.01, "a new game starts at the first shrine's respawn")
+	assert_vec_near(player.facing(), _forward(first.respawn_yaw_deg), 0.01, "facing as that shrine says")
 	assert_eq(player.stats.hp, player.stats.max_hp, "full HP")
 	assert_eq(player.stats.stamina, player.stats.max_stamina, "full stamina")
 	assert_eq(player.stats.posture, player.stats.max_posture, "full posture")
@@ -216,7 +217,7 @@ func test_death_stands_him_up_at_the_last_shrine_after_three_seconds() -> void:
 	assert_true(player.dead, "still down at 179 frames")
 	await frames(2)
 	assert_false(player.dead, "up at 181")
-	assert_vec_near(player.global_position, Vector3(-32.5, 0, 1.25), 0.01, "at rose_a's respawn")
+	assert_vec_near(player.global_position, _shrine(&"rose_a").respawn, 0.01, "at rose_a's respawn")
 	assert_eq(player.stats.hp, player.stats.max_hp, "with full bars")
 	assert_eq(back[0], 1, "respawned once")
 	# after resting at rose_b, at rose_b
@@ -263,6 +264,48 @@ func test_every_shrine_is_standing_ground_and_clear_of_the_foes() -> void:
 		assert_true(shrine.respawn.distance_to(shrine.plinth) <= 3.0, "%s: the respawn is within 3 m of the plinth" % id)
 		for point: Vector3 in [shrine.respawn, shrine.plinth + toward]:
 			assert_true(reached.has(StretchGround.cell_of(Vector2(point.x, point.z))), "%s: %s is walked to from the spawn" % [id, point])
+
+
+# Each shrine's plinth is the stone the layout built for it (a ray down at the plinth's point hits that block, a hand high), and he stands up
+# 1.6 m in front of it on the camera's side (south: +z), facing the stone, inside the shrine's radius.
+func test_each_shrine_stands_on_its_own_stone_and_its_respawn_faces_it() -> void:
+	var w := await _world()
+	var region: Region = w.region
+	var space := region.get_world_3d().direct_space_state
+	for pair: Array in [[&"rose_a", "Plinth_A"], [&"rose_b", "Plinth_B"]]:
+		var shrine := _shrine(pair[0])
+		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(shrine.plinth + Vector3(0.013, 2.0, 0.007), shrine.plinth + Vector3(0.013, -1.0, 0.007), Layers.WORLD))
+		assert_true(not hit.is_empty() and (hit["collider"] as Node).name == pair[1], "%s: a ray down at the plinth's point hits %s" % [pair[0], pair[1]])
+		if not hit.is_empty():
+			assert_near((hit["position"] as Vector3).y, 0.6, 0.01, "%s: the stone is 0.6 m high" % pair[0])
+		var in_front := shrine.respawn - shrine.plinth
+		assert_near(in_front.length(), 1.6, 0.01, "%s: he stands up 1.6 m from the stone" % pair[0])
+		assert_true(in_front.z > 1.59, "%s: on the camera's side (south)" % pair[0])
+		assert_true(in_front.length() <= shrine.radius, "%s: inside the shrine's radius" % pair[0])
+		assert_vec_near(_forward(shrine.respawn_yaw_deg), -in_front.normalized(), 0.01, "%s: facing the stone" % pair[0])
+
+
+# The reading places beside each shrine (the picture tests stand a body at each, BESIDE_SHRINES) are standing ground walked to from the court.
+# (A metre to the side of Plinth_A's stone is not ground: the block is 1.6 m wide and a body is 0.35 m in radius, so A has no side places.)
+func test_the_places_a_body_is_read_at_beside_each_shrine_are_standing_ground() -> void:
+	var w := await _world()
+	var region: Region = w.region
+	var reached := StretchGround.reached(region)
+	for entry: Array in load("res://tests/render/test_bilibara_readability_more.gd").BESIDE_SHRINES:
+		var shrine := _shrine(entry[0])
+		var point := shrine.plinth + Vector3(0.0, 0.0, float(entry[1]))
+		assert_true(StretchGround.stands(region, point), "%s, %.1f m south of the plinth, is standing ground" % [entry[0], entry[1]])
+		assert_true(reached.has(StretchGround.cell_of(Vector2(point.x, point.z))), "and is walked to from the spawn")
+	var side := _shrine(&"rose_a").plinth + Vector3(1.0, 0.0, 0.0)
+	assert_false(StretchGround.stands(region, side), "a metre east of Plinth_A is the stone's edge, not ground: no side places at A")
+
+
+# Where the old start was (1.7 m from shrine A over bare paving) is not a place any more: nothing is built or left there.
+func test_a_new_game_starts_at_the_first_shrines_respawn_and_not_at_the_regions_spawn_marker() -> void:
+	var w := await _world()
+	var first := _shrine(&"rose_a")
+	assert_vec_near(w.player.global_position, first.respawn, 0.01, "he starts at rose_a's respawn")
+	assert_true(w.player.global_position.distance_to((w.region as Region).spawn().origin) > 3.0, "which is not the region's Spawn marker (a marker the yard-like tests use)")
 
 
 func test_set_flag_saves_through_the_store_and_announces_once() -> void:
@@ -380,7 +423,7 @@ func test_a_place_with_no_ground_under_it_or_an_odd_height_loads_at_the_shrine()
 		var data := SaveData.new_game()
 		data.at = at
 		_start(bare, data)
-		assert_vec_near(bare.player.global_position, Vector3(-32.5, 0, 1.25), 0.01, "%s: at the first shrine" % [at])
+		assert_vec_near(bare.player.global_position, _shrine(&"rose_a").respawn, 0.01, "%s: at the first shrine's respawn" % [at])
 		(bare.region as Node).queue_free()
 		await frames(2)
 

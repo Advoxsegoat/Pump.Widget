@@ -10,9 +10,9 @@ func test_the_shrine_data_loads_through_the_registry() -> void:
 	if a == null or b == null:
 		return
 	assert_eq(a.title, "Rose shrine, behind the Lazyman's")
-	assert_eq(a.plinth, Vector3(-30.8, 0, 1.25))
-	assert_eq(a.respawn, Vector3(-32.5, 0, 1.25))
-	assert_eq(a.respawn_yaw_deg, 90.0)
+	assert_eq(a.plinth, Vector3(-36.1, 0, -4.7))
+	assert_eq(a.respawn, Vector3(-36.1, 0, -3.1))
+	assert_eq(a.respawn_yaw_deg, 180.0)
 	assert_eq(a.radius, 2.0)
 	assert_eq(b.title, "Rose shrine, the lamp and the chair")
 	assert_eq(b.plinth, Vector3(31.8, 0, -37.2))

@@ -57,7 +57,7 @@ func _bytes() -> Dictionary:
 
 # The hands: stand, walk toward the first shrine's plinth, press interact (a rest, if he is in reach), walk on.
 func _hands() -> Array:
-	return [{"frames": 10}, {"frames": 40, "move": Vector2(-1, 0)}, {"frames": 1, "press": [&"interact"]}, {"frames": 20},
+	return [{"frames": 10}, {"frames": 20, "move": Vector2(0, -1)}, {"frames": 1, "press": [&"interact"]}, {"frames": 20},
 			{"frames": 60, "move": Vector2(1, 0.4)}, {"frames": 1, "press": [&"interact"]}, {"frames": 60, "move": Vector2(0, 1)}, {"frames": 30}]
 
 

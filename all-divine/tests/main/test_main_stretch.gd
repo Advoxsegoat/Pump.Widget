@@ -77,7 +77,7 @@ func test_f2_continues_the_saved_game_and_new_reads_and_writes_nothing() -> void
 	assert_eq(main.stretch.data.petals, 0, "a new game has no petals")
 	assert_eq(main.stretch.data.rest_shrine, &"", "and has rested nowhere")
 	assert_eq(main.stretch.rest_shrine().id, &"rose_a", "it starts at the first shrine")
-	assert_vec_near(main.player.global_position, Vector3(-32.5, 0, 1.25), 0.01, "where it stands")
+	assert_vec_near(main.player.global_position, (main.stretch.def.shrines[0] as ShrineDef).respawn, 0.01, "where it stands: the first shrine's respawn")
 	var before := _bytes()
 	main.stretch.set_flag(&"x")
 	main.stretch.rest(main.stretch.def.shrines[0])
