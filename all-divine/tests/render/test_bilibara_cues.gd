@@ -6,8 +6,8 @@ extends TestCase
 ## diamond, which carries its own ink edge in the code that draws it (Hud._diamond) and is not measured here.
 ##
 ## A cue's pixels are those the picture changes by 0.2 or more in luma (off the foe's own body); the rule: at least 85% of its outline (its pixels with a
-## neighbour, four ways, that is neither the cue nor the body) changes the picture by 0.33 or more, bright or dark, or is a dark edge (a pixel of 0.16 or less
-## in the picture, or touching one): the cue differs from the ground by 0.33, or it is carried by a dark edge all round it. A rim carries an ink edge (the second, wider hull of the rim), a wave a dark band each side of its ring, and
+## neighbour, four ways, that is neither the cue nor the body) changes the picture by 0.35 or more, bright or dark, or is a dark edge (a pixel of 0.16 or less
+## in the picture, or touching one): the cue differs from the ground by 0.35, or it is carried by a dark edge all round it. A rim carries an ink edge (the second, wider hull of the rim), a wave a dark band each side of its ring, and
 ## a spark and a puff a dark pass behind them.
 ## The table goes to out/shots/bilibara_cues.txt and a crop of each cue at four times its size (the yard's and one in the stretch) to
 ## out/shots/bilibara/cues/.
@@ -16,8 +16,7 @@ const MAIN := "res://main/main.tscn"
 const SIZE := Vector2i(1920, 1080)
 const OUT_TEXT := "out/shots/bilibara_cues.txt"
 const OUT_PICTURES := "out/shots/bilibara/cues/"
-## 0.33 (it was 0.35): the fronts' wood is a mid tone now, 0.16 in the picture where it was 0.13, and the perilous rim (0.50) stands off it by 0.34.
-const STRONG := 0.33
+const STRONG := 0.35
 ## A pixel is the cue's when the picture changes it by this much in luma or more; the cue's outline reads when this share of it changes by STRONG or more.
 const VISIBLE := 0.2
 const EDGE_SHARE := 0.85
@@ -267,7 +266,7 @@ func _run(main: Main, foe: Actor, label: String, at: Vector3, lines: PackedStrin
 	for cue: Array in made:
 		var m: Dictionary = cue[1]
 		var ok := _reads(m, cue[0])
-		lines.append("%s | %s | cue px %d, %d change by 0.33 or more | their mean change %.3f | outline px %d, of them %d carried (%.0f%%) | %s" % [label, cue[0], m.n, m.strong, m.mean, m.edge, m.carried, 100.0 * m.carried / maxf(m.edge, 1.0), "reads" if ok else "LOST"])
+		lines.append("%s | %s | cue px %d, %d change by 0.35 or more | their mean change %.3f | outline px %d, of them %d carried (%.0f%%) | %s" % [label, cue[0], m.n, m.strong, m.mean, m.edge, m.carried, 100.0 * m.carried / maxf(m.edge, 1.0), "reads" if ok else "LOST"])
 		if not ok:
 			problems.append("%s at %s: %d px (%d strong), outline %d px of which %d carried (at least %.0f%%)" % [cue[0], label, m.n, m.strong, m.edge, m.carried, 100.0 * _share(cue[0])])
 		if not keep.is_empty():
@@ -275,7 +274,7 @@ func _run(main: Main, foe: Actor, label: String, at: Vector3, lines: PackedStrin
 
 
 func test_every_cue_reads_on_every_ground() -> void:
-	var lines := PackedStringArray(["place | cue | pixels the cue changes | their mean change in luma | the cue's outline and how much of it differs from the ground by 0.33 or more | verdict"])
+	var lines := PackedStringArray(["place | cue | pixels the cue changes | their mean change in luma | the cue's outline and how much of it differs from the ground by 0.35 or more | verdict"])
 	var problems := PackedStringArray()
 	var positions: Array = []
 	positions.append_array(load("res://tests/render/test_bilibara_readability.gd").POSITIONS)

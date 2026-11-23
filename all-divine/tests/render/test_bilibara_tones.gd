@@ -227,12 +227,12 @@ func test_the_town_round_the_pale_ground_has_the_right_tones() -> void:
 	for style in ["frontage", "tannery", "plain"]:
 		if not lumas.has(style):
 			continue
-		# The plaster is the paler part of a front (the doors, the shutters, the trim and the windows are the darker part, and they are many: the median
-		# is theirs): its upper quartile.
+		# The plaster is the paler part of a front (the doors, the shutters, the trim and the windows are dark, since a head against one must not be
+		# within 0.08 of it, and they are many: the median is theirs): its upper quartile.
 		var sorted := (lumas[style] as Array).duplicate()
 		sorted.sort()
 		var luma: float = sorted[sorted.size() * 3 / 4]
-		# (The tannery's walls are brown wood, a mid tone like a door: only its top is held.)
+		# (The tannery's walls are brown wood, which is the dark of a door: only its top is held.)
 		assert_true((style == "tannery" or luma >= roofs_top - 1e-6) and luma <= ground + 0.06, "%s fronts: plaster (upper quartile) luma %.3f, between the roofs (%.3f) and a little over the ground (%.3f)" % [style, luma, roofs_top, ground])
 	var water: float = mean.call("water")
 	if water >= 0.0:
@@ -244,124 +244,6 @@ func test_the_town_round_the_pale_ground_has_the_right_tones() -> void:
 	assert_true(neon_pixels > 100, "the neon shows in the views (%d pixels)" % neon_pixels)
 	assert_true(hot_pixels <= 20, "%d pixels of another hue are saturated over 0.5: %s" % [hot_pixels, hot_where.slice(0, 6)])
 	assert_eq(problems, PackedStringArray())
-
-
-## The wood of the fronts (doors, shutters, timber, the tannery's boards: every texel of the Bilibara colormap that is a brown, r > g > b and
-## saturated; the iron bars and the window glass are other colours and stay dark) is a mid tone in the final picture, WOOD_LOW to WOOD_HIGH, at
-## the lane, the Rack Walk and the street (the median of the wood's pixels at each view; the tannery's boards, at the lane, are warmer and no
-## darker than WOOD_LOW). A black front (0.13 to 0.14 it was) is the first thing the eye lands on; a paler one loses a tier III's head, whose tone is 0.28 to 0.29: the lightest wood that keeps every head
-## under half at every measured place is this one (the readability tests hold that), so the range stops at 0.19.
-const WOOD_LOW := 0.15
-const WOOD_HIGH := 0.19
-const WOOD_VIEWS: Array[String] = ["LaneMid", "RackWest", "Spawn", "StreetEast"]
-const WOOD_SHADER := """
-shader_type spatial;
-render_mode unshaded;
-uniform sampler2D colormap : source_color, filter_nearest;
-void fragment() {
-	vec3 c = texture(colormap, UV).rgb;
-	bool brown = c.r > c.g * 1.05 && c.g > c.b * 1.05 && (c.r - c.b) > 0.25 * c.r;
-	ALBEDO = brown ? vec3(1.0, 0.0, 1.0) : vec3(0.0);
-}
-"""
-## The tannery's own boards are drawn green instead, so that they are read apart.
-const TANNERY_WOOD_SHADER := """
-shader_type spatial;
-render_mode unshaded;
-uniform sampler2D colormap : source_color, filter_nearest;
-void fragment() {
-	vec3 c = texture(colormap, UV).rgb;
-	bool brown = c.r > c.g * 1.05 && c.g > c.b * 1.05 && (c.r - c.b) > 0.25 * c.r;
-	ALBEDO = brown ? vec3(0.0, 1.0, 0.0) : vec3(0.0);
-}
-"""
-
-
-func test_the_wood_of_the_fronts_is_a_mid_tone_in_the_picture_at_the_lane_the_rack_walk_and_the_street() -> void:
-	Game.reset()
-	var main := track((load(MAIN) as PackedScene).instantiate()) as Main
-	await frames(5)
-	main.enter_stretch()
-	var region := main.region
-	main.hud.visible = false
-	main.player.set_brain(Brain.new())
-	var env := (region.get_node("WorldEnvironment") as WorldEnvironment).environment
-	var sky := env.background_color
-	var flat := ShaderMaterial.new()
-	flat.shader = Shader.new()
-	flat.shader.code = WOOD_SHADER
-	flat.set_shader_parameter("colormap", load("res://assets/env/textures/bilibara_colormap.png"))
-	var tannery_flat := ShaderMaterial.new()
-	tannery_flat.shader = Shader.new()
-	tannery_flat.shader.code = TANNERY_WOOD_SHADER
-	tannery_flat.set_shader_parameter("colormap", load("res://assets/env/textures/bilibara_colormap.png"))
-	var black := _flat(Color.BLACK)
-	var lines := PackedStringArray()
-	var problems := PackedStringArray()
-	for view_name in WOOD_VIEWS:
-		main.player.place((region.find_child(view_name, true, false) as Marker3D).global_transform)
-		main.player.visible = false
-		main.camera_rig.snap_now()
-		await frames(6)
-		for i in 4:
-			await RenderingServer.frame_post_draw
-		var shot := get_viewport().get_texture().get_image()
-		var worn: Array[Dictionary] = []
-		var shadows := region.get_node_or_null(^"ContactShadows") as Node3D
-		if shadows != null:
-			shadows.visible = false
-		var styles := _solid_styles()
-		for mesh: GeometryInstance3D in region.find_children("*", "GeometryInstance3D", true, false):
-			if shadows != null and shadows.is_ancestor_of(mesh):
-				continue
-			worn.append({mesh = mesh, was = mesh.material_override})
-			var material: Material = mesh.material_override
-			if material == null and mesh is MeshInstance3D:
-				material = (mesh as MeshInstance3D).get_active_material(0)
-			elif material == null and mesh is MultiMeshInstance3D and (mesh as MultiMeshInstance3D).multimesh != null and (mesh as MultiMeshInstance3D).multimesh.mesh != null:
-				material = (mesh as MultiMeshInstance3D).multimesh.mesh.surface_get_material(0)
-			var uses: bool = material is ShaderMaterial and (material as ShaderMaterial).get_shader_parameter("albedo_tex") == flat.get_shader_parameter("colormap")
-			var cls := _class_of(mesh, region, styles)
-			mesh.material_override = (tannery_flat if cls == "tannery" else flat) if uses and cls != "roof" else black
-		var look := main.camera_rig.post_quad
-		var look_was := look.visible
-		look.visible = false
-		env.background_color = Color.BLACK
-		for i in 4:
-			await RenderingServer.frame_post_draw
-		var picture := main.stage.world.get_texture().get_image()
-		env.background_color = sky
-		look.visible = look_was
-		for entry in worn:
-			(entry.mesh as GeometryInstance3D).material_override = entry.was
-		if shadows != null:
-			shadows.visible = true
-		main.player.visible = true
-		var lumas: Array[float] = []
-		var boards: Array[float] = []
-		for y in range(PixelSnap.MARGIN, PixelSnap.MARGIN + 360):
-			for x in range(PixelSnap.MARGIN, PixelSnap.MARGIN + 640):
-				var f := picture.get_pixel(x, y)
-				if f.r > 0.6 and f.b > 0.6 and f.g < 0.3:
-					lumas.append(_luma(shot.get_pixelv(_to_window(main, Vector2i(x, y)))))
-				elif f.g > 0.6 and f.r < 0.3 and f.b < 0.3:
-					boards.append(_luma(shot.get_pixelv(_to_window(main, Vector2i(x, y)))))
-		boards.sort()
-		lumas.append_array(boards)  # the tannery's boards are wood too: the view's wood is all of it
-		lumas.sort()
-		if boards.size() >= 300:
-			var boards_median := boards[boards.size() / 2]
-			lines.append("%s: the tannery's boards median %.3f (%d px)" % [view_name, boards_median, boards.size()])
-			if boards_median < WOOD_LOW:
-				problems.append("%s: the tannery's boards are %.3f in the picture (no darker than %.2f)" % [view_name, boards_median, WOOD_LOW])
-		var median := lumas[lumas.size() / 2] if lumas.size() > 0 else -1.0
-		lines.append("%s: wood median %.3f (%d px)" % [view_name, median, lumas.size()])
-		if lumas.size() < 300:
-			problems.append("%s: only %d pixels of wood" % [view_name, lumas.size()])
-		elif median < WOOD_LOW or median > WOOD_HIGH:
-			problems.append("%s: the wood is %.3f in the picture (%.2f to %.2f)" % [view_name, median, WOOD_LOW, WOOD_HIGH])
-	print("wood: %s" % ["; ".join(lines)])
-	assert_eq(problems, PackedStringArray(), "the wood's tone at each view: %s" % ["; ".join(lines)])
 
 
 ## At noon a warm pool is a faint tint, not a bright disc. With the lamps out against on, over each of these views: no pixel of the ground a fighter walks on is lifted by more than LAMP_LIFT, so no lamp lifts the ground under it by more, and no step of the lift

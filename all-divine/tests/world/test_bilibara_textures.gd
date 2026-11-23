@@ -330,7 +330,7 @@ func _kit_colormap() -> Image:
 
 # The kit's colormap drawn in Bilibara's colours: every one of its colours (1,900-odd, swatches and their shading) is
 # given a colour, none loud: saturation at most 0.40, value at most 0.76. Roofs are slate-indigo, plaster a cold stone of
-# value 0.50 to 0.66, timber and trim a grey-brown mid tone (0.20 to 0.30 in the texture, 0.20 to 0.28 in the picture: the texture pass of Nov 16 took the wood off near black), boards the same wood.
+# value 0.50 to 0.66, timber and trim a dark rose-gold (0.10 to 0.18: a door or a shutter behind a head must not be within 0.08 of one of the heads' tones, 0.28 to 0.55), boards dark wood.
 func test_bilibara_colormap_gives_every_kit_colour_a_quiet_one() -> void:
 	var kit := _kit_colormap()
 	var made := MAKE_TEXTURES.bilibara_colormap()
@@ -358,8 +358,8 @@ func test_bilibara_colormap_gives_every_kit_colour_a_quiet_one() -> void:
 	assert_true(roof_red.v <= 0.32 and roof_red.b > roof_red.g, "the pink roof is a dark plum-indigo (%s)" % roof_red.to_html(false))
 	assert_true(plaster.v >= 0.66 and plaster.v <= 0.72 and plaster.b >= plaster.r, "plaster is a cold stone (%s)" % plaster.to_html(false))
 	assert_true(shade.v >= 0.45 and shade.v < plaster.v, "and its shade a little darker (%s)" % shade.to_html(false))
-	assert_true(trim.r > trim.g and trim.g > trim.b and trim.v >= 0.165 and trim.v <= 0.24, "trim is a mid-tone rose-gold, darker than the plaster (%s)" % trim.to_html(false))
-	assert_true(board.v >= 0.16 and board.v <= 0.22 and board.r >= board.b, "boards are mid-tone wood, lighter than the near black they were (%s)" % board.to_html(false))
+	assert_true(trim.r > trim.g and trim.g > trim.b and trim.v >= 0.10 and trim.v <= 0.18, "trim is a dark rose-gold, darker than any head (%s)" % trim.to_html(false))
+	assert_true(board.v <= 0.46 and board.r >= board.b, "boards are dark wood (%s)" % board.to_html(false))
 
 
 func test_bilibara_colormap_is_made_the_same_every_time_and_has_its_material() -> void:
@@ -622,12 +622,11 @@ func test_wood_reads_brown_and_trim_and_doors_are_darker_than_the_plaster_they_s
 	var shade: Color = find.call("8d93b1")
 	for hex: String in ["9c5e48", "85503e", "794939"]:
 		var wood: Color = find.call(hex)
-		assert_true(wood.h >= 0.04 and wood.h <= 0.11 and wood.s >= 0.27 and wood.r > wood.g and wood.g > wood.b, "%s is a brown (%s: hue %.2f, saturation %.2f), not a mauve plaster" % [hex, wood.to_html(false), wood.h, wood.s])
+		assert_true(wood.h >= 0.04 and wood.h <= 0.11 and wood.s >= 0.30 and wood.r > wood.g and wood.g > wood.b, "%s is a brown (%s: hue %.2f, saturation %.2f), not a mauve plaster" % [hex, wood.to_html(false), wood.h, wood.s])
 		assert_true(wood.v <= 0.46 and wood.v < shade.v - 0.10, "%s is darker than the plaster's shade (%.2f against %.2f)" % [hex, wood.v, shade.v])
-		assert_true(wood.v >= 0.16 and wood.v <= 0.22, "%s is a mid tone in the texture, lighter than the near black it was (%.2f; the picture's tone is measured by test_bilibara_tones, and what a tier III's head allows by the readability tests)" % [hex, wood.v])
 	for hex: String in ["cc8665", "b87758", "c27f5f"]:
 		var trim: Color = find.call(hex)
-		assert_true(trim.v <= shade.v - 0.04 and trim.v >= 0.165 and trim.v <= 0.24, "%s (trim, shutters) is darker than the plaster's shade and a mid tone (%.2f against %.2f)" % [hex, trim.v, shade.v])
+		assert_true(trim.v <= shade.v - 0.04 and trim.v >= 0.10 and trim.v <= 0.18, "%s (trim, shutters) is darker than the plaster's shade and than any head (%.2f against %.2f)" % [hex, trim.v, shade.v])
 	assert_true(plaster.v >= 0.66, "and the plaster is still pale")
 
 
