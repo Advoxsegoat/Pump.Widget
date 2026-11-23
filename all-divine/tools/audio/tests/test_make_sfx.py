@@ -31,6 +31,7 @@ NAMES = [
     "perilous_sting", "tell_glint", "cloth_move", "foot_land",
     "surface_cloth_1", "surface_cloth_2", "body_fall", "charge_hum", "stamina_refused",
     "evade_whoosh", "perfect_dodge", "knocked_out", "shrine_rest",
+    "petal_gain", "petal_wilt",
 ]
 
 

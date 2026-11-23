@@ -60,6 +60,8 @@ enum Team { PLAYER, ENEMY }
 @export var poise := 10.0
 ## How high the head is above the feet, in metres: where others look at the actor (Actor.head_point).
 @export var look_height := 1.6
+## The petals a foe gives the player when it falls (the stretch's run credits them); 0 for everyone else.
+@export var petals := 0
 ## The sound cue of what the actor is made of (cloth, say), layered under the impact of a blow that lands
 ## on it (a name in data/sounds/).
 @export var surface_sound := &"surface_cloth"
