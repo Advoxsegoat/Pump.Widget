@@ -176,7 +176,7 @@ any single blow, from full health and full posture.
 
 - The tier I jab's share at 18 (above): 51%.
 - (Mended in fix round 1, below: the long jab's added five frames were the Punch_Jab clip's own quiet guard slowed, 0.7 to 2.1 degrees a step, and a held pose; they now have a keyed layer that draws the lead arm back.)
-- The bot's masher is an extreme (15 presses a second): how a person who mashes at 5 to 8 a second plays under the tax is for the owner's hands.
+- The bot's masher is an extreme (a palm about 8.6 times a second and a change of direction 15 times a second): how a person who mashes at 5 to 8 a second plays under the tax is for the owner's hands.
 - With the cost of mashing off, the masher met a foe that "never engages" in 901 frames in two seeds (9 and 10) of ten; with it on, and in every other table, nothing: the brain of that foe was not touched here.
 
 # After fix round 1 (the review of Task 17)
@@ -258,6 +258,8 @@ and no longer charged by a press rate no hand has), and the free first redundant
 No value holds all four: the masher's deaths are over 60 at all three (64, 63, 78) and at 2.0 his waves are under 13 as well. **`hammer_tax` stays 1.0, and the item stops there, as ruled: no new mechanism.** Ruling 1 alone took the masher at 1.0 from 10 waves and
 76 deaths to 15 and 64 (the band asked for at most 60 deaths: missed by 4). The controller decides what next (the notes above name a tax that starts at the third redundant press, or a floor under 1.0).
 
+**The controller's ruling (Nov 23):** 1.0 stays and nothing more is built. The ceiling of 60 deaths was the controller's own pick (one and a half times the 40 the masher dies with no cost at all); 64 is 1.6 times, in a policy no hand plays (a palm 8.6 times a second with the guard held and a change of direction 15 times a second). The band is now 13 to 22 waves and under 70 deaths, and the masher at 1.0 is inside it. What a person who mashes feels is for the owner's hands (the checklist's item: mash for a minute); `hammer_tax` and `strain_step` are the two numbers to turn if it is too hard or too soft.
+
 ## All the rows again (ten seeds, 7,200 frames)
 
 | policy | reaction | waves | deaths | dealt | taken | taken per HP dealt |
@@ -285,5 +287,5 @@ At ten a second he pays 49 frames more (a bit over a second of the ten) and can 
 ## What mashing costs now
 
 A player who presses an attack once for each blow pays nothing, and neither does one who presses a little early (the first redundant press of a move is free). A masher who hammers an attack pays from his second wasted press of a move: one stamina each, which
-does not hold back the wait before stamina returns, so at six presses a second he is not held back at all and at ten he loses about a second of the ten to an empty bar. A masher of sways or ducks pays no tax by the press: he pays through the strain, which makes each
+does not hold back the wait before stamina returns, so at six presses a second he is not held back at all and at ten he loses about 0.8 s of the ten to an empty bar. A masher of sways or ducks pays no tax by the press: he pays through the strain, which makes each
 evade that dodges nothing a quarter dearer than the one before (at most twice the cost) until one lands or a second goes by. A player who times his blows and his evades pays nothing at all.
