@@ -286,7 +286,9 @@ func test_each_shrine_stands_on_its_own_stone_and_its_respawn_faces_it() -> void
 
 
 # The reading places beside each shrine (the picture tests stand a body at each, BESIDE_SHRINES) are standing ground walked to from the court.
-# (A metre to the side of Plinth_A's stone is not ground: the block is 1.6 m wide and a body is 0.35 m in radius, so A has no side places.)
+# (A has no side places: a metre east or west of Plinth_A is closed by the building's wall (the `Body` of the block beside it), not by the
+# stone, and on the east also by the `Gate` board. The stone is 1.6 m wide and a body 0.35 m in radius, but narrowing the stone to 1.0 m
+# leaves both sides closed. A later task opens the gate, so the test takes the `Gate` board and the stone away and asks the wall alone.)
 func test_the_places_a_body_is_read_at_beside_each_shrine_are_standing_ground() -> void:
 	var w := await _world()
 	var region: Region = w.region
@@ -296,8 +298,15 @@ func test_the_places_a_body_is_read_at_beside_each_shrine_are_standing_ground() 
 		var point := shrine.plinth + Vector3(0.0, 0.0, float(entry[1]))
 		assert_true(StretchGround.stands(region, point), "%s, %.1f m south of the plinth, is standing ground" % [entry[0], entry[1]])
 		assert_true(reached.has(StretchGround.cell_of(Vector2(point.x, point.z))), "and is walked to from the spawn")
-	var side := _shrine(&"rose_a").plinth + Vector3(1.0, 0.0, 0.0)
-	assert_false(StretchGround.stands(region, side), "a metre east of Plinth_A is the stone's edge, not ground: no side places at A")
+	# What closes the sides is the wall: with the stone and the Gate board made unseen, a metre east and west of Plinth_A is still not ground.
+	for node_name: String in ["Plinth_A", "Gate"]:
+		var body := region.find_child(node_name, true, false) as CollisionObject3D
+		assert_true(body != null, "%s is in the region" % node_name)
+		if body != null:
+			body.collision_layer = 0
+	for dx: float in [1.0, -1.0]:
+		var side := _shrine(&"rose_a").plinth + Vector3(dx, 0.0, 0.0)
+		assert_false(StretchGround.stands(region, side), "a metre %s of Plinth_A is closed by the building's wall (not by the stone or the Gate board): no side places at A" % ("east" if dx > 0.0 else "west"))
 
 
 # Where the old start was (1.7 m from shrine A over bare paving) is not a place any more: nothing is built or left there.
