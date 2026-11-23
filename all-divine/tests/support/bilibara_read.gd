@@ -318,6 +318,13 @@ func _row(main: Main, at: Vector3, defs: Array[String], shot_out: Array) -> Dict
 		actor.visible = was_visible[actor]
 	for i in 3:
 		await RenderingServer.frame_post_draw
+	# A body's silhouette is the difference of two pictures a frame apart: petals that fade between them would be part of it. The masks are made
+	# without particles (the pictures above, the ones the rule is read from, have them).
+	var particles: Array[GPUParticles3D] = []
+	for node in main.find_children("*", "GPUParticles3D", true, false):
+		if (node as GPUParticles3D).visible:
+			particles.append(node as GPUParticles3D)
+			(node as GPUParticles3D).visible = false
 	var silhouettes: Array[Dictionary] = []
 	for i in 3:
 		silhouettes.append(await ShotMasks.silhouette(main, bodies[i], _box_of(main, bodies[i])))
@@ -331,6 +338,8 @@ func _row(main: Main, at: Vector3, defs: Array[String], shot_out: Array) -> Dict
 		result[names[i]] = await _measure(main, shot, empty, bodies[i], silhouettes[i], others, floor)
 	if defs[0] == ABARAX:
 		result["Abarax"]["shirt"] = await _measure_shirt(main, shot, abarax, result["Abarax"].ground)
+	for node in particles:
+		node.visible = true
 	for actor in bodies:
 		if actor != abarax:
 			actor.queue_free()
