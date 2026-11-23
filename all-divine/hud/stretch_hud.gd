@@ -69,6 +69,11 @@ const COUNT_TOP := 6
 const COUNT_HEIGHT := 14
 ## The marker of the pile and the popup stay this far inside the picture's edges.
 const INSET := 6
+## An arrow (a pile out of the picture) is this long from its tip to its back and this wide across, in picture pixels, with a one pixel
+## dark edge; its middle stands this far inside the picture's edges, so that all of it, edge included, is inside.
+const ARROW_LENGTH := 12.0
+const ARROW_WIDTH := 12.0
+const ARROW_INSET := 12
 ## The popup shows this many play frames after a gain (a pause does not count).
 const POPUP_FRAMES := 90
 ## The marker (a rose diamond of 5 x 5 on an ink one of 7 x 7) and how far above the pile's foot it hangs, in metres.
@@ -121,10 +126,13 @@ func pile_marker() -> Dictionary:
 	var low := Vector2(INSET, INSET)
 	var high := Hud.PICTURE - low
 	var inside := p.x >= low.x and p.x <= high.x and p.y >= low.y and p.y <= high.y
+	if not inside:
+		low = Vector2(ARROW_INSET, ARROW_INSET)
+		high = Hud.PICTURE - low
 	var shown := p.clamp(low, high)
 	var dir := Vector2.ZERO if inside else (p - Hud.PICTURE / 2.0).normalized()
 	var heads := _heads()
-	var half := MARKER_RADIUS + 1
+	var half := MARKER_RADIUS + 1 if inside else int(ARROW_LENGTH / 2.0) + 1
 	for i in CLEAR_TRIES + 1:
 		var tried := shown + _marker_step(inside, shown, i)
 		tried = tried.clamp(low, high)
@@ -138,7 +146,7 @@ func pile_marker() -> Dictionary:
 func _marker_step(inside: bool, from: Vector2, i: int) -> Vector2:
 	if inside:
 		return Vector2(0.0, -float(CLEAR_STEP * i))
-	var on_side := from.x <= INSET or from.x >= Hud.PICTURE.x - INSET
+	var on_side := from.x <= ARROW_INSET or from.x >= Hud.PICTURE.x - ARROW_INSET
 	return Vector2(0.0, float(CLEAR_STEP * i)) if on_side else Vector2(float(CLEAR_STEP * i), 0.0)
 
 
@@ -222,13 +230,20 @@ func _draw_petals() -> void:
 	if marker.arrow:
 		var dir: Vector2 = marker.dir
 		var centre := Vector2(marker.point)
-		var side := Vector2(-dir.y, dir.x)
-		var points := PackedVector2Array([centre + dir * 4.0, centre - dir * 2.0 + side * 3.0, centre - dir * 2.0 - side * 3.0])
-		draw_colored_polygon(points, ink)
-		var inner := PackedVector2Array([centre + dir * 2.5, centre - dir * 1.0 + side * 1.6, centre - dir * 1.0 - side * 1.6])
-		draw_colored_polygon(inner, rose)
+		draw_colored_polygon(arrow_points(centre, dir, 0.0), ink)
+		draw_colored_polygon(arrow_points(centre, dir, 1.0), rose)
 	else:
 		_diamond(marker.point, MARKER_RADIUS, rose, ink)
+
+
+## The three corners of the arrow at `centre` pointing along `dir`, drawn `shrink` picture pixels smaller all round (0 is the dark edge, 1 the
+## rose inside it).
+static func arrow_points(centre: Vector2, dir: Vector2, shrink: float) -> PackedVector2Array:
+	var side := Vector2(-dir.y, dir.x)
+	var tip := ARROW_LENGTH * 0.6 - shrink * 1.6
+	var back := ARROW_LENGTH * 0.4 - shrink * 1.2
+	var half := ARROW_WIDTH / 2.0 - shrink * 1.8
+	return PackedVector2Array([centre + dir * tip, centre - dir * back + side * half, centre - dir * back - side * half])
 
 
 # A filled diamond of radius `r` over an ink one a pixel larger.

@@ -132,7 +132,19 @@ func test_petal_text_popup_and_marker() -> void:
 		assert_true(marker.arrow, "an arrow, since it is off the picture")
 		var inset := Rect2(6.0, 6.0, Hud.PICTURE.x - 12.0, Hud.PICTURE.y - 12.0)
 		assert_true(inset.has_point(Vector2(marker.point)), "its point is inside the picture's 6 px inset (%s)" % [marker.point])
-		assert_true(marker.point.x <= 7, "at the left edge, where the pile lies")
+		assert_true(marker.point.x <= StretchHud.ARROW_INSET + 1, "at the left edge, where the pile lies")
+		# the arrow is a mark worth seeing: at least 12 picture pixels long and across (24 px at 1280 x 720), all of it inside the picture
+		var corners := StretchHud.arrow_points(Vector2(marker.point), marker.dir, 0.0)
+		var dir: Vector2 = marker.dir
+		var along: Array = []
+		var across: Array = []
+		for corner in corners:
+			along.append((corner - Vector2(marker.point)).dot(dir))
+			across.append((corner - Vector2(marker.point)).dot(Vector2(-dir.y, dir.x)))
+		assert_true(along.max() - along.min() >= 11.9, "the arrow is at least 12 pixels long (%s)" % [along.max() - along.min()])
+		assert_true(across.max() - across.min() >= 11.9, "and 12 across (%s)" % [across.max() - across.min()])
+		for corner in corners:
+			assert_true(Rect2(Vector2.ZERO, Hud.PICTURE).has_point(corner), "every corner of it is inside the picture (%s)" % [corner])
 
 
 func test_the_count_stands_at_the_top_right_and_the_popup_under_it() -> void:

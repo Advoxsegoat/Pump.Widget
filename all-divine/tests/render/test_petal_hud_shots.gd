@@ -98,3 +98,37 @@ func test_in_a_fight_the_count_popup_and_marker_are_drawn_and_clear_of_every_hea
 	assert_true(_pixels_near(shot, popup, Color.WHITE, 0.3) >= 6, "the popup is drawn (white)")
 	var mark_area := Rect2(Vector2(marker.point) - Vector2.ONE * 3.0, Vector2.ONE * 7.0)
 	assert_true(_pixels_near(shot, mark_area, Hud.ROSE, 0.3) >= 4, "the marker is drawn (rose)")
+
+
+# A pile out of the picture to the west and to the east: the arrow at the picture's edge is drawn large enough to see (a good patch of
+# rose, on a dark edge) and the pictures are saved (out/shots/petal_hud_arrow_{west,east}.png).
+func test_an_arrow_for_a_pile_out_of_the_picture_is_drawn_large_to_the_west_and_to_the_east() -> void:
+	for side: String in ["west", "east"]:
+		Game.reset()
+		var main := (load(MAIN) as PackedScene).instantiate() as Main
+		main.stretch_start = "new"
+		track(main)
+		await frames(5)
+		var hud := main.hud.find_child("StretchHud", true, false) as StretchHud
+		if hud == null:
+			fail("no stretch hud")
+			return
+		main.player.place(Transform3D(Basis(), Vector3(0, 0, 0)))
+		await frames(3)
+		main.camera_rig.snap_now()
+		await frames(3)
+		main.stretch.petals.gain(80)
+		main.stretch.petals.fall_at(Vector3(-30.0 if side == "west" else 30.0, 0.0, 0.0))
+		await frames(4)
+		var marker := hud.pile_marker()
+		for i in 4:
+			await RenderingServer.frame_post_draw
+		var shot := get_viewport().get_texture().get_image()
+		var file := "out/shots/petal_hud_arrow_%s.png" % side
+		assert_eq(shot.save_png(ProjectSettings.globalize_path("res://").path_join(file)), OK, "saved the picture")
+		assert_true(marker.arrow, "%s: it is an arrow" % side)
+		var area := Rect2(Vector2(marker.point) - Vector2.ONE * 8.0, Vector2.ONE * 17.0)
+		var rose := _pixels_near(shot, area, Hud.ROSE, 0.3)
+		assert_true(rose >= 60, "%s: the arrow is a patch of rose (%d pixels) you can see" % [side, rose])
+		(main as Node).queue_free()
+		await frames(2)
