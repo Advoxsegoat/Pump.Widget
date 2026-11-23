@@ -88,6 +88,7 @@ F0 (Foundation) is built: a lit courtyard to walk in, with Abarax moving, dash-s
 Plan: [`docs/superpowers/plans/2026-11-15-all-divine-stretch-systems.md`](../docs/superpowers/plans/2026-11-15-all-divine-stretch-systems.md) (eight tasks, with the owner's amendments of Nov 16).
 
 - F3 Task 1 (systems): the saved game and the world's memory. `SaveData` is what a save holds: the rest shrine, petals and the pile left at a death, items, deaths, frames played, the flags the player's deeds set (`WorldMemory`), and, by the owner's word, **where he stood** (`at`), **his bars** (`bars`, as shares of full) and the foes fallen since the last rest (`fallen`). `SaveStore` writes one JSON file (`user://save/save.json`) with a check over its bytes, a version and migration steps, through a temporary file that is read back before anything is renamed, and keeps the game before as `save.bak.json`. No file, however broken, costs more than the last save or prints a line (a reviewer fed it 103 broken files, with and without a backup, and stopped a write after each step); a newer game's file, main or backup, is moved aside (`save.v<N>.json`) and never read or overwritten; a main file that cannot be read is kept as `save.bad.json`; a file over 8 MB or not text is a bad file. A test, a `-s` script, the self-test and `--no-player-settings` never touch the player's folder, however it is spelled. Nothing in the game calls it yet: Task 2 does (`tools/test.sh`: 2094 passed, 0 failed).
+- F3 Task 2 (systems): the run, the shrines, resting and the way back after death. `StretchRun` is the stretch's run (the world's memory, rest, respawn, the saved position). **Two rose shrines** stand on the stones the layout built: A by the Lazyman's back wall (plinth (-36.1, 0, -4.7); he stands 1.6 m in front of it, facing it) and B under the alcove's lamp (plinth (31.8, 0, -37.2)). A press at a shrine rests (`Interactor`: bars full, the respawn point set, foes back, saved); a death stands him up three seconds later at the shrine he last rested at; a new game starts in front of shrine A. **The save holds where he stood** (the owner's word): once a second on safe ground (alive, on the floor, in no move, no foe awake within 12 m) the run notes his place and his bars, and a loaded game puts him there, or at the shrine when that place is no longer ground he can stand on. `-- --stretch` continues the saved game and `--stretch=new` begins one that reads and writes no file; a recording being made (`--record=`, or F2 pressed during one) and a replay are always a new game, so no tool touches the player's save; a session in the stretch replays as recorded, and the yard's hashes are pinned (`tests/replay/test_yard_hash_pin.gd`, re-made once for the tier I's longer jab). The rose glow is 28 small, light, translucent petals lying over the stone (one draw pass, the same petals every run, no light); a fighter's head reads beside each shrine with it on. (`tools/test.sh`: 2176 passed, 0 failed; no run prints the NUL line any more.)
 
 ### Portraits
 
@@ -101,7 +102,7 @@ The builds boot into `main/main.tscn`: the training yard with the Arena's waves 
 
 ## Next
 
-F1 Combat core is built, with the tuning the owner chose on Nov 16 (the tier I jab's longer warning, a bigger punish for clean timing, a stamina cost for mashing: Task 17); what is left of it is the owner's checklist below. **Being built now, in this order**: the town's systems ([`docs/superpowers/plans/2026-11-15-all-divine-stretch-systems.md`](../docs/superpowers/plans/2026-11-15-all-divine-stretch-systems.md): Task 1, the saved game, is in; next the shrines, resting and the way back after death with the saved position; then petals, foes with a home, gates, the Hand's Pack and the Rose Bell, the Collector, and a level that plays through). The texture pass gave the snow its grain; the fronts' wood waits on the owner's choice between three looks (the stretch's checklist, item 3). Waiting on the owner: the wood; what "slowed" means for the Pack after the Bell, whether the Collector is optional and where he stands, and the first round of questions on the fighting styles (layered styles with a deck of his own; then a spec, then F2's plan). After those: the art and animation pass with the owner; the final review of the whole branch.
+F1 Combat core is built, with the tuning the owner chose on Nov 16 (the tier I jab's longer warning, a bigger punish for clean timing, a stamina cost for mashing: Task 17); what is left of it is the owner's checklist below. **Being built now, in this order**: the town's systems ([`docs/superpowers/plans/2026-11-15-all-divine-stretch-systems.md`](../docs/superpowers/plans/2026-11-15-all-divine-stretch-systems.md): Tasks 1 and 2 are in: the saved game; the shrines, resting, the way back after death and the saved position. Being built now, side by side: petals and the corpse run, and the gates with the shortcut loop. Then foes with a home, the Hand's Pack and the Rose Bell, the Collector, and a level that plays through). The texture pass gave the snow its grain; the fronts' wood waits on the owner's choice between three looks (the stretch's checklist, item 3). Waiting on the owner: the wood; what "slowed" means for the Pack after the Bell, whether the Collector is optional and where he stands, and the first round of questions on the fighting styles (layered styles with a deck of his own; then a spec, then F2's plan). After those: the art and animation pass with the owner; the final review of the whole branch.
 
 ## Owner checklist for F0
 
@@ -216,13 +217,16 @@ Press F2 in the game to enter it (F5 goes back to the yard).
 
 ## Owner checklist for the town's systems
 
-The saved game is not called by the game until the shrines are in (Task 2); these are for then, on your Windows machine (no test here can stand in for it):
+Press F2 in the game to enter the town (the game itself starts there once foes are placed, with Task 4), or start it with `-- --stretch`. The first five are for your Windows machine (no test here can stand in for it):
 
 1. Play, rest at a shrine, close the game, open it: are you where you were, with the bars you had?
 2. Does saving ever fail or stutter with a virus scanner running, or with the save folder (`%APPDATA%\Godot\app_userdata\The All-Divine\save`) inside OneDrive or on a network drive?
 3. Mark `save.json` read-only and play on: the game must go on without a word and without a crash (it cannot save; tell me what you see).
 4. If your Windows uses a decimal comma (a European number format): does a saved game still load?
 5. Pull the plug (or kill the game in Task Manager) in the middle of play: on the next start you have the last save or the one before it, never nothing.
+6. Rest at both shrines, die, and stand up at the one you last rested at: is a press and no kneeling the right amount? After standing up he cannot act for about a second and a half: a breath, or sticky?
+7. The shrines: each is a dark stone with a few small rose petals over it, and the two look alike. Is it clear this is where you rest, are the petals big enough to catch the eye, and should the two look different?
+8. Walk twenty metres from a shrine without resting, close the game and open it: are you where you stood, with the bars you had? Do the same in the middle of a fight: you should come back at the last quiet place, never inside the fight.
 
 ## Owner checklist for the portraits
 
@@ -306,6 +310,8 @@ all-divine/tools/godot.sh -s res://tools/bot/run_bot.gd -- --seeds=1-10 --frames
                                                # the combat bot: a line for each seed (waves, deaths, problems); --policy=all, --detail
 all-divine/tools/godot.sh --render -- --record=out/replays/session.tres   # play; the recording is written as the game ends
 all-divine/tools/godot.sh --render -- --replay=out/replays/session.tres   # the same fight again: `as recorded`, or the frame it diverged at
+all-divine/tools/godot.sh --render -- --stretch            # start in the Bilibara stretch, continuing the saved game (or beginning one)
+all-divine/tools/godot.sh --render -- --stretch=new        # a new game there that reads and writes no save (so is --stretch with --record= or --replay=)
 python3 -I all-divine/tools/portraits/sketch_to_portrait.py --init-recipe docs/art/owner/<drawing>.jpg --out docs/art/owner/<drawing>.recipe.json
                                                # a first recipe for a new drawing (needs Pillow 12.3.0 and numpy 2.5.3 where this Python can see them)
 python3 -I all-divine/tools/portraits/sketch_to_portrait.py --sketch docs/art/owner/<drawing>.jpg --recipe docs/art/owner/<drawing>.recipe.json --out all-divine/assets/portraits/<speaker>

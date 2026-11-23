@@ -126,6 +126,12 @@ reads the code again and will find afresh whatever those lists held. F0's record
 - Task 5 (gates and the shortcut loop) is built beside Tasks 3 and 4, in another lane from round 3's commit: it consumes only
   Task 2 and the layout (the plan's amendment: Tasks 1 to 6 do not depend on where the Collector stands); its line in Task 4's
   test is made by whichever of the two merges second. Cost if wrong: a join with text conflicts in five shared files.
+- Task 2, round 3 (Nov 23): the join had no conflict. The yard's pin is this task's own file and moved with the tier I's longer jab
+  (shown by putting the old jab back: the old numbers returned); it was re-made once, with a comment (1561874147 and 3110548667).
+  The three cures are in: F2 pressed during a recording marks it and starts a new game; shrine A's sides are closed by the building's
+  wall (the test holds with the stone and the Gate board taken away); the junk bytes are written as bytes and no run prints the NUL
+  line. Whole run 2176 passed, cloud run 683 green, merged on Nov 23. The controller's brief had said the pin came with the join; it
+  did not, and the implementer found it and said so. The round was small: the controller's reading of its diff stood for a review.
 - For Task 4's brief: `loop_straggler` (-32.5, -14) is 11.48 m from shrine A's new respawn and moves to about (-32.5, -14.8).
 - Both shrines read as a dark stone with a few petals above it, not plainly as a shrine, and they look alike: put to the owner.
 
