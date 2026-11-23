@@ -240,23 +240,49 @@ func _clumps(img: Image, colour: Color) -> Array[int]:
 	return sizes
 
 
-func test_snow_is_a_cold_near_white_with_clumps_of_shadow_and_has_its_material() -> void:
+func test_snow_is_a_cold_near_white_with_a_soft_grain_that_does_not_clip_and_has_its_material() -> void:
 	var img := MAKE_TEXTURES.snow()
 	assert_eq(img.get_size(), Vector2i(64, 64), "64 x 64 texels")
-	var counts := _colours(img)
-	assert_eq(counts.size(), 2, "two tones: %s" % [counts.keys()])
-	var light: Color = MAKE_TEXTURES.SNOWS[0]
-	var shadow: Color = MAKE_TEXTURES.SNOWS[1]
-	assert_true(light.v >= 0.92, "the light tone is %.3f: the palest ground of the stretch (the drifts lie off the ground a fighter walks on)" % light.v)
-	assert_true(shadow.v >= 0.85 and shadow.v < light.v, "the shadow tone is %.3f" % shadow.v)
-	assert_true(shadow.b - shadow.r > light.b - light.r, "and bluer")
-	assert_true(light.b > light.r, "cold")
-	var share: int = counts.get(shadow.to_html(false), 0)
-	assert_true(share >= 4096 * 0.05 and share <= 4096 * 0.15, "the shadow covers %d of 4096 texels" % share)
-	var clumps := _clumps(img, shadow)
-	assert_true(clumps.size() > 10, "%d clumps" % clumps.size())
-	for size in clumps:
-		assert_true(size >= 2 and size <= 5, "a clump of %d texels, not 2 to 5" % size)
+	var luma := func(c: Color) -> float: return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+	var tones := {}
+	var sum := 0.0
+	var brightest := 0
+	var most := 0.0
+	var least := 1.0
+	for y in 64:
+		for x in 64:
+			var c := img.get_pixel(x, y)
+			tones[c.to_html(false)] = true
+			var l: float = luma.call(c)
+			sum += l
+			most = maxf(most, l)
+			least = minf(least, l)
+			brightest = maxi(brightest, maxi(c.r8, maxi(c.g8, c.b8)))
+			assert_true(c.b > c.r, "cold at %d, %d" % [x, y])
+	# The stretch's light lifts the texture by a tenth in red, a seventh in green and a quarter in blue: a channel of the texture over 200 clips in the picture
+	# (it did, at 248: a flat white sheet; test_ground_pictures holds the picture's own brightest channel under 250).
+	assert_true(brightest <= MAKE_TEXTURES.SNOW_BRIGHTEST, "the brightest channel is %d, at most %d so that the stretch's light does not clip it" % [brightest, MAKE_TEXTURES.SNOW_BRIGHTEST])
+	# It is still the palest ground of the stretch (the cobble's mean is 0.72).
+	assert_true(sum / 4096.0 >= 0.70 and sum / 4096.0 <= 0.78, "mean luma %.3f (0.70 to 0.78)" % (sum / 4096.0))
+	# A soft grain: many tones (ripples and dimples, not two flat colours), their range a visible but gentle 0.03 to 0.10, neighbours within 0.05.
+	assert_true(tones.size() >= 20, "%d tones: a grain, not two flat colours" % tones.size())
+	assert_true(most - least >= 0.03 and most - least <= 0.10, "the grain spans %.3f in luma (0.03 to 0.10)" % (most - least))
+	var step := 0.0
+	var lone := 0.0
+	for y in 64:
+		for x in 64:
+			var here: float = luma.call(img.get_pixel(x, y))
+			step = maxf(step, absf(here - luma.call(img.get_pixel((x + 1) % 64, y))))
+			step = maxf(step, absf(here - luma.call(img.get_pixel(x, (y + 1) % 64))))
+			# No lone pale texel (static, and a shimmer): none stands over the mean of the eight round it by more than 0.012.
+			var around := 0.0
+			for dy in range(-1, 2):
+				for dx in range(-1, 2):
+					if dx != 0 or dy != 0:
+						around += luma.call(img.get_pixel(posmod(x + dx, 64), posmod(y + dy, 64)))
+			lone = maxf(lone, here - around / 8.0)
+	assert_true(step <= 0.05, "neighbouring texels differ by %.3f (at most 0.05), the wrap included" % step)
+	assert_true(lone <= 0.012, "a texel stands %.3f over the eight round it (at most 0.012): a lone pale texel" % lone)
 	_same_as_committed(MAKE_TEXTURES.snow, "snow")
 	_ground_material("snow")
 
@@ -647,6 +673,8 @@ func test_slate_cold_is_slabs_of_uneven_size_some_darker_in_cool_joints_with_tro
 	var joint: Color = MAKE_TEXTURES.SLATE_COLD_JOINT
 	var snow: Color = MAKE_TEXTURES.SLATE_COLD_SNOW
 	assert_true(joint.b >= joint.r and joint.v >= 0.40 and joint.v <= 0.55, "the joint is a cool grey (%s)" % joint.to_html(false))
+	# The snow in the joints is paler than the slabs and does not clip in the stretch's light, which lifts blue by a quarter: its blue channel is at most 200.
+	assert_true(snow.b8 <= 200 and snow.r8 <= 200 and snow.g8 <= 200, "the snow in the joints (%s) has a channel over 200: it clips in the stretch's light" % snow.to_html(false))
 	var tones: Array[Color] = MAKE_TEXTURES.SLATE_COLD_TONES
 	var luma := func(c: Color) -> float: return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
 	# A texel is a slab's when it is within the grain of one of the tones; a joint's when it is the joint or the snow (a joint is a shape of one

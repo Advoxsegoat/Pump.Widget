@@ -160,13 +160,21 @@ func test_the_cobble_is_no_busier_and_shimmers_no_more_than_the_flagstone() -> v
 	assert_true(cobble.busy <= MARGIN * flagstone.busy, "the cobble's busyness %.2f against the flagstone's %.2f" % [cobble.busy, flagstone.busy])
 
 
+func test_the_snow_is_no_busier_and_shimmers_no_more_than_the_flagstone() -> void:
+	var flagstone: Dictionary = await _measure("flagstone")
+	var snow: Dictionary = await _measure("snow")
+	print("ground pictures: flagstone shimmer %.3f busy %.2f; snow shimmer %.3f busy %.2f" % [flagstone.shimmer, flagstone.busy, snow.shimmer, snow.busy])
+	assert_true(snow.shimmer <= MARGIN * flagstone.shimmer + SLACK, "the snow's shimmer %.3f against the flagstone's %.3f" % [snow.shimmer, flagstone.shimmer])
+	assert_true(snow.busy <= MARGIN * flagstone.busy, "the snow's busyness %.2f against the flagstone's %.2f" % [snow.busy, flagstone.busy])
+
+
 ## The grounds a body can stand on in the stretch (the layout's `ground` lines that are not `visual`), seen in the stretch's own light and grade.
-const STANDING: Array[String] = ["cobble", "tan_earth", "flagstone_cold", "slate_pale"]
+const STANDING: Array[String] = ["cobble", "tan_earth", "flagstone_cold", "slate_pale", "slate_cold"]
+## The grounds that are only seen (the snow of the apron and the drifts: no body walks on it, so the jacket rule does not apply): they must not clip.
+const SEEN_ONLY: Array[String] = ["snow"]
 ## Grounds that are known not to meet the rule yet: name -> why. The test measures them anyway and fails when one now meets it, so that the entry is removed.
-const NOT_YET := {
-	"slate_cold": "court A's and the yard border's slate: the trodden snow in its joints is (217, 233, 255), the blue channel clips at 255 in a column of joints (the ground's luma is 0.72, the jacket tells from it); a texture pass after the owner has seen it",
-	"snow": "snow clips to white in the stretch's light (max 255): the apron and the drifts are flat white; a texture pass after the owner has seen it",
-}
+## (None now: the texture pass of Nov 16 took the snow and the cold slate's joints under the line.)
+const NOT_YET := {}
 
 
 # [brightest channel off the body, the jacket's 98th percentile luma, the mean luma of the ground round him] of `stone` in the stretch's light.
@@ -193,10 +201,12 @@ func _white_on(stone: String) -> Array[float]:
 
 
 func test_a_body_in_white_is_told_from_every_ground_he_stands_on_in_the_stretch() -> void:
-	for stone in STANDING:
+	for stone in STANDING + SEEN_ONLY:
 		var m := await _white_on(stone)
 		print("%s in the stretch's light: brightest %d, jacket %.0f, ground %.0f" % [stone, m[0], m[1], m[2]])
 		assert_true(m[0] < 250.0, "%s: the ground's brightest channel is %d" % [stone, m[0]])
+		if SEEN_ONLY.has(stone):
+			continue
 		assert_true(absf(m[1] - m[2]) >= 0.08 * 255.0, "%s: his jacket (%.0f) is %.0f from the ground round him (%.0f), at least %.0f" % [stone, m[1], absf(m[1] - m[2]), m[2], 0.08 * 255.0])
 
 
