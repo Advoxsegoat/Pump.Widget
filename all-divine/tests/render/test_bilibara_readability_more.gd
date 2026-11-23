@@ -20,6 +20,12 @@ const POSITIONS := [
 	["two grounds meet, lane mouth", 27.5, -5.0], ["street's far east end", 31.0, 1.0], ["beside the vat, yard E", 30.7, -66.25], ["gate near, south of the board", -32.5, -3.5],
 ]
 const SIZE := BilibaraRead.SIZE
+const OUT_SHRINE_TEXT := "out/shots/bilibara_readability_shrines.txt"
+const OUT_SHRINE_SHEET := "out/shots/bilibara_readability_shrines.png"
+## Beside the shrines, on the camera's side of each plinth (the camera looks north: south is +z), the glow in the picture: [shrine, metres south].
+const BESIDE_SHRINES := [[&"rose_a", 1.0], [&"rose_a", 1.5], [&"rose_a", 2.5], [&"rose_b", 1.0], [&"rose_b", 2.0]]
+## Frames to wait for the glow's petals to fill (4 s of them): the rows above are read before they do, and miss it.
+const GLOW_FILLS := 240
 
 
 func before_each() -> void:
@@ -37,3 +43,17 @@ func test_a_body_reads_at_the_twelve_more_places() -> void:
 	var rig := BilibaraRead.new(self)
 	var problems: PackedStringArray = await rig.stretch(POSITIONS, OUT_TEXT, OUT_SHEET)
 	assert_eq(problems.slice(0, 12), PackedStringArray(), "every body reads on every ground (%d problems; the table is %s)" % [problems.size(), OUT_TEXT])
+
+
+## A glow that hides a fighter breaks the rule that a fighter reads everywhere: the first glow's dark ink pass and its petals drew over a head
+## on the camera's side of shrine A and blended 56 to 97% of its ring. Here the glow is on and full, and the head's ring is held at each place
+## (a ring under 60 pixels, a head hidden, is a problem, not a pass).
+func test_a_head_reads_beside_each_shrine_with_the_glow_on() -> void:
+	var places: Array = []
+	for entry: Array in BESIDE_SHRINES:
+		var shrine := Registry.fetch(&"stretch", entry[0]) as ShrineDef
+		places.append(["%s, %.1f m south" % [entry[0], entry[1]], shrine.plinth.x, shrine.plinth.z + float(entry[1])])
+	var rig := BilibaraRead.new(self)
+	var problems: PackedStringArray = await rig.stretch(places, OUT_SHRINE_TEXT, OUT_SHRINE_SHEET, {settle = GLOW_FILLS, head_only = true, strict_head = true})
+	assert_eq(problems.slice(0, 12), PackedStringArray(), "every head reads beside the shrines with the glow on (%d problems; the table is %s)" % [problems.size(), OUT_SHRINE_TEXT])
+

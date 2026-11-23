@@ -25,6 +25,8 @@ const MOST_SPREAD := 0.08
 const HEAD_SHARE := 0.22
 const HEAD_NEAR := 0.08
 const HEAD_BLEND_MOST := 0.5
+## A head's ring under this many pixels is too small to say anything (the rule passes it); with `strict_head` it is a problem.
+const HEAD_RING_LEAST := 60
 ## Abarax's shirt against the ground, or an outline at least this much darker along this share of the shirt's edge.
 const SHIRT_LEAST := 0.06
 const OUTLINE_DARKER := 0.25
@@ -347,12 +349,17 @@ func _write(path: String, text: String) -> void:
 
 
 ## Measures the bodies at `positions` ([name, x, z]) in the stretch; writes the table to `out_text` and the sheet to `out_sheet`; returns the problems found.
-func stretch(positions: Array, out_text: String, out_sheet: String) -> PackedStringArray:
+## `options`: `settle` (frames to wait after entering the stretch, so that a glow of petals has filled: it takes about 4 s), `head_only` (only
+## the head's ring is held: beside a shrine the question is whether the glow hides a head), `strict_head` (a head ring under HEAD_RING_LEAST
+## pixels is a problem line too: a body the glow hides reports a ring of 0 and would otherwise pass)).
+func stretch(positions: Array, out_text: String, out_sheet: String, options: Dictionary = {}) -> PackedStringArray:
+	var head_only: bool = options.get("head_only", false)
+	var strict_head: bool = options.get("strict_head", false)
 	Game.reset()
 	var main := t.track((load(MAIN) as PackedScene).instantiate()) as Main
 	await t.frames(5)
 	main.enter_stretch()
-	await t.frames(5)
+	await t.frames(5 + int(options.get("settle", 0)))
 	var lines := PackedStringArray(["position | x z | per body: ground / body luma / ground less body / contact shadow (the strip under the feet without the body less with it)"])
 	var problems := PackedStringArray()
 	var lowest := {}
@@ -378,18 +385,22 @@ func stretch(positions: Array, out_text: String, out_sheet: String) -> PackedStr
 			worst_of[who] = minf(worst_of.get(who, 9.0), margin)
 			lowest[who] = minf(lowest.get(who, 9.0), m.body)
 			highest[who] = maxf(highest.get(who, -9.0), m.body)
-			if m.pixels < 100:
+			if m.pixels < 100 and not head_only:
 				problems.append("%s at %s shows only %d pixels" % [who, entry[0], m.pixels])
-			if m.ring < 150:
+			if m.ring < 150 and not head_only:
 				problems.append("%s at %s: only %d ground pixels in the ring" % [who, entry[0], m.ring])
-			if m.ground < GROUND_LOW or m.ground > GROUND_HIGH:
+			if (m.ground < GROUND_LOW or m.ground > GROUND_HIGH) and not head_only:
 				problems.append("%s at %s: ground %.3f outside %.2f..%.2f" % [who, entry[0], m.ground, GROUND_LOW, GROUND_HIGH])
-			if margin < LEAST_DARKER:
+			if margin < LEAST_DARKER and not head_only:
 				problems.append("%s at %s: darker than the ground by %.3f, under %.2f (body %.3f, ground %.3f)" % [who, entry[0], margin, LEAST_DARKER, m.body, m.ground])
 			headline.append("%s head %.3f, %.0f%% of its ring within %.2f of it (%.0f%% of the ring a front), %d ring px" % [who, m.head, 100.0 * m.head_blend, HEAD_NEAR, 100.0 * m.head_front, m.head_ring])
-			if m.head_ring >= 60 and m.head_blend >= HEAD_BLEND_MOST:
+			if strict_head and m.head_ring < HEAD_RING_LEAST:
+				problems.append("%s at %s: the head's ring is only %d pixels (at least %d): the head is hidden or has no ring to read against" % [who, entry[0], m.head_ring, HEAD_RING_LEAST])
+			elif m.head_ring >= HEAD_RING_LEAST and m.head_blend >= HEAD_BLEND_MOST:
 				problems.append("%s at %s: %.0f%% of the head's ring is within %.2f of the head's tone (under %.0f%%)" % [who, entry[0], 100.0 * m.head_blend, HEAD_NEAR, 100.0 * HEAD_BLEND_MOST])
-			if m.under < 40:
+			if head_only:
+				pass
+			elif m.under < 40:
 				problems.append("%s at %s: the strip under the feet shows only %d ground pixels (at least 40)" % [who, entry[0], m.under])
 			elif m.contact < CONTACT_LEAST:
 				problems.append("%s at %s: the contact shadow is %.3f, under %.2f" % [who, entry[0], m.contact, CONTACT_LEAST])
@@ -397,14 +408,16 @@ func stretch(positions: Array, out_text: String, out_sheet: String) -> PackedStr
 		lines.append("HEAD %s | %s" % [entry[0], " | ".join(headline)])
 		var shirt: Dictionary = seen["Abarax"].shirt
 		shirts.append("%s: shirt %.3f, ground %.3f, differs by %.3f, outline darker along %.0f%% of %d edge pixels (%d shirt pixels)" % [entry[0], shirt.luma, seen["Abarax"].ground, shirt.diff, 100.0 * shirt.outline, shirt.edge, shirt.pixels])
-		if shirt.pixels < 20:
+		if head_only:
+			pass
+		elif shirt.pixels < 20:
 			problems.append("Abarax's shirt at %s shows only %d pixels" % [entry[0], shirt.pixels])
 		elif shirt.diff < SHIRT_LEAST and shirt.outline < OUTLINE_SHARE:
 			problems.append("Abarax's shirt at %s: differs from the ground by %.3f (at least %.2f) and the outline is dark along only %.0f%% of its edge (%.0f%%)" % [entry[0], shirt.diff, SHIRT_LEAST, 100.0 * shirt.outline, 100.0 * OUTLINE_SHARE])
 	for who: String in lowest:
 		var spread: float = highest[who] - lowest[who]
 		lines.append("%s's own luma varies by %.3f across the positions (%.3f to %.3f)" % [who, spread, lowest[who], highest[who]])
-		if spread > MOST_SPREAD:
+		if spread > MOST_SPREAD and not head_only:
 			problems.append("%s's own luma varies by %.3f across the positions (at most %.2f)" % [who, spread, MOST_SPREAD])
 	lines.append_array(shirts)
 	var parts := PackedStringArray()
