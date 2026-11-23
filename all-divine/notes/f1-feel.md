@@ -240,3 +240,50 @@ Every row but the masher is the same to the unit as the table above (the others 
 
 `tests/bot/test_feel_ordering.gd` (seeds 1 to 3, 3,600 frames) measured again: mash 3 waves, 9 deaths, 627 dealt, 1187 taken; mixed 8, 1, 1028, 317; counter at 14 6, 0, 804, 157; counter at 10 9, 0, 1008, 135. It gained a bound a worthless masher fails: he deals at least 0.48 of what the mixed player
 deals (0.61 measured; a fifth under it; at least the 0.35 asked).
+
+
+# After fix round 2 (the tax is for attack presses only)
+
+The controller ruled two things after round 1: the tax on mashed presses is for **attack presses only** (`HAMMERED` is now `palm` and `heavy`; a sway or a duck pays through the strain alone, which counts sways started, so an evade is no longer charged twice,
+and no longer charged by a press rate no hand has), and the free first redundant press of a move stays. The strain's numbers (0.25, cap 2.0, 60 frames) are as they were. `hammer_tax` was to be the largest of 1.0, 1.5 and 2.0 at which four checks hold.
+
+## The choice of `hammer_tax` (the bot's masher at 14, ten seeds, 7,200 frames; the hand speeds by the harness of `tests/actors/test_mash_cost.gd`)
+
+| hammer_tax | (a) 10 a second: unable, base 195 (needs 210 to 300) | (b) 6 a second: unable, base 195 (needs at most 205) | (c) 2 a second: unable, base 130 | (d) masher: waves (13 to 22), deaths (at most 60), dealt, taken per HP dealt |
+|---|---|---|---|---|
+| 1.0 | 244 holds | 195 holds | 130 holds | 15 waves holds, **64 deaths FAILS**, 4497 dealt, 1.90 (mixed 0.48: holds) |
+| 1.5 | 240 holds | 203 holds | 130 holds | 16 waves holds, **63 deaths FAILS**, 4740 dealt, 1.75 (holds) |
+| 2.0 | 261 holds | 203 holds | 130 holds | **10 waves FAILS, 78 deaths FAILS**, 4799 dealt, 1.83 (holds) |
+
+No value holds all four: the masher's deaths are over 60 at all three (64, 63, 78) and at 2.0 his waves are under 13 as well. **`hammer_tax` stays 1.0, and the item stops there, as ruled: no new mechanism.** Ruling 1 alone took the masher at 1.0 from 10 waves and
+76 deaths to 15 and 64 (the band asked for at most 60 deaths: missed by 4). The controller decides what next (the notes above name a tax that starts at the third redundant press, or a floor under 1.0).
+
+## All the rows again (ten seeds, 7,200 frames)
+
+| policy | reaction | waves | deaths | dealt | taken | taken per HP dealt |
+|---|---|---|---|---|---|---|
+| mash | 14 | 15 | 64 | 4497 | 8539 | 1.90 |
+| counter | 14 | 36 | 0 | 4585 | 1294 | 0.28 |
+| mixed | 14 | 43 | 10 | 5575 | 2680 | 0.48 |
+| counter | 10 | 42 | 0 | 5751 | 1084 | 0.19 |
+| mixed | 10 | 46 | 6 | 5888 | 2207 | 0.37 |
+| counter | 18 | 14 | 14 | 2061 | 2529 | 1.23 |
+| mixed | 18 | 39 | 11 | 4612 | 3557 | 0.77 |
+
+The six rows of `counter` and `mixed` are the notes' above to the unit: they press an evade once, never twice in a move, so the change touches none of them. Only the masher moved (10 waves, 76 deaths, 3639 dealt to 15, 64, 4497).
+`tests/bot/test_feel_ordering.gd` (seeds 1 to 3, 3,600 frames): mash 3 waves, 9 deaths, 680 dealt, 1298 taken; the others as before; the masher must deal at least 0.53 of what `mixed` deals (0.66 measured, a fifth under it).
+
+## By hand speed (10 s of palm taps beside a tier I; frames of 600 in which Abarax cannot start a move)
+
+| | 2 a second | 6 a second | 10 a second |
+|---|---|---|---|
+| the base game (no cost) | 130 | 195 | 195 |
+| now (tax 1.0, attack presses only) | 130 | 195 | 244 |
+
+At ten a second he pays 49 frames more (a bit over a second of the ten) and can still act for 356 of 600; at six and two a second he pays nothing.
+
+## What mashing costs now
+
+A player who presses an attack once for each blow pays nothing, and neither does one who presses a little early (the first redundant press of a move is free). A masher who hammers an attack pays from his second wasted press of a move: one stamina each, which
+does not hold back the wait before stamina returns, so at six presses a second he is not held back at all and at ten he loses about a second of the ten to an empty bar. A masher of sways or ducks pays no tax by the press: he pays through the strain, which makes each
+evade that dodges nothing a quarter dearer than the one before (at most twice the cost) until one lands or a second goes by. A player who times his blows and his evades pays nothing at all.
