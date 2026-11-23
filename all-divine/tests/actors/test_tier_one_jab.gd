@@ -9,9 +9,10 @@ extends TestCase
 const TIER_ONE := "res://data/actors/knuckle_1.tres"
 const OTHERS := ["res://data/actors/knuckle_2.tres", "res://data/actors/knuckle_3.tres"]
 const DRUMMER := "res://data/actors/knuckle_drummer.tres"
-## The least a bone of the body turns between two drawn poses of the wind-up for it to count as moving (degrees). The jab's own wind-up
-## moves 1.1, 2.5 and 2.5 degrees on its three steps.
-const MOVES_AT_LEAST := 0.6
+## What the lead arm's drawing back must do (degrees; fix round 1, I1): turn this much between every two drawn poses of the wind-up, and this
+## much from the tell to the last pose before the blow. The source's quiet guard, stretched, turns 0.7 to 2.1 degrees a step.
+const STEP_AT_LEAST := 5.0
+const DRAWN_BACK_AT_LEAST := 20.0
 
 
 func _move(id: StringName) -> MoveData:
@@ -74,26 +75,66 @@ func test_the_long_jab_is_the_jabs_own_from_the_blow_on() -> void:
 		assert_eq(Marks.frame_of(after_b[i]["time"]) - b_blow, Marks.frame_of(after_a[i]["time"]) - a_blow, "mark %d's distance from the blow" % i)
 
 
-func test_the_long_jabs_windup_moves_on_every_drawn_pose() -> void:
-	# The clip is shown stepped at 12 fps: the poses drawn before the blow are those at 0, 1/12, 2/12, ... of its seconds, and no two of
-	# them in a row may be the same (not a pose held for two steps: that is a sticky wind-up).
+func test_the_poses_from_the_blow_on_are_the_jabs_own_five_frames_on() -> void:
+	# Fix round 1 (I1): the keyed layer is nothing at the blow (f25) and after it, so every bone is where the jab has it, five frames earlier.
+	var jab := _clip(&"knuckle_jab")
+	var long := _clip(&"knuckle_jab_long")
+	var worst := 0.0
+	for i in long.get_track_count():
+		if long.track_get_type(i) != Animation.TYPE_ROTATION_3D:
+			continue
+		var j := jab.find_track(long.track_get_path(i), Animation.TYPE_ROTATION_3D)
+		if j < 0:
+			continue
+		for f in range(25, Marks.frame_of(long.length) + 1, 5):
+			var a: Quaternion = long.rotation_track_interpolate(i, f / 60.0)
+			var b: Quaternion = jab.rotation_track_interpolate(j, (f - 5) / 60.0)
+			worst = maxf(worst, rad_to_deg(a.angle_to(b)))
+	print("JABPOSE worst post-blow difference %.3f degrees" % worst)
+	assert_true(worst < 2.0, "from the blow on no bone is more than two degrees (the warp's own, 1.1 measured) from the jab's pose five frames earlier: %.3f" % worst)
+
+
+func _bone_track(anim: Animation, bone: String) -> int:
+	for i in anim.get_track_count():
+		if anim.track_get_type(i) == Animation.TYPE_ROTATION_3D and String(anim.track_get_path(i)).ends_with(":" + bone):
+			return i
+	return -1
+
+
+func test_the_long_jabs_windup_is_a_drawing_back_on_every_drawn_pose() -> void:
+	# The clip is shown stepped at 12 fps: a pose is held for 5 frames, so what a player sees of the wind-up is the poses drawn from the
+	# tell to the blow (f5, f10, f15, f20, then the blow at f25). Fix round 1 (I1): a threshold under a degree let the source's quiet guard,
+	# stretched, pass as a wind-up; the lead arm (the upper or the lower, whichever the keyed layer turns) now turns at least STEP_AT_LEAST
+	# between every two drawn poses, DRAWN_BACK_AT_LEAST in all, and the hand goes AWAY from the target while it does.
 	var anim := _clip(&"knuckle_jab_long")
 	assert_eq(int(anim.get_meta(&"step_fps", 0)), 12, "it is a stepped clip like the jab")
+	var tell := _frame_of(&"knuckle_jab_long", &"tell")
 	var blow := _frame_of(&"knuckle_jab_long", &"hitbox_on")
-	var steps := blow / 5
-	assert_eq(steps, 5, "five drawn poses to the blow")
-	var previous := {}
-	for k in steps:
-		var pose := {}
-		for i in anim.get_track_count():
-			if anim.track_get_type(i) == Animation.TYPE_ROTATION_3D:
-				pose[i] = anim.rotation_track_interpolate(i, k / 12.0)
-		if not previous.is_empty():
-			var turned := 0.0
-			for i: int in pose:
-				turned = maxf(turned, rad_to_deg((pose[i] as Quaternion).angle_to(previous[i])))
-			assert_true(turned >= MOVES_AT_LEAST, "pose %d is not the one before it: the most any bone turns is %.2f degrees (at least %.2f)" % [k, turned, MOVES_AT_LEAST])
-		previous = pose
+	assert_eq([tell, blow], [5, 25], "the tell at f5 and the blow at f25")
+	var drawn := range(tell, blow, 5)
+	assert_eq(drawn, [5, 10, 15, 20], "four drawn poses from the tell to the blow")
+	var turned_ok := []
+	for bone in ["upperarm_l", "lowerarm_l"]:
+		var i := _bone_track(anim, bone)
+		assert_true(i >= 0, "%s has a rotation track" % bone)
+		var steps := []
+		for k in range(1, drawn.size()):
+			var a: Quaternion = anim.rotation_track_interpolate(i, drawn[k - 1] / 60.0)
+			var b: Quaternion = anim.rotation_track_interpolate(i, drawn[k] / 60.0)
+			steps.append(rad_to_deg(a.angle_to(b)))
+		var whole := rad_to_deg((anim.rotation_track_interpolate(i, drawn[0] / 60.0) as Quaternion).angle_to(anim.rotation_track_interpolate(i, drawn[-1] / 60.0)))
+		print("JABPOSE %s steps %s whole %.1f" % [bone, steps.map(func(d: float) -> String: return "%.1f" % d), whole])
+		turned_ok.append(steps.all(func(d: float) -> bool: return d >= STEP_AT_LEAST) and whole >= DRAWN_BACK_AT_LEAST)
+	assert_true(turned_ok.has(true), "the lead arm turns at least %.0f degrees between every two drawn poses and %.0f in all (upper arm, lower arm: %s)" % [STEP_AT_LEAST, DRAWN_BACK_AT_LEAST, turned_ok])
+	# and it is a drawing back: the lead hand's distance to a target a metre and a half ahead grows from the tell to the last pose before the blow
+	var rig := (load(TIER_ONE) as ActorDef).rig_scene.instantiate() as Rig
+	track(rig)
+	var joints: Array[StringName] = [&"hand_l"]
+	var poses := ClipMotion.poses(rig, &"knuckle_jab_long", joints)
+	var target := Vector3(0.0, 1.2, 1.5)
+	var from_tell := ((poses[tell] as Dictionary)[&"hand_l"] as Vector3).distance_to(target)
+	var last := ((poses[drawn[-1]] as Dictionary)[&"hand_l"] as Vector3).distance_to(target)
+	assert_true(last > from_tell + 0.03, "the hand is further from the target at f%d (%.3f m) than at the tell (%.3f m)" % [drawn[-1], last, from_tell])
 
 
 func test_there_are_sixty_eight_moves_and_the_checker_passes_them_all() -> void:
