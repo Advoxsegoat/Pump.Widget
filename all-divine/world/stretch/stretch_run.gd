@@ -58,6 +58,9 @@ var interactor: Interactor
 ## Play frames between two autosaves (a test shortens it).
 var autosave_frames := AUTOSAVE_FRAMES
 
+## Task 4: where foes stand (made in `start`, after the petals, which it hands every foe to).
+var encounters: EncounterHost
+
 # Task 5: gates. One door per gate of the def, made before the player is placed (a board built here is in the world he is placed in).
 var gates: Array[GateDoor] = []
 
@@ -99,6 +102,7 @@ static func start(region_node: Region, who: Actor, stretch_def: StretchDef, save
 	who.died.connect(run._on_player_died)
 	run._place_player()
 	run._petals_begin()
+	run.encounters = EncounterHost.begin(run)
 	return run
 
 
@@ -196,6 +200,7 @@ func state_hash() -> int:
 	for flag_name in data.memory.names():
 		parts.append(String(flag_name))
 	parts.append_array([data.petals, petals.pile_amount(), data.deaths])
+	parts.append(encounters.hash_part())
 	var lying: Variant = petals.pile_at()
 	if lying != null:
 		parts.append_array([roundi((lying as Vector3).x * 1000.0), roundi((lying as Vector3).z * 1000.0)])
@@ -203,7 +208,8 @@ func state_hash() -> int:
 
 
 ## Whether this is a place worth coming back to: he is alive, on the floor, in no move, not frozen by a blow, not in a paired
-## move, and no living foe of the other team is within SAFE_DISTANCE of him. (Where foes sleep, this will say "awake".)
+## move, and no awake, living foe of the other team is within SAFE_DISTANCE of him. A sleeper does not count, and neither does an
+## encounter that has not stood in (it has no foes).
 func is_safe() -> bool:
 	if player.dead or not player.is_on_floor() or player.runner.current != null or player.frozen > 0 or player.paired_with != null:
 		return false
@@ -316,12 +322,15 @@ static func _moved(a: Dictionary, b: Dictionary) -> bool:
 	return from.distance_to(to) >= MOVED_METRES or turned >= TURNED_DEGREES
 
 
-# Whether a living foe of the other team is within SAFE_DISTANCE of the player, flat.
+# Whether an awake, living foe of the other team is within SAFE_DISTANCE of the player, flat.
 func _foe_near() -> bool:
 	var here := Vector2(player.global_position.x, player.global_position.z)
 	for node in get_tree().get_nodes_in_group(Actor.GROUP):
 		var actor := node as Actor
 		if actor == null or actor == player or actor.dead or actor.def == null or actor.def.team == player.def.team:
+			continue
+		var brain := actor.brain as EnemyBrain
+		if brain != null and brain.asleep:
 			continue
 		if here.distance_to(Vector2(actor.global_position.x, actor.global_position.z)) <= SAFE_DISTANCE:
 			return true
@@ -389,13 +398,15 @@ var _pile_node: PetalPile
 var _watched := {}  # instance id -> true: the foes whose fall is already listened for
 
 
-## Listens for `foe`'s fall: once, the petals its def gives are his, and the game is marked changed. Every foe of the stretch is watched as
-## it enters the region (`_on_node_added`), so this is for one that is not under it.
+## Listens for `foe`'s fall: each time it falls, the petals its def gives are his, and the game is marked changed (a foe that stands again,
+## revived, and falls again pays again; a foe healed on arriving home did not fall, and pays nothing). Every foe of the stretch is
+## watched as it enters the region (`_on_node_added`), so this is for one that is not under it.
 func watch_foe(foe: Actor) -> void:
 	if foe == null or foe == player or _watched.has(foe.get_instance_id()):
 		return
 	_watched[foe.get_instance_id()] = true
-	foe.died.connect(_on_foe_died.bind(foe), CONNECT_ONE_SHOT)
+	foe.died.connect(_on_foe_died.bind(foe))
+	foe.tree_exited.connect(_unwatch.bind(foe.get_instance_id()), CONNECT_ONE_SHOT)
 
 
 ## Something other than standing still has changed: the autosave tick writes the file.
@@ -473,6 +484,10 @@ func _free_pile() -> void:
 func _on_node_added(node: Node) -> void:
 	if node is Actor:
 		watch_foe(node as Actor)
+
+
+func _unwatch(id: int) -> void:
+	_watched.erase(id)
 
 
 func _on_foe_died(foe: Actor) -> void:

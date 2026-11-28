@@ -176,7 +176,7 @@ func test_the_yards_arena_never_begins_when_the_game_starts_in_the_stretch() -> 
 	assert_eq(main.region.scene_file_path, "res://world/bilibara/bilibara.tscn", "the region is the stretch")
 	assert_true(main.arena() == null, "no arena")
 	var foes := main.find_children("*", "Actor", true, false).filter(func(a: Node) -> bool: return (a as Actor).def.team == ActorDef.Team.ENEMY)
-	assert_eq(foes.size(), 0, "no foe anywhere")
+	assert_eq(foes.size(), main.stretch.encounters.all_foes().size(), "the only foes are the stretch's own encounters (none of the yard's wave)")
 
 
 func test_leaving_the_stretch_saves_what_changed() -> void:

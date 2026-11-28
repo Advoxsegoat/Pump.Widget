@@ -14,3 +14,6 @@ extends Resource
 
 ## Task 3: the numbers of the petals (what he leaves where he falls, the clock, the reach).
 @export var petals: PetalTuning
+
+## Task 4: where foes stand (`EncounterHost` stands them in and out as the player comes and goes).
+@export var encounters: Array[EncounterDef] = []

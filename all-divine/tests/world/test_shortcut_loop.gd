@@ -26,6 +26,13 @@ func after_each() -> void:
 	Game.reset()
 
 
+# The stretch's def with no foes standing in it: this file is about something else (the encounters have their own, test_encounters.gd).
+func _quiet_def() -> StretchDef:
+	var def := (Registry.fetch(&"stretch", &"bilibara") as StretchDef).duplicate() as StretchDef
+	def.encounters = [] as Array[EncounterDef]
+	return def
+
+
 func _world(flags: Array[StringName]) -> Dictionary:
 	var region := track((load(BILIBARA) as PackedScene).instantiate()) as Region
 	var player := (load("res://actors/actor.tscn") as PackedScene).instantiate() as Actor
@@ -37,7 +44,7 @@ func _world(flags: Array[StringName]) -> Dictionary:
 	var data := SaveData.new_game()
 	for flag in flags:
 		data.memory.set_flag(flag)
-	var run := StretchRun.start(region, player, Registry.fetch(&"stretch", &"bilibara") as StretchDef, null, data)
+	var run := StretchRun.start(region, player, _quiet_def(), null, data)
 	_runs.append(run)
 	await frames(2)
 	return {region = region, player = player, run = run}

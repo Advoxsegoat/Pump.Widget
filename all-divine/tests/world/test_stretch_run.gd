@@ -57,8 +57,15 @@ func _bare() -> Dictionary:
 	return {region = region, player = player}
 
 
+# The stretch's def with no foes standing in it: this file is about something else (the encounters have their own, test_encounters.gd).
+func _quiet_def() -> StretchDef:
+	var def := (Registry.fetch(&"stretch", &"bilibara") as StretchDef).duplicate() as StretchDef
+	def.encounters = [] as Array[EncounterDef]
+	return def
+
+
 func _start(bare: Dictionary, data: SaveData = null, store: SaveStore = null) -> StretchRun:
-	var def := Registry.fetch(&"stretch", &"bilibara") as StretchDef
+	var def := _quiet_def()
 	var run := StretchRun.start(bare.region, bare.player, def, store, data if data != null else SaveData.new_game())
 	_runs.append(run)
 	return run

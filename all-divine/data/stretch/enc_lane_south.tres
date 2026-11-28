@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="EncounterDef" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://world/stretch/encounter_def.gd" id="1_enc"]
+[ext_resource type="Script" path="res://world/stretch/placement.gd" id="2_pl"]
+[ext_resource type="Resource" path="res://data/actors/knuckle_blade.tres" id="d0"]
+
+[sub_resource type="Resource" id="Placement_0"]
+script = ExtResource("2_pl")
+def = ExtResource("d0")
+at = Vector3(27.5, 0, -14)
+
+[resource]
+script = ExtResource("1_enc")
+id = &"lane_south"
+placements = Array[ExtResource("2_pl")]([SubResource("Placement_0")])

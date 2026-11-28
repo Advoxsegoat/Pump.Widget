@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="EncounterDef" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://world/stretch/encounter_def.gd" id="1_enc"]
+[ext_resource type="Script" path="res://world/stretch/placement.gd" id="2_pl"]
+[ext_resource type="Resource" path="res://data/actors/knuckle_1.tres" id="d0"]
+
+[sub_resource type="Resource" id="Placement_0"]
+script = ExtResource("2_pl")
+def = ExtResource("d0")
+at = Vector3(-32.5, 0, -14.8)
+facing_deg = 180.0
+
+[resource]
+script = ExtResource("1_enc")
+id = &"loop_straggler"
+placements = Array[ExtResource("2_pl")]([SubResource("Placement_0")])

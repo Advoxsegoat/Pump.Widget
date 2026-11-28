@@ -50,12 +50,19 @@ func _actor(region: Region, def_path: String, at: Vector3, actor_name: String) -
 	return actor
 
 
+# The stretch's def with no foes standing in it: this file is about something else (the encounters have their own, test_encounters.gd).
+func _quiet_def() -> StretchDef:
+	var def := (Registry.fetch(&"stretch", &"bilibara") as StretchDef).duplicate() as StretchDef
+	def.encounters = [] as Array[EncounterDef]
+	return def
+
+
 # The stretch with Abarax and a started run on it (the physics has stepped, so the ground answers): {region, player, run}.
 func _world(data: SaveData = null, store: SaveStore = null) -> Dictionary:
 	var region := track((load(BILIBARA) as PackedScene).instantiate()) as Region
 	var player := _actor(region, ABARAX, Vector3.ZERO, "Player")
 	await frames(2)
-	var def := Registry.fetch(&"stretch", &"bilibara") as StretchDef
+	var def := _quiet_def()
 	var run := StretchRun.start(region, player, def, store, data if data != null else SaveData.new_game())
 	_runs.append(run)
 	return {region = region, player = player, run = run}
@@ -297,7 +304,7 @@ func test_a_pause_does_not_count_against_the_clock() -> void:
 	var region := track((load(BILIBARA) as PackedScene).instantiate()) as Region
 	var player := _actor(region, ABARAX, Vector3.ZERO, "Player")
 	await frames(2)
-	var def := (Registry.fetch(&"stretch", &"bilibara") as StretchDef).duplicate() as StretchDef
+	var def := _quiet_def()
 	def.petals = tuned
 	var run := StretchRun.start(region, player, def, null, SaveData.new_game())
 	_runs.append(run)
