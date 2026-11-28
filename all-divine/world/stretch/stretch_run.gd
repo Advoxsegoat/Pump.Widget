@@ -94,6 +94,7 @@ static func start(region_node: Region, who: Actor, stretch_def: StretchDef, save
 		shrine.global_position = shrine_def.plinth
 	who.died.connect(run._on_player_died)
 	run._place_player()
+	run._petals_begin()
 	return run
 
 
@@ -190,6 +191,10 @@ func state_hash() -> int:
 	parts.append(String(data.rest_shrine))
 	for flag_name in data.memory.names():
 		parts.append(String(flag_name))
+	parts.append_array([data.petals, petals.pile_amount(), data.deaths])
+	var lying: Variant = petals.pile_at()
+	if lying != null:
+		parts.append_array([roundi((lying as Vector3).x * 1000.0), roundi((lying as Vector3).z * 1000.0)])
 	return parts.hash()
 
 
@@ -207,6 +212,7 @@ func _physics_process(_delta: float) -> void:
 		return  # a frame of no play (a pause, a scene): nothing counts
 	_counted = Game.play_frames
 	data.play_frames += 1
+	_petals_tick()
 	if _death_frames >= 0:
 		_death_frames += 1
 		if _death_frames >= roundi(DEATH_DELAY * Engine.physics_ticks_per_second):
@@ -327,6 +333,7 @@ func _remember(flag_name: StringName) -> bool:
 
 
 func _on_player_died() -> void:
+	_petals_fell()
 	player_fell.emit()
 	_death_frames = 0
 	data.at = {}
@@ -339,3 +346,142 @@ func _snap_camera() -> void:
 	var rig := get_tree().get_first_node_in_group(CameraRig.GROUP) as CameraRig
 	if rig != null:
 		rig.snap_now()
+
+
+# --- Task 3: petals and the corpse run ---
+# The petals he carries and the pile he left (`Petals`, over the same `SaveData`), the pile drawn in the world (`PetalPile`), the foes that
+# give petals when they fall, and the file written when it matters: at the moment of death, at the pickup, and on the autosave tick for
+# the rest. Nothing here waits for a press: coming within reach of the pile takes it, in a move or not, on that very play frame.
+
+const PILE := preload("res://fx/petal_pile.tscn")
+const GAIN_CUE := &"petal_gain"
+const WILT_CUE := &"petal_wilt"
+## Metres between the rings, and how far out, that a pile looks for standing ground when he fell off it (a death in a corner).
+const GROUND_RING := 0.25
+const GROUND_RINGS := 12
+const GROUND_ANGLES := 16
+
+var petals: Petals
+## The last point he stood on the floor alive (flat, y 0), kept every play frame: where a pile lies if he falls, in the air or not.
+var last_stand := Vector3.ZERO
+
+var _pile_node: PetalPile
+var _watched := {}  # instance id -> true: the foes whose fall is already listened for
+
+
+## Listens for `foe`'s fall: once, the petals its def gives are his, and the game is marked changed. Every foe of the stretch is watched as
+## it enters the region (`_on_node_added`), so this is for one that is not under it.
+func watch_foe(foe: Actor) -> void:
+	if foe == null or foe == player or _watched.has(foe.get_instance_id()):
+		return
+	_watched[foe.get_instance_id()] = true
+	foe.died.connect(_on_foe_died.bind(foe), CONNECT_ONE_SHOT)
+
+
+## Something other than standing still has changed: the autosave tick writes the file.
+func mark_dirty() -> void:
+	_dirty = true
+
+
+# The run's start: its petals over the game's data, the pile of a loaded game drawn again, the foes already in the region watched.
+func _petals_begin() -> void:
+	petals = Petals.new(data, def.petals)
+	last_stand = Vector3(player.global_position.x, 0.0, player.global_position.z)
+	petals.gained.connect(_on_petals_gained)
+	petals.dropped.connect(_on_pile_dropped)
+	petals.taken.connect(_on_pile_taken)
+	petals.wilted.connect(_on_pile_wilted)
+	var lying: Variant = petals.pile_at()
+	if lying != null:
+		_draw_pile(lying)
+	for node in get_tree().get_nodes_in_group(Actor.GROUP):
+		_on_node_added(node)
+	get_tree().node_added.connect(_on_node_added)
+
+
+# Every play frame: where he stands, the pile ageing, and the pile taken if he is within reach.
+func _petals_tick() -> void:
+	if not player.dead and player.is_on_floor():
+		last_stand = Vector3(player.global_position.x, 0.0, player.global_position.z)
+	petals.tick(1)
+	var lying: Variant = petals.pile_at()
+	if lying == null or player.dead or Director.current() != null or Director.moment_playing() != null:
+		return
+	var there := lying as Vector3
+	if Vector2(there.x - player.global_position.x, there.z - player.global_position.z).length() <= _reach():
+		petals.take_back()
+
+
+func _reach() -> float:
+	return def.petals.reach if def.petals != null else PetalTuning.new().reach
+
+
+# He fell: what he carries is the pile at the last place he stood on the floor (on standing ground, whatever the ground was).
+func _petals_fell() -> void:
+	petals.fall_at(_ground_near(last_stand))
+
+
+# `point` if it is standing ground, else the nearest point that is (rings of GROUND_RING out to a few metres), else his shrine's respawn.
+func _ground_near(point: Vector3) -> Vector3:
+	var flat := Vector3(point.x, 0.0, point.z)
+	if StretchGround.stands(region, flat):
+		return flat
+	for ring in range(1, GROUND_RINGS + 1):
+		for k in GROUND_ANGLES:
+			var angle := TAU * float(k) / float(GROUND_ANGLES)
+			var tried := flat + Vector3(sin(angle), 0.0, cos(angle)) * (GROUND_RING * float(ring))
+			if StretchGround.stands(region, tried):
+				return tried
+	return spawn_point(rest_shrine()).origin
+
+
+func _draw_pile(at: Vector3) -> void:
+	_free_pile()
+	_pile_node = PILE.instantiate() as PetalPile
+	add_child(_pile_node)
+	_pile_node.global_position = at
+	_pile_node.amount = petals.pile_amount()
+
+
+func _free_pile() -> void:
+	if is_instance_valid(_pile_node):
+		remove_child(_pile_node)
+		_pile_node.free()
+	_pile_node = null
+
+
+func _on_node_added(node: Node) -> void:
+	if node is Actor:
+		watch_foe(node as Actor)
+
+
+func _on_foe_died(foe: Actor) -> void:
+	if foe.def != null and foe.def.team == ActorDef.Team.ENEMY:
+		petals.gain(foe.def.petals)
+
+
+func _on_petals_gained(_amount: int) -> void:
+	Sfx.play(GAIN_CUE, player.global_position)
+	mark_dirty()
+
+
+func _on_pile_dropped(_amount: int, at: Vector3) -> void:
+	_draw_pile(at)
+	mark_dirty()
+
+
+# Taken back: a burst of petals on him and the chime, the pile gone from the world, and the file says so now.
+func _on_pile_taken(_amount: int) -> void:
+	_free_pile()
+	var fx := player.get_node_or_null(^"ActorFx") as ActorFx
+	if fx != null:
+		fx.show_fx(BURST_FX, player.global_position)
+	Sfx.play(GAIN_CUE, player.global_position)
+	save_now()
+
+
+func _on_pile_wilted(_amount: int) -> void:
+	if is_instance_valid(_pile_node):
+		Sfx.play(WILT_CUE, _pile_node.global_position)
+	_free_pile()
+	mark_dirty()

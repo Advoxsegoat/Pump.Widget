@@ -9,3 +9,5 @@ extends Resource
 @export var shrines: Array[ShrineDef] = []
 ## The shrine a game that has rested nowhere stands up at.
 @export var start_shrine: StringName = &"rose_a"
+## Task 3: the numbers of the petals (what he leaves where he falls, the clock, the reach).
+@export var petals: PetalTuning
