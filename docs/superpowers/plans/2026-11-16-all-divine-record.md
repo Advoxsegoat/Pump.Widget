@@ -135,6 +135,35 @@ reads the code again and will find afresh whatever those lists held. F0's record
 - For Task 4's brief: `loop_straggler` (-32.5, -14) is 11.48 m from shrine A's new respawn and moves to about (-32.5, -14.8).
 - Both shrines read as a dark stone with a few petals above it, not plainly as a shrine, and they look alike: put to the owner.
 
+- Task 2, round 3 (Nov 23): joined the head of Nov 23; the yard's pin was re-made for the tier I's longer jab (the pin file is the
+  lane's own: the controller's brief wrongly said it came with the join); the F2 key in a recording starts a new game; shrine A's side
+  places are closed by the building's wall; the junk bytes are written as bytes. Merged Nov 23 (86466b2).
+- Tasks 3 (petals) and 5 (gates) were built side by side on Nov 23. Both builders were stopped by the account's usage limit close to
+  the end; each task was finished by a fresh implementer from the tree as it stood (one pushed commit and a few unsaved edits each),
+  then reviewed by an independent agent, with a second agent reproducing each serious finding.
+- Ruling: **the toll board is not placed in the town until the owner answers on the Collector** (optional or on the way, and where he
+  stands). `data/stretch/bilibara.tres` lists the shortcut gate only; `gate_toll.tres` stays loaded and tested through a def the tests
+  build. To place it: add `[ext_resource type="Resource" path="res://data/stretch/gate_toll.tres" id="7_gt"]` and make the gates line
+  `gates = Array[ExtResource("5_gate")]([ExtResource("6_gs"), ExtResource("7_gt")])`; then the perf walk
+  (`tests/perf/test_bilibara_budget.gd`), two reads of `StretchGround.reached` in `tests/world/test_stretch_run.gd` and the lane-mouth
+  place in `tests/render/test_bilibara_readability_more.gd` open it first (as commit 16ced8d had them). Cost if wrong: the lane's
+  mouth stays open one task longer than the plan says.
+- Task 3's review: a test that could not fail on the rule it guards (a pile is always on standing ground: the test now sets the place
+  he last stood to a wall point) and a wrong sentence in the report, both mended; the scene gate got its test and an unreachable
+  play-state clause went. Ruling: **the arrow to a pile out of the picture is drawn twice as large with a dark edge** (24 px at
+  1280x720; it was a sliver). Cost if wrong: a Hud mark the owner finds loud; one number (`StretchHud.ARROW_LENGTH`).
+- Task 5's review: the two picket gates across the gateway stayed standing when the shortcut opened. Ruling: **they go down with the
+  board** (named in the gate's `nodes`); whether they should swing open is put to the owner as an art-pass question. Cost if wrong:
+  one line of data. `GateDoor.shuts` (no caller) was deleted.
+- Ruling: Task 5's fix round was made on the joined tree (Task 3's fixed head merged into Task 5's lane, six files with text
+  conflicts, each keeping both sides), run whole once (2228 passed) and checked by an independent agent that undid each fix and saw
+  its test go red, compared every shared file with both parents, and played the two systems together both ways. Merged Nov 28:
+  Task 3 from lane bot's head (6dd82f7, cloud run 694), Task 5 from the joined head (0f7c8db, cloud run 696).
+- Ruling: Task 4 is built on the joined head, so its flood-fill test has the gate and the ground's memo in its tree; a foe that
+  stands again must pay petals again (Task 3's watch connects once: a finding handed to Task 4's brief). Cost if wrong: none.
+- Task 4's brief also rules: a foe with a home goes home after any stand-down; a rest in the middle of a fight is not refused (put to
+  the owner as a question); `loop_straggler` and `lane_north` move to 12.2 m from the nearer respawn.
+
 ### The texture pass (the owner's choices 1.A and 2.A of Nov 16)
 
 - The snow has a grain and nothing in the stretch clips to white: built, reviewed, kept.
@@ -221,6 +250,12 @@ reads the code again and will find afresh whatever those lists held. F0's record
 - The texture pass: the snow's picture test (no busier than the flagstones, shimmers no more) cannot fail on a flat snow; the
   texture test is the guard.
 
+- Task 3: the play-state clause in the pile's pickup was removed as unreachable (the run's physics does not tick outside play); a
+  menu state that keeps the tree running would need it back. The scene-gate test stands a bare Director in for a real moment.
+- Task 3: the pile's column may be faint at the far end of the street in motion (judged on stills only): the owner's checklist.
+- Task 5: the flood fill's memo is keyed by the region's solid bodies, so a test that opens many gates pays for one fill each.
+- The picture tests that save a PNG need `out/shots` to exist: in a fresh copy they fail with "Can't save PNG".
+
 ## Findings kept for the final review
 
 - Seeded fights are not the same on every machine (the cloud's is not the build machine): a rule tuned to ten seeds here failed there
@@ -239,6 +274,9 @@ reads the code again and will find afresh whatever those lists held. F0's record
   now made with particles hidden. Any later picture rule that reads a moving effect should be checked the same way.
 - The same rendered picture is not the same on every machine either: a head rule 0.005 of wood tone from a cliff passed here and
   failed in the cloud. Picture rules need room, as rules over seeded fights do.
+
+- `tests/actors` `test_foe_planning` wall40x8 measures thread time: it failed once while another lane was rendering, and passed alone.
+- The first `tools/godot.sh --import` after a merge crashed once with signal 11 (malloc, unaligned tcache chunk); the rerun was clean.
 
 ## For the owner's checklists (kept in STATE.md)
 
