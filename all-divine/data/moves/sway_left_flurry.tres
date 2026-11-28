@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://moves/move_data.gd" id="1_move"]
+
+[resource]
+script = ExtResource("1_move")
+id = &"sway_left_flurry"
+kind = 1
+clip = &"sway_left_flurry"
+root_motion = false
+stamina_cost = 3.0
+evade = 1
+redodge_frame = 12
+directional = {
+&"back": &"sway_back_flurry",
+&"right": &"sway_right_flurry"
+}
+counters = {
+&"heavy": &"clear_backpalm",
+&"palm": &"counter_hook"
+}

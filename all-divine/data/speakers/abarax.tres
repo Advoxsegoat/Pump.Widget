@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="Speaker" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://story/speaker.gd" id="1_speaker"]
+[ext_resource type="Texture2D" uid="uid://c7hbv5bxt6t7k" path="res://assets/portraits/abarax/neutral.png" id="2_neutral"]
+
+[resource]
+script = ExtResource("1_speaker")
+id = &"abarax"
+display_name = "Abarax"
+portraits = {
+&"neutral": ExtResource("2_neutral"),
+&"smile": ExtResource("2_neutral"),
+&"serious": ExtResource("2_neutral"),
+&"angry": ExtResource("2_neutral"),
+&"sad": ExtResource("2_neutral"),
+&"surprise": ExtResource("2_neutral")
+}
+placeholder_exprs = Array[StringName]([&"smile", &"serious", &"angry", &"sad", &"surprise"])
+blip_pitch = 1.0

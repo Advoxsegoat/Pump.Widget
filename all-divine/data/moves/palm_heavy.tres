@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://moves/move_data.gd" id="1_move"]
+[ext_resource type="Script" path="res://moves/hit_profile.gd" id="2_hit"]
+
+[sub_resource type="Resource" id="Resource_heavy"]
+script = ExtResource("2_hit")
+damage = 22.0
+poise_damage = 25.0
+posture_damage = 22.0
+guard_stamina = 24.0
+knockback = 3.0
+hitstop_frames = 6
+shake = 0.5
+line = 1
+staggers = true
+impact_sound = &"impact_heavy"
+
+[sub_resource type="Resource" id="Resource_charged"]
+script = ExtResource("2_hit")
+damage = 34.0
+poise_damage = 40.0
+posture_damage = 35.0
+guard_stamina = 34.0
+knockback = 5.0
+hitstop_frames = 6
+shake = 0.8
+line = 1
+staggers = true
+impact_sound = &"impact_heavy"
+
+[resource]
+script = ExtResource("1_move")
+id = &"palm_heavy"
+clip = &"palm_heavy"
+stamina_cost = 24.0
+hits = {
+&"charged": SubResource("Resource_charged"),
+&"heavy": SubResource("Resource_heavy")
+}

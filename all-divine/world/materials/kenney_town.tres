@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3]
+
+[ext_resource type="Shader" path="res://render/shaders/toon_world.gdshader" id="1_toon"]
+[ext_resource type="Texture2D" path="res://assets/env/kenney_town/Textures/colormap.png" id="2_colormap"]
+
+[resource]
+resource_name = "kenney_town"
+shader = ExtResource("1_toon")
+shader_parameter/albedo_tex = ExtResource("2_colormap")
+shader_parameter/world_uv = false
+shader_parameter/texels_per_metre = 32.0

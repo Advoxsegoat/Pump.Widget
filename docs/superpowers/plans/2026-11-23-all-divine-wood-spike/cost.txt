@@ -1,0 +1,28 @@
+Spawn | 2 bodies | K0 | 185 draws | 33760 prims | 38.8 ms/frame
+Spawn | 2 bodies | K2 | 204 draws | 47912 prims | 39.9 ms/frame
+Spawn | 8 bodies | K0 | 269 draws | 72532 prims | 41.5 ms/frame
+Spawn | 8 bodies | K2 | 330 draws | 125444 prims | 45.4 ms/frame
+StreetEast | 2 bodies | K0 | 177 draws | 31270 prims | 35.8 ms/frame
+StreetEast | 2 bodies | K2 | 207 draws | 47768 prims | 35.3 ms/frame
+StreetEast | 8 bodies | K0 | 272 draws | 72388 prims | 38.7 ms/frame
+StreetEast | 8 bodies | K2 | 333 draws | 125300 prims | 41.1 ms/frame
+LaneMid | 2 bodies | K0 | 207 draws | 33570 prims | 36.8 ms/frame
+LaneMid | 2 bodies | K2 | 222 draws | 46870 prims | 36.7 ms/frame
+LaneMid | 8 bodies | K0 | 287 draws | 71490 prims | 40.4 ms/frame
+LaneMid | 8 bodies | K2 | 348 draws | 124402 prims | 43.5 ms/frame
+RackWest | 2 bodies | K0 | 132 draws | 30684 prims | 38.5 ms/frame
+RackWest | 2 bodies | K2 | 182 draws | 49604 prims | 37.7 ms/frame
+RackWest | 8 bodies | K0 | 247 draws | 74224 prims | 44.9 ms/frame
+RackWest | 8 bodies | K2 | 308 draws | 127136 prims | 52.1 ms/frame
+GateFar | 2 bodies | K0 | 204 draws | 36524 prims | 43.4 ms/frame
+GateFar | 2 bodies | K2 | 222 draws | 50434 prims | 40.1 ms/frame
+GateFar | 8 bodies | K0 | 287 draws | 75054 prims | 47.3 ms/frame
+GateFar | 8 bodies | K2 | 348 draws | 127966 prims | 49.7 ms/frame
+YardEntry | 2 bodies | K0 | 190 draws | 33516 prims | 38.1 ms/frame
+YardEntry | 2 bodies | K2 | 189 draws | 41226 prims | 37.4 ms/frame
+YardEntry | 8 bodies | K0 | 254 draws | 65846 prims | 42.9 ms/frame
+YardEntry | 8 bodies | K2 | 315 draws | 118758 prims | 45.1 ms/frame
+MEAN 2 K0: 182 draws, 33221 prims, 38.6 ms/frame
+MEAN 2 K2: 204 draws, 47302 prims, 37.9 ms/frame
+MEAN 8 K0: 269 draws, 71922 prims, 42.6 ms/frame
+MEAN 8 K2: 330 draws, 124834 prims, 46.2 ms/frame

@@ -1,0 +1,146 @@
+extends TestCase
+## What a cancel leaves behind. When a move is cancelled into another, nothing of the first may carry on in
+## the second: its hitboxes are off, its invulnerability, evade window and armour are off, and its cancel window is
+## gone (the new move has its own, from its own marks). Tested on the real clips' windows: palm_jab opens
+## {palm: palm_cross} at f15 and {palm, dodge, sway, duck} at f20; palm_cross opens {palm: palm_hook} at f20 and
+## {palm, dodge, sway, duck} at f25; dash_step opens {palm, heavy, guard, sway, duck} at f10; a sway's evade window
+## is open from its f2. The jab's hitbox is palm_l (on at f10, off at f15), the cross's is palm_r (f15 to f20).
+##
+## A move frame counts the actor's frames since the move started; 0 is the frame it started on. The windows
+## only open once a hitbox's own mark has turned it off, so a second pair of tests cancels with
+## MoveRunner.start in the middle of a swing and a sway, where the state to clear is really on.
+
+const ABARAX := "res://data/actors/abarax.tres"
+const DT := 1.0 / 60
+
+
+## Plays `steps` for `total` actor frames and returns what happened, keyed by the actor's frame:
+##   actor     the Actor
+##   started   [[move id, actor frame], ...] from move_started
+##   ended     [[move id, actor frame, cancelled], ...] from move_ended
+##   states    actor frame -> {move (its id, or &""), hitboxes (active ids), iframes, evading, window, recovery, facing}
+func _run(steps: Array, total: int) -> Dictionary:
+	var arena := TestArena.make(self)
+	var actor := TestArena.spawn(arena, load(ABARAX), ScriptBrain.new(steps))
+	var run := {"actor": actor, "started": [], "ended": [], "states": {}}
+	actor.runner.move_started.connect(func(m: MoveData) -> void: run["started"].append([m.id, actor.frame]))
+	actor.runner.move_ended.connect(func(m: MoveData, cancelled: bool) -> void:
+		run["ended"].append([m.id, actor.frame, cancelled]))
+	while actor.frame < total:
+		await frames(1)
+		run["states"][actor.frame] = _state(actor)
+	return run
+
+
+func _state(actor: Actor) -> Dictionary:
+	var current := actor.runner.current
+	return {
+		"move": current.id if current != null else &"",
+		"hitboxes": actor.rig.active_hitboxes(),
+		"iframes": actor.runner.iframes,
+		"evading": actor.runner.evading,
+		"hyperarmour": actor.runner.hyperarmour,
+		"window": actor.runner.window.duplicate(),
+		"recovery": actor.runner.in_recovery,
+		"facing": actor.facing(),
+	}
+
+
+func _at(run: Dictionary, f: int) -> Dictionary:
+	if not run["states"].has(f):
+		fail("no state for frame %d" % f)
+		return {"move": &"?", "hitboxes": [&"?"], "iframes": true, "hyperarmour": true, "window": {"?": &"?"}, "recovery": true, "facing": Vector3.INF}
+	return run["states"][f]
+
+
+func test_jab_cancelled_into_cross_turns_its_hitbox_off() -> void:
+	# Palm at frame 11 (jab f0), and again at frame 26 (jab f15, where the window opens).
+	var run: Dictionary = await _run([
+		{"frames": 10}, {"frames": 1, "press": [&"palm"]},
+		{"frames": 14}, {"frames": 1, "press": [&"palm"]},
+		{"frames": 20},
+	], 50)
+	assert_eq(run["started"], [[&"palm_jab", 11], [&"palm_cross", 26]], "the cross at jab f15")
+	assert_eq(run["ended"].front(), [&"palm_jab", 26, true], "the jab was cancelled")
+	assert_eq(_at(run, 25)["hitboxes"], [&"palm_l"], "the jab's hand is live the frame before")
+	var cancel := _at(run, 26)
+	assert_eq(cancel["move"], &"palm_cross")
+	assert_eq(cancel["hitboxes"], [] as Array[StringName], "on the frame the cross starts, palm_l is off and palm_r is not on yet")
+	assert_eq(cancel["window"], {}, "the jab's window is gone; the cross's opens at its f20")
+	assert_false(cancel["recovery"], "and the jab's recovery with it")
+	assert_eq(_at(run, 40)["hitboxes"], [] as Array[StringName], "the cross's own hand comes on at its f15, frame 41")
+	assert_eq(_at(run, 41)["hitboxes"], [&"palm_r"])
+	assert_eq(_at(run, 46)["window"], {&"palm": &"palm_hook"}, "the cross's window at its f20")
+
+
+func test_jab_cancelled_into_dash_step_at_its_recovery_window() -> void:
+	# Palm at frame 11, then dodge with the stick pushed east at jab f20 (frame 31), where {palm, dodge, ...} opens.
+	var east := Vector2(1, 0)
+	var run: Dictionary = await _run([
+		{"frames": 10}, {"frames": 1, "press": [&"palm"]},
+		{"frames": 19}, {"frames": 1, "press": [&"dodge"], "move": east},
+		{"frames": 20, "move": east},
+	], 55)
+	assert_eq(run["started"], [[&"palm_jab", 11], [&"dash_step_left", 31]])
+	assert_eq(run["ended"].front(), [&"palm_jab", 31, true], "the jab was cancelled")
+	var cancel := _at(run, 31)
+	assert_eq(cancel["move"], &"dash_step_left")
+	assert_eq(cancel["hitboxes"], [] as Array[StringName], "no hitbox is on")
+	assert_false(cancel["iframes"], "a dash-step is never invulnerable")
+	assert_eq(cancel["window"], {}, "the jab's {palm, dodge, ...} window did not carry over")
+	assert_false(cancel["recovery"], "nor its recovery")
+	assert_vec_near(cancel["facing"], Vector3(0, 0, 1), 1e-6, "the dash-step kept the facing, and went east sideways")
+	for f in range(31, 56):
+		assert_eq(_at(run, f)["hitboxes"], [] as Array[StringName], "no hitbox in frame %d" % f)
+		assert_false(_at(run, f)["iframes"], "no iframes in frame %d" % f)
+
+
+func test_dash_step_cancelled_into_jab_clears_the_window() -> void:
+	# Dodge at frame 11 (dash f0), palm at dash f10 (frame 21), where {palm, heavy, guard, sway, duck} opens.
+	var run: Dictionary = await _run([
+		{"frames": 10}, {"frames": 1, "press": [&"dodge"], "move": Vector2(1, 0)},
+		{"frames": 9}, {"frames": 1, "press": [&"palm"]},
+		{"frames": 20},
+	], 50)
+	assert_eq(run["started"], [[&"dash_step_left", 11], [&"palm_jab", 21]])
+	assert_eq(run["ended"].front(), [&"dash_step_left", 21, true], "the dash-step was cancelled")
+	assert_eq(_at(run, 20)["window"], {}, "no window the frame before")
+	var cancel := _at(run, 21)
+	assert_eq(cancel["move"], &"palm_jab")
+	assert_eq(cancel["window"], {}, "the dash-step's window is gone, and the jab's is empty until its f15")
+	assert_false(cancel["recovery"], "the dash-step's recovery is over with it")
+	assert_eq(_at(run, 35)["window"], {}, "still empty at jab f14")
+	assert_eq(_at(run, 36)["window"], {&"palm": &"palm_cross"}, "the jab's own window opens at its f15, with no dodge in it")
+
+
+func test_jab_forced_into_dash_step_mid_swing_turns_the_hitbox_off() -> void:
+	# The windows only open after the hand is off, so force the cancel at jab f12, with palm_l on.
+	var arena := TestArena.make(self)
+	var actor := TestArena.spawn(arena, load(ABARAX), ScriptBrain.new([{"frames": 1, "press": [&"palm"]}]))
+	while actor.frame < 13:  # the jab starts on frame 1, so frame 13 is its f12
+		await frames(1)
+	assert_eq(actor.runner.current.id, &"palm_jab")
+	assert_eq(actor.rig.active_hitboxes(), [&"palm_l"], "mid-swing")
+	actor.runner.start(Registry.fetch(&"moves", &"dash_step") as MoveData)
+	assert_eq(actor.runner.current.id, &"dash_step")
+	assert_eq(actor.rig.active_hitboxes(), [] as Array[StringName], "the cancelled jab's hitbox is off at once")
+	assert_false(actor.runner.iframes)
+	assert_false(actor.runner.hyperarmour)
+	assert_eq(actor.runner.window, {})
+
+
+func test_sway_forced_into_jab_mid_evade_clears_the_evade_window() -> void:
+	# A sway's evade window is open from its f2: cancel at f5, inside it.
+	var arena := TestArena.make(self)
+	var actor := TestArena.spawn(arena, load(ABARAX), ScriptBrain.new([{"frames": 1, "press": [&"sway"], "evade_dir": Vector2(1, 0)}]))
+	while actor.frame < 6:  # the sway starts on frame 1, so frame 6 is its f5
+		await frames(1)
+	assert_eq(actor.runner.current.id, &"sway_left_slip")
+	assert_eq(actor.runner.evading, MoveData.Evade.SWAY, "mid-evade")
+	actor.runner.start(Registry.fetch(&"moves", &"palm_jab") as MoveData)
+	assert_eq(actor.runner.current.id, &"palm_jab")
+	assert_eq(actor.runner.evading, MoveData.Evade.NONE, "the cancelled sway's window is closed at once")
+	assert_false(actor.is_invulnerable())
+	assert_false(actor.runner.hyperarmour)
+	assert_eq(actor.runner.window, {})
+	assert_eq(actor.rig.active_hitboxes(), [] as Array[StringName], "and the jab's hand is not on until its f10")

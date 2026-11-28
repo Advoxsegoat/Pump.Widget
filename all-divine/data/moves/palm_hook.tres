@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://moves/move_data.gd" id="1_move"]
+[ext_resource type="Script" path="res://moves/hit_profile.gd" id="2_hit"]
+
+[sub_resource type="Resource" id="Resource_hook"]
+script = ExtResource("2_hit")
+damage = 13.0
+poise_damage = 12.0
+posture_damage = 10.0
+guard_stamina = 14.0
+knockback = 2.0
+hitstop_frames = 5
+shake = 0.3
+line = 1
+
+[resource]
+script = ExtResource("1_move")
+id = &"palm_hook"
+clip = &"palm_hook"
+stamina_cost = 16.0
+hits = {
+&"hook": SubResource("Resource_hook")
+}
