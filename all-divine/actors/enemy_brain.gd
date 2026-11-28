@@ -45,6 +45,21 @@ extends Brain
 
 enum Mode { IDLE, NOTICING, ENGAGED, ATTACKING, RETREATING }
 
+## It went from not fighting to fighting: once each time it goes from noticing (or being woken, or alarmed) to engaged.
+signal engaged
+## It walked home and is there (within HOME_ARRIVED of it).
+signal arrived_home
+
+## A foe that stands at a post (F3 systems Task 4). All of this is inert at its defaults, so the yard's foes are as they were:
+## `home` is the post (a Vector3), or null for none; `leash` is how far from it, flat, it follows a target (metres); `asleep` is a
+## brain that senses and does nothing until `wake` or `engage_now`. A foe with a home that stands down for any reason (past its
+## leash, no target in reach, its target dead) and is further than HOME_ARRIVED from home walks home at the jog, ignoring the
+## target, for at most HOME_GIVE_UP seconds, then stands at `home_facing` (a yaw in radians about +Y, or null) for a moment.
+var home: Variant = null
+var leash := INF
+var asleep := false
+var home_facing: Variant = null
+
 ## How far its heading swings when it re-angles.
 const REANGLE_DEG := 60.0
 ## The stick: a jog to cover ground, a walk to settle into a range.
@@ -144,6 +159,11 @@ const LOSE_FACTOR := 2.0
 const BACK_OFF_AFTER: Array[StringName] = [&"stagger", &"parried", &"caught"]
 ## The action that, pressed with the stick at rest, starts the actor's feint (its moveset's `dodge`).
 const FEINT_ACTION := &"dodge"
+## A foe walking home is home within this many metres, and gives up the walk after this many seconds.
+const HOME_ARRIVED := 0.6
+const HOME_GIVE_UP := 8.0
+## It turns to its post's facing for this long once it is home (the turn itself is the body's, at its own rate).
+const HOME_TURN_SECONDS := 0.75
 
 var def: BrainDef
 var rng := RandomNumberGenerator.new()
@@ -203,6 +223,10 @@ var _clear_frame := -1  # the physics frame of _clear_cache
 var _clear_cache: Array = [null, null]  # whether the line is clear for a blow that is not low, and for a low one, this frame
 var _self: Actor  # its own actor, kept for _reangle (which is called from where only the clock is known)
 var _wind_ups := {}  # move id -> seconds to its first hitbox_on (read from its clip once)
+var _homing := false  # walking home, ignoring the target
+var _homing_for := 0.0  # seconds it has walked home
+var _turning_home := 0.0  # seconds left that it faces home_facing
+var _alarm := false  # woken or alarmed: it engages on its next think, if it has a target
 
 
 func _init(brain_def: BrainDef, seed_value: int) -> void:
@@ -214,6 +238,10 @@ func think(actor: Actor, delta: float) -> Intent:
 	var intent := _think(actor, delta)
 	if _come_round:
 		_hold_lit(actor, intent)
+	if _turning_home > 0.0:
+		_turning_home -= delta
+		if mode == Mode.IDLE and intent.face_target == null:
+			_face_home(actor, intent)  # home: it turns to its post's facing over a few frames
 	return intent
 
 
@@ -223,14 +251,22 @@ func _think(actor: Actor, delta: float) -> Intent:
 		_speed = _flat(actor, _last_at).length() / delta
 	_last_at = actor.global_position
 	_self = actor
+	if asleep:
+		return intent  # no turning, no looking, no perceiving
 	for option: AttackOption in _cooldowns.keys():
 		_cooldowns[option] = maxf(_cooldowns[option] - delta, 0.0)
+	if _homing:
+		_walk_home(actor, intent, delta)
+		return intent
 	_find_target(actor)
 	if target == null:
 		_go_idle(actor)
 		return intent
 	if mode == Mode.IDLE or mode == Mode.NOTICING:
 		_perceive(actor, delta, intent)
+		return intent
+	if home != null and _flat(actor, home as Vector3).length() > leash:
+		_go_idle(actor)  # past its leash: it gives the fight up and goes home
 		return intent
 	if _flat(actor, target.global_position).length() > def.sight_range * LOSE_FACTOR:
 		_go_idle(actor)
@@ -298,6 +334,26 @@ func rest_for(seconds: float) -> void:
 	_rest = maxf(_rest, seconds)
 
 
+## Wakes it: awake from now on, and it engages on its next think if it has a target (which it turns to face).
+func wake() -> void:
+	engage_now()
+
+
+## An alarm: awake, and straight to ENGAGED on its next think if it has a target, with no noticing. One already fighting is not
+## told twice.
+func engage_now() -> void:
+	asleep = false
+	if mode == Mode.ENGAGED or mode == Mode.ATTACKING or mode == Mode.RETREATING:
+		return
+	_homing = false
+	_alarm = true
+
+
+## Whether it is walking home (it ignores its target while it does).
+func going_home() -> bool:
+	return _homing
+
+
 # --- target and perception ---
 
 # Keeps the target while it is alive and in the game, else finds the nearest live actor of the player's team.
@@ -319,6 +375,12 @@ func _find_target(actor: Actor) -> void:
 # IDLE and NOTICING: builds up its notice while it perceives the target, turning to look, and lets it fade when it does
 # not; engages at notice_time.
 func _perceive(actor: Actor, delta: float, intent: Intent) -> void:
+	if _alarm:
+		_alarm = false
+		intent.face_target = target.global_position
+		intent.look_target = target.head_point()
+		_engage(actor)
+		return
 	if _sees(actor) or _hears(actor):
 		mode = Mode.NOTICING
 		_noticed += delta
@@ -333,9 +395,12 @@ func _perceive(actor: Actor, delta: float, intent: Intent) -> void:
 
 
 func _engage(_actor: Actor) -> void:
+	var was := mode
 	mode = Mode.ENGAGED
 	_rest = def.attack_rest * rng.randf_range(0.25, 0.75)
 	_reset_spacing()
+	if was != Mode.RETREATING:
+		engaged.emit()  # (a foe that regroups and comes back is the same engagement)
 
 
 # Whether the target is in its sight cone with a clear line between their heads.
@@ -1326,6 +1391,7 @@ func _stand_down(actor: Actor) -> void:
 # No one to fight (the target is gone, dead or too far): it stands down and forgets what it owed the fight it was in, a
 # back-off, a retreat, its spacing, so a new foe meets it fresh.
 func _go_idle(actor: Actor) -> void:
+	var was := mode
 	_stand_down(actor)
 	mode = Mode.IDLE
 	_noticed = 0.0
@@ -1334,6 +1400,11 @@ func _go_idle(actor: Actor) -> void:
 	_retreat_left = 0.0
 	_blocked = 0.0
 	_reset_spacing()
+	# Standing down from a fight, for whatever reason, a foe with a post goes back to it.
+	if was != Mode.IDLE and home != null and _flat(actor, home as Vector3).length() > HOME_ARRIVED:
+		_homing = true
+		_homing_for = 0.0
+		_turning_home = 0.0
 
 
 # Whether the actor could hold the tokens `option` holds now (AttackOption.tokens), holding what it holds.
@@ -1429,6 +1500,34 @@ func _retreat(actor: Actor, intent: Intent, delta: float) -> void:
 	var away := -_flat(actor, target.global_position)
 	if not away.is_zero_approx():
 		intent.move = away.normalized() * JOG_PUSH
+
+
+# --- home ---
+
+# One frame of the walk home: the jog (a walk over the last of it, as everywhere), the target ignored; home within HOME_ARRIVED ends it
+# (`arrived_home`), and so does HOME_GIVE_UP seconds of walking (a wall in the way) with no signal.
+func _walk_home(actor: Actor, intent: Intent, delta: float) -> void:
+	_homing_for += delta
+	var to := _flat(actor, home as Vector3)
+	var distance := to.length()
+	if distance <= HOME_ARRIVED:
+		_homing = false
+		_turning_home = HOME_TURN_SECONDS
+		_face_home(actor, intent)
+		arrived_home.emit()
+		return
+	if _homing_for >= HOME_GIVE_UP:
+		_homing = false
+		return
+	intent.move = to / distance * (JOG_PUSH if distance > WALK_WITHIN + HOME_ARRIVED else WALK_PUSH)
+
+
+# Turns it to its post's facing (the body turns at its own rate: this only says which way).
+func _face_home(actor: Actor, intent: Intent) -> void:
+	if home_facing == null:
+		return
+	var yaw := float(home_facing)
+	intent.face_target = actor.global_position + Vector3(sin(yaw), 0.0, cos(yaw)) * 4.0
 
 
 # --- helpers ---
