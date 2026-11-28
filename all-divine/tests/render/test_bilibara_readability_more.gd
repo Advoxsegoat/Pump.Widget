@@ -57,3 +57,16 @@ func test_a_head_reads_beside_each_shrine_with_the_glow_on() -> void:
 	var problems: PackedStringArray = await rig.stretch(places, OUT_SHRINE_TEXT, OUT_SHRINE_SHEET, {settle = GLOW_FILLS, head_only = true, strict_head = true})
 	assert_eq(problems.slice(0, 12), PackedStringArray(), "every head reads beside the shrines with the glow on (%d problems; the table is %s)" % [problems.size(), OUT_SHRINE_TEXT])
 
+
+## Task 5: the same three places south of shrine A, with the gates open. The gate's board beside the stone is sunk and gone, and the gap where it
+## stood is the loop lane's way in: a head must read there too (the ground behind a head changes where the board was).
+func test_a_head_reads_beside_shrine_a_with_the_gates_open() -> void:
+	var places: Array = []
+	for entry: Array in BESIDE_SHRINES:
+		if entry[0] != &"rose_a":
+			continue
+		var shrine := Registry.fetch(&"stretch", entry[0]) as ShrineDef
+		places.append(["%s, %.1f m south, gates open" % [entry[0], entry[1]], shrine.plinth.x, shrine.plinth.z + float(entry[1])])
+	var rig := BilibaraRead.new(self)
+	var problems: PackedStringArray = await rig.stretch(places, "out/shots/bilibara_readability_shrine_a_open.txt", "out/shots/bilibara_readability_shrine_a_open.png", {settle = GLOW_FILLS, head_only = true, strict_head = true, open_gates = true})
+	assert_eq(problems.slice(0, 12), PackedStringArray(), "every head reads beside shrine A with the gates open (%d problems)" % problems.size())

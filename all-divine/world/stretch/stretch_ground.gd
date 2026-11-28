@@ -17,7 +17,7 @@ const GRID_Z := Vector2i(-165, 25)
 const FLOOR_SLACK := 0.01
 const POINT_SLACK := 0.25
 
-## The flood fill, made once for the run (the stretch does not change), by the scene it was made of.
+## The flood fill, made once for the scene as it stands (a gate that has opened is another scene: `solid_signature`).
 static var _memo := {}
 
 
@@ -69,7 +69,7 @@ static func middle(cell: Vector2i) -> Vector2:
 ## The flood fill from Spawn on CELL cells: `{free: cells whose capsule overlaps no wall (true), ground: cells with ground under
 ## their middle, reached: cells walked to from Spawn (a free ground cell next to a reached one)}`. Made once per scene.
 static func fill(region: Region) -> Dictionary:
-	var key := region.scene_file_path
+	var key := "%s|%d" % [region.scene_file_path, solid_signature(region)]
 	if _memo.has(key):
 		return _memo[key]
 	var space := region.get_world_3d().direct_space_state
@@ -107,3 +107,14 @@ static func fill(region: Region) -> Dictionary:
 		near.call(cell)
 	_memo[key] = {free = free, ground = ground, reached = reached_cells}
 	return _memo[key]
+
+
+## A number that changes when a gate opens or shuts (Task 5): the names and collision layers of the bodies that are children of `region`.
+## A board built at run time is one more body; a board lowered has layer 0. Two regions of the same scene with the same gates hash alike.
+static func solid_signature(region: Node) -> int:
+	var parts: Array = []
+	for child in region.get_children():
+		var body := child as StaticBody3D
+		if body != null:
+			parts.append([String(body.name), body.collision_layer])
+	return parts.hash()

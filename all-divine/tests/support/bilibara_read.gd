@@ -379,6 +379,9 @@ func stretch(positions: Array, out_text: String, out_sheet: String, options: Dic
 	var main := t.track((load(MAIN) as PackedScene).instantiate()) as Main
 	await t.frames(5)
 	main.enter_stretch()
+	if options.get("open_gates", false):
+		for door: GateDoor in main.stretch.gates:  # Task 5: every gate open (the boards gone), as after the shortcut and the toll are won
+			door.open(false)
 	await t.frames(5 + int(options.get("settle", 0)))
 	var lines := PackedStringArray(["position | x z | per body: ground / body luma / ground less body / contact shadow (the strip under the feet without the body less with it)"])
 	var problems := PackedStringArray()

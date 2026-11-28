@@ -1,9 +1,11 @@
-[gd_resource type="Resource" script_class="StretchDef" load_steps=7 format=3]
+[gd_resource type="Resource" script_class="StretchDef" load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://world/stretch/stretch_def.gd" id="1_def"]
 [ext_resource type="Script" path="res://world/stretch/shrine_def.gd" id="2_shrine"]
 [ext_resource type="Resource" path="res://data/stretch/rose_a.tres" id="3_a"]
 [ext_resource type="Resource" path="res://data/stretch/rose_b.tres" id="4_b"]
+[ext_resource type="Script" path="res://world/stretch/gate_def.gd" id="5_gate"]
+[ext_resource type="Resource" path="res://data/stretch/gate_shortcut.tres" id="6_gs"]
 
 [ext_resource type="Script" path="res://world/stretch/petal_tuning.gd" id="5_tuning"]
 [ext_resource type="Resource" path="res://data/stretch/petals.tres" id="6_petals"]
@@ -14,4 +16,5 @@ id = &"bilibara"
 region = "res://world/bilibara/bilibara.tscn"
 shrines = Array[ExtResource("2_shrine")]([ExtResource("3_a"), ExtResource("4_b")])
 start_shrine = &"rose_a"
+gates = Array[ExtResource("5_gate")]([ExtResource("6_gs")])
 petals = ExtResource("6_petals")

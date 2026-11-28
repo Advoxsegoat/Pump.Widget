@@ -450,6 +450,17 @@ def charge_hum(rng):
     return times(mix([(layer(out, 1.0), 0.0), (layer(breath, 0.15), 0.0)], n), swell(n, 0.4))
 
 
+def gate_unlatch(rng):
+    """The latch of a gate lifted (Task 5): a dry wooden clunk, a short low knock with a woody noise burst on it, and then the bar sliding
+    away, a soft band of noise that sinks in pitch under a swell. 0.5 s; quiet and plain, heard once per gate."""
+    n = samples_in(0.5)
+    knock = thump(n, 210.0, 120.0, 0.02, 0.035)
+    wood = burst(rng, n, 900.0, 1.4, 0.02)
+    slide_n = samples_in(0.34)
+    slide = times(swept(noise(rng, slide_n), sweep_path(slide_n, 620.0, 260.0, 1.2), 1.8), swell(slide_n, 0.45))
+    return fade_out(mix([(layer(knock, 1.0), 0.0), (layer(wood, 0.5), 0.0), (layer(slide, 0.38), 0.11)], n), 0.04)
+
+
 def shrine_rest(rng):
     """A rest at a rose shrine: a low bell of two partials a little more than an octave apart that rings and dies away, and a
     soft thud of low noise where it is struck. Quiet and round: it is heard every time the player rests, never a sting."""
@@ -505,6 +516,7 @@ SOUNDS = {
     "perfect_dodge": (perfect_dodge, -3.0),
     "knocked_out": (knocked_out, -10.0),
     "shrine_rest": (shrine_rest, -12.0),
+    "gate_unlatch": (gate_unlatch, -14.0),
     "petal_gain": (petal_gain, -14.0),
     "petal_wilt": (petal_wilt, -14.0),
 }

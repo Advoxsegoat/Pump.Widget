@@ -25,6 +25,8 @@ func _init() -> void:
 func prompt_line() -> String:
 	if current == null or not is_instance_valid(current):
 		return ""
+	if not current.usable(player):
+		return current.prompt(player)  # a line that only says why not has no key: the button does nothing here
 	var key := ControlsList.shown(&"interact", Inputs.last_device() == Inputs.Device.GAMEPAD)
 	return "%s  %s" % [key, current.prompt(player)]
 
@@ -46,9 +48,12 @@ func _physics_process(_delta: float) -> void:
 		interacted.emit(used)
 
 
-# The nearest interactable of this run in reach of the player whose prompt is not empty, or null.
+# The nearest interactable of this run in reach of the player whose prompt is not empty, or null. One the press does something for
+# (`usable`) comes before one that only says why not (a barred latch beside a shrine), whichever is nearer: so the line never takes away
+# a press that works, and as the line depends on where he stands and on nothing before, it cannot flicker between the two.
 func _nearest() -> Interactable:
 	var best: Interactable = null
+	var best_usable := false
 	var best_distance := INF
 	var run := get_parent()
 	for node in get_tree().get_nodes_in_group(Interactable.GROUP):
@@ -56,7 +61,9 @@ func _nearest() -> Interactable:
 		if thing == null or not run.is_ancestor_of(thing) or not thing.in_reach(player) or thing.prompt(player).is_empty():
 			continue
 		var distance := Vector2(thing.global_position.x - player.global_position.x, thing.global_position.z - player.global_position.z).length()
-		if distance < best_distance:
+		var usable := thing.usable(player)
+		if best == null or (usable and not best_usable) or (usable == best_usable and distance < best_distance):
 			best = thing
+			best_usable = usable
 			best_distance = distance
 	return best

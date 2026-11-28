@@ -41,7 +41,7 @@ func _draw() -> void:
 	_draw_petals()
 	if not draws():
 		return
-	var alpha := hud.shown_alpha()
+	var alpha := hud.shown_alpha() * (BARRED_ALPHA if prompt_is_barred() else 1.0)
 	var line := prompt_line()
 	var font := ThemeDB.fallback_font
 	var width := font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, Hud.HINT_FONT_SIZE).x
@@ -52,6 +52,19 @@ func _draw() -> void:
 	white.a *= alpha
 	draw_string_outline(font, at, line, HORIZONTAL_ALIGNMENT_LEFT, -1, Hud.HINT_FONT_SIZE, 3, ink)
 	draw_string(font, at, line, HORIZONTAL_ALIGNMENT_LEFT, -1, Hud.HINT_FONT_SIZE, white)
+
+
+# --- Task 5: gates ---
+
+## How much of its strength a line is drawn with when it only says why the button does nothing (a barred latch's).
+const BARRED_ALPHA := 0.7
+
+
+## Whether the line shown is one the button does nothing for.
+func prompt_is_barred() -> bool:
+	if run == null or not is_instance_valid(run) or run.interactor == null or run.interactor.current == null:
+		return false
+	return not run.interactor.current.usable(run.player)
 
 
 # --- Task 3: the petals on the Hud ---
