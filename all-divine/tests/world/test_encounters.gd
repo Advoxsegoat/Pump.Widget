@@ -275,6 +275,34 @@ func test_rest_and_death_bring_every_foe_back_healed() -> void:
 		assert_eq(_host(w).killed(&"street_pair").size(), 0, "and nobody is down")
 
 
+func test_resting_with_two_foes_on_him_takes_them_away_at_once_and_they_stand_at_their_posts_again() -> void:
+	# What the owner asked to see: he rests in the middle of a fight. The press is not refused; the bars are full, the foes that were on
+	# him are gone that frame and stand again, idle and whole, at their posts (22 m off and out of the picture) within a streaming tick.
+	var w := await _world()
+	var run: StretchRun = w.run
+	var shrine := _shrine(&"rose_a")
+	await _stand(w.player, shrine.respawn)
+	var foes := _foes(w, &"street_pair")
+	assert_eq(foes.size(), 2, "(they stand)")
+	if foes.size() != 2:
+		return
+	for i in 2:
+		foes[i].place(Transform3D(Basis(Vector3.UP, deg_to_rad(90.0)), shrine.respawn + Vector3(2.0, 0, 0.8 * (i * 2 - 1))))
+		(foes[i].brain as EnemyBrain).engage_now()
+	await frames(20)
+	assert_eq((foes[0].brain as EnemyBrain).mode != EnemyBrain.Mode.IDLE, true, "(the foes are on him)")
+	w.player.stats.hp = 10.0
+	run.rest(shrine)
+	assert_eq(w.player.stats.hp, w.player.stats.max_hp, "the rest is not refused: bars full")
+	assert_eq(_foes(w, &"street_pair").size(), 0, "the foes that were on him are gone that frame")
+	await frames(16)
+	var back := _foes(w, &"street_pair")
+	assert_eq(back.size(), 2, "and stand again within a streaming tick")
+	for i in mini(back.size(), 2):
+		assert_true(_flat(back[i].global_position, _def(&"street_pair").placements[i].at) < 0.4, "at their posts")
+		assert_eq((back[i].brain as EnemyBrain).mode, EnemyBrain.Mode.IDLE, "idle")
+
+
 # --- waking ---
 
 func test_a_sleeper_wakes_by_nearness_by_a_blow_or_by_the_alarm() -> void:

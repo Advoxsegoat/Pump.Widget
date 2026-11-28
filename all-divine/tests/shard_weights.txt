@@ -57,6 +57,7 @@
 28   render/test_yard_shot.gd   # measured in a render shard
 28   render/test_readability_shots.gd   # measured in a render shard
 23   main/test_main.gd   # measured in a render shard
+26   world/test_encounters.gd   # 13 s headless here, times two: an estimate
 21   world/test_stretch_run.gd   # 10.7 s in a filtered render run here (8.8 s headless), times two
 20   actors/test_foe_planning.gd   # 12 s here headless; played with the drawing off (DRAWS): an estimate
 18   actors/test_heavy_knuckle.gd   # measured in a render shard
